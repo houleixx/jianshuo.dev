@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Jianshuo Wang (王建硕) — developer tools, apps, and projects.">
+  <title>jianshuo.dev — 王建硕</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=JetBrains+Mono:wght@300;400;500&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #F5F3EE;
+      --bg-card:   #EFEDE7;
+      --ink:       #1A1814;
+      --ink-mid:   #4A4740;
+      --ink-faint: #9A9690;
+      --seal:      #C13527;
+      --seal-soft: rgba(193, 53, 39, 0.08);
+      --border:    #DDDAD2;
+      --border-card: #D5D2CA;
+      --shadow:    rgba(26, 24, 20, 0.06);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 16px; scroll-behavior: smooth; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--ink);
+      font-family: 'Lora', Georgia, serif;
+      min-height: 100vh;
+      padding: 0;
+      /* Subtle paper grain */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+    }
+
+    /* ─── Page wrapper ─── */
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 72px 40px 96px;
+    }
+
+    /* ─── Fade-in animation ─── */
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade { opacity: 0; animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+    .delay-0  { animation-delay: 0.05s; }
+    .delay-1  { animation-delay: 0.18s; }
+    .delay-2  { animation-delay: 0.28s; }
+    .delay-3  { animation-delay: 0.38s; }
+    .delay-4  { animation-delay: 0.48s; }
+    .delay-5  { animation-delay: 0.58s; }
+    .delay-6  { animation-delay: 0.68s; }
+    .delay-7  { animation-delay: 0.78s; }
+    .delay-8  { animation-delay: 0.88s; }
+    .delay-9  { animation-delay: 0.98s; }
+    .delay-10 { animation-delay: 1.08s; }
+
+    /* ─── Header ─── */
+    header {
+      padding-bottom: 48px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 56px;
+    }
+
+    .domain-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.12em;
+      color: var(--ink-faint);
+      text-transform: uppercase;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .domain-label::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--seal);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .name-zh {
+      font-family: 'Cormorant Garamond', 'STSong', '宋体', serif;
+      font-size: clamp(52px, 9vw, 80px);
+      font-weight: 300;
+      letter-spacing: -0.01em;
+      line-height: 0.95;
+      color: var(--ink);
+      margin-bottom: 18px;
+    }
+
+    .name-en {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 400;
+      font-style: italic;
+      color: var(--ink-mid);
+      letter-spacing: 0.01em;
+      margin-bottom: 20px;
+    }
+
+    .bio {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 300;
+      color: var(--ink-faint);
+      letter-spacing: 0.04em;
+      line-height: 1.7;
+      max-width: 480px;
+    }
+
+    /* ─── Section ─── */
+    .section {
+      margin-bottom: 56px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+    }
+
+    .section-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ─── Project cards ─── */
+    .projects {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .project-card {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      padding: 20px 22px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      position: relative;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+    }
+
+    .project-card:hover {
+      background: var(--bg-card);
+      border-color: var(--border-card);
+      transform: translateX(4px);
+      box-shadow: 0 4px 20px var(--shadow);
+    }
+
+    .project-card:hover .project-name {
+      color: var(--seal);
+    }
+
+    .project-card:hover .project-arrow {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .card-inner {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      gap: 12px;
+    }
+
+    .project-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      margin-bottom: 6px;
+      transition: color 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .project-subdomain {
+      font-weight: 300;
+      color: var(--ink-faint);
+      font-size: 12px;
+    }
+
+    .project-tagline {
+      font-family: 'Lora', serif;
+      font-size: 13.5px;
+      font-weight: 400;
+      color: var(--ink-mid);
+      line-height: 1.55;
+    }
+
+    .project-arrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--seal);
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      padding-top: 2px;
+      flex-shrink: 0;
+    }
+
+    /* ─── Personal links ─── */
+    .personal-links {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .personal-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-decoration: none;
+      color: inherit;
+      padding: 14px 22px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .personal-link:hover {
+      background: var(--bg-card);
+      border-color: var(--border-card);
+      transform: translateX(4px);
+    }
+
+    .personal-link:hover .link-url {
+      color: var(--seal);
+    }
+
+    .personal-link:hover .link-arrow {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .link-info { flex: 1; }
+
+    .link-label {
+      font-family: 'Lora', serif;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+
+    .link-url {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 300;
+      color: var(--ink-faint);
+      letter-spacing: 0.02em;
+      transition: color 0.2s ease;
+    }
+
+    .link-arrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--seal);
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    /* ─── Footer ─── */
+    footer {
+      margin-top: 64px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-left {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 300;
+      color: var(--ink-faint);
+      letter-spacing: 0.06em;
+    }
+
+    .footer-seal {
+      width: 28px;
+      height: 28px;
+      border: 1.5px solid var(--seal);
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Cormorant Garamond', 'STSong', '宋体', serif;
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--seal);
+      opacity: 0.7;
+      transform: rotate(-2deg);
+      letter-spacing: 0;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 580px) {
+      .page { padding: 48px 24px 72px; }
+      .name-zh { font-size: 56px; }
+      .section-title { font-size: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- ─── Header ─── -->
+    <header>
+      <div class="domain-label fade delay-0">jianshuo.dev</div>
+      <div class="name-zh fade delay-1">王建硕</div>
+      <div class="name-en fade delay-2">Jianshuo Wang</div>
+      <p class="bio fade delay-3">
+        Builder of tools, apps, and ideas. Based in Shanghai.<br>
+        These are the things I make.
+      </p>
+    </header>
+
+    <!-- ─── Developer Tools ─── -->
+    <section class="section fade delay-4">
+      <div class="section-header">
+        <span class="section-title">Developer Tools</span>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="projects">
+
+        <a class="project-card fade delay-5" href="https://ccglass.jianshuo.dev" target="_blank" rel="noopener">
+          <div class="card-inner">
+            <div>
+              <div class="project-name">
+                ccglass
+                <span class="project-subdomain">ccglass.jianshuo.dev</span>
+              </div>
+              <div class="project-tagline">See exactly what your coding agent sends to the model — a reverse-proxy dashboard for Claude Code, Codex, and more.</div>
+            </div>
+            <div class="project-arrow">↗</div>
+          </div>
+        </a>
+
+        <a class="project-card fade delay-6" href="https://ccline.jianshuo.dev" target="_blank" rel="noopener">
+          <div class="card-inner">
+            <div>
+              <div class="project-name">
+                ccline
+                <span class="project-subdomain">ccline.jianshuo.dev</span>
+              </div>
+              <div class="project-tagline">Type a thought at your shell prompt, get an AI answer and run the commands.</div>
+            </div>
+            <div class="project-arrow">↗</div>
+          </div>
+        </a>
+
+        <a class="project-card fade delay-7" href="https://cclight.jianshuo.dev" target="_blank" rel="noopener">
+          <div class="card-inner">
+            <div>
+              <div class="project-name">
+                cclight
+                <span class="project-subdomain">cclight.jianshuo.dev</span>
+              </div>
+              <div class="project-tagline">MacBook notch light that shows Claude Code's live status at a glance.</div>
+            </div>
+            <div class="project-arrow">↗</div>
+          </div>
+        </a>
+
+        <a class="project-card fade delay-8" href="https://cathier.jianshuo.dev" target="_blank" rel="noopener">
+          <div class="card-inner">
+            <div>
+              <div class="project-name">
+                cathier
+                <span class="project-subdomain">cathier.jianshuo.dev</span>
+              </div>
+              <div class="project-tagline">iOS emotion awareness practice app — 情绪感知训练.</div>
+            </div>
+            <div class="project-arrow">↗</div>
+          </div>
+        </a>
+
+        <a class="project-card fade delay-9" href="https://bdpan-finder.jianshuo.dev" target="_blank" rel="noopener">
+          <div class="card-inner">
+            <div>
+              <div class="project-name">
+                bdpan-finder
+                <span class="project-subdomain">bdpan-finder.jianshuo.dev</span>
+              </div>
+              <div class="project-tagline">Mount Baidu Pan in macOS Finder like OneDrive — native integration via NSFileProvider.</div>
+            </div>
+            <div class="project-arrow">↗</div>
+          </div>
+        </a>
+
+      </div>
+    </section>
+
+    <!-- ─── Personal Sites ─── -->
+    <section class="section fade delay-10">
+      <div class="section-header">
+        <span class="section-title">On the Web</span>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="personal-links">
+
+        <a class="personal-link" href="https://home.wangjianshuo.com" target="_blank" rel="noopener">
+          <div class="link-info">
+            <div class="link-label">English Blog &amp; Homepage</div>
+            <div class="link-url">home.wangjianshuo.com</div>
+          </div>
+          <div class="link-arrow">↗</div>
+        </a>
+
+        <a class="personal-link" href="https://home.wangjianshuo.com/cn" target="_blank" rel="noopener">
+          <div class="link-info">
+            <div class="link-label">中文主页</div>
+            <div class="link-url">home.wangjianshuo.com/cn</div>
+          </div>
+          <div class="link-arrow">↗</div>
+        </a>
+
+        <a class="personal-link" href="https://wangjianshuo.com" target="_blank" rel="noopener">
+          <div class="link-info">
+            <div class="link-label">Main Website</div>
+            <div class="link-url">wangjianshuo.com</div>
+          </div>
+          <div class="link-arrow">↗</div>
+        </a>
+
+      </div>
+    </section>
+
+    <!-- ─── Footer ─── -->
+    <footer class="fade delay-10">
+      <span class="footer-left">jianshuo.dev · Shanghai</span>
+      <div class="footer-seal" title="王">王</div>
+    </footer>
+
+  </div>
+</body>
+</html>
