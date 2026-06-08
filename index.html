@@ -7,466 +7,518 @@
   <title>jianshuo.dev — 王建硕</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=JetBrains+Mono:wght@300;400;500&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800;900&family=Instrument+Serif:ital@0;1&family=Syne:wght@400;500&display=swap" rel="stylesheet">
 
   <style>
-    :root {
-      --bg:        #F5F3EE;
-      --bg-card:   #EFEDE7;
-      --ink:       #1A1814;
-      --ink-mid:   #4A4740;
-      --ink-faint: #9A9690;
-      --seal:      #C13527;
-      --seal-soft: rgba(193, 53, 39, 0.08);
-      --border:    #DDDAD2;
-      --border-card: #D5D2CA;
-      --shadow:    rgba(26, 24, 20, 0.06);
-    }
-
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html { font-size: 16px; scroll-behavior: smooth; }
+    :root {
+      --bg:      #F2F0EC;
+      --ink:     #111010;
+      --muted:   #7A776F;
+      --surface: #FFFFFF;
+      --gap:     16px;
+      --radius:  22px;
+    }
 
     body {
-      background-color: var(--bg);
+      background: var(--bg);
       color: var(--ink);
-      font-family: 'Lora', Georgia, serif;
+      font-family: 'Syne', sans-serif;
       min-height: 100vh;
-      padding: 0;
-      /* Subtle paper grain */
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+      padding: 32px 40px 64px;
     }
 
-    /* ─── Page wrapper ─── */
-    .page {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 72px 40px 96px;
-    }
-
-    /* ─── Fade-in animation ─── */
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(14px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .fade { opacity: 0; animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-    .delay-0  { animation-delay: 0.05s; }
-    .delay-1  { animation-delay: 0.18s; }
-    .delay-2  { animation-delay: 0.28s; }
-    .delay-3  { animation-delay: 0.38s; }
-    .delay-4  { animation-delay: 0.48s; }
-    .delay-5  { animation-delay: 0.58s; }
-    .delay-6  { animation-delay: 0.68s; }
-    .delay-7  { animation-delay: 0.78s; }
-    .delay-8  { animation-delay: 0.88s; }
-    .delay-9  { animation-delay: 0.98s; }
-    .delay-10 { animation-delay: 1.08s; }
-
-    /* ─── Header ─── */
+    /* ─── HEADER ─────────────────────────────── */
     header {
-      padding-bottom: 48px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 56px;
-    }
-
-    .domain-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      font-weight: 400;
-      letter-spacing: 0.12em;
-      color: var(--ink-faint);
-      text-transform: uppercase;
-      margin-bottom: 28px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .domain-label::before {
-      content: '';
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      background: var(--seal);
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .name-zh {
-      font-family: 'Cormorant Garamond', 'STSong', '宋体', serif;
-      font-size: clamp(52px, 9vw, 80px);
-      font-weight: 300;
-      letter-spacing: -0.01em;
-      line-height: 0.95;
-      color: var(--ink);
-      margin-bottom: 18px;
-    }
-
-    .name-en {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 22px;
-      font-weight: 400;
-      font-style: italic;
-      color: var(--ink-mid);
-      letter-spacing: 0.01em;
-      margin-bottom: 20px;
-    }
-
-    .bio {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      font-weight: 300;
-      color: var(--ink-faint);
-      letter-spacing: 0.04em;
-      line-height: 1.7;
-      max-width: 480px;
-    }
-
-    /* ─── Section ─── */
-    .section {
-      margin-bottom: 56px;
-    }
-
-    .section-header {
       display: flex;
       align-items: baseline;
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .section-title {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      font-weight: 500;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--ink-faint);
-    }
-
-    .section-line {
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    /* ─── Project cards ─── */
-    .projects {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .project-card {
-      display: block;
-      text-decoration: none;
-      color: inherit;
-      padding: 20px 22px;
-      border: 1px solid transparent;
-      border-radius: 4px;
-      position: relative;
-      transition: background 0.2s ease, border-color 0.2s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
-    }
-
-    .project-card:hover {
-      background: var(--bg-card);
-      border-color: var(--border-card);
-      transform: translateX(4px);
-      box-shadow: 0 4px 20px var(--shadow);
-    }
-
-    .project-card:hover .project-name {
-      color: var(--seal);
-    }
-
-    .project-card:hover .project-arrow {
-      opacity: 1;
-      transform: translateX(0);
-    }
-
-    .card-inner {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: start;
+      justify-content: space-between;
+      margin-bottom: 48px;
+      flex-wrap: wrap;
       gap: 12px;
     }
 
-    .project-name {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      font-weight: 500;
-      letter-spacing: -0.01em;
+    .header-name {
+      font-family: 'Instrument Serif', serif;
+      font-style: italic;
+      font-size: clamp(1.5rem, 3vw, 2.25rem);
       color: var(--ink);
-      margin-bottom: 6px;
-      transition: color 0.2s ease;
+      text-decoration: none;
+      letter-spacing: -0.01em;
+      transition: opacity 0.2s;
+    }
+    .header-name:hover { opacity: 0.55; }
+
+    .header-links {
       display: flex;
+      gap: 24px;
+      list-style: none;
       align-items: center;
-      gap: 8px;
+    }
+    .header-links a {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      transition: color 0.2s;
+    }
+    .header-links a:hover { color: var(--ink); }
+
+    /* ─── BENTO GRID ──────────────────────────── */
+    .bento {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: 500px 420px;
+      gap: var(--gap);
     }
 
-    .project-subdomain {
-      font-weight: 300;
-      color: var(--ink-faint);
-      font-size: 12px;
-    }
+    /* ccglass spans 2 cols */
+    .card:nth-child(1) { grid-column: span 2; }
 
-    .project-tagline {
-      font-family: 'Lora', serif;
-      font-size: 13.5px;
-      font-weight: 400;
-      color: var(--ink-mid);
-      line-height: 1.55;
-    }
-
-    .project-arrow {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      color: var(--seal);
-      opacity: 0;
-      transform: translateX(-4px);
-      transition: opacity 0.2s ease, transform 0.2s ease;
-      padding-top: 2px;
-      flex-shrink: 0;
-    }
-
-    /* ─── Personal links ─── */
-    .personal-links {
+    /* ─── CARD ────────────────────────────────── */
+    .card {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      text-decoration: none;
+      color: inherit;
+      background: var(--surface);
+      transition:
+        transform 0.35s cubic-bezier(.22,.68,0,1.2),
+        box-shadow 0.35s ease;
+      will-change: transform;
+      opacity: 0;
+      animation: cardIn 0.55s cubic-bezier(.22,.68,0,1.2) forwards;
+    }
+
+    .card:nth-child(1) { animation-delay: 0.04s; }
+    .card:nth-child(2) { animation-delay: 0.11s; }
+    .card:nth-child(3) { animation-delay: 0.18s; }
+    .card:nth-child(4) { animation-delay: 0.25s; }
+    .card:nth-child(5) { animation-delay: 0.32s; }
+
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card:hover {
+      transform: translateY(-9px);
+      box-shadow: 0 36px 90px rgba(0,0,0,0.17);
+    }
+
+    /* Accent border ring on hover */
+    .card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius);
+      border: 3px solid var(--accent, transparent);
+      opacity: 0;
+      transition: opacity 0.28s ease;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .card:hover::after { opacity: 1; }
+
+    /* ─── VISUAL AREA ─────────────────────────── */
+    .card__visual {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .card__visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+      transition: transform 0.5s cubic-bezier(.22,.68,0,1.2);
+    }
+    .card:hover .card__visual img { transform: scale(1.05); }
+
+    /* ─── FOOTER ──────────────────────────────── */
+    .card__footer {
+      position: relative;
+      background: var(--ink);
+      padding: 20px 24px 22px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    /* Accent sweep from left */
+    .card__footer::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--accent, transparent);
+      opacity: 0.1;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.4s cubic-bezier(.22,.68,0,1.2);
+    }
+    .card:hover .card__footer::before { transform: scaleX(1); }
+
+    .card__meta { flex: 1; min-width: 0; position: relative; }
+
+    .card__name {
+      font-family: 'Unbounded', sans-serif;
+      font-weight: 800;
+      font-size: clamp(0.95rem, 1.7vw, 1.4rem);
+      color: #fff;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    .card__tag {
+      font-size: 0.74rem;
+      font-weight: 500;
+      color: rgba(255,255,255,0.42);
+      margin-top: 6px;
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card__arrow {
+      font-size: 1.6rem;
+      color: rgba(255,255,255,0.22);
+      line-height: 1;
+      flex-shrink: 0;
+      margin-bottom: 2px;
+      position: relative;
+      transition: transform 0.3s ease, color 0.3s ease;
+    }
+    .card:hover .card__arrow {
+      transform: translate(5px, -5px);
+      color: var(--accent, #fff);
+    }
+
+    /* ─── PROJECT ACCENT COLORS ───────────────── */
+    .card--ccglass  { --accent: #E85D27; }
+    .card--cclight  { --accent: #FFB000; }
+    .card--ccline   { --accent: #22C55E; }
+    .card--cathier  { --accent: #F2700A; }
+    .card--bdpan    { --accent: #3B82F6; }
+
+    /* ─── BDPAN FINDER MOCKUP ─────────────────── */
+    .finder-mockup {
+      width: 100%;
+      height: 100%;
+      background: #1A2334;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .finder-sidebar {
+      width: 170px;
+      background: #212D42;
+      padding: 22px 0 12px;
+      flex-shrink: 0;
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .finder-section-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: rgba(255,255,255,0.26);
+      padding: 0 13px;
+      margin-bottom: 3px;
+      margin-top: 16px;
+    }
+    .finder-section-label:first-child { margin-top: 0; }
+
+    .finder-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 13px;
+      font-size: 11.5px;
+      color: rgba(255,255,255,0.48);
+    }
+
+    .finder-row.active {
+      background: rgba(59,130,246,0.42);
+      color: #fff;
+      border-radius: 6px;
+      margin: 2px 7px;
+      padding: 4px 7px;
+    }
+
+    .finder-row-icon { font-size: 12px; }
+
+    .finder-main {
+      flex: 1;
+      background: #1A2334;
+      padding: 16px;
+    }
+
+    .finder-toolbar {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 16px;
+    }
+
+    .finder-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+    .finder-dot:nth-child(1) { background: #FF5F57; }
+    .finder-dot:nth-child(2) { background: #FEBC2E; }
+    .finder-dot:nth-child(3) { background: #28C840; }
+
+    .finder-files {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .finder-file {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .finder-file-icon { font-size: 25px; line-height: 1; }
+
+    .finder-file-name {
+      font-size: 9px;
+      color: rgba(255,255,255,0.38);
+      text-align: center;
+      max-width: 54px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ─── PERSONAL LINKS ──────────────────────── */
+    .personal-bar {
+      display: flex;
+      gap: var(--gap);
+      margin-top: var(--gap);
+      opacity: 0;
+      animation: cardIn 0.55s 0.44s cubic-bezier(.22,.68,0,1.2) forwards;
     }
 
     .personal-link {
+      flex: 1;
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 15px 20px;
+      text-decoration: none;
+      color: var(--ink);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      text-decoration: none;
-      color: inherit;
-      padding: 14px 22px;
-      border: 1px solid transparent;
-      border-radius: 4px;
-      transition: background 0.2s ease, border-color 0.2s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+      transition:
+        background 0.22s,
+        transform 0.28s cubic-bezier(.22,.68,0,1.2);
     }
 
     .personal-link:hover {
-      background: var(--bg-card);
-      border-color: var(--border-card);
-      transform: translateX(4px);
+      background: var(--ink);
+      color: #fff;
+      transform: translateY(-4px);
     }
 
-    .personal-link:hover .link-url {
-      color: var(--seal);
-    }
-
-    .personal-link:hover .link-arrow {
-      opacity: 1;
-      transform: translateX(0);
-    }
-
-    .link-info { flex: 1; }
-
-    .link-label {
-      font-family: 'Lora', serif;
-      font-size: 14px;
+    .personal-link-label {
+      font-size: 0.875rem;
       font-weight: 500;
-      color: var(--ink);
-      margin-bottom: 2px;
     }
 
-    .link-url {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      font-weight: 300;
-      color: var(--ink-faint);
-      letter-spacing: 0.02em;
-      transition: color 0.2s ease;
+    .personal-link-arrow {
+      opacity: 0.35;
+      font-size: 1.1rem;
+      transition: opacity 0.2s, transform 0.2s;
     }
 
-    .link-arrow {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      color: var(--seal);
-      opacity: 0;
-      transform: translateX(-4px);
-      transition: opacity 0.2s ease, transform 0.2s ease;
+    .personal-link:hover .personal-link-arrow {
+      opacity: 1;
+      transform: translate(3px, -3px);
     }
 
-    /* ─── Footer ─── */
-    footer {
-      margin-top: 64px;
-      padding-top: 32px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    /* ─── RESPONSIVE ──────────────────────────── */
+    @media (max-width: 920px) {
+      body { padding: 20px 20px 48px; }
+      .bento {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto;
+      }
+      .card:nth-child(1) { grid-column: span 2; min-height: 360px; }
+      .card { min-height: 300px; }
     }
 
-    .footer-left {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      font-weight: 300;
-      color: var(--ink-faint);
-      letter-spacing: 0.06em;
-    }
-
-    .footer-seal {
-      width: 28px;
-      height: 28px;
-      border: 1.5px solid var(--seal);
-      border-radius: 2px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: 'Cormorant Garamond', 'STSong', '宋体', serif;
-      font-size: 14px;
-      font-weight: 400;
-      color: var(--seal);
-      opacity: 0.7;
-      transform: rotate(-2deg);
-      letter-spacing: 0;
-    }
-
-    /* ─── Responsive ─── */
-    @media (max-width: 580px) {
-      .page { padding: 48px 24px 72px; }
-      .name-zh { font-size: 56px; }
-      .section-title { font-size: 9px; }
+    @media (max-width: 560px) {
+      .bento { grid-template-columns: 1fr; }
+      .card:nth-child(1) { grid-column: span 1; }
+      .card { min-height: 280px; }
+      .personal-bar { flex-direction: column; }
+      .header-links { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="page">
 
-    <!-- ─── Header ─── -->
-    <header>
-      <div class="domain-label fade delay-0">jianshuo.dev</div>
-      <div class="name-zh fade delay-1">王建硕</div>
-      <div class="name-en fade delay-2">Jianshuo Wang</div>
-      <p class="bio fade delay-3">
-        Builder of tools, apps, and ideas. Based in Shanghai.<br>
-        These are the things I make.
-      </p>
-    </header>
+  <header>
+    <a class="header-name" href="https://wangjianshuo.com">王建硕</a>
+    <ul class="header-links">
+      <li><a href="https://home.wangjianshuo.com">Blog</a></li>
+      <li><a href="https://home.wangjianshuo.com/cn">中文</a></li>
+      <li><a href="https://wangjianshuo.com">wangjianshuo.com</a></li>
+    </ul>
+  </header>
 
-    <!-- ─── Developer Tools ─── -->
-    <section class="section fade delay-4">
-      <div class="section-header">
-        <span class="section-title">Developer Tools</span>
-        <div class="section-line"></div>
-      </div>
+  <main>
+    <div class="bento">
 
-      <div class="projects">
+      <!-- 1 · ccglass — hero, 2 cols wide -->
+      <a class="card card--ccglass" href="https://ccglass.jianshuo.dev">
+        <div class="card__visual">
+          <img
+            src="https://raw.githubusercontent.com/jianshuo/ccglass/main/docs/demo.gif"
+            alt="ccglass live dashboard"
+            loading="eager"
+          >
+        </div>
+        <div class="card__footer">
+          <div class="card__meta">
+            <div class="card__name">ccglass</div>
+            <div class="card__tag">See exactly what your coding agent sends to the model — live stream, token cost, turn-to-turn diff</div>
+          </div>
+          <div class="card__arrow">↗</div>
+        </div>
+      </a>
 
-        <a class="project-card fade delay-5" href="https://ccglass.jianshuo.dev" target="_blank" rel="noopener">
-          <div class="card-inner">
-            <div>
-              <div class="project-name">
-                ccglass
-                <span class="project-subdomain">ccglass.jianshuo.dev</span>
-              </div>
-              <div class="project-tagline">See exactly what your coding agent sends to the model — a reverse-proxy dashboard for Claude Code, Codex, and more.</div>
+      <!-- 2 · cclight -->
+      <a class="card card--cclight" href="https://cclight.jianshuo.dev">
+        <div class="card__visual">
+          <img
+            src="https://raw.githubusercontent.com/jianshuo/cclight/main/marketing/screenshots/out-2560/v1-2560.png"
+            alt="CCLight notch glow"
+            loading="lazy"
+          >
+        </div>
+        <div class="card__footer">
+          <div class="card__meta">
+            <div class="card__name">cclight</div>
+            <div class="card__tag">MacBook notch tells you when Claude Code is thinking</div>
+          </div>
+          <div class="card__arrow">↗</div>
+        </div>
+      </a>
+
+      <!-- 3 · ccline -->
+      <a class="card card--ccline" href="https://ccline.jianshuo.dev">
+        <div class="card__visual">
+          <img
+            src="https://raw.githubusercontent.com/jianshuo/ccline/main/docs/demo.gif"
+            alt="ccline terminal demo"
+            loading="lazy"
+          >
+        </div>
+        <div class="card__footer">
+          <div class="card__meta">
+            <div class="card__name">ccline</div>
+            <div class="card__tag">Type a thought at your shell — get an AI answer and run the command</div>
+          </div>
+          <div class="card__arrow">↗</div>
+        </div>
+      </a>
+
+      <!-- 4 · cathier -->
+      <a class="card card--cathier" href="https://cathier.jianshuo.dev">
+        <div class="card__visual">
+          <img
+            src="https://raw.githubusercontent.com/jianshuo/Cathier/main/marketing/posts/2026-05-07/instagram-1.png"
+            alt="Cathier iOS app"
+            loading="lazy"
+          >
+        </div>
+        <div class="card__footer">
+          <div class="card__meta">
+            <div class="card__name">cathier</div>
+            <div class="card__tag">情绪感知训练 — body scan, emotion labeling, AI reflection</div>
+          </div>
+          <div class="card__arrow">↗</div>
+        </div>
+      </a>
+
+      <!-- 5 · bdpan-finder -->
+      <a class="card card--bdpan" href="https://bdpan-finder.jianshuo.dev">
+        <div class="card__visual">
+          <div class="finder-mockup">
+            <div class="finder-sidebar">
+              <div class="finder-section-label">Favorites</div>
+              <div class="finder-row"><span class="finder-row-icon">🔵</span> AirDrop</div>
+              <div class="finder-row"><span class="finder-row-icon">⏱</span> Recents</div>
+              <div class="finder-row"><span class="finder-row-icon">📱</span> Applications</div>
+              <div class="finder-row"><span class="finder-row-icon">📥</span> Downloads</div>
+              <div class="finder-section-label">Locations</div>
+              <div class="finder-row"><span class="finder-row-icon">💻</span> My Mac</div>
+              <div class="finder-row active"><span class="finder-row-icon">☁️</span> 百度网盘</div>
             </div>
-            <div class="project-arrow">↗</div>
-          </div>
-        </a>
-
-        <a class="project-card fade delay-6" href="https://ccline.jianshuo.dev" target="_blank" rel="noopener">
-          <div class="card-inner">
-            <div>
-              <div class="project-name">
-                ccline
-                <span class="project-subdomain">ccline.jianshuo.dev</span>
+            <div class="finder-main">
+              <div class="finder-toolbar">
+                <div class="finder-dot"></div>
+                <div class="finder-dot"></div>
+                <div class="finder-dot"></div>
               </div>
-              <div class="project-tagline">Type a thought at your shell prompt, get an AI answer and run the commands.</div>
-            </div>
-            <div class="project-arrow">↗</div>
-          </div>
-        </a>
-
-        <a class="project-card fade delay-7" href="https://cclight.jianshuo.dev" target="_blank" rel="noopener">
-          <div class="card-inner">
-            <div>
-              <div class="project-name">
-                cclight
-                <span class="project-subdomain">cclight.jianshuo.dev</span>
+              <div class="finder-files">
+                <div class="finder-file"><div class="finder-file-icon">📁</div><div class="finder-file-name">Documents</div></div>
+                <div class="finder-file"><div class="finder-file-icon">🎬</div><div class="finder-file-name">Videos</div></div>
+                <div class="finder-file"><div class="finder-file-icon">🖼️</div><div class="finder-file-name">Photos</div></div>
+                <div class="finder-file"><div class="finder-file-icon">📁</div><div class="finder-file-name">Backup</div></div>
+                <div class="finder-file"><div class="finder-file-icon">📄</div><div class="finder-file-name">Report.pdf</div></div>
+                <div class="finder-file"><div class="finder-file-icon">🎵</div><div class="finder-file-name">Music</div></div>
+                <div class="finder-file"><div class="finder-file-icon">📦</div><div class="finder-file-name">Archive</div></div>
+                <div class="finder-file"><div class="finder-file-icon">📁</div><div class="finder-file-name">Projects</div></div>
               </div>
-              <div class="project-tagline">MacBook notch light that shows Claude Code's live status at a glance.</div>
             </div>
-            <div class="project-arrow">↗</div>
           </div>
-        </a>
-
-        <a class="project-card fade delay-8" href="https://cathier.jianshuo.dev" target="_blank" rel="noopener">
-          <div class="card-inner">
-            <div>
-              <div class="project-name">
-                cathier
-                <span class="project-subdomain">cathier.jianshuo.dev</span>
-              </div>
-              <div class="project-tagline">iOS emotion awareness practice app — 情绪感知训练.</div>
-            </div>
-            <div class="project-arrow">↗</div>
+        </div>
+        <div class="card__footer">
+          <div class="card__meta">
+            <div class="card__name">百度网盘 Finder</div>
+            <div class="card__tag">Mount Baidu Pan in macOS Finder — browse, download, upload natively</div>
           </div>
-        </a>
+          <div class="card__arrow">↗</div>
+        </div>
+      </a>
 
-        <a class="project-card fade delay-9" href="https://bdpan-finder.jianshuo.dev" target="_blank" rel="noopener">
-          <div class="card-inner">
-            <div>
-              <div class="project-name">
-                bdpan-finder
-                <span class="project-subdomain">bdpan-finder.jianshuo.dev</span>
-              </div>
-              <div class="project-tagline">Mount Baidu Pan in macOS Finder like OneDrive — native integration via NSFileProvider.</div>
-            </div>
-            <div class="project-arrow">↗</div>
-          </div>
-        </a>
+    </div>
 
-      </div>
-    </section>
+    <!-- Personal links -->
+    <div class="personal-bar">
+      <a class="personal-link" href="https://home.wangjianshuo.com">
+        <span class="personal-link-label">home.wangjianshuo.com</span>
+        <span class="personal-link-arrow">↗</span>
+      </a>
+      <a class="personal-link" href="https://home.wangjianshuo.com/cn">
+        <span class="personal-link-label">中文主页</span>
+        <span class="personal-link-arrow">↗</span>
+      </a>
+      <a class="personal-link" href="https://wangjianshuo.com">
+        <span class="personal-link-label">wangjianshuo.com</span>
+        <span class="personal-link-arrow">↗</span>
+      </a>
+    </div>
+  </main>
 
-    <!-- ─── Personal Sites ─── -->
-    <section class="section fade delay-10">
-      <div class="section-header">
-        <span class="section-title">On the Web</span>
-        <div class="section-line"></div>
-      </div>
-
-      <div class="personal-links">
-
-        <a class="personal-link" href="https://home.wangjianshuo.com" target="_blank" rel="noopener">
-          <div class="link-info">
-            <div class="link-label">English Blog &amp; Homepage</div>
-            <div class="link-url">home.wangjianshuo.com</div>
-          </div>
-          <div class="link-arrow">↗</div>
-        </a>
-
-        <a class="personal-link" href="https://home.wangjianshuo.com/cn" target="_blank" rel="noopener">
-          <div class="link-info">
-            <div class="link-label">中文主页</div>
-            <div class="link-url">home.wangjianshuo.com/cn</div>
-          </div>
-          <div class="link-arrow">↗</div>
-        </a>
-
-        <a class="personal-link" href="https://wangjianshuo.com" target="_blank" rel="noopener">
-          <div class="link-info">
-            <div class="link-label">Main Website</div>
-            <div class="link-url">wangjianshuo.com</div>
-          </div>
-          <div class="link-arrow">↗</div>
-        </a>
-
-      </div>
-    </section>
-
-    <!-- ─── Footer ─── -->
-    <footer class="fade delay-10">
-      <span class="footer-left">jianshuo.dev · Shanghai</span>
-      <div class="footer-seal" title="王">王</div>
-    </footer>
-
-  </div>
 </body>
 </html>
