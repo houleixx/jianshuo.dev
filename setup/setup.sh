@@ -23,7 +23,12 @@ if [ ! -f "$HERE/Brewfile" ]; then
   mkdir -p "$HOME/code"
   curl -fsSL "$MIRROR" | tar -xz -C "$HOME/code"
   [ -f "$HOME/code/machine-setup/Brewfile" ] || { echo "!! 自举失败：镜像不完整"; exit 1; }
-  exec bash "$HOME/code/machine-setup/setup.sh" "$@"
+  # curl | bash 时 stdin 是管道：重新接回终端，不带 --yes 的交互确认才能用
+  if [ -e /dev/tty ]; then
+    exec bash "$HOME/code/machine-setup/setup.sh" "$@" </dev/tty
+  else
+    exec bash "$HOME/code/machine-setup/setup.sh" "$@"
+  fi
 fi
 
 AUTO=0
@@ -45,6 +50,11 @@ step_brew(){
       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
   fi
   eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+  if ! command -v brew >/dev/null 2>&1; then
+    warn "Homebrew 仍不可用（安装失败或被跳过）。常见原因：访问不了 raw.githubusercontent.com。"
+    echo "    先把代理跑起来（或用国内镜像装 brew），然后重跑：bash setup.sh brew"
+    return 0
+  fi
   if ask "用 Brewfile 安装所有包（formulae/casks/uv/npm/vscode）？"; then
     brew bundle --file="$HERE/Brewfile" || warn "部分包失败，可重跑"
     ok "brew bundle 完成"
@@ -120,6 +130,18 @@ step_claude(){
 step_repos(){
   run repos || return 0
   c "克隆所有 GitHub 仓库（普通 → ~/code/，产品 → products/，网站 → websites/，外部 → external/）"
+  # 前置检查：全新机器没有 SSH key，git@github.com 一个仓库都拉不下来
+  if ! ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+    warn "SSH 连不上 GitHub，跳过整个克隆步骤。配好 key 后单独重跑：bash setup.sh repos"
+    echo "    方式 A（推荐）：从旧机器把整个 ~/.ssh/ 拷过来，然后："
+    echo "      chmod 700 ~/.ssh && chmod 600 ~/.ssh/id_* && chmod 644 ~/.ssh/*.pub"
+    echo "    方式 B：本机新生成一把 key，加到 GitHub："
+    echo "      ssh-keygen -t ed25519 -C \"你的邮箱\""
+    echo "      pbcopy < ~/.ssh/id_ed25519.pub   # 已进剪贴板，贴到 https://github.com/settings/keys"
+    echo "      （或先 gh auth login，再 gh ssh-key add ~/.ssh/id_ed25519.pub）"
+    echo "    若 github.com 整个连不通：先装代理 app 并 proxy-on，再回来跑这步。"
+    return 0
+  fi
   # clone_into <父目录> <repo名> [org]（本地目录名与 repo 同名，org 默认 jianshuo）
   # products/ websites/ external/ 只是普通文件夹，不是 git repo
   clone_into(){
@@ -179,5 +201,7 @@ echo
 c "完成。接下来："
 echo "  1) 填密钥：编辑 ~/.config/secrets.env，并把旧机器的 ~/code/.env 拷过来"
 echo "  2) 新开终端 / source ~/.zshrc"
-echo "  3) 若新机无本地代理，注释掉 ~/.zshrc 顶部的代理 export 块"
-echo "  4) claude /login 登录；gh auth login 登录 GitHub"
+echo "  3) 代理：装好本地代理 app 后重开终端即可（.zshrc 检测到 127.0.0.1:1087 在监听才启用代理）"
+echo "  4) SSH key：拷旧机器 ~/.ssh/ 或 ssh-keygen 新生成并加到 GitHub（repos 步骤打印了详细命令）"
+echo "  5) 补克隆仓库：bash setup.sh repos（没 SSH key 时该步会自动跳过）"
+echo "  6) claude /login 登录；gh auth login 登录 GitHub"
