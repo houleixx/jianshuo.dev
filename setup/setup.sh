@@ -42,6 +42,38 @@ ask(){ [ "$AUTO" = 1 ] && return 0; read -r -p "  $1 [Y/n] " a; [ -z "$a" ] || [
 run(){ [ "$ONLY" = all ] || [ "$ONLY" = "$1" ]; }
 
 # --------------------------------------------------------------------------
+# 最早执行：从 iCloud 备份恢复 ~/.ssh（密钥不进 git/镜像，手动输密码解密）。
+# 备份由「打 zip 存进 iCloud 重要文档」生成：ssh-backup-*.zip，密码自带。
+# 这步先跑，后面的 repos（git clone）才有 SSH key 可用。
+step_ssh(){
+  run ssh || return 0
+  c "恢复 SSH key（从 iCloud 加密备份）"
+  if [ -f "$HOME/.ssh/id_ed25519" ]; then
+    ok "~/.ssh/id_ed25519 已存在，跳过恢复"; return 0
+  fi
+  local dir="$HOME/Library/Mobile Documents/com~apple~CloudDocs/my/重要文档"
+  # 取最新一个 ssh-backup-*.zip
+  local zip; zip="$(ls -t "$dir"/ssh-backup-*.zip 2>/dev/null | head -1)"
+  if [ -z "$zip" ]; then
+    warn "iCloud 里没找到 ssh-backup-*.zip（可能还没同步下来 / 没登录 iCloud）。"
+    echo "    晚点 key 到位后可单独重跑：bash setup.sh ssh"
+    return 0
+  fi
+  ok "找到备份：$(basename "$zip")"
+  local pw=""
+  read -r -s -p "  输入 zip 密码（直接回车跳过）: " pw </dev/tty; echo
+  [ -z "$pw" ] && { warn "未输密码，跳过 SSH 恢复"; return 0; }
+  if unzip -oq -P "$pw" "$zip" -d "$HOME" 2>/dev/null; then
+    chmod 700 "$HOME/.ssh" 2>/dev/null
+    chmod 600 "$HOME"/.ssh/* 2>/dev/null   # 先全部收紧
+    chmod 644 "$HOME"/.ssh/*.pub 2>/dev/null  # 再放开公钥
+    ok "~/.ssh 已恢复并修正权限"
+  else
+    warn "解压失败（密码错？）。可单独重跑：bash setup.sh ssh"
+  fi
+}
+
+# --------------------------------------------------------------------------
 step_brew(){
   run brew || return 0
   c "Homebrew + Brewfile"
@@ -190,6 +222,7 @@ step_extras(){
 
 # --------------------------------------------------------------------------
 echo "================ machine-setup ($ONLY) ================"
+step_ssh
 step_brew
 step_runtimes
 step_npm
@@ -202,6 +235,7 @@ c "完成。接下来："
 echo "  1) 填密钥：编辑 ~/.config/secrets.env，并把旧机器的 ~/code/.env 拷过来"
 echo "  2) 新开终端 / source ~/.zshrc"
 echo "  3) 代理：装好本地代理 app 后重开终端即可（.zshrc 检测到 127.0.0.1:1087 在监听才启用代理）"
-echo "  4) SSH key：拷旧机器 ~/.ssh/ 或 ssh-keygen 新生成并加到 GitHub（repos 步骤打印了详细命令）"
+echo "  4) SSH key：开头那步会自动从 iCloud 的 ssh-backup-*.zip 恢复（提示输密码）。"
+echo "     iCloud 没同步到/当时跳过了 → 同步好后单独重跑：bash setup.sh ssh"
 echo "  5) 补克隆仓库：bash setup.sh repos（没 SSH key 时该步会自动跳过）"
 echo "  6) claude /login 登录；gh auth login 登录 GitHub"
