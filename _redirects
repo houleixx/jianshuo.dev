@@ -1,0 +1,2 @@
+/vpn /setup 301
+/vpn/* /setup/:splat 301
