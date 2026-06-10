@@ -42,12 +42,13 @@ ask(){ [ "$AUTO" = 1 ] && return 0; read -r -p "  $1 [Y/n] " a; [ -z "$a" ] || [
 run(){ [ "$ONLY" = all ] || [ "$ONLY" = "$1" ]; }
 
 # --------------------------------------------------------------------------
-# 最早执行：从 iCloud 备份恢复 ~/.ssh（密钥不进 git/镜像，手动输密码解密）。
+# 最早执行：从 iCloud 备份恢复 ~/.ssh 和 ~/code/.env（密钥不进 git/镜像，手动输密码解密）。
 # 备份由「打 zip 存进 iCloud 重要文档」生成：ssh-backup-*.zip，密码自带。
-# 这步先跑，后面的 repos（git clone）才有 SSH key 可用。
+# zip 内路径都相对 $HOME（.ssh/* 和 code/.env），unzip -d $HOME 一次性还原到位。
+# 这步先跑：repos（git clone）才有 SSH key，且 .env 抢在 dotfiles 的占位符 seed 之前就位。
 step_ssh(){
   run ssh || return 0
-  c "恢复 SSH key（从 iCloud 加密备份）"
+  c "恢复 SSH key + ~/code/.env（从 iCloud 加密备份）"
   if [ -f "$HOME/.ssh/id_ed25519" ]; then
     ok "~/.ssh/id_ed25519 已存在，跳过恢复"; return 0
   fi
@@ -68,6 +69,10 @@ step_ssh(){
     chmod 600 "$HOME"/.ssh/* 2>/dev/null   # 先全部收紧
     chmod 644 "$HOME"/.ssh/*.pub 2>/dev/null  # 再放开公钥
     ok "~/.ssh 已恢复并修正权限"
+    if [ -f "$HOME/code/.env" ]; then
+      chmod 600 "$HOME/code/.env" 2>/dev/null  # 含密钥，收紧
+      ok "~/code/.env 已恢复（真实值，dotfiles 步骤的占位符会自动跳过）"
+    fi
   else
     warn "解压失败（密码错？）。可单独重跑：bash setup.sh ssh"
   fi
@@ -232,10 +237,10 @@ step_repos
 step_extras
 echo
 c "完成。接下来："
-echo "  1) 填密钥：编辑 ~/.config/secrets.env，并把旧机器的 ~/code/.env 拷过来"
+echo "  1) 填密钥：编辑 ~/.config/secrets.env（~/code/.env 已随 SSH 备份自动恢复，无需手拷）"
 echo "  2) 新开终端 / source ~/.zshrc"
 echo "  3) 代理：装好本地代理 app 后重开终端即可（.zshrc 检测到 127.0.0.1:1087 在监听才启用代理）"
-echo "  4) SSH key：开头那步会自动从 iCloud 的 ssh-backup-*.zip 恢复（提示输密码）。"
+echo "  4) SSH key + ~/code/.env：开头那步会自动从 iCloud 的 ssh-backup-*.zip 恢复（提示输密码）。"
 echo "     iCloud 没同步到/当时跳过了 → 同步好后单独重跑：bash setup.sh ssh"
 echo "  5) 补克隆仓库：bash setup.sh repos（没 SSH key 时该步会自动跳过）"
 echo "  6) claude /login 登录；gh auth login 登录 GitHub"
