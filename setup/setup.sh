@@ -6,7 +6,7 @@
 #   bash setup.sh --yes     # 全套，不再逐步确认
 #   bash setup.sh brew      # 只跑某一步：brew / runtimes / npm / dotfiles / claude / extras
 #
-# 幂等：每步都可重复跑。密钥不在脚本里，见 secrets.env.example。
+# 幂等：每步都可重复跑。密钥不在脚本里，见 env.example。
 # ==========================================================================
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -138,21 +138,19 @@ step_dotfiles(){
     backup "$HOME/.zprofile"; cp "$HERE/zprofile.template" "$HOME/.zprofile"
     ok ".zshrc / .zprofile 已部署"
   fi
-  mkdir -p "$HOME/.config"
   # 占位符模板（已存在就不覆盖，免得抹掉填好的真实值）
   seed(){ [ -f "$2" ] && { ok "$2 已存在，跳过"; return; }; cp "$1" "$2"; warn "已生成 $2（占位符）——记得填真实值！"; }
-  seed "$HERE/secrets.env.example"      "$HOME/.config/secrets.env"
-  seed "$HERE/machine-local.zsh.example" "$HOME/.config/machine-local.zsh"
   mkdir -p "$HOME/code"
   seed "$HERE/env.example"              "$HOME/code/.env"
-  # git 身份：从 machine-local.zsh 读 GIT_USER_NAME / GIT_USER_EMAIL
-  [ -f "$HOME/.config/machine-local.zsh" ] && source "$HOME/.config/machine-local.zsh"
+  # git 身份：从 shellrc 读 GIT_USER_NAME / GIT_USER_EMAIL（只取值，不 source 整个文件）
+  GIT_USER_NAME=$(grep '^export GIT_USER_NAME='  "$HERE/shellrc" | cut -d'"' -f2 || true)
+  GIT_USER_EMAIL=$(grep '^export GIT_USER_EMAIL=' "$HERE/shellrc" | cut -d'"' -f2 || true)
   if [ -n "${GIT_USER_NAME:-}" ] && [[ "$GIT_USER_NAME" != 你的名字 ]]; then
     git config --global user.name  "$GIT_USER_NAME"
     git config --global user.email "$GIT_USER_EMAIL"
     ok "git 身份：$GIT_USER_NAME <$GIT_USER_EMAIL>"
   else
-    warn "git 身份未设：填好 ~/.config/machine-local.zsh 里的 GIT_USER_* 后重跑 dotfiles"
+    warn "git 身份未设：在 shellrc 里设 GIT_USER_* 后重跑 dotfiles"
   fi
 }
 
@@ -237,7 +235,7 @@ step_repos
 step_extras
 echo
 c "完成。接下来："
-echo "  1) 填密钥：编辑 ~/.config/secrets.env（~/code/.env 已随 SSH 备份自动恢复，无需手拷）"
+echo "  1) 填密钥：~/code/.env 已随 SSH 备份自动恢复；若是占位符版，照 env.example 填真实值"
 echo "  2) 新开终端 / source ~/.zshrc"
 echo "  3) 代理：装好本地代理 app 后重开终端即可（.zshrc 检测到 127.0.0.1:1087 在监听才启用代理）"
 echo "  4) SSH key + ~/code/.env：开头那步会自动从 iCloud 的 ssh-backup-*.zip 恢复（提示输密码）。"
