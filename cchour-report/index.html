@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 编程工具时间报表</title>
+<style>
+  :root { --ink:#2c2c2c; --muted:#8a8a8a; --line:#ececec; --bg:#fafaf8; --card:#ffffff; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,"PingFang SC","Hiragino Sans GB",sans-serif;
+          background:var(--bg); color:var(--ink); padding:40px 24px 80px; }
+  .wrap { max-width:980px; margin:0 auto; }
+  h1 { font-size:26px; font-weight:700; letter-spacing:.5px; }
+  .sub { color:var(--muted); font-size:13px; margin-top:6px; }
+  h2 { font-size:16px; font-weight:600; margin:36px 0 14px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; margin-top:24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
+  .card-label { font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .card-value { font-size:32px; font-weight:700; margin-top:6px; }
+  .card-value .unit { font-size:14px; font-weight:400; color:var(--muted); margin-left:4px; }
+  .card-sub { font-size:12px; color:var(--muted); margin-top:4px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; }
+  .chart { display:flex; align-items:flex-end; gap:3px; height:190px; }
+  .bar { flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; min-width:0; }
+  .bar-stack { width:100%; display:flex; flex-direction:column-reverse; border-radius:3px 3px 0 0; overflow:hidden; }
+  .bar:hover .bar-stack { opacity:.75; }
+  .bar-x { font-size:9px; color:var(--muted); margin-top:5px; white-space:nowrap;
+            transform:rotate(-45deg); transform-origin:top center; height:26px; }
+  .hourchart .bar-x { transform:none; height:auto; }
+  .legend { display:flex; gap:16px; margin-top:6px; font-size:12px; color:var(--muted); }
+  .lg { display:flex; align-items:center; gap:5px; }
+  .hrow { display:flex; align-items:center; gap:12px; padding:7px 0; border-bottom:1px solid var(--line); }
+  .hrow:last-child { border-bottom:none; }
+  .hname { width:200px; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+            display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  .htrack { flex:1; height:14px; background:#f3f3f0; border-radius:7px; overflow:hidden; }
+  .hfill { height:100%; border-radius:7px; }
+  .hval { width:230px; font-size:12px; text-align:right; flex-shrink:0; }
+  .muted { color:var(--muted); }
+  .controls { margin-top:18px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .chip { border:1px solid var(--line); background:var(--card); border-radius:16px; padding:5px 13px;
+          font-size:13px; color:var(--ink); cursor:pointer; font-family:inherit; }
+  .chip:hover { border-color:#c5c5c0; }
+  .chip.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .custom { font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-left:6px; }
+  .custom input { border:1px solid var(--line); border-radius:8px; padding:4px 8px; font-size:13px;
+                  color:var(--ink); background:var(--card); font-family:inherit; }
+  footer { margin-top:48px; font-size:12px; color:var(--muted); text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI 编程工具时间报表</h1>
+  <div class="sub">生成于 2026-06-11 23:27 · <span id="range-label"></span> · 数据来自本机 Claude Code 与 Codex 会话记录 · 活跃时长 = 相邻操作间隔 ≤ 15 分钟的累计</div>
+
+  <div class="controls">
+    <button class="chip" data-preset="all">全部</button>
+    <button class="chip" data-preset="today">今天</button>
+    <button class="chip" data-preset="week">本周</button>
+    <button class="chip" data-preset="lastweek">上周</button>
+    <button class="chip" data-preset="month">本月</button>
+    <button class="chip" data-preset="lastmonth">上月</button>
+    <button class="chip" data-preset="d7">近 7 天</button>
+    <button class="chip" data-preset="d30">近 30 天</button>
+    <button class="chip" data-preset="d90">近 90 天</button>
+    <span class="custom">自定义 <input type="date" id="d-since"> ~ <input type="date" id="d-until"></span>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <h2 id="h-daily"></h2>
+  <div class="panel">
+    <div class="chart" id="chart-daily"></div>
+    <div class="legend" id="legend-daily"></div>
+  </div>
+
+  <h2 id="h-weekly"></h2>
+  <div class="panel">
+    <div class="chart" id="chart-weekly" style="height:180px"></div>
+    <div class="legend" id="legend-weekly"></div>
+  </div>
+
+  <h2 id="h-monthly"></h2>
+  <div class="panel">
+    <div class="chart" id="chart-monthly" style="height:180px"></div>
+    <div class="legend" id="legend-monthly"></div>
+  </div>
+
+  <h2>一天中的时间分布（24 小时）</h2>
+  <div class="panel hourchart">
+    <div class="chart" id="chart-hourly" style="height:150px"></div>
+    <div class="legend" id="legend-hourly"></div>
+  </div>
+
+  <h2>工作分类</h2>
+  <div class="panel" id="cats"></div>
+
+  <h2>项目时长 Top 20</h2>
+  <div class="panel" id="projects"></div>
+
+  <footer>cchour · 全部数据在本机统计，未上传任何服务 · 时间范围切换在浏览器内完成</footer>
+</div>
+
+<script type="application/json" id="cchour-data">{"genDay":"2026-06-11","genTime":"2026-06-11 23:27","minDay":"2026-05-01","daysOpt":30,"range":{"since":null,"until":null},"tools":{"Claude Code":{"daily":{"2026-05-12":8024,"2026-05-13":18548,"2026-05-14":23970,"2026-05-15":21886,"2026-05-16":10020,"2026-05-17":8550,"2026-05-18":35548,"2026-05-19":10885,"2026-05-20":25294,"2026-05-21":18870,"2026-05-22":12082,"2026-05-23":23912,"2026-05-24":37633,"2026-05-25":36875,"2026-05-26":30983,"2026-05-27":23936,"2026-05-28":36382,"2026-05-29":34746,"2026-05-30":24217,"2026-05-31":13544,"2026-06-01":22208,"2026-06-02":33906,"2026-06-03":36034,"2026-06-04":43852,"2026-06-05":23576,"2026-06-06":42560,"2026-06-07":26620,"2026-06-08":28654,"2026-06-09":21957,"2026-06-10":36611,"2026-06-11":44917},"dayHour":{"2026-05-12":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1379,2512,4133],"2026-05-13":[3447,1507,396,368,128,769,548,427,70,0,0,35,253,708,0,0,0,1323,1900,959,0,2411,3299,0],"2026-05-14":[0,0,0,0,0,0,0,0,343,1528,2002,2521,94,1437,3232,1215,2649,3074,1430,54,0,1084,3163,144],"2026-05-15":[2700,263,713,125,939,326,164,1132,0,0,0,0,0,419,30,2948,3563,3048,0,32,792,757,1471,2464],"2026-05-16":[0,0,0,0,0,0,0,0,0,0,0,2558,985,65,897,803,2009,1739,35,679,90,0,0,160],"2026-05-17":[0,0,0,0,0,0,0,0,0,0,169,3361,1219,0,0,48,938,1958,732,0,125,0,0,0],"2026-05-18":[1477,3516,3684,794,0,0,0,0,0,818,123,1430,466,464,3069,3235,3033,0,0,2039,2618,3612,3507,1663],"2026-05-19":[0,0,0,0,0,0,0,0,0,645,880,2053,208,0,0,0,866,358,0,0,0,97,2212,3566],"2026-05-20":[2338,0,0,0,0,0,0,0,0,31,0,0,2111,755,1994,308,1551,2848,1245,3606,3435,3062,1980,30],"2026-05-21":[0,0,0,0,0,0,0,0,0,1221,0,451,0,0,671,1792,0,0,2265,928,1692,3615,3466,2769],"2026-05-22":[0,0,0,0,0,0,0,0,0,2068,933,1381,450,851,0,1016,907,2493,0,0,0,0,1055,928],"2026-05-23":[0,0,0,0,0,0,0,0,0,2573,1655,2147,535,0,596,527,1044,4353,858,1178,605,54,4195,3592],"2026-05-24":[2991,38,98,69,108,64,67,69,43,0,60,0,0,0,3579,3359,3841,3599,3602,2907,2335,3666,3601,3537],"2026-05-25":[475,31,90,144,30,840,115,30,88,3146,3357,2536,238,1626,3860,0,1646,30,1509,3626,2539,3720,3602,3597],"2026-05-26":[2903,1776,964,1300,0,0,188,0,0,2841,2152,225,34,460,0,876,2835,0,73,3494,2053,3674,3591,1544],"2026-05-27":[3536,1753,40,0,0,0,63,0,0,0,0,0,31,293,1636,0,784,3275,3558,1902,3749,1853,1463,0],"2026-05-28":[0,0,0,0,0,0,0,0,0,0,61,1224,257,3738,3543,1102,3606,3597,3574,1186,3645,3615,3634,3600],"2026-05-29":[3173,3991,0,0,0,0,0,0,0,0,0,0,1456,3058,2982,3361,3606,3667,1556,0,1038,1054,2245,3559],"2026-05-30":[2726,2403,30,0,0,0,0,1984,512,3001,873,0,1151,0,0,3553,1684,55,0,0,0,0,2648,3597],"2026-05-31":[3212,0,30,0,0,0,0,0,0,0,273,979,1310,0,0,0,1480,3499,1722,440,0,0,91,508],"2026-06-01":[3541,1954,0,0,0,0,0,0,0,0,0,747,30,1849,3592,506,1087,0,0,0,0,895,4400,3607],"2026-06-02":[3066,3758,3974,3164,0,0,0,0,0,1239,3506,2568,923,147,588,618,1463,439,0,642,585,0,3619,3607],"2026-06-03":[182,0,0,0,0,0,0,0,0,0,957,3298,3545,2067,2122,2668,708,3350,2425,3598,3464,2842,2542,2266],"2026-06-04":[2800,1313,0,0,0,0,0,0,0,0,1477,3638,2371,3661,3556,3143,2635,3108,3526,782,1021,3493,3650,3678],"2026-06-05":[3566,1577,0,0,0,0,0,0,0,0,1925,1172,0,0,0,369,2272,2373,0,0,0,3232,3546,3544],"2026-06-06":[2473,3600,2314,30,0,0,0,0,0,0,0,0,1044,843,2594,3576,3611,3613,3577,3604,3619,2241,3533,2288],"2026-06-07":[3593,1068,0,0,0,0,0,0,0,0,0,0,1499,937,3600,2401,3509,2793,1645,1341,672,501,3061,0],"2026-06-08":[0,0,0,0,0,0,0,0,0,0,0,287,2535,3637,971,3086,2747,3554,3650,1462,0,2108,3592,1025],"2026-06-09":[0,2295,3605,740,0,0,1253,0,0,0,932,1989,3101,0,30,0,1851,966,0,1473,0,706,1366,1650],"2026-06-10":[0,656,585,0,0,0,0,0,0,0,0,3519,3477,3117,4146,1311,3343,3589,736,1322,60,3550,3584,3616],"2026-06-11":[3386,869,934,264,262,1144,2118,3627,91,260,2107,3599,2254,2618,1768,3596,2021,2090,3910,1518,604,600,3626,1651]}},"Codex":{"daily":{"2026-05-01":5636,"2026-05-02":2881,"2026-05-03":4537,"2026-05-04":3543,"2026-05-05":2225,"2026-05-06":3410,"2026-05-07":2817,"2026-05-08":793,"2026-05-09":522,"2026-05-10":260,"2026-05-11":1565,"2026-05-12":1465,"2026-05-15":153,"2026-05-17":1933,"2026-05-21":641,"2026-05-23":132,"2026-05-25":688,"2026-05-26":6821,"2026-05-27":675,"2026-05-29":70,"2026-06-02":1217,"2026-06-03":6358,"2026-06-04":149,"2026-06-05":1594,"2026-06-10":104},"dayHour":{"2026-05-01":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,110,0,0,0,1930,3596,0,0,0],"2026-05-02":[0,0,0,0,0,0,0,0,0,0,614,1324,0,0,0,0,0,0,0,0,463,480,0,0],"2026-05-03":[0,0,0,0,0,0,0,0,0,1587,456,886,0,219,563,0,0,0,0,741,85,0,0,0],"2026-05-04":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1152,0,0,0,1774,617,0,0],"2026-05-05":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,247,50,679,214,164,522,349,0],"2026-05-06":[254,84,0,0,0,0,0,0,0,0,0,0,0,0,0,818,377,0,0,0,179,1523,0,175],"2026-05-07":[0,1074,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,201,1063,479],"2026-05-08":[793,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"2026-05-09":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,74,448,0],"2026-05-10":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,78,182,0],"2026-05-11":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,402,1163,0,0],"2026-05-12":[0,0,0,0,0,0,0,0,0,0,0,0,738,466,0,0,0,261,0,0,0,0,0,0],"2026-05-15":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,65,46,42,0,0,0,0,0,0],"2026-05-17":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,656,946,276,55],"2026-05-21":[0,0,0,0,0,0,0,0,0,0,0,184,0,0,0,0,0,0,0,0,0,457,0,0],"2026-05-23":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,132,0,0,0,0,0,0,0,0,0],"2026-05-25":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,297,0,391,0,0],"2026-05-26":[0,0,0,0,0,0,0,0,0,0,0,0,0,716,0,0,586,1763,202,0,76,2207,969,302],"2026-05-27":[0,0,0,0,0,0,365,189,90,0,0,0,0,0,0,0,0,0,31,0,0,0,0,0],"2026-05-29":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,70,0,0,0],"2026-06-02":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,514,0,0,0,0,0,0,703],"2026-06-03":[0,0,0,0,0,0,0,0,0,0,32,1644,217,2556,755,1061,0,93,0,0,0,0,0,0],"2026-06-04":[0,0,0,0,0,0,0,0,0,0,0,0,149,0,0,0,0,0,0,0,0,0,0,0],"2026-06-05":[0,0,0,0,0,0,0,0,0,0,527,1067,0,0,0,0,0,0,0,0,0,0,0,0],"2026-06-10":[0,0,0,0,0,0,0,0,0,0,0,104,0,0,0,0,0,0,0,0,0,0,0,0]}}},"projects":[{"tool":"Claude Code","proj":"code 根目录（杂项）","cat":"杂项（根目录会话）","daily":{"2026-05-21":2843,"2026-05-22":205,"2026-05-23":2933,"2026-05-24":784,"2026-05-26":2799,"2026-05-27":19589,"2026-05-28":332,"2026-05-29":852,"2026-05-30":6011,"2026-06-02":1119,"2026-06-03":3516,"2026-06-04":20456,"2026-06-05":12462,"2026-06-06":26825,"2026-06-07":2630,"2026-06-08":5538,"2026-06-09":4051,"2026-06-10":5953,"2026-06-11":9032}},{"tool":"Claude Code","proj":"claude-skills","cat":"技能与工具链","daily":{"2026-05-13":9892,"2026-05-14":14864,"2026-05-15":15067,"2026-05-16":10020,"2026-05-17":8550,"2026-05-18":22109,"2026-05-20":5132,"2026-05-21":1380,"2026-05-29":1119}},{"tool":"Claude Code","proj":"code 根目录 · 写作与发布","cat":"写作与发布","daily":{"2026-05-21":6719,"2026-05-22":1767,"2026-05-26":1608,"2026-05-27":4746,"2026-05-30":2254,"2026-06-02":3246,"2026-06-03":14340,"2026-06-04":14597,"2026-06-05":10660,"2026-06-06":4002,"2026-06-07":5300,"2026-06-08":3381,"2026-06-09":10647,"2026-06-10":152}},{"tool":"Claude Code","proj":"code 根目录 · 产品开发","cat":"产品开发","daily":{"2026-06-05":117,"2026-06-06":8909,"2026-06-07":3120,"2026-06-08":10328,"2026-06-09":1210,"2026-06-10":24836,"2026-06-11":14543}},{"tool":"Claude Code","proj":"iCloud 文档 · 视频制作","cat":"视频制作","daily":{"2026-05-13":2206,"2026-05-24":29925,"2026-05-25":26458}},{"tool":"Claude Code","proj":"ccglass","cat":"产品开发","daily":{"2026-05-23":10407,"2026-05-24":9535,"2026-05-25":688,"2026-05-26":5898,"2026-05-27":127,"2026-05-28":10640,"2026-06-08":4888,"2026-06-11":5579}},{"tool":"Claude Code","proj":"wechat-publish","cat":"写作与发布","daily":{"2026-05-14":2365,"2026-05-23":9296,"2026-05-24":187,"2026-05-27":165,"2026-05-28":3032,"2026-05-29":13060,"2026-05-30":1105,"2026-05-31":568,"2026-06-01":1961,"2026-06-02":100,"2026-06-03":6141,"2026-06-04":132,"2026-06-05":86,"2026-06-06":184,"2026-06-07":250,"2026-06-08":1558,"2026-06-09":1515,"2026-06-10":407,"2026-06-11":2957}},{"tool":"Claude Code","proj":"huixianju-cn","cat":"写作与发布","daily":{"2026-05-30":2758,"2026-05-31":12976,"2026-06-01":21151,"2026-06-02":3157,"2026-06-04":1234}},{"tool":"Claude Code","proj":"code 根目录 · 网站维护","cat":"网站维护","daily":{"2026-06-04":1088,"2026-06-05":2434,"2026-06-07":1499,"2026-06-08":4227,"2026-06-09":146,"2026-06-10":19720,"2026-06-11":11460}},{"tool":"Claude Code","proj":"vibelight","cat":"产品开发","daily":{"2026-05-28":33989,"2026-05-29":4742}},{"tool":"Claude Code","proj":"Downloads-2026-5-24---------","cat":"杂项（根目录会话）","daily":{"2026-05-25":16593,"2026-05-26":11856}},{"tool":"Claude Code","proj":"iCloud 文档","cat":"杂项（根目录会话）","daily":{"2026-05-13":2091,"2026-05-18":757,"2026-05-20":4271,"2026-05-21":165,"2026-05-24":4048,"2026-05-25":15563,"2026-05-26":523,"2026-05-30":1024}},{"tool":"Claude Code","proj":"financial-services","cat":"产品开发","daily":{"2026-05-18":12495,"2026-05-19":2785,"2026-05-20":2962,"2026-05-21":2248,"2026-05-22":2518,"2026-05-26":683}},{"tool":"Claude Code","proj":"bdpan-finder","cat":"产品开发","daily":{"2026-06-06":3891,"2026-06-07":19579}},{"tool":"Claude Code","proj":"Cathier","cat":"产品开发","daily":{"2026-05-14":8728,"2026-05-15":944,"2026-05-19":8786,"2026-05-20":877,"2026-05-21":2293,"2026-05-27":400}},{"tool":"Claude Code","proj":"inspirationlake-org","cat":"产品开发","daily":{"2026-06-01":358,"2026-06-02":20373}},{"tool":"Claude Code","proj":"code 根目录 · 基础设施","cat":"基础设施","daily":{"2026-05-21":118,"2026-05-30":105,"2026-06-02":94,"2026-06-04":4313,"2026-06-05":483,"2026-06-06":146,"2026-06-08":4786,"2026-06-09":9057}},{"tool":"Claude Code","proj":"code 根目录 · 技能与工具链","cat":"技能与工具链","daily":{"2026-05-21":3041,"2026-05-22":5663,"2026-05-26":147,"2026-05-28":30,"2026-06-04":401,"2026-06-05":1401,"2026-06-06":2307,"2026-06-08":5198,"2026-06-09":237,"2026-06-10":60}},{"tool":"Claude Code","proj":"iCloud 文档 · 公司与业务","cat":"公司与业务","daily":{"2026-05-13":6981,"2026-05-20":9323,"2026-05-24":1220}},{"tool":"Claude Code","proj":"mira","cat":"产品开发","daily":{"2026-05-14":4311,"2026-05-15":7291,"2026-05-20":2799}},{"tool":"Codex","proj":"articles","cat":"写作与发布","daily":{"2026-05-26":5378,"2026-05-27":675,"2026-06-03":5061,"2026-06-04":149,"2026-06-05":90}},{"tool":"Claude Code","proj":"websites-yishineihua-com","cat":"网站维护","daily":{"2026-06-03":7865,"2026-06-04":3282}},{"tool":"Claude Code","proj":"ccline","cat":"产品开发","daily":{"2026-05-29":10564,"2026-05-30":185}},{"tool":"Claude Code","proj":"code 根目录 · 视频制作","cat":"视频制作","daily":{"2026-05-29":926,"2026-06-02":1944,"2026-06-04":5307,"2026-06-06":661}},{"tool":"Claude Code","proj":"websites-maggiacito-com","cat":"网站维护","daily":{"2026-06-04":8786}},{"tool":"Claude Code","proj":"iCloud 文档 · 写作与发布","cat":"写作与发布","daily":{"2026-05-24":7268,"2026-05-25":1180,"2026-05-26":31}},{"tool":"Codex","proj":"云想","cat":"产品开发","daily":{"2026-05-01":5490,"2026-05-02":2881}},{"tool":"Claude Code","proj":"home 目录 · 写作与发布","cat":"写作与发布","daily":{"2026-05-12":3311,"2026-05-26":4939}},{"tool":"Claude Code","proj":"wangjianshuo-com","cat":"写作与发布","daily":{"2026-05-30":6412,"2026-06-02":664}},{"tool":"Claude Code","proj":"home-wangjianshuo-com","cat":"写作与发布","daily":{"2026-06-02":1130,"2026-06-03":3967,"2026-06-04":1261}},{"tool":"Codex","proj":"files-mentioned-by-the-user-img","cat":"其他","daily":{"2026-05-06":2659,"2026-05-07":2616,"2026-05-08":793}},{"tool":"Claude Code","proj":"cclight","cat":"产品开发","daily":{"2026-05-29":5828}},{"tool":"Claude Code","proj":"Downloads-wangjianshuo-com","cat":"写作与发布","daily":{"2026-05-30":5767}},{"tool":"Claude Code","proj":"machine-setup","cat":"其他","daily":{"2026-06-07":4792,"2026-06-08":156}},{"tool":"Claude Code","proj":"websites","cat":"网站维护","daily":{"2026-06-02":4735,"2026-06-03":182}},{"tool":"Claude Code","proj":"cchour","cat":"产品开发","daily":{"2026-06-11":4826}},{"tool":"Codex","proj":"new-chat-2","cat":"其他","daily":{"2026-05-05":1347,"2026-05-06":238,"2026-05-07":201,"2026-05-09":522,"2026-05-10":260,"2026-05-11":197,"2026-05-12":45,"2026-05-15":65,"2026-05-17":403,"2026-05-21":641,"2026-05-23":132,"2026-05-25":688}},{"tool":"Claude Code","proj":"claude-code","cat":"技能与工具链","daily":{"2026-05-21":2678,"2026-05-22":1091,"2026-05-25":931}},{"tool":"Claude Code","proj":"home 目录 · 技能与工具链","cat":"技能与工具链","daily":{"2026-05-12":3616,"2026-05-13":1016}},{"tool":"Claude Code","proj":"claude-logs","cat":"技能与工具链","daily":{"2026-05-22":4368}},{"tool":"Codex","proj":"Cathier","cat":"产品开发","daily":{"2026-05-01":152,"2026-05-03":3711,"2026-05-05":56,"2026-05-06":175}},{"tool":"Codex","proj":"alimasu-tiktok","cat":"其他","daily":{"2026-05-04":3543,"2026-05-05":30}},{"tool":"Claude Code","proj":"agents","cat":"技能与工具链","daily":{"2026-05-20":2655}},{"tool":"Claude Code","proj":"cctime","cat":"产品开发","daily":{"2026-06-11":2001}},{"tool":"Claude Code","proj":"根目录 · 写作与发布","cat":"写作与发布","daily":{"2026-05-19":31,"2026-05-20":31,"2026-05-21":845,"2026-05-22":32,"2026-05-23":32,"2026-05-25":161,"2026-05-26":513,"2026-05-27":195}},{"tool":"Claude Code","proj":"临时目录","cat":"其他","daily":{"2026-05-29":1777}},{"tool":"Codex","proj":"code 根目录 · 写作与发布","cat":"写作与发布","daily":{"2026-06-03":67,"2026-06-05":1594}},{"tool":"Claude Code","proj":"home 目录（杂项）","cat":"杂项（根目录会话）","daily":{"2026-05-12":105,"2026-05-21":314,"2026-05-26":802,"2026-05-29":39,"2026-05-30":105,"2026-06-04":69,"2026-06-05":34,"2026-06-08":35,"2026-06-10":34}},{"tool":"Codex","proj":"claude-skills","cat":"技能与工具链","daily":{"2026-05-17":1530}},{"tool":"Codex","proj":"code 根目录（杂项）","cat":"杂项（根目录会话）","daily":{"2026-06-03":1230}},{"tool":"Codex","proj":"users-jianshuo-library-mobile-documents-com","cat":"杂项（根目录会话）","daily":{"2026-05-11":1227}},{"tool":"Claude Code","proj":"home 目录 · 基础设施","cat":"基础设施","daily":{"2026-05-26":1042}},{"tool":"Claude Code","proj":"skills-wjs-publishing-wechat","cat":"写作与发布","daily":{"2026-05-28":945}},{"tool":"Codex","proj":"claude-code","cat":"技能与工具链","daily":{"2026-05-17":915}},{"tool":"Codex","proj":"ccglass","cat":"产品开发","daily":{"2026-05-26":912}},{"tool":"Codex","proj":"haojing","cat":"其他","daily":{"2026-05-03":826,"2026-05-05":31}},{"tool":"Claude Code","proj":"html-anything","cat":"产品开发","daily":{"2026-05-19":543,"2026-05-20":311}},{"tool":"Claude Code","proj":"mini-claude-code","cat":"技能与工具链","daily":{"2026-06-09":706}},{"tool":"Codex","proj":"websites","cat":"网站维护","daily":{"2026-06-02":703}},{"tool":"Claude Code","proj":"code 根目录 · 公司与业务","cat":"公司与业务","daily":{"2026-06-06":629}},{"tool":"Claude Code","proj":"html-anything-next","cat":"产品开发","daily":{"2026-05-19":582}},{"tool":"Codex","proj":"chrome-plugin-chrome-openai-bundled","cat":"其他","daily":{"2026-05-12":582}},{"tool":"Codex","proj":"code 根目录 · 视频制作","cat":"视频制作","daily":{"2026-06-02":514}},{"tool":"Claude Code","proj":"iCloud 文档 · 网站维护","cat":"网站维护","daily":{"2026-06-04":472}},{"tool":"Codex","proj":"github-pr","cat":"其他","daily":{"2026-05-05":84,"2026-05-06":338}},{"tool":"Codex","proj":"new-chat","cat":"其他","daily":{"2026-05-05":241,"2026-05-15":46,"2026-05-26":128}},{"tool":"Claude Code","proj":"home-wangjianshuo-com-hugo-public-cn","cat":"写作与发布","daily":{"2026-06-01":374}},{"tool":"Codex","proj":"files-mentioned-by-the-user-1080","cat":"其他","daily":{"2026-05-12":334}},{"tool":"Claude Code","proj":"researching-company","cat":"其他","daily":{"2026-05-22":299}},{"tool":"Claude Code","proj":"Library-CloudStorage-OneDrive----My-Life-----------websites-wangjianshuo-com","cat":"写作与发布","daily":{"2026-06-05":154}},{"tool":"Codex","proj":"code 根目录 · 技能与工具链","cat":"技能与工具链","daily":{"2026-06-03":144}},{"tool":"Codex","proj":"plugin-browser-use-openai-bundled-test","cat":"其他","daily":{"2026-05-05":141}},{"tool":"Claude Code","proj":"skills-wjs-tweeting-from-articles","cat":"写作与发布","daily":{"2026-05-25":140}},{"tool":"Claude Code","proj":"skills","cat":"技能与工具链","daily":{"2026-06-04":130}},{"tool":"Claude Code","proj":"根目录（杂项）","cat":"杂项（根目录会话）","daily":{"2026-05-27":105}},{"tool":"Codex","proj":"mini-claude-code","cat":"技能与工具链","daily":{"2026-06-10":104}},{"tool":"Claude Code","proj":"claude","cat":"其他","daily":{"2026-05-31":101}},{"tool":"Claude Code","proj":"mitmproxy","cat":"技能与工具链","daily":{"2026-05-21":100}},{"tool":"Codex","proj":"hello","cat":"其他","daily":{"2026-05-11":39,"2026-05-15":42}},{"tool":"Claude Code","proj":"websites-run2me-com","cat":"网站维护","daily":{"2026-06-02":34,"2026-06-04":42}},{"tool":"Codex","proj":"home 目录（杂项）","cat":"杂项（根目录会话）","daily":{"2026-05-26":76}},{"tool":"Codex","proj":"plugin-computer-use-openai-bundled","cat":"其他","daily":{"2026-05-12":73}},{"tool":"Codex","proj":"tmp","cat":"技能与工具链","daily":{"2026-05-29":70}}]}</script>
+<script>
+'use strict';
+/* 范围切换全部在前端完成：按「日桶归属」对内嵌的按日数据求和。 */
+var D = JSON.parse(document.getElementById('cchour-data').textContent);
+var TOOL_COLORS = { 'Claude Code': '#D97757', 'Codex': '#4A7DBE' };
+var CAT_COLORS = ['#D97757', '#4A7DBE', '#5BA88B', '#C9A227', '#9B7BB8', '#D86F8C', '#8A9BA8'];
+var TOOLS = Object.keys(D.tools);
+
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+function hrs(sec) { var h = sec / 3600; return h >= 100 ? h.toFixed(0) : h.toFixed(1); }
+function fmtH(sec) { var h = sec / 3600; return h >= 1 ? h.toFixed(1) + ' 小时' : Math.round(sec / 60) + ' 分钟'; }
+function color(t) { return TOOL_COLORS[t] || '#888'; }
+function dayStr(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function parseDay(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+function mondayOf(d) { return addDays(d, -((d.getDay() + 6) % 7)); }
+function inR(k, lo, hi) { return (!lo || k >= lo) && (!hi || k <= hi); }
+function sumRange(daily, lo, hi) { var s = 0; for (var k in daily) if (inR(k, lo, hi)) s += daily[k]; return s; }
+
+var cur = { since: null, until: null };
+
+function stackedBars(keys, tools, valFn, labelFn, height) {
+  var max = 1, totals = [], i, t, v;
+  for (i = 0; i < keys.length; i++) {
+    v = 0;
+    for (t = 0; t < tools.length; t++) v += valFn(tools[t], keys[i]);
+    totals.push(v);
+    if (v > max) max = v;
+  }
+  var html = '';
+  for (i = 0; i < keys.length; i++) {
+    var segs = '';
+    for (t = 0; t < tools.length; t++) {
+      v = valFn(tools[t], keys[i]);
+      var h = (v / max) * height;
+      if (h > 0.5) segs += '<div class="seg" style="height:' + h.toFixed(1) + 'px;background:' + color(tools[t]) + '"></div>';
+    }
+    html += '<div class="bar" title="' + keys[i] + ' · ' + (totals[i] / 3600).toFixed(1) + 'h">' +
+      '<div class="bar-stack">' + segs + '</div><div class="bar-x">' + labelFn(keys[i]) + '</div></div>';
+  }
+  return html;
+}
+
+function render() {
+  var lo = cur.since, hi = cur.until, i;
+  var toolSec = {}, total = 0;
+  TOOLS.forEach(function (t) { toolSec[t] = sumRange(D.tools[t].daily, lo, hi); total += toolSec[t]; });
+  var tools = TOOLS.slice().sort(function (a, b) { return toolSec[b] - toolSec[a]; });
+
+  var start = lo && lo > D.minDay ? lo : D.minDay;
+  var end = hi && hi < D.genDay ? hi : D.genDay;
+  if (end < start) end = start;
+  var spanDays = Math.max(1, Math.round((parseDay(end) - parseDay(start)) / 86400000) + 1);
+
+  document.getElementById('range-label').textContent =
+    (lo || hi) ? '统计范围 ' + (lo || '最早') + ' ~ ' + (hi || '今天') : '统计范围 全部数据';
+
+  // 总览卡片
+  var cards = '<div class="card"><div class="card-label">总活跃时长</div>' +
+    '<div class="card-value">' + hrs(total) + '<span class="unit">小时</span></div>' +
+    '<div class="card-sub">' + start + ' ~ ' + end + ' · ' + spanDays + ' 天</div></div>';
+  tools.forEach(function (t) {
+    var pct = total ? (toolSec[t] / total) * 100 : 0;
+    cards += '<div class="card"><div class="card-label"><span class="dot" style="background:' + color(t) + '"></span>' + t + '</div>' +
+      '<div class="card-value">' + hrs(toolSec[t]) + '<span class="unit">小时</span></div>' +
+      '<div class="card-sub">占比 ' + pct.toFixed(0) + '% · 日均 ' + (toolSec[t] / 3600 / spanDays).toFixed(1) + ' 小时</div></div>';
+  });
+  document.getElementById('cards').innerHTML = cards;
+
+  var legend = tools.map(function (t) {
+    return '<span class="lg"><span class="dot" style="background:' + color(t) + '"></span>' + t + '</span>';
+  }).join('');
+  ['legend-daily', 'legend-weekly', 'legend-monthly', 'legend-hourly'].forEach(function (id) {
+    document.getElementById(id).innerHTML = legend;
+  });
+
+  // 每日图：锚定范围末尾，最多 daysOpt 根
+  var endD = parseDay(end);
+  var days = [];
+  for (i = D.daysOpt - 1; i >= 0; i--) {
+    var ds = dayStr(addDays(endD, -i));
+    if (ds < start) continue;
+    days.push(ds);
+  }
+  document.getElementById('h-daily').textContent = '最近 ' + days.length + ' 天每日使用';
+  document.getElementById('chart-daily').innerHTML = stackedBars(days, tools, function (t, k) {
+    return D.tools[t].daily[k] || 0;
+  }, function (k) { return k.slice(5).replace('-', '/'); }, 160);
+
+  // 周 / 月聚合（只含范围内的天）
+  var wkByTool = {}, moByTool = {};
+  tools.forEach(function (t) {
+    var w = {}, m = {}, daily = D.tools[t].daily, k;
+    for (k in daily) {
+      if (!inR(k, lo, hi)) continue;
+      var wk = dayStr(mondayOf(parseDay(k)));
+      w[wk] = (w[wk] || 0) + daily[k];
+      var mk = k.slice(0, 7);
+      m[mk] = (m[mk] || 0) + daily[k];
+    }
+    wkByTool[t] = w;
+    moByTool[t] = m;
+  });
+  var weeks = [], endWeek = mondayOf(endD), startWeek = dayStr(mondayOf(parseDay(start)));
+  for (i = 11; i >= 0; i--) {
+    var wkk = dayStr(addDays(endWeek, -7 * i));
+    if (wkk < startWeek) continue;
+    weeks.push(wkk);
+  }
+  document.getElementById('h-weekly').textContent = '最近 ' + weeks.length + ' 周每周使用（以周一为起点）';
+  document.getElementById('chart-weekly').innerHTML = stackedBars(weeks, tools, function (t, k) {
+    return wkByTool[t][k] || 0;
+  }, function (k) { return k.slice(5).replace('-', '/'); }, 150);
+
+  var months = [], startMonth = start.slice(0, 7);
+  for (i = 11; i >= 0; i--) {
+    var md = new Date(endD.getFullYear(), endD.getMonth() - i, 1);
+    var mk2 = md.getFullYear() + '-' + pad2(md.getMonth() + 1);
+    if (mk2 < startMonth) continue;
+    months.push(mk2);
+  }
+  document.getElementById('h-monthly').textContent = '最近 ' + months.length + ' 个月每月使用';
+  document.getElementById('chart-monthly').innerHTML = stackedBars(months, tools, function (t, k) {
+    return moByTool[t][k] || 0;
+  }, function (k) { return k.slice(2).replace('-', '/'); }, 150);
+
+  // 24 小时分布
+  var hourByTool = {};
+  tools.forEach(function (t) {
+    var arr = [], j;
+    for (j = 0; j < 24; j++) arr.push(0);
+    var dh = D.tools[t].dayHour, k;
+    for (k in dh) {
+      if (!inR(k, lo, hi)) continue;
+      for (j = 0; j < 24; j++) arr[j] += dh[k][j];
+    }
+    hourByTool[t] = arr;
+  });
+  var hourKeys = [];
+  for (i = 0; i < 24; i++) hourKeys.push(i);
+  document.getElementById('chart-hourly').innerHTML = stackedBars(hourKeys, tools, function (t, h) {
+    return hourByTool[t][h];
+  }, function (h) { return String(h); }, 120);
+
+  // 工作分类（由项目行聚合，口径与 CLI 一致：分类只含具体项目，不含工具并集差额）
+  var catSec = {};
+  D.projects.forEach(function (p) {
+    var s = sumRange(p.daily, lo, hi);
+    if (s > 0) catSec[p.cat] = (catSec[p.cat] || 0) + s;
+  });
+  var cats = Object.keys(catSec).sort(function (a, b) { return catSec[b] - catSec[a]; });
+  var catTotal = cats.reduce(function (a, c) { return a + catSec[c]; }, 0) || 1;
+  var catRows = '';
+  cats.forEach(function (c, idx) {
+    var pct = (catSec[c] / catTotal) * 100;
+    var col = CAT_COLORS[idx % CAT_COLORS.length];
+    catRows += '<div class="hrow"><div class="hname"><span class="dot" style="background:' + col + '"></span>' + c + '</div>' +
+      '<div class="htrack"><div class="hfill" style="width:' + pct.toFixed(1) + '%;background:' + col + '"></div></div>' +
+      '<div class="hval">' + fmtH(catSec[c]) + ' · ' + pct.toFixed(0) + '%</div></div>';
+  });
+  document.getElementById('cats').innerHTML = catRows || '<div class="muted" style="font-size:13px">该时间段没有数据</div>';
+
+  // Top 项目
+  var rows = [];
+  D.projects.forEach(function (p) {
+    var s = sumRange(p.daily, lo, hi);
+    if (s <= 0) return;
+    var lastDay = null, k;
+    for (k in p.daily) if (inR(k, lo, hi) && (!lastDay || k > lastDay)) lastDay = k;
+    rows.push({ proj: p.proj, tool: p.tool, cat: p.cat, sec: s, last: lastDay });
+  });
+  rows.sort(function (a, b) { return b.sec - a.sec; });
+  var top = rows.slice(0, 20);
+  var maxProj = top.length ? top[0].sec : 1;
+  var projHtml = '';
+  top.forEach(function (r) {
+    var pct = (r.sec / maxProj) * 100;
+    projHtml += '<div class="hrow"><div class="hname" title="' + r.proj + '">' + r.proj + '</div>' +
+      '<div class="htrack"><div class="hfill" style="width:' + pct.toFixed(1) + '%;background:' + color(r.tool) + '"></div></div>' +
+      '<div class="hval">' + fmtH(r.sec) + ' <span class="muted">· ' + r.cat + ' · 最近 ' + r.last.slice(5) + '</span></div></div>';
+  });
+  document.getElementById('projects').innerHTML = projHtml || '<div class="muted" style="font-size:13px">该时间段没有数据</div>';
+}
+
+function presetRange(name) {
+  var t = new Date();
+  var today = dayStr(t);
+  var mon = mondayOf(t);
+  if (name === 'today') return [today, today];
+  if (name === 'week') return [dayStr(mon), today];
+  if (name === 'lastweek') { var lm = addDays(mon, -7); return [dayStr(lm), dayStr(addDays(lm, 6))]; }
+  if (name === 'month') return [today.slice(0, 8) + '01', today];
+  if (name === 'lastmonth') {
+    return [dayStr(new Date(t.getFullYear(), t.getMonth() - 1, 1)), dayStr(new Date(t.getFullYear(), t.getMonth(), 0))];
+  }
+  if (name === 'd7') return [dayStr(addDays(t, -6)), today];
+  if (name === 'd30') return [dayStr(addDays(t, -29)), today];
+  if (name === 'd90') return [dayStr(addDays(t, -89)), today];
+  return [null, null]; // all
+}
+
+function setRange(since, until, activeChip) {
+  cur.since = since;
+  cur.until = until;
+  document.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('active'); });
+  if (activeChip) activeChip.classList.add('active');
+  document.getElementById('d-since').value = since || '';
+  document.getElementById('d-until').value = until || '';
+  render();
+}
+
+document.querySelectorAll('.chip').forEach(function (c) {
+  c.addEventListener('click', function () {
+    var r = presetRange(c.dataset.preset);
+    setRange(r[0], r[1], c);
+  });
+});
+
+function onCustom() {
+  var s = document.getElementById('d-since').value || null;
+  var u = document.getElementById('d-until').value || null;
+  if (s && u && s > u) { var tmp = s; s = u; u = tmp; }
+  setRange(s, u, null);
+}
+document.getElementById('d-since').addEventListener('change', onCustom);
+document.getElementById('d-until').addEventListener('change', onCustom);
+
+setRange(null, null, document.querySelector('.chip[data-preset="all"]'));
+</script>
+</body>
+</html>
