@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>File Transfer · jianshuo.dev</title>
+<style>
+  :root {
+    --border: #e2e2e2;
+    --muted: #888;
+    --accent: #0a6cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #fff;
+    color: #222;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .token-row { display: flex; gap: 8px; margin-bottom: 20px; }
+  .token-row input {
+    flex: 1;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  button {
+    padding: 9px 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fafafa;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button:hover { background: #f0f0f0; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #0858d6; }
+  #drop {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 44px 20px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    margin-bottom: 28px;
+  }
+  #drop.dragover { border-color: var(--accent); background: #f5f9ff; color: var(--accent); }
+  #file-input { display: none; }
+  #status { font-size: 14px; margin: -16px 0 20px; min-height: 20px; }
+  #status.err { color: #c0392b; }
+  #status.ok { color: #1e8e3e; }
+  progress { width: 100%; height: 6px; margin-bottom: 20px; display: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  td.name { word-break: break-all; }
+  td.meta { color: var(--muted); white-space: nowrap; font-size: 13px; }
+  td.actions { white-space: nowrap; text-align: right; }
+  td.actions a, td.actions button {
+    font-size: 13px;
+    padding: 4px 10px;
+    margin-left: 6px;
+    text-decoration: none;
+    color: var(--accent);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: inline-block;
+  }
+  td.actions button.del { color: #c0392b; }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 28px; }
+  .hint code {
+    background: #f6f6f6;
+    padding: 2px 6px;
+    border-radius: 5px;
+    font-size: 12px;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+  <h1>File Transfer</h1>
+  <div class="sub">Upload here, download from any other machine.</div>
+
+  <div class="token-row">
+    <input id="token" type="password" placeholder="Access token" autocomplete="off">
+    <button id="save-token">Save</button>
+  </div>
+
+  <div id="drop">Drop files here, or click to choose</div>
+  <input id="file-input" type="file" multiple>
+  <progress id="prog" max="100" value="0"></progress>
+  <div id="status"></div>
+
+  <table>
+    <thead><tr><th>File</th><th>Size</th><th>Uploaded</th><th></th></tr></thead>
+    <tbody id="list"><tr><td colspan="4" class="empty">Enter token to load files</td></tr></tbody>
+  </table>
+
+  <div class="hint">
+    Download from another machine:<br>
+    <code id="curl-hint">curl -OJ "https://jianshuo.dev/setup/files/api/download/NAME?token=TOKEN"</code>
+  </div>
+
+<script>
+const API = '/setup/files/api';
+const $ = (id) => document.getElementById(id);
+const tokenInput = $('token'), statusEl = $('status'), listEl = $('list'), prog = $('prog');
+
+tokenInput.value = localStorage.getItem('files_token') || '';
+
+function token() { return tokenInput.value.trim(); }
+function headers() { return { 'Authorization': 'Bearer ' + token() }; }
+function setStatus(msg, cls) { statusEl.textContent = msg; statusEl.className = cls || ''; }
+function fmtSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+
+$('save-token').onclick = () => {
+  localStorage.setItem('files_token', token());
+  refresh();
+};
+tokenInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-token').click(); });
+
+async function refresh() {
+  if (!token()) return;
+  const res = await fetch(API + '/list', { headers: headers() });
+  if (res.status === 401) { setStatus('Invalid token', 'err'); return; }
+  const { files } = await res.json();
+  setStatus('');
+  if (!files.length) {
+    listEl.innerHTML = '<tr><td colspan="4" class="empty">No files yet</td></tr>';
+    return;
+  }
+  listEl.innerHTML = files.map((f) => {
+    const enc = encodeURIComponent(f.name);
+    const date = new Date(f.uploaded).toLocaleString();
+    return `<tr>
+      <td class="name">${f.name.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</td>
+      <td class="meta">${fmtSize(f.size)}</td>
+      <td class="meta">${date}</td>
+      <td class="actions">
+        <a href="${API}/download/${enc}?token=${encodeURIComponent(token())}">Download</a>
+        <button class="del" data-name="${enc}">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+  listEl.querySelectorAll('button.del').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('Delete ' + decodeURIComponent(b.dataset.name) + '?')) return;
+      await fetch(API + '/file/' + b.dataset.name, { method: 'DELETE', headers: headers() });
+      refresh();
+    };
+  });
+}
+
+async function uploadFiles(files) {
+  if (!token()) { setStatus('Enter the access token first', 'err'); return; }
+  for (const file of files) {
+    setStatus('Uploading ' + file.name + '…');
+    prog.style.display = 'block';
+    try {
+      await uploadWithProgress(file);
+      setStatus('Uploaded ' + file.name, 'ok');
+    } catch (e) {
+      setStatus('Failed: ' + file.name + ' — ' + e.message, 'err');
+      break;
+    }
+  }
+  prog.style.display = 'none';
+  refresh();
+}
+
+function uploadWithProgress(file) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', API + '/upload/' + encodeURIComponent(file.name));
+    xhr.setRequestHeader('Authorization', 'Bearer ' + token());
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) prog.value = (e.loaded / e.total) * 100; };
+    xhr.onload = () => (xhr.status === 200 ? resolve() : reject(new Error('HTTP ' + xhr.status)));
+    xhr.onerror = () => reject(new Error('network error'));
+    xhr.send(file);
+  });
+}
+
+const drop = $('drop');
+drop.onclick = () => $('file-input').click();
+$('file-input').onchange = (e) => uploadFiles(e.target.files);
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  drop.classList.remove('dragover');
+  uploadFiles(e.dataTransfer.files);
+});
+
+if (token()) refresh();
+</script>
+</body>
+</html>

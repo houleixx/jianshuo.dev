@@ -1,0 +1,8 @@
+{
+  "name": "jianshuo-dev",
+  "pages_build_output_dir": ".",
+  "compatibility_date": "2026-06-01",
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "jianshuo-dev-files" }
+  ]
+}
