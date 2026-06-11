@@ -83,12 +83,14 @@
     .bento {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: 500px 420px;
+      grid-template-rows: 500px 460px 420px;
       gap: var(--gap);
     }
 
-    /* ccline spans 2 cols as hero */
-    .card:nth-child(1) { grid-column: span 2; }
+    /* cchour hero, ccline and bdpan span 2 cols */
+    .card:nth-child(1),
+    .card:nth-child(3),
+    .card:nth-child(6) { grid-column: span 2; }
 
     /* ─── CARD ────────────────────────────────── */
     .card {
@@ -113,6 +115,7 @@
     .card:nth-child(3) { animation-delay: 0.18s; }
     .card:nth-child(4) { animation-delay: 0.25s; }
     .card:nth-child(5) { animation-delay: 0.32s; }
+    .card:nth-child(6) { animation-delay: 0.39s; }
 
     @keyframes cardIn {
       from { opacity: 0; transform: translateY(30px); }
@@ -219,11 +222,180 @@
     }
 
     /* ─── PROJECT ACCENT COLORS ───────────────── */
+    .card--cchour   { --accent: #D97757; }
     .card--ccglass  { --accent: #E85D27; }
     .card--cclight  { --accent: #FFB000; }
     .card--ccline   { --accent: #22C55E; }
     .card--cathier  { --accent: #F2700A; }
     .card--bdpan    { --accent: #3B82F6; }
+
+    /* ─── CCHOUR HERO REPORT ──────────────────── */
+    .cchour-scene {
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(ellipse 70% 55% at 72% 18%, rgba(217,119,87,0.10), transparent 65%),
+        radial-gradient(ellipse 50% 45% at 12% 85%, rgba(74,125,190,0.07), transparent 65%),
+        repeating-linear-gradient(0deg, transparent 0 23px, rgba(31,29,26,0.03) 23px 24px),
+        #F6F2EA;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 13px;
+      padding: 24px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Step 1: the command you type */
+    .cchour-cmd {
+      align-self: flex-start;
+      margin-left: max(0px, calc(50% - 280px));
+      background: #1F1D1A;
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 12px;
+      display: flex;
+      align-items: baseline;
+      box-shadow: 0 10px 28px rgba(31,29,26,0.22);
+    }
+    .cchour-cmd .p { color: #7EE787; font-weight: 600; white-space: pre; }
+    .cchour-cmd .t {
+      color: #F2EFE9;
+      overflow: hidden;
+      white-space: nowrap;
+      width: 0;
+      animation: cchType 0.85s steps(17, end) 0.35s forwards;
+    }
+    @keyframes cchType { to { width: 17ch; } }
+    .cchour-cmd .cur {
+      display: inline-block;
+      width: 7px; height: 12px;
+      background: #7EE787;
+      margin-left: 2px;
+      animation: blink 0.9s step-end infinite, cursorFade 0.3s 1.4s forwards;
+      vertical-align: text-bottom;
+    }
+
+    /* Step 2: the report that comes out */
+    .cchour-sheet {
+      width: 100%;
+      max-width: 560px;
+      background: #FFFFFF;
+      border: 1px solid rgba(31,29,26,0.08);
+      border-radius: 14px;
+      box-shadow: 0 22px 64px rgba(31,29,26,0.13);
+      padding: 18px 22px 16px;
+      opacity: 0;
+      animation: fadeUp 0.5s ease 1.05s forwards;
+    }
+
+    .cch-head { display: flex; justify-content: space-between; align-items: flex-start; }
+    .cch-title { font-size: 13px; font-weight: 700; color: #2C2C2C; }
+    .cch-sub { font-size: 10px; color: #8A8A8A; margin-top: 3px; }
+    .cch-total { text-align: right; flex-shrink: 0; }
+    .cch-total-num {
+      font-family: 'Unbounded', sans-serif;
+      font-weight: 800;
+      font-size: 26px;
+      line-height: 1;
+      color: #D97757;
+      letter-spacing: -0.02em;
+    }
+    .cch-total-num small { font-size: 13px; font-weight: 700; }
+    .cch-total-cap {
+      font-size: 8.5px; color: #8A8A8A; margin-top: 3px;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+
+    .cch-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 150px;
+      margin-top: 14px;
+      position: relative;
+      border-bottom: 1px solid #ECECEC;
+    }
+    .cch-bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
+    .cch-stack {
+      display: flex;
+      flex-direction: column-reverse;
+      border-radius: 2.5px 2.5px 0 0;
+      overflow: hidden;
+      transform: scaleY(0);
+      transform-origin: bottom;
+      animation: cchGrow 0.55s cubic-bezier(.22,.68,0,1) forwards;
+    }
+    .cch-stack b { display: block; background: #D97757; }
+    .cch-stack i { display: block; background: #4A7DBE; }
+    @keyframes cchGrow { to { transform: scaleY(1); } }
+
+    .cch-tip {
+      position: absolute;
+      bottom: 154px;
+      left: 75%;
+      transform: translateX(-50%) translateY(5px);
+      background: #1F1D1A;
+      color: #F2EFE9;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 9.5px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      white-space: nowrap;
+      opacity: 0;
+      animation: cchTip 0.4s cubic-bezier(.22,.68,0,1.2) 2.95s forwards;
+    }
+    .cch-tip::after {
+      content: '';
+      position: absolute;
+      top: 100%; left: 50%;
+      transform: translateX(-50%);
+      border: 4px solid transparent;
+      border-top-color: #1F1D1A;
+    }
+    @keyframes cchTip { to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+    .cch-legend {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 10px;
+      color: #8A8A8A;
+      opacity: 0;
+      animation: fadeUp 0.4s ease 2.55s forwards;
+    }
+    .cch-lg { display: flex; gap: 12px; }
+    .cch-lg span { display: flex; align-items: center; gap: 4px; }
+    .cch-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    .cch-cats {
+      display: flex;
+      gap: 2px;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+    .cch-cats span {
+      transform: scaleX(0);
+      transform-origin: left;
+      animation: cchGrowX 0.5s cubic-bezier(.22,.68,0,1) forwards;
+    }
+    @keyframes cchGrowX { to { transform: scaleX(1); } }
+    .cch-cat-labels {
+      display: flex;
+      margin-top: 5px;
+      font-size: 8.5px;
+      color: #A8A49C;
+      letter-spacing: 0.02em;
+      opacity: 0;
+      animation: fadeUp 0.4s ease 3.25s forwards;
+    }
+    .cch-cat-labels span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
     /* ─── CCLINE HERO TERMINAL ─────────────────── */
     .ccline-terminal {
@@ -526,13 +698,18 @@
         grid-template-columns: 1fr 1fr;
         grid-template-rows: auto;
       }
-      .card:nth-child(1) { grid-column: span 2; min-height: 360px; }
+      .card:nth-child(1),
+      .card:nth-child(3),
+      .card:nth-child(6) { grid-column: span 2; min-height: 360px; }
       .card { min-height: 300px; }
     }
 
     @media (max-width: 560px) {
       .bento { grid-template-columns: 1fr; }
-      .card:nth-child(1) { grid-column: span 1; }
+      .card:nth-child(1),
+      .card:nth-child(3),
+      .card:nth-child(6) { grid-column: span 1; }
+      .cchour-scene { padding: 20px 16px; }
       .card { min-height: 280px; }
       .personal-bar { flex-direction: column; }
       .header-links { display: none; }
@@ -553,7 +730,118 @@
   <main>
     <div class="bento">
 
-      <!-- 1 · ccline — hero, 2 cols wide -->
+      <!-- 1 · cchour — hero, 2 cols wide -->
+      <a class="card card--cchour" href="https://cchour.jianshuo.dev">
+        <div class="card__visual">
+          <div class="cchour-scene">
+
+            <!-- Step 1: type one command -->
+            <div class="cchour-cmd">
+              <span class="p">$ </span><span class="t">npx cchour --open</span><span class="cur"></span>
+            </div>
+
+            <!-- Step 2: the report prints -->
+            <div class="cchour-sheet">
+              <div class="cch-head">
+                <div>
+                  <div class="cch-title">AI Coding Hours</div>
+                  <div class="cch-sub">Claude Code + Codex · computed from local session logs</div>
+                </div>
+                <div class="cch-total">
+                  <div class="cch-total-num">243<small>h</small></div>
+                  <div class="cch-total-cap">last 30 days</div>
+                </div>
+              </div>
+
+              <div class="cch-chart">
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.30s"><b style="height:62px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.35s"><b style="height:80px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.39s"><b style="height:73px"></b><i style="height:1px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.44s"><b style="height:33px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.48s"><b style="height:29px"></b><i style="height:6px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.53s"><b style="height:119px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.57s"><b style="height:36px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.62s"><b style="height:85px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.66s"><b style="height:63px"></b><i style="height:2px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.71s"><b style="height:40px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.75s"><b style="height:80px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.80s"><b style="height:126px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.84s"><b style="height:123px"></b><i style="height:2px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.89s"><b style="height:104px"></b><i style="height:23px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.93s"><b style="height:80px"></b><i style="height:2px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:1.98s"><b style="height:122px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.02s"><b style="height:116px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.07s"><b style="height:81px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.11s"><b style="height:45px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.16s"><b style="height:74px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.20s"><b style="height:113px"></b><i style="height:4px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.25s"><b style="height:121px"></b><i style="height:21px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.29s"><b style="height:147px"></b><i style="height:1px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.34s"><b style="height:79px"></b><i style="height:5px"></i></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.38s"><b style="height:142px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.43s"><b style="height:89px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.47s"><b style="height:96px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.52s"><b style="height:73px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.56s"><b style="height:122px"></b></div></div>
+                <div class="cch-bar"><div class="cch-stack" style="animation-delay:2.61s"><b style="height:97px"></b></div></div>
+                <div class="cch-tip">Jun 4 · 12.2h</div>
+              </div>
+
+              <div class="cch-legend">
+                <div class="cch-lg">
+                  <span><span class="cch-dot" style="background:#D97757"></span>Claude Code 229h</span>
+                  <span><span class="cch-dot" style="background:#4A7DBE"></span>Codex 14h</span>
+                </div>
+                <span>daily · avg 8.1h</span>
+              </div>
+
+              <div class="cch-cats">
+                <span style="width:29%;background:#D97757;animation-delay:2.70s"></span>
+                <span style="width:22%;background:#4A7DBE;animation-delay:2.80s"></span>
+                <span style="width:18%;background:#5BA88B;animation-delay:2.90s"></span>
+                <span style="width:13%;background:#C9A227;animation-delay:3.00s"></span>
+                <span style="width:9%;background:#9B7BB8;animation-delay:3.10s"></span>
+                <span style="width:9%;background:#D86F8C;animation-delay:3.20s"></span>
+              </div>
+              <div class="cch-cat-labels">
+                <span style="width:29%">Products</span>
+                <span style="width:22%">Writing</span>
+                <span style="width:18%">Misc</span>
+                <span style="width:13%">Skills</span>
+                <span style="width:9%">Video</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+        <div class="card__footer">
+          <div class="card__meta">
+            <div class="card__name">cchour</div>
+            <div class="card__tag">See where your AI-coding hours actually go — one command turns Claude Code &amp; Codex local logs into a beautiful report</div>
+          </div>
+          <div class="card__arrow">↗</div>
+        </div>
+      </a>
+
+      <!-- 2 · cclight -->
+      <a class="card card--cclight" href="https://cclight.jianshuo.dev">
+        <div class="card__visual">
+          <img
+            src="https://raw.githubusercontent.com/jianshuo/cclight/main/marketing/screenshots/out-2560/v1-2560.png"
+            alt="CCLight notch glow"
+            loading="lazy"
+          >
+        </div>
+        <div class="card__footer">
+          <div class="card__meta">
+            <div class="card__name">cclight</div>
+            <div class="card__tag">MacBook notch tells you when Claude Code is thinking</div>
+          </div>
+          <div class="card__arrow">↗</div>
+        </div>
+      </a>
+
+      <!-- 3 · ccline — wide -->
       <a class="card card--ccline" href="https://ccline.jianshuo.dev">
         <div class="card__visual">
           <div class="ccline-terminal">
@@ -623,25 +911,7 @@
         </div>
       </a>
 
-      <!-- 2 · cclight -->
-      <a class="card card--cclight" href="https://cclight.jianshuo.dev">
-        <div class="card__visual">
-          <img
-            src="https://raw.githubusercontent.com/jianshuo/cclight/main/marketing/screenshots/out-2560/v1-2560.png"
-            alt="CCLight notch glow"
-            loading="lazy"
-          >
-        </div>
-        <div class="card__footer">
-          <div class="card__meta">
-            <div class="card__name">cclight</div>
-            <div class="card__tag">MacBook notch tells you when Claude Code is thinking</div>
-          </div>
-          <div class="card__arrow">↗</div>
-        </div>
-      </a>
-
-      <!-- 3 · ccglass -->
+      <!-- 4 · ccglass -->
       <a class="card card--ccglass" href="https://ccglass.jianshuo.dev">
         <div class="card__visual">
           <img
@@ -659,7 +929,7 @@
         </div>
       </a>
 
-      <!-- 4 · cathier -->
+      <!-- 5 · cathier -->
       <a class="card card--cathier" href="https://cathier.jianshuo.dev">
         <div class="card__visual">
           <img
@@ -677,7 +947,7 @@
         </div>
       </a>
 
-      <!-- 5 · bdpan-finder -->
+      <!-- 6 · bdpan-finder — wide -->
       <a class="card card--bdpan" href="https://bdpan-finder.jianshuo.dev">
         <div class="card__visual">
           <div class="finder-mockup">
