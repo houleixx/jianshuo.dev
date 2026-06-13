@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>太平洋战争 1941–1945 · 互动史 | 从珍珠港到东京湾</title>
+<meta name="description" content="系统、详细地介绍美国与日本的太平洋战争——从珍珠港偷袭、中途岛转折，到瓜达尔卡纳尔、莱特湾、硫磺岛、冲绳，直至原子弹与日本投降。互动时间轴、战区地图、中途岛分步推演与知识测验。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Noto+Serif+SC:wght@400;700;900&family=Noto+Sans+SC:wght@400;500;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 导航 -->
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-brand">太平洋战争 · <b>1941–1945</b></div>
+    <button class="nav-toggle" aria-label="菜单">≡</button>
+    <div class="nav-links">
+      <a href="#overview">概览</a>
+      <a href="#timeline">时间轴</a>
+      <a href="#map">战区地图</a>
+      <a href="#battles">关键战役</a>
+      <a href="#midway">中途岛推演</a>
+      <a href="#compare">兵力对比</a>
+      <a href="#cost">代价</a>
+      <a href="#quiz">测验</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero" id="top">
+  <div class="hero-grid"></div>
+  <svg class="hero-arc" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="arcg" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#b23222" stop-opacity="0.5"/>
+        <stop offset="1" stop-color="#1d4e74" stop-opacity="0.5"/>
+      </linearGradient>
+    </defs>
+    <path d="M 1180 250 Q 720 -40 220 360" fill="none" stroke="url(#arcg)" stroke-width="1.6" stroke-dasharray="2 8" stroke-linecap="round"/>
+    <path d="M 1240 360 Q 760 120 300 520" fill="none" stroke="url(#arcg)" stroke-width="1.2" stroke-dasharray="2 10" stroke-linecap="round" opacity="0.6"/>
+    <circle cx="1180" cy="250" r="4" fill="#b23222"/>
+    <circle cx="220" cy="360" r="4" fill="#1d4e74"/>
+  </svg>
+  <div class="wrap hero-inner">
+    <div class="hero-kicker"><span></span>太平洋战区 · The Pacific Theater</div>
+    <h1>太平洋战争<span class="yr">From Pearl Harbor to Tokyo Bay · 1941 — 1945</span></h1>
+    <p class="hero-sub">1941 年 12 月 7 日清晨，日本舰载机扑向珍珠港。此后 1346 天，人类历史上规模最大的海上战争在太平洋上展开——从航母对决到跳岛血战，从密码破译到原子之火，最终在东京湾的一纸投降书前落幕。</p>
+    <div class="hero-flags">
+      <div class="hero-flag us"><span class="dot"></span><b>美国 / 盟军</b> — United States &amp; Allies</div>
+      <div class="hero-flag jp"><span class="dot"></span><b>大日本帝国</b> — Empire of Japan</div>
+    </div>
+    <div class="hero-scroll">向下滚动开始</div>
+  </div>
+</header>
+
+<!-- 概览 -->
+<section class="overview" id="overview">
+  <div class="wrap">
+    <span class="eyebrow reveal">导言 · Overview</span>
+    <h2 class="section-title reveal">一场跨越半个地球的海洋战争</h2>
+    <p class="section-lead reveal">太平洋战争（1941–1945）是第二次世界大战的东方主战场，交战双方以航空母舰、潜艇与两栖登陆为核心，在从阿留申群岛到所罗门群岛、从夏威夷到日本本土的辽阔海域上反复较量。它的胜负不仅取决于战场，更取决于工业产能、密码情报与战略意志。</p>
+    <div class="stat-grid reveal">
+      <div class="stat"><div class="num">1346</div><div class="lbl">战争持续天数</div></div>
+      <div class="stat"><div class="num">≈3000<small> 万</small></div><div class="lbl">军民伤亡（含中国战场，估计）</div></div>
+      <div class="stat"><div class="num">5</div><div class="lbl">决定战局的关键海战</div></div>
+      <div class="stat"><div class="num">2</div><div class="lbl">投向日本的原子弹</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 时间轴 -->
+<section id="timeline">
+  <div class="wrap">
+    <span class="eyebrow reveal">编年 · Timeline</span>
+    <h2 class="section-title reveal">从偷袭到投降：四年战事</h2>
+    <p class="section-lead reveal">点击下方按钮筛选事件。<b style="color:var(--navy-deep)">蓝色</b>为盟军主导，<b style="color:var(--red-deep)">红色</b>为日本主导，<b style="color:#80611f">金色</b>为战争转折点。</p>
+    <div class="tl-controls reveal" id="tlControls">
+      <button class="tl-btn active" data-f="all">全部</button>
+      <button class="tl-btn" data-f="us">盟军行动</button>
+      <button class="tl-btn" data-f="jp">日本行动</button>
+      <button class="tl-btn" data-f="turn">转折点</button>
+    </div>
+    <div class="timeline" id="timeline-list"></div>
+  </div>
+</section>
+
+<!-- 互动地图 -->
+<section class="map-section" id="map">
+  <div class="wrap">
+    <span class="eyebrow reveal">地理 · The Theater</span>
+    <h2 class="section-title reveal">太平洋战区互动地图</h2>
+    <p class="section-lead reveal">点击地图上的标记，了解每一处战场的位置与意义。这是一张示意性的海图——岛屿之间动辄数千海里，正是这片辽阔决定了航母与后勤的统治地位。</p>
+    <div class="map-layout">
+      <div class="map-stage reveal" id="mapStage"></div>
+      <aside class="map-info reveal" id="mapInfo">
+        <p class="hint">← 点击左侧任意标记点查看详情。</p>
+        <div class="map-legend">
+          <span class="k"><i style="background:#6db4e6"></i>盟军胜</span>
+          <span class="k"><i style="background:#e8745f"></i>日本胜</span>
+          <span class="k"><i style="background:#f0c14b"></i>转折点</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- 关键战役 -->
+<section id="battles">
+  <div class="wrap">
+    <div class="battles-head">
+      <div>
+        <span class="eyebrow reveal">战役 · Key Battles</span>
+        <h2 class="section-title reveal">九场决定命运的战役</h2>
+      </div>
+      <p class="section-lead reveal" style="margin:0">按时间顺序，从 1941 年的珍珠港到 1945 年的东京湾。每一场都改变了战争的走向。</p>
+    </div>
+    <div class="battle-list" id="battleList"></div>
+  </div>
+</section>
+
+<!-- 中途岛分步推演 -->
+<section class="midway" id="midway">
+  <div class="wrap">
+    <span class="eyebrow reveal">推演 · Interactive</span>
+    <h2 class="section-title reveal">中途岛：改变战争的五分钟</h2>
+    <p class="section-lead reveal">1942 年 6 月 4 日，南云忠一的四艘航母在换装弹药的致命间隙遭到美军俯冲轰炸机突袭。逐步推进下面的动画，看清这场转折是如何发生的。</p>
+    <div class="mw-layout">
+      <div class="mw-stage reveal" id="mwStage"></div>
+      <div class="mw-panel reveal">
+        <div class="mw-step-num" id="mwStepNum">第 1 / 6 步</div>
+        <h3 id="mwTitle"></h3>
+        <p class="mw-desc" id="mwDesc"></p>
+        <div class="mw-controls">
+          <button class="ghost" id="mwPrev">← 上一步</button>
+          <button id="mwNext">下一步 →</button>
+        </div>
+        <div class="mw-progress" id="mwProgress"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 兵力对比 -->
+<section id="compare">
+  <div class="wrap">
+    <span class="eyebrow reveal">力量 · The Balance of Power</span>
+    <h2 class="section-title reveal">钢铁与产能的较量</h2>
+    <p class="section-lead reveal">开战时日本拥有训练精良的舰队与世界一流的零式战斗机；但当战争进入消耗阶段，美国的工业机器以日本无法企及的速度倾泻出航母、飞机与人员。下面的条形长度按相对数量缩放。</p>
+    <div class="compare-grid reveal" id="compareGrid"></div>
+  </div>
+</section>
+
+<!-- 代价 -->
+<section class="cost" id="cost">
+  <div class="wrap">
+    <span class="eyebrow reveal">代价 · The Human Cost</span>
+    <h2 class="section-title reveal">血与火的账单</h2>
+    <p class="section-lead reveal">数字是冰冷的，但每一个背后都是生命。以下为几场标志性战役中双方阵亡人数的对比（估计值，含战斗死亡），条形按比例缩放。</p>
+    <div class="cost-grid reveal" id="costGrid"></div>
+    <p class="cost-foot">数据为历史学界常见估计区间的代表值，不同史料略有出入；冲绳一役另有逾 10 万平民罹难，未计入上表。太平洋战争美军总阵亡逾 10 万，日本军人死亡逾 170 万（含中国及东南亚战场）。</p>
+  </div>
+</section>
+
+<!-- 测验 -->
+<section id="quiz">
+  <div class="wrap">
+    <span class="eyebrow reveal">检验 · Quiz</span>
+    <h2 class="section-title reveal">你掌握了多少？</h2>
+    <p class="section-lead reveal">八道题，检验你对太平洋战争的理解。每题作答后会给出解析。</p>
+    <div class="quiz-card reveal" id="quizCard"></div>
+  </div>
+</section>
+
+<!-- 页脚 -->
+<footer class="foot">
+  <div class="wrap">
+    <div>
+      <h4>从珍珠港到东京湾</h4>
+      <p>太平洋战争以一场偷袭开始，以两朵蘑菇云和一纸投降书结束。它重塑了亚太格局，确立了航母与海权的现代形态，也留下了关于战争与和平的永恒诘问。</p>
+      <p style="margin-top:1rem">本页为教育与科普用途的互动史料整理。历史照片均来自维基共享资源（Wikimedia Commons），绝大多数为美国政府公有领域作品。</p>
+    </div>
+    <div>
+      <h4>延伸阅读</h4>
+      <ul>
+        <li><a href="https://zh.wikipedia.org/wiki/太平洋战争" target="_blank" rel="noopener">维基百科：太平洋战争</a></li>
+        <li><a href="https://zh.wikipedia.org/wiki/中途岛海战" target="_blank" rel="noopener">维基百科：中途岛海战</a></li>
+        <li><a href="https://zh.wikipedia.org/wiki/珍珠港事件" target="_blank" rel="noopener">维基百科：珍珠港事件</a></li>
+        <li><a href="https://www.history.navy.mil/" target="_blank" rel="noopener">美国海军历史与遗产司令部</a></li>
+      </ul>
+    </div>
+    <div class="foot-note" style="grid-column:1/-1">PACIFIC WAR · AN INTERACTIVE HISTORY · 1941–1945 · 数据与史实力求准确，如有出入欢迎指正。</div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
