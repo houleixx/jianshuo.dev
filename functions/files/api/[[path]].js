@@ -2,10 +2,10 @@
 // All routes require the FILES_TOKEN secret, via "Authorization: Bearer <token>"
 // or "?token=<token>" (so plain curl/wget works from another machine).
 //
-//   GET    /setup/files/api/list              -> JSON list of files
-//   PUT    /setup/files/api/upload/<name>     -> upload (raw body)
-//   GET    /setup/files/api/download/<name>   -> download
-//   DELETE /setup/files/api/file/<name>       -> delete
+//   GET    /files/api/list              -> JSON list of files
+//   PUT    /files/api/upload/<name>     -> upload (raw body)
+//   GET    /files/api/download/<name>   -> download
+//   DELETE /files/api/file/<name>       -> delete
 
 export async function onRequest(context) {
   const { request, env, params } = context;

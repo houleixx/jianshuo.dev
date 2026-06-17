@@ -109,11 +109,11 @@
 
   <div class="hint">
     Download from another machine:<br>
-    <code id="curl-hint">curl -OJ "https://jianshuo.dev/setup/files/api/download/NAME?token=TOKEN"</code>
+    <code id="curl-hint">curl -OJ "https://jianshuo.dev/files/api/download/NAME?token=TOKEN"</code>
   </div>
 
 <script>
-const API = '/setup/files/api';
+const API = '/files/api';
 const $ = (id) => document.getElementById(id);
 const tokenInput = $('token'), statusEl = $('status'), listEl = $('list'), prog = $('prog');
 
