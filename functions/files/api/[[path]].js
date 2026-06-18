@@ -50,12 +50,22 @@ export async function onRequest(context) {
   const authHeader = request.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '') || url.searchParams.get('token') || '';
 
-  let scope = null; // null = unauthorized, '' = admin/full bucket, 'users/<sub>/' = user
+  let scope = null; // null = unauthorized, '' = admin/full bucket, 'users/<id>/' = user
   if (env.FILES_TOKEN && token === env.FILES_TOKEN) {
     scope = '';
-  } else if (token && env.SESSION_SECRET) {
-    const sub = await verifySession(token, env.SESSION_SECRET);
-    if (sub) scope = `users/${sanitizeSeg(sub)}/`;
+  } else if (token) {
+    const sub = env.SESSION_SECRET ? await verifySession(token, env.SESSION_SECRET) : null;
+    if (sub) {
+      // Signed-in (Sign in with Apple) user.
+      scope = `users/${sanitizeSeg(sub)}/`;
+    } else if (token.startsWith('anon_') && token.length >= 20) {
+      // Anonymous capability token: a high-entropy secret the app generates on
+      // first launch and stores in the user's iCloud Keychain (zero-login,
+      // same Apple ID -> same token across devices). Possession = access.
+      // Scope by a hash so the secret itself is never the directory name.
+      const id = (await sha256hex(token)).slice(0, 32);
+      scope = `users/anon-${id}/`;
+    }
   }
   if (scope === null) return json({ error: 'unauthorized' }, 401);
 
@@ -200,6 +210,11 @@ async function hmacSign(data, secret) {
 // helpers
 // ---------------------------------------------------------------------------
 function sanitizeSeg(s) { return String(s).replace(/[^A-Za-z0-9._-]/g, '_'); }
+
+async function sha256hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 function timingSafeEqual(a, b) {
   if (a.length !== b.length) return false;
