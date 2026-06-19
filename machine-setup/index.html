@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="在一台全新的 Apple Silicon Mac 上，一条命令复刻王建硕的开发环境。">
+<title>machine-setup — 一台新 Mac 的开机仪式</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#ef7d54;--code-bg:#fff7ee}
+  body{background:radial-gradient(ellipse 120% 70% at 50% -10%,#fdf0e0,var(--bg));color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;line-height:1.6}
+  .wrap{max-width:780px;margin:0 auto;padding:40px 28px 90px}
+
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:46px}
+  .brand{display:flex;align-items:center;gap:11px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.15rem;color:inherit;text-decoration:none}
+  .brand .blob{width:30px;height:30px;border-radius:42% 58% 60% 40%/45% 45% 55% 55%;background:linear-gradient(135deg,#f6a560,#ef7d54);box-shadow:0 6px 16px rgba(239,125,84,.4)}
+  header nav a{font-weight:700;font-size:.82rem;color:var(--soft);text-decoration:none;padding:8px 15px;border-radius:999px;transition:all .2s}
+  header nav a:hover{background:var(--card);color:var(--ink);box-shadow:0 4px 12px rgba(74,63,53,.08)}
+
+  .hero{margin-bottom:40px}
+  .hero .pill{display:inline-block;background:#fff;border-radius:999px;padding:6px 16px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:.76rem;color:var(--accent);box-shadow:0 6px 16px rgba(74,63,53,.06);margin-bottom:18px}
+  .hero h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(2rem,5vw,3rem);line-height:1.12;letter-spacing:-.02em}
+  .hero h1 span{color:var(--accent)}
+  .hero .lede{margin-top:16px;font-size:1.05rem;color:#7d6f5f;font-weight:600}
+  .hero .meta{margin-top:10px;font-size:.82rem;color:var(--soft);font-weight:600}
+
+  h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.5rem;letter-spacing:-.01em;margin:46px 0 16px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:10px;background:var(--accent);color:#fff;font-size:.95rem;flex:none;box-shadow:0 6px 14px rgba(239,125,84,.32)}
+  h3{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.05rem;margin:26px 0 10px}
+  p{margin:12px 0;color:#5f5346}
+  p.sub{color:#82735f;font-size:.95rem}
+  a{color:var(--accent);text-decoration:none;font-weight:700}
+  a:hover{text-decoration:underline}
+  strong{color:var(--ink);font-weight:800}
+
+  .hero-cmd{margin-top:26px}
+  .cmd{position:relative;background:var(--code-bg);border:1.5px solid rgba(239,125,84,.18);border-radius:16px;padding:18px 56px 18px 20px;font-family:'JetBrains Mono',monospace;font-size:.9rem;color:#6b4a36;overflow-x:auto;box-shadow:0 10px 26px rgba(74,63,53,.07)}
+  .cmd .prompt{color:var(--accent);user-select:none}
+  .copy{position:absolute;top:10px;right:10px;border:none;background:#fff;color:#8a7a66;width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:.95rem;box-shadow:0 4px 10px rgba(74,63,53,.1);transition:all .2s}
+  .copy:hover{color:var(--accent);transform:translateY(-1px)}
+  .copy.done{color:#1FA050}
+
+  pre{background:var(--code-bg);border:1.5px solid rgba(74,63,53,.08);border-radius:14px;padding:16px 18px;overflow-x:auto;margin:14px 0;font-family:'JetBrains Mono',monospace;font-size:.84rem;line-height:1.7;color:#6b5a48}
+  pre .c{color:#a89683}
+  code{font-family:'JetBrains Mono',monospace;font-size:.86em;background:#fff;border:1px solid rgba(74,63,53,.1);border-radius:6px;padding:1px 6px;color:#a8552e}
+
+  .card{background:var(--card);border-radius:20px;padding:22px 24px;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8);margin:16px 0}
+  .note{background:#fff7ee;border-left:4px solid var(--accent);border-radius:0 14px 14px 0;padding:16px 20px;margin:18px 0;font-size:.93rem;color:#6b5a48}
+  .note strong{color:var(--accent)}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.9rem;background:var(--card);border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(74,63,53,.06)}
+  th{text-align:left;background:#fbeede;font-family:'Quicksand',sans-serif;font-weight:700;color:#6b5a48;padding:12px 16px;font-size:.84rem}
+  td{padding:11px 16px;border-top:1px solid rgba(74,63,53,.07);color:#5f5346;vertical-align:top}
+  td:first-child{font-weight:700;color:var(--ink);white-space:nowrap}
+
+  ol.steps{list-style:none;counter-reset:s;margin:14px 0}
+  ol.steps li{counter-increment:s;position:relative;padding:10px 0 10px 42px;border-top:1px solid rgba(74,63,53,.07);color:#5f5346}
+  ol.steps li:first-child{border-top:none}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:10px;width:26px;height:26px;border-radius:8px;background:#fbeede;color:var(--accent);font-family:'Quicksand',sans-serif;font-weight:700;font-size:.85rem;display:flex;align-items:center;justify-content:center}
+
+  footer{text-align:center;margin-top:64px;padding-top:24px;border-top:1px solid rgba(74,63,53,.08);font-size:.78rem;color:var(--soft);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="brand" href="/"><span class="blob"></span>jianshuo.dev</a>
+    <nav>
+      <a href="https://github.com/jianshuo/machine-setup">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <span class="pill">🖥️ machine-setup</span>
+    <h1>一台新 Mac 的<span>开机仪式</span></h1>
+    <p class="lede">在一台全新的 Apple Silicon Mac 上，把整套开发环境一键复刻出来——同一套标准，同一份配置。</p>
+    <p class="meta">快照来源：macOS 26.4 · arm64 · zsh · Homebrew 5.1</p>
+
+    <div class="hero-cmd">
+      <div class="cmd"><span class="prompt">$ </span><span id="oneliner">curl -fsSL https://jianshuo.dev/setup/setup.sh | bash -s -- --yes</span><button class="copy" data-copy="oneliner" title="复制">⧉</button></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>不依赖 github.com。</strong> 这条命令只需要能连上 jianshuo.dev——它会先从 <code>jianshuo.dev/setup/machine-setup.tar.gz</code> 自举安装所需文件到 <code>~/code/machine-setup</code>，再继续跑全套。该地址是 Cloudflare 边缘实时反代 GitHub main 分支，<code>git push</code> 即生效。所以在访问不了 GitHub 的网络里也照常能用。
+  </div>
+
+  <h2><span class="n">1</span>装起来</h2>
+  <p>能访问 GitHub 的话，传统方式照常可用：</p>
+  <pre><span class="c"># 克隆后逐步确认</span>
+git clone https://github.com/jianshuo/machine-setup.git ~/code/machine-setup
+cd ~/code/machine-setup
+bash setup.sh            <span class="c"># 逐步确认</span>
+bash setup.sh --yes      <span class="c"># 全自动</span></pre>
+
+  <p>每一步都是<strong>幂等</strong>的，可以单独重跑：</p>
+  <pre>bash setup.sh ssh        <span class="c"># 从 iCloud 加密备份恢复 ~/.ssh + ~/code/.env</span>
+bash setup.sh brew       <span class="c"># Homebrew + Brewfile 全部包</span>
+bash setup.sh runtimes   <span class="c"># nvm / node / uv</span>
+bash setup.sh npm        <span class="c"># 全局 npm 包</span>
+bash setup.sh dotfiles   <span class="c"># .zshrc / .zprofile / git / secrets</span>
+bash setup.sh claude     <span class="c"># Claude Code CLI + marketplaces + plugins</span>
+bash setup.sh repos      <span class="c"># clone 全部 GitHub 仓库到 ~/code/</span>
+bash setup.sh extras     <span class="c"># xurl / ccline 提示</span></pre>
+
+  <h2><span class="n">2</span>装了什么</h2>
+  <table>
+    <tr><th>类别</th><th>内容</th></tr>
+    <tr><td>包管理</td><td>Homebrew + <code>Brewfile</code>（formulae / casks / uv / npm / VSCode 扩展全清单）</td></tr>
+    <tr><td>运行时</td><td>nvm → node v22、pnpm、bun、uv（kimi-cli）、ruby</td></tr>
+    <tr><td>全局 npm</td><td>codex、wx-cli、pi-coding-agent、ccglass、corepack</td></tr>
+    <tr><td>dotfiles</td><td><code>.zshrc</code>、<code>.zprofile</code>、git 身份</td></tr>
+    <tr><td>Claude Code</td><td>CLI + 2 个 marketplace + 7 个用户级 plugin</td></tr>
+    <tr><td>代码仓库</td><td>全部 GitHub repo 自动 clone，扁平落到 <code>~/code/&lt;name&gt;</code></td></tr>
+    <tr><td>独立二进制</td><td>xurl（X CLI）、ccline（需手动拷）</td></tr>
+  </table>
+
+  <h2><span class="n">3</span>密钥怎么处理</h2>
+  <p><strong>真实密钥不进 git。</strong>全部收在一个本地文件 <code>~/code/.env</code> 里，<code>shellrc</code> 自动 <code>source</code> 它。安装脚本从 <code>env.example</code> 拷一份占位符版过去，由你填真实值。</p>
+  <div class="card">
+    <p style="margin-top:0"><code>env.example</code> 里<strong>列全了所有 key 名</strong>（占位符 <code>CHANGE_ME</code>）——20+ 个 API key（OpenAI / Claude / 火山 / 微信 / ASC / Cloudflare / Tailscale…），外加 <code>VOLC_APPID</code>、<code>MODEL_SPEECH_API_KEY</code>、<code>X_ACCESS_TOKEN</code>。照着把旧机器的真实值填进去即可，不会漏。</p>
+    <p style="margin-bottom:0" class="sub">非密钥的个人配置（git 身份、Tailscale 内网 SSH 别名、工作区路径）直接写在 <code>shellrc</code> 里进 git——内网 IP 不可公网路由，公开无妨。</p>
+  </div>
+  <div class="note">
+    <strong>最早一步会自动恢复密钥。</strong> <code>step_ssh</code> 是脚本第一步，会从 iCloud 的 <code>重要文档/ssh-backup-*.zip</code> 解密恢复整个 <code>~/.ssh/</code> 和 <code>~/code/.env</code>（提示输密码，自动 chmod 600）。<code>.env</code> 抢在 dotfiles 的占位符 seed 之前就位，所以恢复的是真实值。若 iCloud 还没同步下来，这步会跳过——同步好后单独重跑 <code>bash setup.sh ssh</code> 即可。
+  </div>
+
+  <h2><span class="n">4</span>跑完之后手动几步</h2>
+  <ol class="steps">
+    <li>填一个本地文件：<code>~/code/.env</code>（模板 <code>env.example</code>），若已随 SSH 备份恢复成真实值则跳过。</li>
+    <li>新开终端，或 <code>source ~/.zshrc</code>。</li>
+    <li>代理：装好本地代理 app（监听 <code>127.0.0.1:1087</code>）后重开终端即可——<code>.zshrc</code> 检测到端口在监听才启用代理，没装也不影响直连。</li>
+    <li>登录：<code>claude /login</code>（或用 cc-switch 切号）、<code>gh auth login</code>。</li>
+    <li>自写 skill 不会自动来：把旧机器 <code>~/.claude/skills/</code> 整个目录、以及 <code>~/.claude/settings.json</code>（hooks / statusLine / permissions）拷过来。</li>
+    <li><code>xurl</code>、<code>ccline</code> 不是 brew 包，按 <code>extras</code> 步骤的提示手动放二进制。</li>
+  </ol>
+
+  <h2><span class="n">5</span>重新生成快照</h2>
+  <p>环境变了之后，在旧机器上更新 <code>Brewfile</code>，再 <code>git push</code> 即对新机器生效：</p>
+  <pre>brew bundle dump --file=~/code/machine-setup/Brewfile --force --describe
+git -C ~/code/machine-setup commit -am "update snapshot" && git push</pre>
+  <p class="sub"><code>jianshuo.dev/setup/setup.sh</code> 和 <code>…/machine-setup.tar.gz</code> 不是镜像副本，而是 Cloudflare Pages Function 在请求时实时反代 GitHub main 分支（边缘缓存 5 分钟）。发布流程就是 <code>git push</code>——没有同步脚本、没有 hook、没有白名单。</p>
+
+  <footer>Made with care in Shanghai · © 2026 王建硕 · <a href="https://github.com/jianshuo/machine-setup">jianshuo/machine-setup</a></footer>
+</div>
+
+<script>
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var t=document.getElementById(btn.dataset.copy).textContent;
+      navigator.clipboard.writeText(t).then(function(){
+        btn.textContent='✓';btn.classList.add('done');
+        setTimeout(function(){btn.textContent='⧉';btn.classList.remove('done')},1600);
+      });
+    });
+  });
+</script>
+<!-- Cloudflare Web Analytics --><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "34108fa3d3204951afa585ccb3976c88"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
