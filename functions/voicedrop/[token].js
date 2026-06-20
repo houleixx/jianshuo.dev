@@ -1,29 +1,22 @@
 // Public, unauthenticated preview of a single mined VoiceDrop article set.
 //
-// URL:  https://jianshuo.dev/voicedrop/<token>
-// where <token> = b64url(fullKey) + "." + HMAC_b64url("share:"+payload, SESSION_SECRET)
-// and fullKey is "users/<sub>/articles/<stem>.json" in the FILES R2 bucket.
-//
-// The token is minted server-side by GET /files/api/share/<name> (authenticated),
-// so the HMAC secret never leaves the worker. This page serves ONLY a validly
-// signed article JSON — never audio, the file list, or any other key. A segment
-// that isn't a valid token (e.g. "privacy") falls through to the static assets,
-// so it never shadows /voicedrop/ or /voicedrop/privacy/.
+// URL:  https://jianshuo.dev/voicedrop/<id>   (e.g. /voicedrop/Ab3xK9_p2Q)
+// The short <id> is minted server-side by GET /files/api/share/<name>
+// (authenticated), which stores a shares/<id> → "users/<sub>/articles/<stem>.json"
+// record in R2. This page resolves that mapping and serves ONLY the target
+// article JSON — never audio, the file list, or any other key. A segment with no
+// mapping (e.g. "privacy") falls through to the static assets, so it never
+// shadows /voicedrop/ or /voicedrop/privacy/.
 
 export async function onRequest(context) {
   const { params, env } = context;
-  const token = params.token || '';
+  const id = params.token || '';
 
-  const dot = token.lastIndexOf('.');
-  if (dot < 0 || !env.SESSION_SECRET) return context.next();
-  const payload = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-
-  const expected = await hmacSign('share:' + payload, env.SESSION_SECRET);
-  if (!timingSafeEqual(sig, expected)) return context.next(); // not ours → static fallthrough
-
-  let key;
-  try { key = b64urlToString(payload); } catch { return context.next(); }
+  // Only short, URL-safe ids are share links; anything else → static fallthrough.
+  if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) return context.next();
+  const map = await env.FILES.get(`shares/${id}`);
+  if (!map) return context.next();
+  const key = await map.text();
   if (!/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) return context.next();
 
   const obj = await env.FILES.get(key);
@@ -119,31 +112,3 @@ function html(body, status = 200, cache = false) {
   if (cache) headers['Cache-Control'] = 'public, max-age=300';
   return new Response(body, { status, headers });
 }
-
-// --- crypto / encoding helpers (mirror of files/api) ---
-async function hmacSign(data, secret) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
-  return bytesToB64url(new Uint8Array(sig));
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-function bytesToB64url(bytes) {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-function b64urlToBytes(s) {
-  s = s.replace(/-/g, '+').replace(/_/g, '/');
-  while (s.length % 4) s += '=';
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-function b64urlToString(s) { return new TextDecoder().decode(b64urlToBytes(s)); }

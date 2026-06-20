@@ -120,19 +120,20 @@ export async function onRequest(context) {
     return json({ ok: true });
   }
 
-  // Mint a public, HMAC-signed share link for one mined article JSON. The token
-  // encodes the full key; only this user's own articles/<stem>.json is shareable.
-  // The public page lives at /voicedrop/<token> (functions/voicedrop/[token].js).
+  // Mint a SHORT public share link for one mined article JSON. The id is the
+  // first 10 chars of HMAC(key) — deterministic (same article → same link),
+  // unguessable (~60 bits), and resolved via a tiny shares/<id> → key record in
+  // R2. Only this user's own articles/<stem>.json is shareable. The public page
+  // lives at /voicedrop/<id> (functions/voicedrop/[token].js).
   if (request.method === 'GET' && action === 'share' && name) {
     if (!env.SESSION_SECRET) return json({ error: 'server misconfigured: no SESSION_SECRET' }, 500);
     const key = keyFor(name);
     if (!key || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) {
       return json({ error: 'not shareable' }, 400);
     }
-    const payload = bytesToB64url(new TextEncoder().encode(key));
-    const sig = await hmacSign('share:' + payload, env.SESSION_SECRET);
-    const token = `${payload}.${sig}`;
-    return json({ url: `${url.origin}/voicedrop/${token}` });
+    const id = (await hmacSign('share:' + key, env.SESSION_SECRET)).slice(0, 10);
+    await env.FILES.put(`shares/${id}`, key);
+    return json({ url: `${url.origin}/voicedrop/${id}` });
   }
 
   return json({ error: 'bad request' }, 400);
