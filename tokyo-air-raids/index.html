@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<script>document.documentElement.className+=' js';</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>东京空袭遗迹 · 一日游 | 李梅火攻与杜立特空袭，今天还看得到的现场</title>
+<meta name="description" content="1945年3月10日东京大空袭（李梅火攻）与1942年杜立特空袭，今天在东京还能实地探访的遗迹、慰灵碑与资料馆——带时间轴的一日游路线、地理聚类示意图与避雷贴士。中文为主，保留日文原名。">
+<meta property="og:title" content="东京空袭遗迹 · 一日游">
+<meta property="og:description" content="李梅火攻与杜立特空袭，今天在东京还看得到的现场——一日游路线与考据。">
+<meta property="og:type" content="article">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Noto+Serif+SC:wght@400;600;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --paper:#f6f1e8; --paper2:#efe7d9;
+    --card:#fffdf8; --ink:#2c2723; --ink2:#574d42;
+    --ash:#8c7f6e; --ash2:#a89a86;
+    --ember:#b5482e; --ember2:#c96a44; --ember-soft:#f3e2d6;
+    --river:#7d99a4; --river-soft:#dde8ea;
+    --line:rgba(70,58,46,.12); --gold:#9a7b2e;
+  }
+  html{scroll-behavior:smooth}
+  body{background:var(--paper);color:var(--ink);font-family:'Noto Sans SC',sans-serif;font-weight:400;line-height:1.75;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:0 26px}
+  h1,h2,h3,.serif{font-family:'Noto Serif SC',serif}
+  ::selection{background:var(--ember-soft)}
+
+  /* NAV */
+  .nav{position:sticky;top:0;z-index:50;background:rgba(246,241,232,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .nav-inner{max-width:980px;margin:0 auto;padding:13px 26px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .nav-brand{font-family:'Noto Serif SC',serif;font-weight:600;font-size:.98rem;letter-spacing:.01em;color:var(--ink)}
+  .nav-brand b{color:var(--ember)}
+  .nav-links{display:flex;gap:5px;flex-wrap:wrap}
+  .nav-links a{font-size:.82rem;color:var(--ash);text-decoration:none;padding:6px 11px;border-radius:8px;transition:.2s;white-space:nowrap}
+  .nav-links a:hover{background:var(--ember-soft);color:var(--ember)}
+  @media(max-width:760px){.nav-links{display:none}}
+
+  /* HERO */
+  .hero{position:relative;overflow:hidden;padding:88px 0 72px;background:
+    radial-gradient(ellipse 90% 70% at 70% -10%, #f1ddcf, transparent 60%),
+    linear-gradient(180deg,var(--paper),var(--paper2))}
+  .hero::after{content:"";position:absolute;inset:0;background-image:
+    repeating-linear-gradient(115deg, transparent 0 38px, rgba(181,72,46,.035) 38px 39px);pointer-events:none}
+  .hero-inner{position:relative;z-index:2;max-width:780px}
+  .kicker{display:inline-flex;align-items:center;gap:9px;font-size:.8rem;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);margin-bottom:22px}
+  .kicker span{width:30px;height:1px;background:var(--ember);opacity:.6}
+  .hero h1{font-weight:900;font-size:clamp(2.1rem,6vw,3.5rem);line-height:1.22;letter-spacing:.005em;color:var(--ink)}
+  .hero h1 em{font-style:normal;color:var(--ember);font-family:'Cormorant Garamond',serif;font-weight:600}
+  .hero .lede{margin-top:24px;font-size:1.08rem;color:var(--ink2);line-height:1.85;max-width:680px}
+  .hero .lede b{color:var(--ink);font-weight:700}
+  .hero-meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:30px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 16px;font-size:.84rem;color:var(--ink2);box-shadow:0 4px 14px rgba(70,58,46,.05)}
+  .chip b{color:var(--ember);font-weight:700}
+
+  section{padding:60px 0}
+  .eyebrow{display:block;font-size:.78rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--ash);margin-bottom:12px}
+  .stitle{font-weight:900;font-size:clamp(1.5rem,3.6vw,2.1rem);line-height:1.3;color:var(--ink);letter-spacing:.01em}
+  .lead{margin-top:16px;font-size:1.02rem;color:var(--ink2);max-width:760px;line-height:1.85}
+  .lead b{color:var(--ink)}
+
+  .divider{height:1px;background:var(--line);max-width:980px;margin:0 auto}
+
+  /* two-event intro */
+  .events{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:34px}
+  @media(max-width:680px){.events{grid-template-columns:1fr}}
+  .event{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px 26px 24px;box-shadow:0 10px 30px rgba(70,58,46,.06)}
+  .event .tag{font-size:.76rem;font-weight:700;letter-spacing:.1em;color:var(--ember);text-transform:uppercase}
+  .event h3{font-weight:900;font-size:1.32rem;margin:8px 0 4px;color:var(--ink)}
+  .event .date{font-family:'Cormorant Garamond',serif;font-size:1.15rem;color:var(--ash);font-style:italic;margin-bottom:12px}
+  .event p{font-size:.95rem;color:var(--ink2);line-height:1.8}
+  .event .figs{display:flex;gap:22px;margin-top:16px;padding-top:16px;border-top:1px dashed var(--line)}
+  .event .fig b{display:block;font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:600;color:var(--ember);line-height:1}
+  .event .fig span{font-size:.76rem;color:var(--ash)}
+
+  /* MAP */
+  .mapwrap{margin-top:30px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 14px 40px rgba(70,58,46,.07)}
+  .mapsvg{width:100%;height:auto;display:block;border-radius:14px;background:linear-gradient(160deg,#fbf7ef,#f3ebdc)}
+  .maplegend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:.82rem;color:var(--ink2)}
+  .maplegend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:middle}
+
+  /* TIMELINE / itinerary */
+  .tl{margin-top:30px;position:relative;padding-left:0}
+  .tl-row{display:grid;grid-template-columns:88px 1fr;gap:18px;position:relative}
+  .tl-row:not(:last-child){padding-bottom:22px}
+  .tl-time{text-align:right;font-family:'Cormorant Garamond',serif;font-weight:600;font-size:1.15rem;color:var(--ember);padding-top:14px}
+  .tl-time small{display:block;font-family:'Noto Sans SC';font-size:.7rem;color:var(--ash);letter-spacing:.05em}
+  .tl-body{position:relative;border-left:2px solid var(--line);padding:0 0 4px 24px;margin-left:4px}
+  .tl-body::before{content:"";position:absolute;left:-7px;top:18px;width:12px;height:12px;border-radius:50%;background:var(--ember);box-shadow:0 0 0 4px var(--paper)}
+  .tl-row.move .tl-body::before{background:var(--river);width:9px;height:9px;left:-5.5px}
+  .tl-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:0 6px 18px rgba(70,58,46,.05)}
+  .tl-row.move .tl-card{background:transparent;border:1px dashed var(--line);box-shadow:none;color:var(--ash);font-size:.88rem}
+  .tl-card h4{font-weight:700;font-size:1.02rem;color:var(--ink);margin-bottom:3px}
+  .tl-card .stay{font-size:.74rem;color:var(--ember);font-weight:700;margin-left:8px}
+  .tl-card p{font-size:.9rem;color:var(--ink2);line-height:1.7}
+  @media(max-width:560px){.tl-row{grid-template-columns:62px 1fr;gap:12px}.tl-time{font-size:1rem}}
+
+  /* SITE CARDS */
+  .cluster{margin-top:42px}
+  .cluster-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  .cluster-h .cdot{width:13px;height:13px;border-radius:50%;flex:none;align-self:center}
+  .cluster-h h3{font-weight:900;font-size:1.4rem;color:var(--ink)}
+  .cluster-h .area{font-size:.84rem;color:var(--ash);font-family:'Cormorant Garamond',serif;font-style:italic}
+  .cluster-note{font-size:.9rem;color:var(--ink2);margin-bottom:18px}
+
+  .site{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:0;margin-bottom:18px;box-shadow:0 10px 30px rgba(70,58,46,.06);overflow:hidden}
+  .site-head{display:flex;gap:14px;align-items:flex-start;padding:22px 24px 16px;cursor:pointer;user-select:none}
+  .site-num{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:1.9rem;color:var(--ember);line-height:1;flex:none;width:42px;text-align:center;opacity:.85}
+  .site-head .t{flex:1}
+  .site-head h4{font-weight:900;font-size:1.22rem;color:var(--ink);line-height:1.35}
+  .site-head .jp{font-size:.85rem;color:var(--ash);margin-top:2px}
+  .site-head .hook{font-size:.92rem;color:var(--ember2);font-weight:500;margin-top:8px}
+  .site-toggle{flex:none;color:var(--ash2);font-size:1.4rem;line-height:1;transition:.3s;padding-top:4px}
+  .site.open .site-toggle{transform:rotate(45deg);color:var(--ember)}
+  .site-body{max-height:0;overflow:hidden;transition:max-height .45s cubic-bezier(.4,0,.2,1)}
+  .site.open .site-body{max-height:820px}
+  .site-inner{padding:4px 24px 24px}
+  .site-inner>p{font-size:.96rem;color:var(--ink2);line-height:1.85;margin-bottom:16px}
+  .facts{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  @media(max-width:560px){.facts{grid-template-columns:1fr}}
+  .fact{background:var(--card);padding:13px 16px}
+  .fact .k{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ash);font-weight:700;margin-bottom:3px}
+  .fact .v{font-size:.9rem;color:var(--ink);line-height:1.6}
+  .fact .v b{color:var(--ember)}
+  .why{margin-top:14px;padding:13px 16px;background:var(--ember-soft);border-radius:12px;font-size:.92rem;color:#7a3a26;line-height:1.7}
+  .why b{font-weight:700}
+
+  /* callout / avoid */
+  .callout{background:linear-gradient(180deg,#fff6f0,#fdeee4);border:1px solid #f0d4c4;border-radius:18px;padding:26px 26px 22px;margin-top:30px}
+  .callout h3{font-weight:900;font-size:1.2rem;color:#9a3d22;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .callout ul{list-style:none}
+  .callout li{font-size:.94rem;color:var(--ink2);line-height:1.8;padding-left:24px;position:relative;margin-bottom:9px}
+  .callout li::before{content:"⚠";position:absolute;left:0;top:0;color:var(--ember);font-size:.85rem}
+  .callout li b{color:var(--ink)}
+
+  .tips{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:28px}
+  @media(max-width:680px){.tips{grid-template-columns:1fr}}
+  .tip{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:0 6px 18px rgba(70,58,46,.05)}
+  .tip h4{font-weight:700;font-size:1rem;color:var(--ink);margin-bottom:6px;display:flex;gap:8px;align-items:center}
+  .tip p{font-size:.9rem;color:var(--ink2);line-height:1.7}
+  .tip b{color:var(--ember)}
+
+  .extra{margin-top:26px;border-left:3px solid var(--line);padding-left:20px}
+  .extra h4{font-weight:700;color:var(--ink);font-size:1rem;margin-bottom:4px}
+  .extra p{font-size:.9rem;color:var(--ink2);line-height:1.8;margin-bottom:14px}
+
+  footer{background:var(--paper2);border-top:1px solid var(--line);padding:46px 0 56px;margin-top:30px}
+  footer .src{font-size:.8rem;color:var(--ash);line-height:1.9}
+  footer .src b{color:var(--ink2)}
+  footer .sig{margin-top:22px;font-family:'Noto Serif SC',serif;font-size:.92rem;color:var(--ink2)}
+  footer .sig a{color:var(--ember);text-decoration:none}
+
+  .js .reveal{opacity:0;transform:translateY(20px);transition:opacity .7s,transform .7s}
+  .js .reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-brand">东京空袭遗迹 · <b>一日游</b></div>
+    <div class="nav-links">
+      <a href="#intro">两场空袭</a>
+      <a href="#map">地图</a>
+      <a href="#route">一日路线</a>
+      <a href="#sites">遗迹清单</a>
+      <a href="#doolittle">杜立特</a>
+      <a href="#tips">避雷贴士</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-inner">
+    <div class="kicker"><span></span>东京 · 空袭遗迹 · 实地一日游</div>
+    <h1>那一夜，东京烧了十万人<br><em>The night Tokyo burned</em></h1>
+    <p class="lede">1945 年 3 月 10 日凌晨，<b>334 架 B-29</b> 在李梅（Curtis LeMay）的低空夜袭战术下，把烧夷弹倾泻在东京东部的下町。两个多小时，约 <b>十万人</b> 葬身火海——这是人类史上单次最致命的空袭。早三年的 1942 年 4 月 18 日，杜立特的 B-25 也曾掠过同一片天空，投下日本本土挨到的第一批炸弹。</p>
+    <p class="lede" style="margin-top:14px">八十年过去，火攻的现场大多重建如新。但只要知道去哪里看——焦黑仍活着的古树、被火烤变色的桥栏石、安放十万无名遗骨的慰灵堂、熔成一团的玻璃——这座城市仍能把那一夜讲给你听。这是一条<b>实地可走的一日游</b>。</p>
+    <div class="hero-meta">
+      <div class="chip">🗓 <b>务必周三–周日</b>去（核心馆周一二闭）</div>
+      <div class="chip">📍 核心区：<b>两国 · 浅草 · 北砂</b></div>
+      <div class="chip">🎟 全程花费极低，多数<b>免费</b></div>
+    </div>
+  </div>
+</header>
+
+<div class="divider"></div>
+
+<!-- INTRO: two events -->
+<section id="intro">
+  <div class="wrap">
+    <span class="eyebrow reveal">导言 · Two Air Raids over Tokyo</span>
+    <h2 class="stitle reveal">同一片天空，两场空袭</h2>
+    <p class="lead reveal">这条路线串起的是两段历史：一场是规模空前、伤亡惨烈、遗迹众多的<b>李梅火攻</b>；另一场是象征意义远大于破坏、几乎没留下可见遗迹的<b>杜立特空袭</b>。前者是主线，后者作为一个北部的小专题，诚实地告诉你"其实看不到什么，但故事值得知道"。</p>
+    <div class="events">
+      <div class="event reveal">
+        <span class="tag">主线 · Operation Meetinghouse</span>
+        <h3>东京大空袭 · 李梅火攻</h3>
+        <div class="date">10 March 1945</div>
+        <p>美军放弃高空精确轰炸，改为夜间低空、拆掉机枪以多载弹、专投 M69 集束燃烧弹。木造密集的下町（墨田、江东、台东）瞬间连成火海，火旋风吞没逃难人群。这一夜的死者多到无法辨认，至今仍以"约十万"计。</p>
+        <div class="figs">
+          <div class="fig"><b>~10万</b><span>一夜死难（估计）</span></div>
+          <div class="fig"><b>~41km²</b><span>市区烧毁</span></div>
+          <div class="fig"><b>334</b><span>架 B-29 出击</span></div>
+        </div>
+      </div>
+      <div class="event reveal">
+        <span class="tag">小专题 · Doolittle Raid</span>
+        <h3>杜立特空袭</h3>
+        <div class="date">18 April 1942</div>
+        <p>16 架 B-25 从大黄蜂号航母起飞，首次轰炸日本本土。军事破坏极小，多数炸弹误落民居，东京全市约 39 人死亡。它的意义在士气——告诉日本：本土不再安全。今天东京几乎没有它的实物遗迹，最实在的是荒川区一块解说牌。</p>
+        <div class="figs">
+          <div class="fig"><b>16</b><span>架 B-25</span></div>
+          <div class="fig"><b>~39</b><span>东京市内死亡</span></div>
+          <div class="fig"><b>0</b><span>东京坠机/遗迹（实物）</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- MAP -->
+<section id="map">
+  <div class="wrap">
+    <span class="eyebrow reveal">地理 · The Clusters</span>
+    <h2 class="stitle reveal">遗迹分布与聚类示意</h2>
+    <p class="lead reveal">东京的空袭遗迹沿隅田川散落。下图是<b>示意图（非真实比例）</b>，按可步行的聚类标出五个片区。核心三点（两国 → 浅草 → 北砂）在东部下町，中部"九段下战争记忆群"与北部"杜立特"是可选加点。</p>
+    <div class="mapwrap reveal">
+      <svg class="mapsvg" viewBox="0 0 820 520" role="img" aria-label="东京空袭遗迹聚类示意图">
+        <!-- river -->
+        <path d="M 600 20 C 560 120 540 180 500 250 C 470 305 430 360 400 440 C 388 470 380 500 372 520"
+              fill="none" stroke="#7d99a4" stroke-width="20" stroke-linecap="round" opacity="0.32"/>
+        <path d="M 600 20 C 560 120 540 180 500 250 C 470 305 430 360 400 440 C 388 470 380 500 372 520"
+              fill="none" stroke="#7d99a4" stroke-width="8" stroke-linecap="round" opacity="0.5"/>
+        <text x="525" y="150" fill="#7d99a4" font-size="13" font-style="italic" font-family="Cormorant Garamond" opacity="0.9" transform="rotate(58 525 150)">隅田川 Sumida R.</text>
+
+        <!-- route dashed connectors (中部→两国→北砂→浅草) -->
+        <path d="M 150 330 L 360 300 L 640 405 L 470 175" fill="none" stroke="#b5482e" stroke-width="1.6" stroke-dasharray="3 7" opacity="0.45"/>
+
+        <!-- 浅草 -->
+        <g>
+          <circle cx="470" cy="175" r="13" fill="#b5482e"/>
+          <circle cx="470" cy="175" r="22" fill="none" stroke="#b5482e" stroke-width="1.2" opacity="0.4"/>
+          <text x="470" y="142" text-anchor="middle" fill="#2c2723" font-size="16" font-weight="700" font-family="Noto Serif SC">浅草</text>
+          <text x="470" y="207" text-anchor="middle" fill="#8c7f6e" font-size="11">言問橋 · 浅草寺</text>
+        </g>
+        <!-- 两国 -->
+        <g>
+          <circle cx="360" cy="300" r="13" fill="#b5482e"/>
+          <circle cx="360" cy="300" r="22" fill="none" stroke="#b5482e" stroke-width="1.2" opacity="0.4"/>
+          <text x="318" y="296" text-anchor="end" fill="#2c2723" font-size="16" font-weight="700" font-family="Noto Serif SC">两国</text>
+          <text x="318" y="316" text-anchor="end" fill="#8c7f6e" font-size="11">横網町公園</text>
+        </g>
+        <!-- 北砂 -->
+        <g>
+          <circle cx="640" cy="405" r="13" fill="#b5482e"/>
+          <circle cx="640" cy="405" r="26" fill="none" stroke="#b5482e" stroke-width="1.4" opacity="0.5"/>
+          <text x="640" y="372" text-anchor="middle" fill="#2c2723" font-size="16" font-weight="700" font-family="Noto Serif SC">北砂</text>
+          <text x="640" y="437" text-anchor="middle" fill="#8c7f6e" font-size="11">战灾资料中心 ★</text>
+        </g>
+        <!-- 九段下 -->
+        <g>
+          <circle cx="150" cy="330" r="11" fill="#7d99a4"/>
+          <text x="150" y="300" text-anchor="middle" fill="#574d42" font-size="15" font-weight="700" font-family="Noto Serif SC">九段下</text>
+          <text x="150" y="356" text-anchor="middle" fill="#8c7f6e" font-size="10.5">昭和館 · 千鳥ヶ淵</text>
+        </g>
+        <!-- 荒川尾久 -->
+        <g>
+          <circle cx="250" cy="95" r="10" fill="#a89a86"/>
+          <text x="250" y="66" text-anchor="middle" fill="#574d42" font-size="14" font-weight="700" font-family="Noto Serif SC">荒川 · 尾久</text>
+          <text x="250" y="120" text-anchor="middle" fill="#8c7f6e" font-size="10.5">杜立特"初空袭之地"</text>
+        </g>
+      </svg>
+      <div class="maplegend">
+        <span><i style="background:#b5482e"></i>核心三点（火攻 · 必走）</span>
+        <span><i style="background:#7d99a4"></i>中部加点（九段下记忆群）</span>
+        <span><i style="background:#a89a86"></i>北部小专题（杜立特）</span>
+        <span><i style="background:#b5482e;opacity:.5"></i>★ 全天硬约束：12–16点开</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ROUTE -->
+<section id="route">
+  <div class="wrap">
+    <span class="eyebrow reveal">行程 · A Full Day, with a Time Axis</span>
+    <h2 class="stitle reveal">样板一日路线</h2>
+    <p class="lead reveal">全天的<b>硬约束</b>只有一个：东京大空袭·战灾资料中心只在 <b>12:00–16:00</b> 开、且<b>周一周二闭馆</b>。所有其它点都围着它排。西→东走，主题核心馆压在下午，浅草无闭馆压力放最后看夕照收尾。<b>务必选周三到周日。</b></p>
+    <div class="tl reveal">
+      <div class="tl-row">
+        <div class="tl-time">09:00<small>上午 · 九段下</small></div>
+        <div class="tl-body"><div class="tl-card"><h4>千鳥ヶ淵戦没者墓苑<span class="stay">~35min</span></h4><p>沿护城河静思凭吊，国家级无名战殁者墓，全年无休。</p></div></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-time">10:00</div>
+        <div class="tl-body"><div class="tl-card"><h4>昭和館<span class="stay">~70min</span></h4><p>开馆即入。从平民视角看空袭下的配给、灯火管制、疏散生活。</p></div></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-time">11:15</div>
+        <div class="tl-body"><div class="tl-card"><h4>しょうけい館（免费）<span class="stay">~35min</span></h4><p>步行 3 分钟，战伤病者史料馆，顺路小馆。</p></div></div>
+      </div>
+      <div class="tl-row move">
+        <div class="tl-time"><small>移动</small></div>
+        <div class="tl-body"><div class="tl-card">🚇 九段下 → 两国（都营线，约 15–18 分钟含换乘）</div></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-time">12:10<small>中午 · 两国</small></div>
+        <div class="tl-body"><div class="tl-card"><h4>两国站附近午餐<span class="stay">~30min</span></h4><p>下町食堂、相扑火锅（ちゃんこ）一带。</p></div></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-time">12:45</div>
+        <div class="tl-body"><div class="tl-card"><h4>横網町公園（慰霊堂＋復興記念館＋祈念碑）<span class="stay">~55min</span></h4><p>免费。十万无名遗骨之所、熔化遗物、刻名名簿碑，三合一同院。</p></div></div>
+      </div>
+      <div class="tl-row move">
+        <div class="tl-time"><small>移动</small></div>
+        <div class="tl-body"><div class="tl-card">🚌 两国 → 北砂（巴士约 30–35 分钟，或打车约 12 分钟更省心）</div></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-time">14:15<small>下午 · 北砂</small></div>
+        <div class="tl-body"><div class="tl-card"><h4>東京大空襲・戦災資料センター ★<span class="stay">~90min</span></h4><p>全天主题高潮。务必卡在 12–16 点窗口内、16:00 前离馆。</p></div></div>
+      </div>
+      <div class="tl-row move">
+        <div class="tl-time"><small>移动</small></div>
+        <div class="tl-body"><div class="tl-card">🚌 北砂 → 浅草（巴士约 35–40 分钟，或打车约 15 分钟）</div></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-time">16:30<small>傍晚 · 浅草</small></div>
+        <div class="tl-body"><div class="tl-card"><h4>言問橋 · 隅田公園慰霊碑<span class="stay">~25min</span></h4><p>火攻夜最惨烈死难现场，桥畔可见火烤焦黑的旧栏杆石。</p></div></div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-time">17:00</div>
+        <div class="tl-body"><div class="tl-card"><h4>浅草寺 · 戦災イチョウ<span class="stay">~60min</span></h4><p>1958 重建的本堂 vs 焦黑仍活的古银杏，夕照雷门一带收尾。</p></div></div>
+      </div>
+    </div>
+    <p class="lead reveal" style="margin-top:24px;font-size:.95rem;color:var(--ash)">想轻装版？砍掉上午的九段下群，只走 <b>两国 → 北砂 → 浅草</b> 三点，约半天到大半天（5–6 小时）即可，但战灾资料中心仍是 12–16 点的硬约束。</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- SITES -->
+<section id="sites">
+  <div class="wrap">
+    <span class="eyebrow reveal">遗迹清单 · Site by Site</span>
+    <h2 class="stitle reveal">每一个点，看什么 · 怎么去</h2>
+    <p class="lead reveal">点击展开每个点的详细：交通、开放、为什么值得去、与那一夜的史实关联。</p>
+
+    <!-- Cluster A: 两国 -->
+    <div class="cluster reveal">
+      <div class="cluster-h"><span class="cdot" style="background:#b5482e"></span><h3>① 两国片区</h3><span class="area">Ryogoku · 墨田区 · 彼此步行 3–10 分</span></div>
+      <p class="cluster-note">室内为主、几乎全免费、开放时间最长——适合作为东部行程的第一站，阴雨天也不怕。</p>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">1</div><div class="t"><h4>横網町公園 · 三合一核心</h4><div class="jp">東京都慰霊堂 ＋ 東京都復興記念館 ＋ 平和祈念碑</div><div class="hook">十万无名遗骨的最终归处，加上熔化遗物与刻名名簿碑，同院三点。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p><b>慰霊堂</b>是一座超宗派的慰灵佛堂＋三重塔，纳骨堂内安置着关东大震灾与东京大空袭合计约 <b>16.3 万具</b> 遗骨——这里实际是 3·10 火攻无名遇难者遗骨的最大安置地，每年 3 月 10 日在此办官方慰灵法会。<b>復興記念館</b>二楼回廊设有东京大空袭专区，陈列烧损/熔化的遗物、遗品与照片，户外通道还保存着言問橋拆下的旧栏杆缘石。园内 2001 年建的<b>祈念碑</b>内安放"东京空袭遇难者名簿"，已登录姓名逾八万人（原件仅每年 3/10、9/1 开匣）。</p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">JR / 大江户线「<b>両国</b>」站步行约 6 分</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v"><b>全部免费</b></div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">慰霊堂 9:00–16:30；復興記念館 9:00–17:00，<b>周一休</b></div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 45–60 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>火攻夜十万亡者的"最终归处"实体所在，肃穆分量最重；免费、室内、有熔化实物，性价比极高，是整条路线的精神中心。</div>
+        </div></div>
+      </div>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">2</div><div class="t"><h4>回向院</h4><div class="jp">諸宗山無縁寺回向院（净土宗）</div><div class="hook">三百年来收容东京历次浩劫无名死者的古刹（补充点）。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>1657 年为明历大火十万死者而建，此后历经安政大地震、关东大震灾、东京大空袭等历次灾难，都在此收容、供养无主遗骨。<b>诚实说明：</b>它与"空袭"的关联是"历代灾难无缘供养"的延续，并非专为 3·10 而设的专门碑或专区——按"无缘供养传统"理解即可，不要夸大成空袭专属遗迹。与横網町公園同在两国、步行可达。</p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">JR「両国」站西口步行 3–5 分</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v"><b>免费</b></div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">日间自由参拜（约 9:00–16:30）</div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 15–20 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>顺路理解"东京如何一次次安置历次浩劫的无名死者"，是两国片区的人文补充。</div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Cluster B: 浅草 -->
+    <div class="cluster reveal">
+      <div class="cluster-h"><span class="cdot" style="background:#b5482e"></span><h3>② 浅草—隅田川片区</h3><span class="area">Asakusa · 台东/墨田区 · 户外为主</span></div>
+      <p class="cluster-note">事发现场与幸存古树都在这里，户外免费、无闭馆压力，适合放在一天的收尾看夕照。</p>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">3</div><div class="t"><h4>言問橋 · 隅田公園慰霊碑</h4><div class="jp">言問橋 ＋ 東京大空襲慰霊碑</div><div class="hook">大空袭最惨烈的具体死难现场，能伸手摸到被火烤焦黑的旧栏杆石。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>3 月 10 日夜，浅草一侧居民以为"过河就能活"涌上言問橋，对岸向岛同样是火海，两股人流在桥上对冲、进退不得，烧夷弹落下，桥上死伤无数。桥本身仍是现役公路桥；西桥头隅田公园内立有空袭慰霊碑，旁边展示着 1992 年改修时切下的<b>旧栏杆基部缘石——石面被火烤得发黑变色</b>，是火攻之夜的实体痕迹。这一带战后曾是遇难者的临时埋葬地。</p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">「<b>浅草</b>」站步行约 12 分；自浅草寺往北步行 12–15 分</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v"><b>户外免费</b>，随时可看</div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">全天</div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 20–25 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>全程唯一能站在"事发现场"、还能亲手触到被火烤焦的栏杆石的地点，史实冲击力最强。</div>
+        </div></div>
+      </div>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">4</div><div class="t"><h4>浅草寺 · 戦災イチョウ</h4><div class="jp">浅草寺 ＋ 战灾银杏</div><div class="hook">1958 重建的本堂，与一株焦黑却仍活着的古银杏，强烈对比。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>1945 年 3 月 10 日凌晨大空袭中，浅草寺本堂、五重塔等大半烧毁，今天看到的本堂是 <b>1958 年重建</b> 的钢筋混凝土仿古建筑。本堂东南、二天门附近的<b>战灾银杏</b>，被燃烧弹直击却存活——树干下部至五六米高处至今焦黑、可见明显碳化痕迹，烧株周围战后又长出数条新干，呈丛生状。<span style="color:#8c7f6e">（注：网上偶见"3 月 20 日"说法属混淆，本堂焚毁确为 3 月 10 日。）</span></p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">银座线/浅草线/东武线「浅草」站步行约 5 分</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v"><b>免费</b>（境内全天开放）</div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">本堂内殿 6:00–17:00（冬季 6:30 起）</div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 45–60 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>名气最大、人流最旺的一站，能同时看到"烧毁后重建的本堂"与"带焦痕仍活着的古树"，是把惨剧与重生并置的最好画面。</div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Cluster C: 北砂 -->
+    <div class="cluster reveal">
+      <div class="cluster-h"><span class="cdot" style="background:#b5482e"></span><h3>③ 北砂 · 主题核心馆</h3><span class="area">Kitasuna · 江东区 · 独立，靠巴士</span></div>
+      <p class="cluster-note">位置偏东、不与两国/浅草步行相连，需单独安排——但它是整条路线的主题高潮，务必把它锁在下午 14–16 点。</p>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">5</div><div class="t"><h4>東京大空襲・戦災資料センター ★</h4><div class="jp">东京大空袭·战灾资料中心</div><div class="hook">全东京唯一专讲这场空袭的博物馆——烧夷弹、熔化遗物、证言地图最集中。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>由空袭幸存者、作家<b>早乙女胜元</b>等发起，2002 年开馆，是民间为弥补国家长期缺乏官方空袭纪念馆而建。常设展陈列 M69 集束燃烧弹实物、被烧熔变形的玻璃瓶/陶器/金属、遇难者遗物、烧焦衣物、证言手记、空袭地图与模型，并有映像讲话室放映空袭概况。这里是全城关于那一夜叙事最完整、遗物最集中的地方。</p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">都营新宿线「<b>西大島/住吉</b>」步行约 14 分；或都营巴士「北砂一丁目」下车 1 分</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v">成人 <b>300 円</b>，初高中 200，小学 100，学龄前免费</div></div>
+            <div class="fact"><div class="k">开放 ⚠</div><div class="v"><b>仅 12:00–16:00</b>；<b>周一、周二闭馆</b>（开放为周三–周日）</div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 90 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>整条路线的"史料锚点"与情感高潮。前面看的是慰灵与现场，这里把"为什么会这样、那一夜到底发生了什么"完整讲清。<b>排期就围它转。</b></div>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Cluster D: 中部 -->
+    <div class="cluster reveal">
+      <div class="cluster-h"><span class="cdot" style="background:#7d99a4"></span><h3>④ 九段下 · 战争记忆群（可选加点）</h3><span class="area">Kudanshita · 千代田区 · 彼此步行 3–8 分</span></div>
+      <p class="cluster-note">高度集中在九段下站周边 500 米内，可整体加在上午，把半天的东部行程撑成结实的一整天。</p>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">6</div><div class="t"><h4>昭和館</h4><div class="jp">战中·战后国民生活资料馆</div><div class="hook">从平民视角看空袭下的日常——配给、灯火管制、疏散学童。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>不是军事视角，而是普通国民在战时与战后的辛劳生活：配给、灯火管制、防空、疏散。与"东京大空袭"的平民受难主题契合度极高，是中部最值得加的一点。</p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">「九段下」站 4 号口步行 1 分</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v">常设展成人 <b>400 円</b>，中小学免费</div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">10:00–17:30，<b>周一休</b></div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 60–75 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>它补上"空袭之下，活着的人怎么过日子"这一层，与东部的慰灵叙事互为表里。</div>
+        </div></div>
+      </div>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">7</div><div class="t"><h4>しょうけい館（免费）</h4><div class="jp">戦傷病者史料館</div><div class="hook">战争的人体代价——负伤致残者及家属的证言。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>战争中负伤、致残、患病的军人及其家属的证言与生活资料。与空袭直接相关度中等，但免费、小巧、紧邻昭和館，顺路 30–40 分钟。</p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">「九段下」站 7 号口步行 3 分</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v"><b>免费</b></div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">10:00–17:30，<b>周一休</b></div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 30–40 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>免费、顺路，把"战争代价"从死难延伸到幸存伤者的余生。</div>
+        </div></div>
+      </div>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">8</div><div class="t"><h4>千鳥ヶ淵戦没者墓苑</h4><div class="jp">千鸟之渊战殁者墓苑</div><div class="hook">国家级、无宗教、政治中性的无名战殁者墓——安静的凭吊起点。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>1959 年由国家建立的"无名战殁者之墓"，六角堂内安置约 37 万具海外战殁者无名遗骨。它与靖国神社性质完全不同——无宗教、非军国主义。与"空袭"非直接相关（悼念的是海外战殁者），但作为安静、政治中性的哀悼空间，适合放在行程开头沉淀。春天还是著名赏樱地。</p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">「九段下」站 2 号口步行约 8 分（沿护城河）</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v"><b>免费</b></div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">9:00–17:00（10–3 月至 16:00），<b>全年无休</b></div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 30–40 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>全年无休、政治中性、环境安静，是一天里最适合"先静下心"的开场。</div>
+        </div></div>
+      </div>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">9</div><div class="t"><h4>遊就館 <span style="font-size:.7rem;color:#b5482e;font-weight:700;border:1px solid #b5482e;border-radius:6px;padding:1px 7px;margin-left:6px">可选 · 有争议</span></h4><div class="jp">靖国神社内军事博物馆</div><div class="hook">与本路线"平民受难/反战"主线立场相反，请带批判视角。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>靖国神社附属的军事博物馆，藏品含零式战斗机、人间鱼雷"回天"等大型兵器与阵亡者遗物。<b>务必如实知道：</b>其历史叙事被广泛批评为美化战前日本对外战争、淡化侵略与战争责任；靖国神社合祀含甲级战犯，是中韩等国长期抗议的对象。它是从战争发动方/军事角度叙事，<b>与本路线的平民受难、反战主线立场相反</b>。对该议题敏感的访客可直接跳过；若要去，请抱批判性视角参观。</p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">「九段下」站步行约 5 分（靖国神社境内）</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v">成人 1000 円</div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">9:00–16:30，几乎全年无休</div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 60 分钟（会挤掉午后，建议本日跳过）</div></div>
+          </div>
+          <div class="why" style="background:#f6ece5;color:#6f4636"><b>提示：</b>列在这里是为了信息完整与让你自己判断，<b>不构成推荐</b>。它和这条以平民视角为主线的路线气质相反。</div>
+        </div></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- DOOLITTLE -->
+<section id="doolittle">
+  <div class="wrap">
+    <span class="eyebrow reveal">小专题 · The Doolittle Raid</span>
+    <h2 class="stitle reveal">杜立特空袭：几乎看不到，但故事值得知道</h2>
+    <p class="lead reveal">先把话说在前面：<b>东京几乎没有"弹痕实物"级别的杜立特可见遗迹。</b>1942 年那次破坏极小、又集中在民居（战后早重建），没有保留弹坑或弹痕建筑。如果你是杜立特迷，最实在的是荒川区东尾久的一块解说牌——日本本土第一颗落地炸弹的地方。</p>
+
+    <div class="cluster reveal">
+      <div class="cluster-h"><span class="cdot" style="background:#a89a86"></span><h3>⑩ 荒川 · 尾久 · "初空袭之地"</h3><span class="area">Ogu · 荒川区 · 北部独立加点</span></div>
+
+      <div class="site">
+        <div class="site-head"><div class="site-num">10</div><div class="t"><h4>「東京初空襲の地」案内板</h4><div class="jp">东京初空袭之地 解说牌（荒川区教委设）</div><div class="hook">日本本土挨到的第一颗落地炸弹，就在这附近。</div></div><div class="site-toggle">＋</div></div>
+        <div class="site-body"><div class="site-inner">
+          <p>1942 年 4 月 18 日正午刚过，杜立特编队的 2 号机在尾久町八、九丁目一带投下炸弹与燃烧弹，造成约 10 死、数十伤，全烧 43 户，弹坑直径 10 米、深 5 米——史称"<b>尾久初空袭</b>"，是日本本土第一颗落地的炸弹。解说牌立在熊野前保育园外墙边，写明事件经过并附推定弹着点地图。<span style="color:#8c7f6e">（探访前建议向荒川区确认是否仍在原位；该区近年仍持续在此办纪念活动与图片展。）</span></p>
+          <div class="facts">
+            <div class="fact"><div class="k">交通</div><div class="v">都电荒川线/舍人线「<b>熊野前</b>」站步行约 5 分</div></div>
+            <div class="fact"><div class="k">门票</div><div class="v"><b>户外免费</b></div></div>
+            <div class="fact"><div class="k">开放</div><div class="v">户外随时（解说牌）</div></div>
+            <div class="fact"><div class="k">停留</div><div class="v">约 15 分钟</div></div>
+          </div>
+          <div class="why"><b>为什么值得去：</b>站在"本土第一颗落地炸弹"的地点，把杜立特空袭从抽象的航母奇袭拉回到一条具体的东京街道。</div>
+        </div></div>
+      </div>
+      <div class="extra">
+        <h4>同主题延伸（更偏，按需）</h4>
+        <p><b>法林寺</b>（葛饰区西水元）：东京区域内唯一明确的杜立特空袭遇难者个人墓——被 3 号机机枪扫射身亡的水元国民学校 13 岁学生石出巳之助之墓，戒名"悲運銃撃善士"。私人寺院墓地，探访需守礼。<br>
+        <b>葛飾区郷土と天文の博物館</b>（お花茶屋站）：曾设杜立特空袭解说面板（含机枪弹与校舍弹痕说明）。是否常设/实物展出请去前电话确认。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- TIPS + AVOID -->
+<section id="tips">
+  <div class="wrap">
+    <span class="eyebrow reveal">实用 · Before You Go</span>
+    <h2 class="stitle reveal">避雷与实用贴士</h2>
+
+    <div class="callout reveal">
+      <h3>⚠ 避雷：别被以讹传讹的"遗迹"骗了</h3>
+      <ul>
+        <li><b>"油库/油槽被杜立特炸毁"</b>——无任何可靠记录，疑为讹传，别采信。</li>
+        <li><b>东京有杜立特坠机点或机组慰灵物</b>——错误。16 架 B-25 无一在东京坠落；被处决的飞行员是在<b>上海</b>，不在东京。</li>
+        <li><b>震災イチョウ（千代田区大手濠）</b>是 1923 关东大震灾的幸存树，<b>与 1945 空袭无关</b>，别混进来。空袭幸存的确切是浅草寺战灾银杏。</li>
+        <li><b>早稻田观音慰霊像（喜久井町観音）</b>是 1945 年 5 月大空袭的，<b>与杜立特无关</b>，别张冠李戴。</li>
+        <li>吾妻橋、駒形橋等隅田川桥当夜也有伤亡，但<b>没有专门的现场纪念</b>——把"桥上的空袭记忆"集中放在言問橋即可。</li>
+      </ul>
+    </div>
+
+    <div class="tips">
+      <div class="tip reveal"><h4>🗓 哪天去</h4><p>务必<b>周三–周日</b>。周一所有室内馆全关；周二战灾资料中心单独关。资料中心 <b>12:00 才开、16:00 就关</b>，是全天唯一硬约束，把它锁在 14:00–16:00，其余点围它排。</p></div>
+      <div class="tip reveal"><h4>🚕 交通</h4><p>核心三点不全在地铁网上：北砂资料中心靠巴士、步行较远。两国↔北砂、北砂↔浅草这两段，<b>打车（约 12–15 分钟）</b>比绕巴士省心很多，预算允许就打车。</p></div>
+      <div class="tip reveal"><h4>🙏 礼仪</h4><p>慰霊堂、纳骨设施、寺院墓地都是安放遗骨与凭吊之所——轻声、勿大声喧哗、拍照前留意馆内告示。法林寺等私人墓地尤其守礼。</p></div>
+      <div class="tip reveal"><h4>📅 特别日</h4><p>每年 <b>3 月 10 日</b>是大空袭纪念日，横網町公園办官方慰灵法会、名簿原件开匣公开。若行程能凑到这天，体验完全不同（人也多）。</p></div>
+    </div>
+
+    <div class="extra reveal" style="margin-top:34px">
+      <h4>延伸阅读（不排进当天路线）</h4>
+      <p><b>明治神宫</b>：1945 年 4 月空袭中本殿等烧毁，1958 年重建——确是"烧毁＋战后重建"的实例，但在西部涩谷/原宿，与本路线地理脱节，且现场已无明显战灾痕迹，作背景知识即可。<br>
+      <b>早稻田（杜立特 1 号机弹着）</b>：史实最有名（早稻田中学学生小島茂之死），但现地没有公开标记，只能"指认地点＋讲故事"，看不到实物。</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="src">
+      <b>资料来源（出行前请再核实官网开放时间/票价）：</b><br>
+      东京都慰霊協会 tokyoireikyoukai.or.jp · 東京大空襲・戦災資料センター tokyo-sensai.net · 浅草寺 senso-ji.jp · 昭和館 showakan.go.jp · しょうけい館 shokeikan.go.jp · 千鳥ヶ淵戦没者墓苑（環境省）· 遊就館 yasukuni.or.jp · 荒川区公式 · 战迹纪行 senseki-kikou.net · 維基百科（交叉核实）。<br>
+      <span style="color:#a89a86">史实与开放信息基于 2026 年 6 月核实；个别民间设施/解说牌可能变动，建议出行前电话或官网再确认。</span>
+    </div>
+    <div class="sig">为「棒棒的建硕」整理 · 一条在东京可以实地走完的记忆之路。<br>
+      <a href="/">← 回 jianshuo.dev</a></div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.site-head').forEach(function(h){
+    h.addEventListener('click',function(){ h.parentElement.classList.toggle('open'); });
+  });
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+</script>
+
+<!-- Cloudflare Web Analytics --><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "34108fa3d3204951afa585ccb3976c88"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
