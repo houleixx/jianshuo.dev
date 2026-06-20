@@ -103,7 +103,7 @@ footer a{color:#86868b;text-decoration:none}
 </style></head>
 <body><div class="wrap">
 ${inner}
-<footer>由 <a href="https://jianshuo.dev/voicedrop/">VoiceDrop</a> 口述生成 · 王建硕</footer>
+<footer>由 <a href="https://jianshuo.dev/voicedrop/">VoiceDrop</a> 口述生成</footer>
 </div></body></html>`;
 }
 
