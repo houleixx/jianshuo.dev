@@ -136,6 +136,24 @@ export async function onRequest(context) {
     return json({ url: `${url.origin}/voicedrop/${id}` });
   }
 
+  // "加急处理": let a signed-in app user kick the article miner now instead of
+  // waiting for the hourly cron. The GitHub token lives only as a Pages secret.
+  if (request.method === 'POST' && action === 'mine') {
+    if (!env.GH_DISPATCH_TOKEN) return json({ error: 'server misconfigured: no GH_DISPATCH_TOKEN' }, 500);
+    const gh = await fetch('https://api.github.com/repos/jianshuo/voicedrop/actions/workflows/mine.yml/dispatches', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.GH_DISPATCH_TOKEN}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'voicedrop-files',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({ ref: 'main' }),
+    });
+    if (gh.status === 204) return json({ ok: true });
+    return json({ error: 'dispatch failed', status: gh.status, detail: (await gh.text()).slice(0, 200) }, 502);
+  }
+
   return json({ error: 'bad request' }, 400);
 }
 
