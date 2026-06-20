@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop — speak it, it files itself. A minimal voice-memo app by 王建硕.">
+<title>VoiceDrop — 口述备忘 · jianshuo.dev</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#ef7d54}
+  body{background:radial-gradient(ellipse 120% 80% at 50% -10%,#fdf0e0,var(--bg));color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:760px;margin:0 auto;padding:44px 32px 80px}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:48px}
+  .brand{display:flex;align-items:center;gap:12px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.2rem;text-decoration:none;color:inherit}
+  .brand .blob{width:34px;height:34px;border-radius:42% 58% 60% 40%/45% 45% 55% 55%;background:linear-gradient(135deg,#f6a560,#ef7d54);box-shadow:0 6px 16px rgba(239,125,84,.4)}
+  header nav a{font-weight:700;font-size:.84rem;color:var(--soft);text-decoration:none;padding:8px 16px;border-radius:999px;transition:all .2s}
+  header nav a:hover{background:var(--card);color:var(--ink);box-shadow:0 4px 12px rgba(74,63,53,.08)}
+  .hero{text-align:center;margin-bottom:44px}
+  .hero .pill{display:inline-block;background:#fff;border-radius:999px;padding:7px 18px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:.8rem;color:var(--accent);box-shadow:0 6px 16px rgba(74,63,53,.06);margin-bottom:22px}
+  .hero h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(2rem,5vw,3rem);line-height:1.1;letter-spacing:-.02em}
+  .hero p{margin-top:16px;font-size:1.06rem;color:#7d6f5f;font-weight:600;line-height:1.55}
+  .card{background:var(--card);border-radius:24px;padding:30px 30px;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8);margin-bottom:22px}
+  .card h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.3rem;margin-bottom:14px}
+  .card ul{list-style:none;display:flex;flex-direction:column;gap:10px}
+  .card li{font-size:.98rem;color:#6f6253;font-weight:600;line-height:1.5;padding-left:28px;position:relative}
+  .card li::before{content:"●";color:var(--accent);position:absolute;left:6px;font-size:.7rem;top:.35em}
+  .card p{font-size:.98rem;color:#6f6253;font-weight:600;line-height:1.6}
+  a.inline{color:var(--accent);font-weight:800;text-decoration:none}
+  a.inline:hover{text-decoration:underline}
+  .links{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:36px}
+  .links a{background:#fff;border-radius:999px;padding:12px 22px;font-weight:700;font-size:.86rem;color:#6f6253;text-decoration:none;box-shadow:0 6px 16px rgba(74,63,53,.06);transition:all .25s}
+  .links a:hover{transform:translateY(-3px);color:var(--accent)}
+  footer{text-align:center;margin-top:40px;font-size:.78rem;color:var(--soft);font-weight:600}
+  .lang{font-size:.78rem;color:var(--soft);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin:30px 0 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="brand" href="/"><span class="blob"></span>jianshuo.dev</a>
+    <nav><a href="/voicedrop/privacy/">Privacy</a></nav>
+  </header>
+
+  <div class="hero">
+    <span class="pill">🎙️ VoiceDrop</span>
+    <h1>Speak it,<br>it files itself.</h1>
+    <p>一句话录下灵感，自动按时间和地点命名，上传到你自己的文件中转站。<br>A minimal voice memo — open, talk, done.</p>
+  </div>
+
+  <div class="lang">使用方法 · How it works</div>
+  <div class="card">
+    <ul>
+      <li>打开就录，松手即存 — open and it starts recording; tap stop to save.</li>
+      <li>每条录音自动用时间 + 当前位置（城市/城区）命名，日后一眼认出。</li>
+      <li>自动上传到你自己的私有文件中转站，并归档到 iCloud。</li>
+      <li>没有多余按钮，没有广告，没有第三方追踪。</li>
+    </ul>
+  </div>
+
+  <div class="lang">需要帮助 · Support</div>
+  <div class="card">
+    <p>有任何问题、建议或希望删除数据，直接邮件联系：<br>
+    Questions, feedback, or data-deletion requests — just email
+    <a class="inline" href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a>.<br>
+    我通常一两天内回复 · I usually reply within a day or two.</p>
+  </div>
+
+  <div class="links">
+    <a href="/voicedrop/privacy/">隐私政策 · Privacy Policy</a>
+    <a href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a>
+    <a href="/">jianshuo.dev</a>
+  </div>
+
+  <footer>Made with care in Shanghai · © 2026 王建硕</footer>
+</div>
+</body>
+</html>
