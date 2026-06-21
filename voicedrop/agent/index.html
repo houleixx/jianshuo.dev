@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop 为 Agent 而生 — 在 Claude Code 或 Codex 里直接读取你的录音与文章。VoiceDrop is built for agents.">
+<title>VoiceDrop for Agents — 在 Claude Code / Codex 里用 · jianshuo.dev</title>
+<meta property="og:title" content="VoiceDrop — built for agents">
+<meta property="og:description" content="你的口述 → 自己云端的结构化文章，一个 token 就能被 Claude Code / Codex 直接读取。">
+<meta property="og:image" content="https://jianshuo.dev/voicedrop/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#ef7d54}
+  body{background:radial-gradient(ellipse 120% 80% at 50% -10%,#fdf0e0,var(--bg));color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:760px;margin:0 auto;padding:44px 32px 80px}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:48px}
+  .brand{display:flex;align-items:center;gap:12px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.2rem;text-decoration:none;color:inherit}
+  .brand .blob{width:34px;height:34px;border-radius:42% 58% 60% 40%/45% 45% 55% 55%;background:linear-gradient(135deg,#f6a560,#ef7d54);box-shadow:0 6px 16px rgba(239,125,84,.4)}
+  header nav a{font-weight:700;font-size:.84rem;color:var(--soft);text-decoration:none;padding:8px 16px;border-radius:999px;transition:all .2s}
+  header nav a:hover{background:var(--card);color:var(--ink);box-shadow:0 4px 12px rgba(74,63,53,.08)}
+  .hero{text-align:center;margin-bottom:44px}
+  .hero .pill{display:inline-block;background:#fff;border-radius:999px;padding:7px 18px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:.8rem;color:var(--accent);box-shadow:0 6px 16px rgba(74,63,53,.06);margin-bottom:22px}
+  .hero h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(2rem,5vw,2.8rem);line-height:1.12;letter-spacing:-.02em}
+  .hero p{margin-top:16px;font-size:1.06rem;color:#7d6f5f;font-weight:600;line-height:1.55}
+  .card{background:var(--card);border-radius:24px;padding:28px 30px;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8);margin-bottom:22px}
+  .card h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:14px}
+  .card p{font-size:.98rem;color:#6f6253;font-weight:600;line-height:1.6;margin-bottom:10px}
+  .card ul{list-style:none;display:flex;flex-direction:column;gap:10px;margin-top:6px}
+  .card li{font-size:.96rem;color:#6f6253;font-weight:600;line-height:1.5;padding-left:28px;position:relative}
+  .card li::before{content:"●";color:var(--accent);position:absolute;left:6px;font-size:.7rem;top:.35em}
+  .step{display:flex;gap:14px;align-items:flex-start;margin-bottom:18px}
+  .step:last-child{margin-bottom:0}
+  .num{flex:none;width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#f6a560,#ef7d54);color:#fff;font-family:'Quicksand',sans-serif;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:.9rem;box-shadow:0 4px 12px rgba(239,125,84,.35)}
+  .step h3{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.02rem;margin-bottom:4px}
+  .step p{font-size:.94rem;margin-bottom:8px}
+  a.inline{color:var(--accent);font-weight:800;text-decoration:none}
+  a.inline:hover{text-decoration:underline}
+  pre{background:#2c2620;color:#f4ece0;border-radius:14px;padding:16px 18px;overflow-x:auto;font-size:.84rem;line-height:1.55;margin:8px 0 4px}
+  code{font-family:'SF Mono',ui-monospace,Menlo,monospace}
+  .chat{background:#f7efe4;border-radius:14px;padding:12px 16px;font-size:.92rem;color:#6f6253;font-weight:600;font-style:italic;margin:8px 0}
+  .links{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:36px}
+  .links a{background:#fff;border-radius:999px;padding:12px 22px;font-weight:700;font-size:.86rem;color:#6f6253;text-decoration:none;box-shadow:0 6px 16px rgba(74,63,53,.06);transition:all .25s}
+  .links a:hover{transform:translateY(-3px);color:var(--accent)}
+  footer{text-align:center;margin-top:40px;font-size:.78rem;color:var(--soft);font-weight:600}
+  .lang{font-size:.78rem;color:var(--soft);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin:30px 0 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="brand" href="/voicedrop/"><span class="blob"></span>VoiceDrop</a>
+    <nav><a href="/voicedrop/">← 首页 Home</a></nav>
+  </header>
+
+  <div class="hero">
+    <span class="pill">🤖 Built for agents</span>
+    <h1>VoiceDrop 为 Agent 而生</h1>
+    <p>你开口说，VoiceDrop 把它变成你自己云端的结构化文章 —— 一个 token，<br>
+    Claude Code、Codex 这样的 agent 就能直接读、直接写。</p>
+  </div>
+
+  <div class="card">
+    <h2>为什么说它是 agent-native</h2>
+    <p>VoiceDrop 不是一个把你的数据锁在自己后台的 app。每条录音和挖出来的文章，都存在
+    <b>你自己的</b>空间里，背后是一套极简的、token 鉴权的开放 API。也就是说，你的
+    voice memo 从录下来的那一刻起，就已经是 agent 可以读写的结构化数据。</p>
+    <ul>
+      <li>开放 Files API：列文件、下载录音 / 文章 / 字幕，全部一个 <code>curl</code> 搞定。</li>
+      <li>文章是结构化 JSON（标题 + 正文 + 转写 + SRT），不是一坨 HTML。</li>
+      <li>一个 <code>CLAUDE.md</code> 的反馈回路：让 agent 蒸馏你的文风写回去，下一篇就更像你。</li>
+      <li>数据在你自己的目录里，token 在你手上 —— 无缝融入你的 agent 工作流。</li>
+    </ul>
+  </div>
+
+  <div class="lang">在 Claude Code / Codex 里用 · How to use</div>
+  <div class="card">
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h3>拿到你的访问令牌</h3>
+        <p>打开 VoiceDrop App → 底部「设置」→「账户」→ 点「复制访问令牌」。令牌形如
+        <code>anon_xxxx…</code>。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h3>在 Claude Code / Codex 里设好它</h3>
+        <pre><code>TOKEN=anon_xxxxxxxx...   # 粘贴你刚复制的令牌
+BASE=https://jianshuo.dev/files/api</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div>
+        <h3>列出 / 读取你的录音和文章</h3>
+        <pre><code># 列出你空间里的所有文件
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/list
+
+# 下载某篇文章的结构化 JSON
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$BASE/download/users/&lt;你的id&gt;/articles/VoiceDrop-....json"</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <div>
+        <h3>或者直接用大白话指挥 agent</h3>
+        <p>装上 <code>voicedrop</code> skill 后，在 Claude Code 里直接说：</p>
+        <div class="chat">「voicedrop list」—— 列出我所有的录音和文章</div>
+        <div class="chat">「voicedrop distill」—— 从我最近几篇文章蒸馏文风，写回设置里的「文风」</div>
+        <p>agent 会用上面的 API 帮你把活干完，蒸馏出的文风规则会直接写进你的
+        <code>CLAUDE.md</code>，下次挖文章自动带上。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>这条回路有多顺</h2>
+    <p>说一段话 → VoiceDrop 自动转写、挖成文章 → 你让 agent 读这些文章、蒸馏出你的文风 →
+    写回 <code>CLAUDE.md</code> → 下一篇文章更像你。整个过程里，agent 始终在用你自己的数据、
+    你自己的 token，没有第二个后台、没有锁定。这就是 VoiceDrop 想做的事：<b>让口述无缝接进
+    agent 生态</b>。</p>
+  </div>
+
+  <div class="links">
+    <a href="/voicedrop/">← VoiceDrop 首页</a>
+    <a href="/voicedrop/privacy/">隐私政策 · Privacy</a>
+    <a href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a>
+  </div>
+
+  <footer>Made with care in Shanghai · © 2026 王建硕</footer>
+</div>
+</body>
+</html>
