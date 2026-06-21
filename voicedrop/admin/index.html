@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>VoiceDrop 控制台</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f5f2; --panel:#ffffff; --ink:#1d1d1f; --muted:#86868b;
+  --line:#e8e5df; --line2:#f0eee9;
+  --accent:#0a7d52; --accent-bg:#e7f6ee;
+  --warn:#9a6b00; --warn-bg:#fbf2dc;
+  --idle:#5b6470; --idle-bg:#eef1f4;
+  --blue:#0a66c2;
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+a{color:var(--blue);text-decoration:none}
+.wrap{max-width:1040px;margin:0 auto;padding:24px 18px 80px}
+
+/* ---- gate ---- */
+#gate{max-width:420px;margin:14vh auto 0;background:var(--panel);
+  border:1px solid var(--line);border-radius:16px;padding:30px 26px;box-shadow:var(--shadow)}
+#gate h1{font-size:1.25rem;margin:0 0 4px}
+#gate p{color:var(--muted);margin:0 0 18px;font-size:.92rem}
+#gate input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;
+  font-size:.95rem;background:#fcfcfb;margin-bottom:12px}
+#gate input:focus{outline:none;border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);border-radius:10px;padding:9px 15px;font-size:.9rem;font-weight:560}
+.btn:hover{background:#faf9f7}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;justify-content:center;padding:11px}
+.btn.primary:hover{filter:brightness(1.05)}
+.err{color:#c0392b;font-size:.86rem;min-height:1.2em;margin-top:2px}
+
+/* ---- header ---- */
+header.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+header.top h1{font-size:1.3rem;margin:0;font-weight:700;letter-spacing:-.01em}
+header.top .grow{flex:1}
+.tag{font-size:.74rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);
+  padding:3px 9px;border-radius:999px}
+
+/* ---- stat cards ---- */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:26px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+.card .n{font-size:1.7rem;font-weight:740;letter-spacing:-.02em;line-height:1.1}
+.card .l{font-size:.8rem;color:var(--muted);margin-top:2px}
+.card.ok .n{color:var(--accent)} .card.warn .n{color:var(--warn)} .card.idle .n{color:var(--idle)}
+
+/* ---- user list ---- */
+.user{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;
+  overflow:hidden;box-shadow:var(--shadow)}
+.user>summary{list-style:none;cursor:pointer;padding:15px 18px;display:flex;align-items:center;gap:12px}
+.user>summary::-webkit-details-marker{display:none}
+.user>summary .caret{color:var(--muted);font-size:.8rem;transition:transform .15s;flex:none}
+.user[open]>summary .caret{transform:rotate(90deg)}
+.user .uname{font-weight:650;font-size:1rem}
+.user .usub{font-size:.74rem;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.user .ustat{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.pill{font-size:.74rem;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.pill.au{background:var(--idle-bg);color:var(--idle)}
+.pill.ok{background:var(--accent-bg);color:var(--accent)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.ubody{border-top:1px solid var(--line2);padding:6px 18px 14px}
+.style{font-size:.82rem;color:var(--muted);background:#fbfaf8;border:1px solid var(--line2);
+  border-radius:10px;padding:9px 12px;margin:10px 0 4px;white-space:pre-wrap}
+.style b{color:var(--ink)}
+
+/* ---- recording rows ---- */
+.rec{border-top:1px solid var(--line2);padding:13px 2px}
+.rec:first-child{border-top:none}
+.rec .rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.badge{font-size:.72rem;font-weight:600;padding:2px 8px;border-radius:6px;flex:none}
+.badge.ok{background:var(--accent-bg);color:var(--accent)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.badge.idle{background:var(--idle-bg);color:var(--idle)}
+.rec .rtitle{font-weight:560}
+.rec .rmeta{font-size:.78rem;color:var(--muted)}
+.rec .rmeta .dot{margin:0 5px;opacity:.5}
+.rec audio{height:34px;margin-top:9px;width:100%;max-width:460px;display:block}
+.rec .acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.lnk{font-size:.82rem;color:var(--blue);cursor:pointer;background:none;border:none;padding:0}
+.lnk:hover{text-decoration:underline}
+.detail{margin-top:10px;background:#fbfaf8;border:1px solid var(--line2);border-radius:10px;padding:0 14px;
+  display:none}
+.detail.open{display:block;padding:12px 14px}
+.detail h4{margin:14px 0 6px;font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.detail h4:first-child{margin-top:2px}
+.detail .art{margin:0 0 10px}
+.detail .art .at{font-weight:680;font-size:1.02rem;margin:0 0 6px}
+.detail .art .ab{white-space:pre-wrap;font-size:.92rem;line-height:1.7}
+.detail .tx{white-space:pre-wrap;font-size:.86rem;color:#444;line-height:1.6;
+  background:#fff;border:1px solid var(--line2);border-radius:8px;padding:10px 12px}
+.detail .reason{color:var(--warn);font-size:.9rem}
+.detail .kv{font-size:.78rem;color:var(--muted)}
+.detail hr{border:none;border-top:1px dashed var(--line);margin:14px 0}
+.loading{color:var(--muted);font-size:.85rem;padding:8px 0}
+.empty-state{text-align:center;color:var(--muted);padding:50px 0}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
+  border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- token gate -->
+  <div id="gate" hidden>
+    <h1>VoiceDrop 控制台</h1>
+    <p>输入 master token 查看全系统状态。token 只存在本机浏览器，不上传。</p>
+    <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+    <div class="err" id="gateErr"></div>
+    <button class="btn primary" id="enter">进入</button>
+  </div>
+
+  <!-- dashboard -->
+  <div id="app" hidden>
+    <header class="top">
+      <h1>VoiceDrop 控制台</h1>
+      <span class="tag" id="updated"></span>
+      <span class="grow"></span>
+      <button class="btn" id="refresh">刷新</button>
+      <button class="btn" id="logout">退出</button>
+    </header>
+    <div class="cards" id="cards"></div>
+    <div id="users"></div>
+  </div>
+
+</div>
+
+<script>
+const API = '/files/api';
+const TKEY = 'vd_admin_token';
+let TOKEN = localStorage.getItem(TKEY) || '';
+
+const $ = (s, r=document) => r.querySelector(s);
+const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+// ---- API helpers (admin scope: raw keys) ----
+async function apiList(){
+  const r = await fetch(`${API}/list`, { headers:{ Authorization:`Bearer ${TOKEN}` }});
+  if(r.status===401) throw new Error('unauthorized');
+  if(!r.ok) throw new Error('list failed: '+r.status);
+  return (await r.json()).files || [];
+}
+async function apiGetJSON(key){
+  const r = await fetch(`${API}/download/${key.split('/').map(encodeURIComponent).join('/')}`,
+    { headers:{ Authorization:`Bearer ${TOKEN}` }});
+  if(!r.ok) throw new Error('download failed: '+r.status);
+  return r.json();
+}
+async function apiGetText(key){
+  const r = await fetch(`${API}/download/${key.split('/').map(encodeURIComponent).join('/')}`,
+    { headers:{ Authorization:`Bearer ${TOKEN}` }});
+  if(!r.ok) throw new Error('download failed: '+r.status);
+  return r.text();
+}
+function audioURL(key){
+  return `${API}/download/${key.split('/').map(encodeURIComponent).join('/')}?token=${encodeURIComponent(TOKEN)}`;
+}
+
+// ---- filename parsing ----
+// VoiceDrop-<YYYY-MM-DD>-<HHMMSS>-<dur>-<weekday>-<period>[-<city>-<district>]
+function parseStem(stem){
+  const out = { date:'', time:'', dur:'', weekday:'', period:'', city:'', district:'', durSec:0 };
+  const m = stem.match(/^VoiceDrop-(\d{4}-\d{2}-\d{2})-(\d{6})(?:-(\d+m\d+s|\d+s))?(?:-([A-Za-z]+))?(?:-([A-Za-z]+))?(?:-([A-Za-z]+))?(?:-([A-Za-z]+))?/);
+  if(!m) return out;
+  out.date = m[1];
+  out.time = m[2] ? `${m[2].slice(0,2)}:${m[2].slice(2,4)}` : '';
+  out.dur = m[3] || '';
+  out.weekday = m[4] || '';
+  out.period = m[5] || '';
+  out.city = m[6] || '';
+  out.district = m[7] || '';
+  if(out.dur){ const d=out.dur.match(/(?:(\d+)m)?(\d+)s/); if(d) out.durSec=(+(d[1]||0))*60+(+d[2]); }
+  return out;
+}
+function fmtDur(sec){ if(!sec) return '—'; const m=Math.floor(sec/60),s=sec%60; return m?`${m}分${s}秒`:`${s}秒`; }
+function fmtTotal(sec){ const h=Math.floor(sec/3600),m=Math.round((sec%3600)/60); return h?`${h}h${m}m`:`${m}分钟`; }
+function fmtBytes(b){ if(b<1024)return b+'B'; if(b<1048576)return (b/1024).toFixed(0)+'KB'; return (b/1048576).toFixed(1)+'MB'; }
+const PERIOD_ZH={EarlyMorning:'清晨',Morning:'上午',Noon:'中午',Afternoon:'下午',Evening:'傍晚',Night:'夜晚',LateNight:'深夜'};
+
+// ---- aggregate keys -> users ----
+function aggregate(files){
+  const users = {}; // sub -> {sub, claudemd, recs:{stem->{...}}}
+  const U = sub => users[sub] || (users[sub]={ sub, claudemd:null, recs:{} });
+  for(const f of files){
+    if(!f.name.startsWith('users/')) continue;
+    const parts = f.name.split('/');
+    const sub = parts[1];
+    if(!sub) continue;
+    const u = U(sub);
+    const rest = parts.slice(2).join('/');
+    if(rest==='CLAUDE.md'){ u.claudemd=f; continue; }
+    if(parts[2]==='articles'){
+      const fn = parts[3]||'';
+      const dot = fn.lastIndexOf('.'); const stem=fn.slice(0,dot), ext=fn.slice(dot+1);
+      if(!stem) continue;
+      const r = u.recs[stem] || (u.recs[stem]={ stem });
+      if(ext==='json') r.json=f;
+      else if(ext==='empty') r.empty=f;
+      else if(ext==='srt') r.srt=f;
+      continue;
+    }
+    if(rest.endsWith('.m4a')){
+      const stem = rest.slice(0,-4);
+      const r = u.recs[stem] || (u.recs[stem]={ stem });
+      r.audio=f;
+    }
+  }
+  return users;
+}
+function recStatus(r){ return r.json?'ok':r.empty?'warn':'idle'; }
+const STATUS_TXT={ok:'已成文',warn:'无语音',idle:'待处理'};
+
+// ---- render ----
+async function load(){
+  $('#users').innerHTML = '<div class="loading"><span class="spin"></span>读取中…</div>';
+  $('#cards').innerHTML='';
+  let files;
+  try { files = await apiList(); }
+  catch(e){
+    if(String(e.message).includes('unauthorized')){ logout('token 无效'); return; }
+    $('#users').innerHTML = `<div class="empty-state">加载失败：${esc(e.message)}</div>`;
+    return;
+  }
+  const users = aggregate(files);
+  const subs = Object.keys(users).sort();
+
+  // stats
+  let nAudio=0,nOk=0,nWarn=0,nIdle=0,totalSec=0;
+  for(const s of subs) for(const stem in users[s].recs){
+    const r=users[s].recs[stem];
+    if(r.audio){ nAudio++; totalSec+=parseStem(stem).durSec; }
+    const st=recStatus(r);
+    if(st==='ok')nOk++; else if(st==='warn')nWarn++; else if(r.audio)nIdle++;
+  }
+  $('#updated').textContent = '更新于 '+new Date().toLocaleTimeString('zh-CN');
+  $('#cards').innerHTML='';
+  const cards=[
+    ['',subs.length,'用户'],
+    ['',nAudio,'音频'],
+    ['ok',nOk,'已成文'],
+    ['warn',nWarn,'无语音'],
+    ['idle',nIdle,'待处理'],
+    ['',fmtTotal(totalSec),'总时长'],
+  ];
+  for(const [c,n,l] of cards){
+    $('#cards').append(el('div','card '+c, `<div class="n">${n}</div><div class="l">${l}</div>`));
+  }
+
+  // user list (most recent activity first)
+  const box=$('#users'); box.innerHTML='';
+  if(!subs.length){ box.innerHTML='<div class="empty-state">还没有用户数据。</div>'; return; }
+  const withTime = subs.map(s=>{
+    const recs=Object.values(users[s].recs);
+    let latest=''; for(const r of recs){ const f=r.audio||r.json||r.empty; if(f&&f.uploaded>latest)latest=f.uploaded; }
+    return {s,latest};
+  }).sort((a,b)=> b.latest<a.latest?-1:1);
+
+  for(const {s} of withTime) box.append(renderUser(users[s]));
+}
+
+function renderUser(u){
+  const recs = Object.values(u.recs);
+  const nAudio = recs.filter(r=>r.audio).length;
+  const nOk = recs.filter(r=>r.json).length;
+  const nWarn = recs.filter(r=>!r.json&&r.empty).length;
+
+  const d = el('details','user');
+  const sum = el('summary');
+  sum.innerHTML = `<span class="caret">▶</span>
+    <span><span class="uname" data-name>${esc(shortSub(u.sub))}</span>
+    <span class="usub"> ${esc(u.sub)}</span></span>
+    <span class="ustat">
+      <span class="pill au">${nAudio} 音频</span>
+      ${nOk?`<span class="pill ok">${nOk} 成文</span>`:''}
+      ${nWarn?`<span class="pill warn">${nWarn} 无语音</span>`:''}
+    </span>`;
+  d.append(sum);
+
+  const body = el('div','ubody');
+  d.append(body);
+
+  // load name + style from CLAUDE.md once, lazily on first open
+  let opened=false;
+  d.addEventListener('toggle', async ()=>{
+    if(!d.open || opened) return; opened=true;
+    if(u.claudemd){
+      try{
+        const md = await apiGetText(u.claudemd.name);
+        const name = (md.split('\n').find(l=>l.trim()) || '').replace(/^#+\s*/,'').trim();
+        if(name){ const nm=sum.querySelector('[data-name]'); if(nm) nm.textContent=name; }
+        body.prepend(el('div','style', `<b>文风设置</b>\n${esc(md.trim())}`));
+      }catch(_){}
+    }
+    // sort recordings newest first
+    recs.sort((a,b)=>{ const fa=(a.audio||a.json||a.empty||{}).uploaded||'', fb=(b.audio||b.json||b.empty||{}).uploaded||''; return fb<fa?-1:1; });
+    for(const r of recs) body.append(renderRec(r));
+  });
+  return d;
+}
+
+function shortSub(sub){ return sub.replace(/^anon-/,'匿名 ').slice(0,12); }
+
+function renderRec(r){
+  const p = parseStem(r.stem);
+  const st = recStatus(r);
+  const wrap = el('div','rec');
+  const loc = [p.city,p.district].filter(Boolean).join('·');
+  const meta = [
+    p.date+(p.time?(' '+p.time):''),
+    p.dur?fmtDur(p.durSec):'',
+    PERIOD_ZH[p.period]||p.period,
+    loc,
+    r.audio?fmtBytes(r.audio.size):'',
+  ].filter(Boolean).map(esc).join('<span class="dot">·</span>');
+
+  wrap.innerHTML = `<div class="rhead">
+    <span class="badge ${st}">${STATUS_TXT[st]}</span>
+    <span class="rtitle" data-title>${esc(loc||p.date||r.stem)}</span>
+  </div>
+  <div class="rmeta">${meta||esc(r.stem)}</div>`;
+
+  if(r.audio){
+    const au=el('audio'); au.controls=true; au.preload='none'; au.src=audioURL(r.audio.name);
+    wrap.append(au);
+  }
+
+  const acts=el('div','acts');
+  const detail=el('div','detail');
+  const canDetail = r.json||r.empty;
+  if(canDetail){
+    const btn=el('button','lnk', st==='ok'?'查看文章 / 转写':'查看处理结果');
+    let loaded=false;
+    btn.onclick=async ()=>{
+      detail.classList.toggle('open');
+      if(loaded) return; loaded=true;
+      detail.innerHTML='<div class="loading"><span class="spin"></span>读取中…</div>';
+      try{ await fillDetail(detail, r, wrap); }
+      catch(e){ detail.innerHTML=`<div class="reason">读取失败：${esc(e.message)}</div>`; }
+    };
+    acts.append(btn);
+  } else if(r.audio){
+    acts.append(el('span','rmeta','尚未处理（等下一轮 mine）'));
+  }
+  if(r.srt){
+    const sb=el('button','lnk','字幕 SRT');
+    sb.onclick=async ()=>{
+      if(sb.dataset.done){ sb.nextElementSibling?.remove(); delete sb.dataset.done; return; }
+      try{ const t=await apiGetText(r.srt.name); const pre=el('div','tx',esc(t)); pre.style.marginTop='8px'; sb.after(pre); sb.dataset.done='1'; }
+      catch(_){}
+    };
+    acts.append(sb);
+  }
+  if(acts.children.length) wrap.append(acts);
+  wrap.append(detail);
+  return wrap;
+}
+
+async function fillDetail(detail, r, wrap){
+  if(r.json){
+    const doc = await apiGetJSON(r.json.name);
+    const arts = Array.isArray(doc.articles)&&doc.articles.length ? doc.articles
+      : (doc.body? [{title:doc.title,body:doc.body}] : []);
+    let h='';
+    h += `<div class="kv">${esc(doc.model||'')}${doc.createdAt?(' · '+esc(new Date(doc.createdAt).toLocaleString('zh-CN'))):''}${doc.status?(' · '+esc(doc.status)):''}</div>`;
+    if(arts.length){
+      h+='<h4>挖出的文章（'+arts.length+'）</h4>';
+      for(const a of arts) h+=`<div class="art"><div class="at">${esc(a.title||'无题')}</div><div class="ab">${esc((a.body||'').trim())}</div></div>`;
+    } else {
+      h+='<div class="reason">这条没有挖出文章。</div>';
+    }
+    if(doc.transcript){ h+='<hr/><h4>转写原文</h4><div class="tx">'+esc(doc.transcript.trim())+'</div>'; }
+    detail.innerHTML=h;
+    // promote first article title to the row title
+    if(arts.length){ const t=wrap.querySelector('[data-title]'); if(t&&arts[0].title) t.textContent=arts[0].title; }
+  } else if(r.empty){
+    const doc = await apiGetJSON(r.empty.name);
+    const why={corrupt:'文件损坏',silent:'太短/静音','no-speech':'没有识别到语音'}[doc.reason]||doc.reason||'无语音';
+    detail.innerHTML=`<div class="reason">无语音 · ${esc(why)}</div>`+
+      (doc.detail?`<div class="kv" style="margin-top:6px">${esc(doc.detail)}</div>`:'');
+  }
+}
+
+// ---- gate / boot ----
+function showGate(msg){ $('#app').hidden=true; $('#gate').hidden=false; $('#gateErr').textContent=msg||''; $('#tok').focus(); }
+function logout(msg){ TOKEN=''; localStorage.removeItem(TKEY); showGate(msg); }
+function enter(){
+  const v=$('#tok').value.trim();
+  if(!v){ $('#gateErr').textContent='请输入 token'; return; }
+  TOKEN=v; localStorage.setItem(TKEY,v);
+  $('#gate').hidden=true; $('#app').hidden=false; load();
+}
+$('#enter').onclick=enter;
+$('#tok').addEventListener('keydown',e=>{ if(e.key==='Enter')enter(); });
+$('#refresh').onclick=load;
+$('#logout').onclick=()=>logout();
+
+if(TOKEN){ $('#app').hidden=false; load(); } else { showGate(); }
+</script>
+</body>
+</html>
