@@ -51,6 +51,7 @@ export async function onRequest(context) {
   const token = authHeader.replace(/^Bearer\s+/i, '') || url.searchParams.get('token') || '';
 
   let scope = null; // null = unauthorized, '' = admin/full bucket, 'users/<id>/' = user
+  let readonly = false;
   if (env.FILES_TOKEN && token === env.FILES_TOKEN) {
     scope = '';
   } else if (token) {
@@ -58,22 +59,42 @@ export async function onRequest(context) {
     if (sub) {
       // Signed-in (Sign in with Apple) user.
       scope = `users/${sanitizeSeg(sub)}/`;
-    } else if (token.startsWith('anon_') && token.length >= 20) {
-      // Anonymous capability token: a high-entropy secret the app generates on
-      // first launch and stores in the user's iCloud Keychain (zero-login,
-      // same Apple ID -> same token across devices). Possession = access.
-      // Scope by a hash so the secret itself is never the directory name.
-      const id = (await sha256hex(token)).slice(0, 32);
-      scope = `users/anon-${id}/`;
+    } else {
+      // Try 24 h read-only temp token (issued by GET /token/articles).
+      const tempScope = env.SESSION_SECRET ? await verifyTempToken(token, env.SESSION_SECRET) : null;
+      if (tempScope) {
+        scope = tempScope;
+        readonly = true;
+      } else if (token.startsWith('anon_') && token.length >= 20) {
+        // Anonymous capability token: a high-entropy secret the app generates on
+        // first launch and stores in the user's iCloud Keychain (zero-login,
+        // same Apple ID -> same token across devices). Possession = access.
+        // Scope by a hash so the secret itself is never the directory name.
+        const id = (await sha256hex(token)).slice(0, 32);
+        scope = `users/anon-${id}/`;
+      }
     }
   }
   if (scope === null) return json({ error: 'unauthorized' }, 401);
+  // Read-only tokens may only list and download.
+  if (readonly && !(request.method === 'GET' && (action === 'list' || action === 'download'))) {
+    return json({ error: 'read-only token' }, 403);
+  }
 
   // Guard: a user-supplied name must not escape its scope.
   function keyFor(n) {
     if (!n) return null;
     if (n.startsWith('/') || n.split('/').some((s) => s === '..')) return null;
     return scope + n;
+  }
+
+  // Mint a 24 h read-only articles link for the current user's scope.
+  if (request.method === 'GET' && action === 'token' && sub2 === 'articles') {
+    if (!scope) return json({ error: 'admin cannot use this endpoint' }, 403);
+    if (!env.SESSION_SECRET) return json({ error: 'server misconfigured: no SESSION_SECRET' }, 500);
+    const t = await mintTempToken(scope, env.SESSION_SECRET);
+    const pageURL = `${url.origin}/voicedrop/articles?t=${encodeURIComponent(t)}`;
+    return json({ token: t, url: pageURL, expires_in: 86400 });
   }
 
   if (request.method === 'GET' && action === 'list') {
@@ -226,6 +247,27 @@ async function verifyAppleIdentityToken(idToken, expectedAud) {
 // ---------------------------------------------------------------------------
 // Stateless session JWT (HS256). No KV — verified by HMAC on every request.
 // ---------------------------------------------------------------------------
+async function mintTempToken(scope, secret) {
+  const now = Math.floor(Date.now() / 1000);
+  const h = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const p = b64url(JSON.stringify({ scope, ro: true, iat: now, exp: now + 86400 }));
+  const sig = await hmacSign(`${h}.${p}`, secret);
+  return `${h}.${p}.${sig}`;
+}
+
+async function verifyTempToken(tokenStr, secret) {
+  const parts = tokenStr.split('.');
+  if (parts.length !== 3) return null;
+  const [h, p, s] = parts;
+  const expected = await hmacSign(`${h}.${p}`, secret);
+  if (!timingSafeEqual(s, expected)) return null;
+  let payload;
+  try { payload = JSON.parse(b64urlToString(p)); } catch { return null; }
+  if (!payload.scope || !payload.ro) return null;
+  if (payload.exp && payload.exp * 1000 < Date.now()) return null;
+  return payload.scope;
+}
+
 async function mintSession(sub, secret) {
   const now = Math.floor(Date.now() / 1000);
   const h = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));

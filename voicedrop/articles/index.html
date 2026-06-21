@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>我的文章 · VoiceDrop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#ef7d54;--line:#ede8e0}
+  body{background:radial-gradient(ellipse 120% 80% at 50% -10%,#fdf0e0,var(--bg));color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:720px;margin:0 auto;padding:36px 20px 80px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:36px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.1rem;text-decoration:none;color:inherit}
+  .brand .blob{width:30px;height:30px;border-radius:42% 58% 60% 40%/45% 45% 55% 55%;background:linear-gradient(135deg,#f6a560,#ef7d54);box-shadow:0 5px 14px rgba(239,125,84,.35);flex:none}
+  .exp{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--soft);background:var(--card);padding:5px 12px;border-radius:999px;border:1px solid var(--line)}
+  h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.5rem;margin-bottom:4px}
+  .sub{font-size:.9rem;color:var(--soft);font-weight:600;margin-bottom:24px}
+  .state{text-align:center;padding:60px 20px;color:var(--soft);font-weight:600}
+  .spin{display:inline-block;width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-4px;margin-right:8px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .err{color:#c0392b}
+  .article{background:var(--card);border:1.5px solid var(--line);border-radius:18px;margin-bottom:14px;overflow:hidden;box-shadow:0 6px 20px rgba(74,63,53,.05)}
+  .art-head{cursor:pointer;padding:16px 18px;display:flex;align-items:center;gap:12px;-webkit-tap-highlight-color:transparent}
+  .art-head:hover{background:rgba(239,125,84,.04)}
+  .caret{color:var(--soft);font-size:.75rem;flex:none;transition:transform .15s}
+  .article.open .caret{transform:rotate(90deg)}
+  .art-meta{flex:1;min-width:0}
+  .art-date{font-size:.8rem;font-weight:700;color:var(--soft);margin-bottom:2px}
+  .art-title{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .art-title.placeholder{color:var(--soft);font-weight:600;font-size:.9rem}
+  .art-dur{flex:none;font-size:.75rem;font-weight:700;background:rgba(239,125,84,.12);color:var(--accent);padding:3px 9px;border-radius:999px}
+  .art-body{border-top:1px solid var(--line);padding:18px 18px 20px;display:none}
+  .article.open .art-body{display:block}
+  .art-full-title{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.15rem;margin-bottom:14px;line-height:1.35}
+  .art-text{font-size:.95rem;line-height:1.8;color:#5a4e43;white-space:pre-wrap;word-break:break-word}
+  .art-loading{font-size:.85rem;color:var(--soft);font-weight:600;padding:4px 0}
+  .loc{display:inline-block;font-size:.75rem;font-weight:700;color:var(--soft);margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="brand" href="/voicedrop/"><span class="blob"></span>VoiceDrop</a>
+    <span class="exp" id="expLabel"></span>
+  </header>
+
+  <h1>我的文章</h1>
+  <p class="sub">全部口述成文的录音，按时间倒序排列。</p>
+
+  <div id="main"><div class="state"><span class="spin"></span>读取中…</div></div>
+
+</div>
+
+<script>
+const API = '/files/api';
+const params = new URLSearchParams(location.search);
+const TOKEN = params.get('t') || '';
+
+if (!TOKEN) {
+  document.getElementById('main').innerHTML = '<div class="state err">链接无效 —— 请在 VoiceDrop App 的「设置→我的文章」重新生成。</div>';
+} else {
+  init();
+}
+
+// Parse expiry from JWT payload (middle segment).
+function jwtExp(t) {
+  try {
+    const p = t.split('.')[1];
+    const pad = p.length % 4 ? p + '='.repeat(4 - p.length % 4) : p;
+    return JSON.parse(atob(pad.replace(/-/g,'+').replace(/_/g,'/'))).exp || 0;
+  } catch { return 0; }
+}
+
+function showExpiry() {
+  const exp = jwtExp(TOKEN);
+  if (!exp) return;
+  const diff = exp * 1000 - Date.now();
+  if (diff <= 0) { document.getElementById('expLabel').textContent = '链接已过期'; return; }
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  document.getElementById('expLabel').textContent = h > 0 ? `${h} 小时后过期` : `${m} 分钟后过期`;
+}
+
+async function init() {
+  showExpiry();
+  let files;
+  try {
+    const r = await fetch(`${API}/list`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    if (r.status === 401 || r.status === 403) {
+      document.getElementById('main').innerHTML = '<div class="state err">链接已过期，请在 App 里重新生成。</div>';
+      return;
+    }
+    if (!r.ok) throw new Error('list failed: ' + r.status);
+    files = (await r.json()).files || [];
+  } catch (e) {
+    document.getElementById('main').innerHTML = `<div class="state err">读取失败：${e.message}</div>`;
+    return;
+  }
+
+  const articles = files
+    .filter(f => f.name.startsWith('articles/') && f.name.endsWith('.json'))
+    .map(f => ({ name: f.name, stem: f.name.slice('articles/'.length, -'.json'.length), uploaded: f.uploaded }))
+    .sort((a, b) => b.uploaded < a.uploaded ? -1 : 1);
+
+  if (!articles.length) {
+    document.getElementById('main').innerHTML = '<div class="state">还没有成文的文章 —— 录几段音等待处理就好了。</div>';
+    return;
+  }
+
+  const box = document.getElementById('main');
+  box.innerHTML = '';
+  for (const a of articles) box.appendChild(renderArticle(a));
+}
+
+function parseStem(stem) {
+  const m = stem.match(/^VoiceDrop-(\d{4}-\d{2}-\d{2})-(\d{6})(?:-(\d+m\d+s|\d+s))?(?:-[A-Za-z]+)?(?:-[A-Za-z]+)?(?:-([A-Za-z]+))?(?:-([A-Za-z]+))?/);
+  if (!m) return { date: stem, time: '', dur: '', loc: '' };
+  const time = m[2] ? `${m[2].slice(0,2)}:${m[2].slice(2,4)}` : '';
+  const loc = [m[4], m[5]].filter(Boolean).join(' · ');
+  return { date: m[1], time, dur: m[3] || '', loc };
+}
+
+function renderArticle(a) {
+  const p = parseStem(a.stem);
+  const wrap = document.createElement('div');
+  wrap.className = 'article';
+
+  const head = document.createElement('div');
+  head.className = 'art-head';
+  head.innerHTML = `<span class="caret">▶</span>
+    <div class="art-meta">
+      <div class="art-date">${p.date}${p.time ? ' ' + p.time : ''}</div>
+      <div class="art-title placeholder" data-title>${p.loc || p.stem}</div>
+    </div>
+    ${p.dur ? `<span class="art-dur">${p.dur}</span>` : ''}`;
+  wrap.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'art-body';
+  wrap.appendChild(body);
+
+  let loaded = false;
+  head.addEventListener('click', async () => {
+    wrap.classList.toggle('open');
+    if (!wrap.classList.contains('open') || loaded) return;
+    loaded = true;
+    body.innerHTML = '<div class="art-loading"><span class="spin"></span>加载中…</div>';
+    try {
+      const r = await fetch(`${API}/download/${encodeURIComponent(a.name)}`, {
+        headers: { Authorization: `Bearer ${TOKEN}` }
+      });
+      if (!r.ok) throw new Error(r.status);
+      const doc = await r.json();
+      const arts = Array.isArray(doc.articles) && doc.articles.length ? doc.articles
+        : doc.body ? [{ title: doc.title, body: doc.body }] : [];
+      if (!arts.length) { body.innerHTML = '<div class="art-loading">没有挖出文章内容。</div>'; return; }
+      const main = arts[0];
+      // Update header title
+      const titleEl = head.querySelector('[data-title]');
+      if (titleEl && main.title) { titleEl.textContent = main.title; titleEl.classList.remove('placeholder'); }
+      let h = `<div class="art-full-title">${esc(main.title || '无题')}</div>
+               <div class="art-text">${esc((main.body || '').trim())}</div>`;
+      if (p.loc) h += `<div class="loc">${esc(p.loc)}</div>`;
+      body.innerHTML = h;
+    } catch (e) {
+      body.innerHTML = `<div class="art-loading err">读取失败：${e.message}</div>`;
+    }
+  });
+
+  return wrap;
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>
