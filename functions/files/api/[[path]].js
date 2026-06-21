@@ -96,6 +96,13 @@ export async function onRequest(context) {
         contentType: request.headers.get('Content-Type') || 'application/octet-stream',
       },
     });
+    // A new recording → kick the miner. Fire-and-forget so the upload returns
+    // immediately; the mine.yml `concurrency: mine` group coalesces bursts into
+    // at most one running + one queued run.
+    const leaf = name.split('/').pop() || name;
+    if (leaf.startsWith('VoiceDrop-') && leaf.endsWith('.m4a')) {
+      context.waitUntil(dispatchMine(env));
+    }
     return json({ ok: true, name });
   }
 
@@ -139,7 +146,19 @@ export async function onRequest(context) {
   // "加急处理": let a signed-in app user kick the article miner now instead of
   // waiting for the hourly cron. The GitHub token lives only as a Pages secret.
   if (request.method === 'POST' && action === 'mine') {
-    if (!env.GH_DISPATCH_TOKEN) return json({ error: 'server misconfigured: no GH_DISPATCH_TOKEN' }, 500);
+    const r = await dispatchMine(env);
+    if (r.ok) return json({ ok: true });
+    return json({ error: 'dispatch failed', detail: r.detail }, r.status === 0 ? 500 : 502);
+  }
+
+  return json({ error: 'bad request' }, 400);
+}
+
+// Dispatch the GitHub article-miner workflow (mine.yml). Used by POST /mine
+// (加急处理) and automatically on every new VoiceDrop-*.m4a upload.
+async function dispatchMine(env) {
+  if (!env.GH_DISPATCH_TOKEN) return { ok: false, status: 0, detail: 'no GH_DISPATCH_TOKEN' };
+  try {
     const gh = await fetch('https://api.github.com/repos/jianshuo/voicedrop/actions/workflows/mine.yml/dispatches', {
       method: 'POST',
       headers: {
@@ -150,11 +169,11 @@ export async function onRequest(context) {
       },
       body: JSON.stringify({ ref: 'main' }),
     });
-    if (gh.status === 204) return json({ ok: true });
-    return json({ error: 'dispatch failed', status: gh.status, detail: (await gh.text()).slice(0, 200) }, 502);
+    if (gh.status === 204) return { ok: true, status: 204, detail: '' };
+    return { ok: false, status: gh.status, detail: (await gh.text()).slice(0, 200) };
+  } catch (e) {
+    return { ok: false, status: 0, detail: String(e && e.message || e) };
   }
-
-  return json({ error: 'bad request' }, 400);
 }
 
 // ---------------------------------------------------------------------------
