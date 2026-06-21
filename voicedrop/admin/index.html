@@ -71,7 +71,8 @@ header.top .grow{flex:1}
 .pill.warn{background:var(--warn-bg);color:var(--warn)}
 .ubody{border-top:1px solid var(--line2);padding:6px 18px 14px}
 .style{font-size:.82rem;color:var(--muted);background:#fbfaf8;border:1px solid var(--line2);
-  border-radius:10px;padding:9px 12px;margin:10px 0 4px;white-space:pre-wrap}
+  border-radius:10px;padding:9px 12px;margin:10px 0 4px;white-space:pre-wrap;
+  max-height:120px;overflow-y:auto}
 .style b{color:var(--ink)}
 
 /* ---- recording rows ---- */
@@ -298,9 +299,9 @@ function renderUser(u){
     if(u.claudemd){
       try{
         const md = await apiGetText(u.claudemd.name);
-        const name = (md.split('\n').find(l=>l.trim()) || '').replace(/^#+\s*/,'').trim();
+        const {name,style} = parseClaudeMd(md);
         if(name){ const nm=sum.querySelector('[data-name]'); if(nm) nm.textContent=name; }
-        body.prepend(el('div','style', `<b>文风设置</b>\n${esc(md.trim())}`));
+        if(style) body.prepend(el('div','style', `<b>文风设置</b>\n${esc(style)}`));
       }catch(_){}
     }
     // sort recordings newest first
@@ -310,6 +311,17 @@ function renderUser(u){
   return d;
 }
 
+function parseClaudeMd(md){
+  const lines=md.split('\n'); let name='',style='',inName=false,inStyle=false;
+  for(const l of lines){
+    if(/^#\s*我的名字/.test(l)){inName=true;inStyle=false;continue;}
+    if(/^#\s*我的文风/.test(l)){inStyle=true;inName=false;continue;}
+    if(l.startsWith('#')){inName=false;inStyle=false;continue;}
+    if(inName&&!name&&l.trim()) name=l.trim();
+    if(inStyle) style+=l+'\n';
+  }
+  return {name:name.trim(),style:style.trim()};
+}
 function shortSub(sub){ return sub.replace(/^anon-/,'匿名 ').slice(0,12); }
 
 function renderRec(r){
