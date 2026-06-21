@@ -1,2 +1,10 @@
 /vpn /setup 301
 /vpn/* /setup/:splat 301
+
+# generated HTML moved under /a/
+/tokyo-air-raids /a/tokyo-air-raids/ 301
+/tokyo-air-raids/* /a/tokyo-air-raids/:splat 301
+/cchour-report /a/cchour-report/ 301
+/cchour-report/* /a/cchour-report/:splat 301
+/tweets /a/tweets/ 301
+/tweets/* /a/tweets/:splat 301
