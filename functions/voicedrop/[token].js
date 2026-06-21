@@ -33,7 +33,8 @@ export async function onRequest(context) {
   const bodyHtml = articles.map((a) =>
     `<article><h1>${esc(a.title || '无题')}</h1>${mdToHtml(a.body || '')}</article>`
   ).join('<hr/>');
-  return html(page(title, bodyHtml), 200, true);
+  const og = { description: plainExcerpt(articles[0].body, 120), url: context.request.url };
+  return html(page(title, bodyHtml, og), 200, true);
 }
 
 // --- minimal, safe markdown -> HTML (escape first, then a few block rules) ---
@@ -73,12 +74,42 @@ function resolveArticles(doc) {
   return [];
 }
 
-function page(title, inner) {
+// A short, plain-text excerpt for og:description — strip markdown marks, collapse
+// whitespace, trim to `max` chars on a clean-ish boundary.
+function plainExcerpt(body, max) {
+  const t = String(body).replace(/[#*`>_~]/g, '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  return t.slice(0, max).replace(/[，。、；,.;:\s]+$/, '') + '…';
+}
+
+function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+
+// Open Graph + Twitter Card tags. No og:image on purpose — sharing the same
+// branded banner over and over reads as spam, so links render as a plain
+// text card (title + description) instead of a large image card.
+function metaTags(title, og) {
+  const t = escAttr(title);
+  const d = escAttr(og.description || '把口述，变成文章');
+  const u = escAttr(og.url || 'https://jianshuo.dev/voicedrop/');
+  return [
+    '<meta property="og:type" content="article"/>',
+    '<meta property="og:site_name" content="VoiceDrop"/>',
+    `<meta property="og:title" content="${t}"/>`,
+    `<meta property="og:description" content="${d}"/>`,
+    `<meta property="og:url" content="${u}"/>`,
+    '<meta name="twitter:card" content="summary"/>',
+    `<meta name="twitter:title" content="${t}"/>`,
+    `<meta name="twitter:description" content="${d}"/>`,
+  ].join('\n');
+}
+
+function page(title, inner, og) {
   return `<!doctype html><html lang="zh-CN"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="referrer" content="no-referrer"/>
 <title>${esc(title)}</title>
+${og ? metaTags(title, og) : ''}
 <style>
 :root{color-scheme:light}
 *{box-sizing:border-box}
