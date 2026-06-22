@@ -164,6 +164,21 @@ export async function onRequest(context) {
     return json({ url: `${url.origin}/voicedrop/${id}` });
   }
 
+  // On-demand WeChat draft push for ONE mined article. The app calls this when
+  // the user taps 发布微信公众号草稿. WeChat's API only works from the whitelisted
+  // Tokyo proxy (in GitHub Actions), so we can't push from here — instead dispatch
+  // publish-wechat.yml with the full article key. It creates the draft, or updates
+  // the existing one in place if this article was published before. Async (~1 min).
+  if (request.method === 'POST' && action === 'wechat' && name) {
+    const key = keyFor(name);
+    if (!key || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) {
+      return json({ error: 'not publishable' }, 400);
+    }
+    const r = await dispatchWorkflow(env, 'publish-wechat.yml', { article_key: key });
+    if (r.ok) return json({ ok: true });
+    return json({ error: 'dispatch failed', detail: r.detail }, r.status === 0 ? 500 : 502);
+  }
+
   // "加急处理": let a signed-in app user kick the article miner now instead of
   // waiting for the hourly cron. The GitHub token lives only as a Pages secret.
   if (request.method === 'POST' && action === 'mine') {
@@ -178,9 +193,18 @@ export async function onRequest(context) {
 // Dispatch the GitHub article-miner workflow (mine.yml). Used by POST /mine
 // (加急处理) and automatically on every new VoiceDrop-*.m4a upload.
 async function dispatchMine(env) {
+  return dispatchWorkflow(env, 'mine.yml');
+}
+
+// Fire a repository workflow_dispatch on jianshuo/voicedrop. `inputs` is optional
+// (mine.yml takes none; publish-wechat.yml takes {article_key}). The GitHub token
+// lives only as a Pages secret.
+async function dispatchWorkflow(env, workflow, inputs) {
   if (!env.GH_DISPATCH_TOKEN) return { ok: false, status: 0, detail: 'no GH_DISPATCH_TOKEN' };
   try {
-    const gh = await fetch('https://api.github.com/repos/jianshuo/voicedrop/actions/workflows/mine.yml/dispatches', {
+    const body = { ref: 'main' };
+    if (inputs) body.inputs = inputs;
+    const gh = await fetch(`https://api.github.com/repos/jianshuo/voicedrop/actions/workflows/${workflow}/dispatches`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.GH_DISPATCH_TOKEN}`,
@@ -188,7 +212,7 @@ async function dispatchMine(env) {
         'User-Agent': 'voicedrop-files',
         'X-GitHub-Api-Version': '2022-11-28',
       },
-      body: JSON.stringify({ ref: 'main' }),
+      body: JSON.stringify(body),
     });
     if (gh.status === 204) return { ok: true, status: 204, detail: '' };
     return { ok: false, status: gh.status, detail: (await gh.text()).slice(0, 200) };
