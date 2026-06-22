@@ -174,6 +174,16 @@ export async function onRequest(context) {
     if (!key || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) {
       return json({ error: 'not publishable' }, 400);
     }
+    // Pre-check: don't dispatch a doomed publish (and a red CI run) if WeChat
+    // isn't configured for this user. 409 → the app reopens the config sheet.
+    const prefix = key.slice(0, key.indexOf('/articles/') + 1);   // users/<sub>/
+    let configured = false;
+    const wcObj = await env.FILES.get(prefix + 'WECHAT.json');
+    if (wcObj) {
+      try { const wc = JSON.parse(await wcObj.text()); configured = !!(wc.appid && wc.secret); } catch {}
+    }
+    if (!configured) return json({ error: 'wechat_not_configured' }, 409);
+
     const r = await dispatchWorkflow(env, 'publish-wechat.yml', { article_key: key });
     if (r.ok) return json({ ok: true });
     return json({ error: 'dispatch failed', detail: r.detail }, r.status === 0 ? 500 : 502);
