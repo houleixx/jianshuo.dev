@@ -236,11 +236,27 @@ export async function onRequest(context) {
       try {
         const p = JSON.parse(await obj.text());
         posts.push({ shareId: p.shareId, author: p.author, title: p.title,
-                     firstSharedAt: p.firstSharedAt, updatedAt: p.updatedAt, count: (p.articles || []).length });
+                     firstSharedAt: p.firstSharedAt, updatedAt: p.updatedAt,
+                     count: (p.articles || []).length, mine: p.owner === scope });
       } catch {}
     }
     posts.sort((a, b) => (b.firstSharedAt || 0) - (a.firstSharedAt || 0));
     return json({ posts });
+  }
+
+  // Un-share (delete) a community post — owner only.
+  if (request.method === 'POST' && action === 'community' && sub2 === 'unshare') {
+    if (!scope) return json({ error: 'unauthorized' }, 403);
+    const shareId = segments[2] || '';
+    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
+    const key = `community/${shareId}.json`;
+    const obj = await env.FILES.get(key);
+    if (!obj) return json({ ok: true });                 // already gone
+    let owner = null;
+    try { owner = JSON.parse(await obj.text()).owner; } catch {}
+    if (owner !== scope) return json({ error: 'not owner' }, 403);
+    await env.FILES.delete(key);
+    return json({ ok: true });
   }
 
   // Get one community post (full snapshot).
@@ -250,6 +266,17 @@ export async function onRequest(context) {
     const obj = await env.FILES.get(`community/${shareId}.json`);
     if (!obj) return json({ error: 'not found' }, 404);
     return new Response(obj.body, { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Whether the user's own article is currently shared to the community (for the
+  // 分享 / 更新 label on the article ⋯ menu).
+  if (request.method === 'GET' && action === 'community' && sub2 === 'shared') {
+    if (!scope || !env.SESSION_SECRET) return json({ shared: false });
+    const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
+    if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) return json({ shared: false });
+    const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
+    const exists = await env.FILES.head(`community/${shareId}.json`);
+    return json({ shared: !!exists });
   }
 
   // "加急处理": let a signed-in app user kick the article miner now instead of
