@@ -174,19 +174,49 @@ export async function onRequest(context) {
     if (!key || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) {
       return json({ error: 'not publishable' }, 400);
     }
-    // Pre-check: don't dispatch a doomed publish (and a red CI run) if WeChat
-    // isn't configured for this user. 409 → the app reopens the config sheet.
     const prefix = key.slice(0, key.indexOf('/articles/') + 1);   // users/<sub>/
-    let configured = false;
+    // WeChat creds. Missing appid/secret → 409 so the app reopens the config sheet.
+    let wc = null;
     const wcObj = await env.FILES.get(prefix + 'WECHAT.json');
-    if (wcObj) {
-      try { const wc = JSON.parse(await wcObj.text()); configured = !!(wc.appid && wc.secret); } catch {}
-    }
-    if (!configured) return json({ error: 'wechat_not_configured' }, 409);
+    if (wcObj) { try { wc = JSON.parse(await wcObj.text()); } catch {} }
+    if (!wc || !wc.appid || !wc.secret) return json({ error: 'wechat_not_configured' }, 409);
 
-    const r = await dispatchWorkflow(env, 'publish-wechat.yml', { article_key: key });
-    if (r.ok) return json({ ok: true });
-    return json({ error: 'dispatch failed', detail: r.detail }, r.status === 0 ? 500 : 502);
+    // Load the article doc.
+    const docObj = await env.FILES.get(key);
+    if (!docObj) return json({ error: 'not found' }, 404);
+    let doc;
+    try { doc = JSON.parse(await docObj.text()); } catch { return json({ error: 'bad article' }, 500); }
+
+    // Publish SYNCHRONOUSLY via the Tokyo VPS relay — its IP is WeChat-whitelisted,
+    // so it calls api.weixin.qq.com directly and returns the real result (vs. the old
+    // fire-and-forget GitHub Action). The relay holds no R2 token; we persist here.
+    if (!env.WECHAT_RELAY_URL || !env.WECHAT_RELAY_SECRET) {
+      return json({ error: 'relay_not_configured' }, 500);
+    }
+    let relay;
+    try {
+      const rr = await fetch(env.WECHAT_RELAY_URL, {
+        method: 'POST',
+        headers: { 'X-Relay-Secret': env.WECHAT_RELAY_SECRET, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appid: wc.appid, secret: wc.secret, thumb_media_id: wc.thumb_media_id || '', article: doc }),
+      });
+      relay = await rr.json().catch(() => null);
+      if (!rr.ok) return json({ error: 'relay_error', detail: relay }, 502);
+    } catch (e) {
+      return json({ error: 'relay_unreachable', detail: String((e && e.message) || e) }, 502);
+    }
+    // A real WeChat-side failure: relay the actual errcode/errmsg to the app.
+    if (!relay || relay.ok !== true) {
+      return json({ error: 'wechat', errcode: relay && relay.errcode, errmsg: relay && relay.errmsg }, 502);
+    }
+
+    // Persist: the article now carries wechatMediaId(s); the cover thumb may be new.
+    await env.FILES.put(key, JSON.stringify(relay.article), { httpMetadata: { contentType: 'application/json' } });
+    if (relay.thumb_media_id && relay.thumb_media_id !== wc.thumb_media_id) {
+      wc.thumb_media_id = relay.thumb_media_id;
+      await env.FILES.put(prefix + 'WECHAT.json', JSON.stringify(wc), { httpMetadata: { contentType: 'application/json' } });
+    }
+    return json({ ok: true, created: relay.created || 0, updated: relay.updated || 0 });
   }
 
   // ── Community: a shared, cross-user space of article snapshots ────────────
