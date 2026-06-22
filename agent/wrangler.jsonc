@@ -1,0 +1,33 @@
+{
+  // VoiceDrop article-editing Agent. Separate Worker (Pages can't host Durable
+  // Objects). Bound to the SAME R2 bucket as the jianshuo.dev Pages project and
+  // shares SESSION_SECRET so it can authenticate the app's existing tokens.
+  "name": "voicedrop-agent",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Take over only the /agent/* path on the zone; Pages still serves everything
+  // else → same-origin wss://jianshuo.dev/agent/...
+  "routes": [
+    { "pattern": "jianshuo.dev/agent/*", "zone_name": "jianshuo.dev" }
+  ],
+
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "jianshuo-dev-files" }
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "ArticleEditor", "class_name": "ArticleEditor" }
+    ]
+  },
+
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ArticleEditor"] }
+  ]
+
+  // Secrets (set with `wrangler secret put`):
+  //   SESSION_SECRET  — same value as the Pages project (verifies app JWTs)
+  //   CLAUDE_API_KEY  — Anthropic API key for the rewrite calls
+}
