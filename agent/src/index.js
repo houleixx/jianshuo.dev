@@ -18,6 +18,25 @@ import { Agent, getAgentByName } from "agents";
 
 const MODEL = "claude-sonnet-4-6";
 
+// Structured-outputs schema — constrains the reply to valid JSON so a large
+// prose-heavy CLAUDE.md can't drift the model off clean JSON. GA on sonnet-4-6.
+const ARTICLES_SCHEMA = {
+  type: "object",
+  properties: {
+    articles: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { title: { type: "string" }, body: { type: "string" } },
+        required: ["title", "body"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["articles"],
+  additionalProperties: false,
+};
+
 // Owner-voice DNA — reused from mining/mine.py SYSTEM, reframed for REVISION.
 const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面给你：你这段录音的原始口述转写（事实来源）、当前的全部文章、以及历次修改要求。按「这次的修改要求」改写全部文章——可以改写、合并、拆分、增删某一篇。
 
@@ -165,6 +184,7 @@ export class ArticleEditor extends Agent {
       max_tokens: 8000,
       system,
       messages: [{ role: "user", content: userContent }],
+      output_config: { format: { type: "json_schema", schema: ARTICLES_SCHEMA } },
     };
     let articles = null;
     for (let attempt = 0; attempt < 2; attempt++) {
