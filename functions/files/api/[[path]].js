@@ -189,6 +189,69 @@ export async function onRequest(context) {
     return json({ error: 'dispatch failed', detail: r.detail }, r.status === 0 ? 500 : 502);
   }
 
+  // ── Community: a shared, cross-user space of article snapshots ────────────
+  // Share (or re-share) one of the user's own articles to the community. The
+  // snapshot is a COPY — later edits don't change it until re-shared. shareId is
+  // derived from the article key so re-sharing updates the same post in place,
+  // and firstSharedAt is preserved for stable newest-first ordering.
+  if (request.method === 'POST' && action === 'community' && sub2 === 'share') {
+    if (!scope) return json({ error: 'admin cannot share' }, 403);
+    if (!env.SESSION_SECRET) return json({ error: 'server misconfigured' }, 500);
+    const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
+    if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) {
+      return json({ error: 'not shareable' }, 400);
+    }
+    const obj = await env.FILES.get(articleKey);
+    if (!obj) return json({ error: 'article not found' }, 404);
+    let doc; try { doc = JSON.parse(await obj.text()); } catch { return json({ error: 'bad article' }, 400); }
+    const articles = (Array.isArray(doc.articles) && doc.articles.length)
+      ? doc.articles
+      : (doc.body ? [{ title: doc.title || '(无题)', body: doc.body }] : []);
+    if (!articles.length) return json({ error: 'empty article' }, 400);
+    let author = '匿名';
+    const md = await env.FILES.get(scope + 'CLAUDE.md');
+    if (md) { const m = (await md.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/); if (m && m[1].trim()) author = m[1].trim(); }
+    const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
+    const communityKey = `community/${shareId}.json`;
+    let firstSharedAt = Date.now();
+    const existing = await env.FILES.get(communityKey);
+    if (existing) { try { firstSharedAt = JSON.parse(await existing.text()).firstSharedAt || firstSharedAt; } catch {} }
+    const post = {
+      schema: 1, shareId, owner: scope, author,
+      title: articles[0].title,
+      articles: articles.map((a) => ({ title: a.title, body: a.body })),
+      firstSharedAt, updatedAt: Date.now(),
+    };
+    await env.FILES.put(communityKey, JSON.stringify(post), { httpMetadata: { contentType: 'application/json' } });
+    return json({ ok: true, shareId });
+  }
+
+  // List community posts (metadata only), newest-first by first-share time.
+  if (request.method === 'GET' && action === 'community' && sub2 === 'list') {
+    const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
+    const posts = [];
+    for (const o of listed.objects.slice(0, 200)) {
+      const obj = await env.FILES.get(o.key);
+      if (!obj) continue;
+      try {
+        const p = JSON.parse(await obj.text());
+        posts.push({ shareId: p.shareId, author: p.author, title: p.title,
+                     firstSharedAt: p.firstSharedAt, updatedAt: p.updatedAt, count: (p.articles || []).length });
+      } catch {}
+    }
+    posts.sort((a, b) => (b.firstSharedAt || 0) - (a.firstSharedAt || 0));
+    return json({ posts });
+  }
+
+  // Get one community post (full snapshot).
+  if (request.method === 'GET' && action === 'community' && sub2 === 'get') {
+    const shareId = segments[2] || '';
+    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
+    const obj = await env.FILES.get(`community/${shareId}.json`);
+    if (!obj) return json({ error: 'not found' }, 404);
+    return new Response(obj.body, { headers: { 'Content-Type': 'application/json' } });
+  }
+
   // "加急处理": let a signed-in app user kick the article miner now instead of
   // waiting for the hourly cron. The GitHub token lives only as a Pages secret.
   if (request.method === 'POST' && action === 'mine') {
