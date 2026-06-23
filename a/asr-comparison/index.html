@@ -3,299 +3,314 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ASR 质量对比：Apple on-device vs 火山引擎（豆包）</title>
+<title>ASR 三方对比：Apple on-device vs Apple 云端 vs 火山（豆包）</title>
 <style>
   :root {
-    --apple: #2d6cdf;
-    --volc: #e85c2e;
-    --bg: #fafaf8;
-    --card: #ffffff;
-    --border: #e8e6e0;
-    --text: #1a1a1a;
-    --muted: #6b6b6b;
-    --radius: 12px;
+    --device: #2d6cdf;
+    --cloud:  #1a9e5c;
+    --volc:   #e85c2e;
+    --bg: #fafaf8; --card: #fff; --border: #e8e6e0;
+    --text: #1a1a1a; --muted: #6b6b6b; --radius: 12px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.7;
+    background: var(--bg); color: var(--text); line-height: 1.7;
     padding: 0 16px 80px;
   }
-  header {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 48px 0 32px;
-  }
-  header h1 {
-    font-size: 1.8rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1.3;
-  }
-  header .meta {
-    margin-top: 8px;
-    color: var(--muted);
-    font-size: 0.9rem;
-  }
+  header { max-width: 1200px; margin: 0 auto; padding: 48px 0 32px; }
+  header h1 { font-size: 1.8rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; }
+  header .meta { margin-top: 8px; color: var(--muted); font-size: .9rem; }
+  .legend { max-width: 1200px; margin: 0 auto 24px; display: flex; gap: 20px; flex-wrap: wrap; }
+  .leg { display: flex; align-items: center; gap: 7px; font-size: .88rem; font-weight: 600; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
   .summary-cards {
-    max-width: 1100px;
-    margin: 0 auto 40px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
+    max-width: 1200px; margin: 0 auto 40px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 14px;
   }
   .summary-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px;
   }
-  .summary-card .label { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
-  .summary-card .value { font-size: 2rem; font-weight: 700; }
-  .summary-card .sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+  .summary-card .label { font-size: .78rem; color: var(--muted); margin-bottom: 4px; }
+  .summary-card .value { font-size: 1.8rem; font-weight: 700; }
+  .summary-card .sub { font-size: .82rem; color: var(--muted); margin-top: 2px; }
   .findings {
-    max-width: 1100px;
-    margin: 0 auto 40px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px 28px;
+    max-width: 1200px; margin: 0 auto 40px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px 28px;
   }
   .findings h2 { font-size: 1.05rem; margin-bottom: 14px; }
   .findings ul { padding-left: 1.4em; }
-  .findings li { margin-bottom: 8px; font-size: 0.95rem; }
-  .findings .err { 
+  .findings li { margin-bottom: 8px; font-size: .94rem; }
+  .err {
     background: #fff4f0; border: 1px solid #ffd0c0; border-radius: 6px;
-    padding: 3px 8px; font-family: monospace; font-size: 0.9rem;
+    padding: 2px 7px; font-family: monospace; font-size: .88rem;
   }
   section.clip {
-    max-width: 1100px;
-    margin: 0 auto 48px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 28px;
+    max-width: 1200px; margin: 0 auto 48px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px;
   }
-  section.clip h2 {
-    font-size: 1.15rem;
-    margin-bottom: 4px;
-  }
-  .loc { font-weight: 400; color: var(--muted); font-size: 0.9rem; }
-  .topic { color: var(--muted); font-size: 0.88rem; margin-bottom: 20px; }
+  section.clip h2 { font-size: 1.1rem; margin-bottom: 4px; }
+  .loc { font-weight: 400; color: var(--muted); font-size: .88rem; }
+  .topic { color: var(--muted); font-size: .86rem; margin-bottom: 20px; }
   .stats-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 14px;
-    margin-bottom: 24px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px; margin-bottom: 16px;
   }
-  .stat-box {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 16px;
+  .stat-box { border: 1px solid var(--border); border-radius: 8px; padding: 13px 15px; }
+  .stat-label { font-size: .76rem; color: var(--muted); margin-bottom: 5px; }
+  .stat-num { font-size: 1.4rem; font-weight: 700; margin-bottom: 7px; }
+  .bar-wrap { background: #f0ede8; border-radius: 4px; height: 5px; margin-bottom: 4px; overflow: hidden; }
+  .bar { height: 5px; border-radius: 4px; }
+  .device-bar { background: var(--device); }
+  .cloud-bar  { background: var(--cloud); }
+  .volc-bar   { background: var(--volc); }
+  .stat-pct { font-size: .76rem; color: var(--muted); }
+  .chunk-note {
+    font-size: .82rem; color: #7a5f00; background: #fffae8;
+    border: 1px solid #eed97a; border-radius: 6px;
+    padding: 6px 12px; margin-bottom: 14px;
   }
-  .stat-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; }
-  .stat-num { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; }
-  .ratio-num { color: var(--volc); }
-  .bar-wrap { background: #f0ede8; border-radius: 4px; height: 6px; margin-bottom: 4px; overflow: hidden; }
-  .bar { height: 6px; border-radius: 4px; }
-  .apple-bar { background: var(--apple); }
-  .volc-bar { background: var(--volc); }
-  .stat-pct { font-size: 0.78rem; color: var(--muted); }
-  .ratio-box { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 120px; }
   .compare {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
   }
   .col { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .col-header {
-    padding: 10px 14px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
+    padding: 9px 13px; font-size: .78rem; font-weight: 700;
+    letter-spacing: .03em; text-transform: uppercase;
   }
-  .apple-col .col-header { background: #eef3fd; color: var(--apple); }
-  .volc-col .col-header { background: #fef3ef; color: var(--volc); }
+  .device-col .col-header { background: #eef3fd; color: var(--device); }
+  .cloud-col  .col-header { background: #eaf7f0; color: var(--cloud); }
+  .volc-col   .col-header { background: #fef3ef; color: var(--volc); }
   .col-body {
-    padding: 14px;
-    font-size: 0.92rem;
-    line-height: 1.8;
-    color: #2a2a2a;
-    max-height: 360px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
+    padding: 13px; font-size: .88rem; line-height: 1.75; color: #2a2a2a;
+    max-height: 400px; overflow-y: auto; word-break: break-word;
   }
+  .speed-section {
+    max-width: 1200px; margin: 0 auto 40px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px 28px;
+  }
+  .speed-section h2 { font-size: 1.05rem; margin-bottom: 16px; }
+  .speed-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .speed-table th, .speed-table td {
+    padding: 9px 14px; border-bottom: 1px solid var(--border); text-align: left;
+  }
+  .speed-table th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; }
+  .speed-table tr:last-child td { border-bottom: none; }
   .verdict {
-    max-width: 1100px;
-    margin: 0 auto 40px;
-    background: #fffdf5;
-    border: 1px solid #f0e4b0;
-    border-radius: var(--radius);
-    padding: 24px 28px;
+    max-width: 1200px; margin: 0 auto 40px;
+    background: #fffdf5; border: 1px solid #f0e4b0;
+    border-radius: var(--radius); padding: 24px 28px;
   }
-  .verdict h2 { margin-bottom: 10px; }
-  .verdict p { font-size: 0.95rem; margin-bottom: 6px; }
-  @media (max-width: 680px) {
-    .stats-row { grid-template-columns: 1fr; }
-    .compare { grid-template-columns: 1fr; }
-    .ratio-box { min-width: auto; }
+  .verdict h2 { margin-bottom: 12px; }
+  .verdict p { font-size: .94rem; margin-bottom: 8px; }
+  .verdict table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: .88rem; }
+  .verdict table th, .verdict table td { padding: 8px 12px; border: 1px solid var(--border); }
+  .verdict table th { background: #f5f2eb; }
+  .verdict table .best { color: var(--volc); font-weight: 700; }
+  .verdict table .mid  { color: var(--cloud); font-weight: 600; }
+  .verdict table .low  { color: var(--muted); }
+  @media (max-width: 800px) {
+    .stats-row, .compare { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>ASR 质量对比<br>Apple on-device 语音识别 vs 火山引擎（豆包）</h1>
-  <div class="meta">实验音频：anon-ae209ac53499d51d513425503bd134b0 · 3 条录音 · 2026-06-23 · by Claude Code</div>
+  <h1>ASR 三方对比<br><small style="font-size:.75em;font-weight:400">Apple on-device · Apple 云端 · 火山引擎（豆包）</small></h1>
+  <div class="meta">实验音频：anon-ae209ac53499d51d513425503bd134b0 · 3 条录音 · 2026-06-23 · 两轮实验 · by Claude Code</div>
 </header>
+
+<div class="legend">
+  <div class="leg"><div class="dot" style="background:var(--device)"></div>Apple on-device（SFSpeechRecognizer · requiresOnDeviceRecognition=true）</div>
+  <div class="leg"><div class="dot" style="background:var(--cloud)"></div>Apple 云端（SFSpeechRecognizer · 默认模式，走 Apple 服务器）</div>
+  <div class="leg"><div class="dot" style="background:var(--volc)"></div>火山引擎 bigmodel（WebSocket 流式，云端大模型）</div>
+</div>
 
 <div class="summary-cards">
   <div class="summary-card">
-    <div class="label">测试片段</div>
-    <div class="value">3</div>
-    <div class="sub">5m / 6.5m / 11.25m</div>
+    <div class="label">Apple on-device 总字数</div>
+    <div class="value" style="color:var(--device)">622</div>
+    <div class="sub">覆盖率 ~13%</div>
   </div>
   <div class="summary-card">
-    <div class="label">Apple ASR 总字数</div>
-    <div class="value">1,822</div>
-    <div class="sub">on-device zh-CN</div>
+    <div class="label">Apple 云端总字数</div>
+    <div class="value" style="color:var(--cloud)">3,974</div>
+    <div class="sub">覆盖率 ~79%</div>
   </div>
   <div class="summary-card">
-    <div class="label">火山 ASR 总字数</div>
-    <div class="value">14,215</div>
-    <div class="sub">豆包流式识别</div>
+    <div class="label">火山总字数（基准）</div>
+    <div class="value" style="color:var(--volc)">4,952</div>
+    <div class="sub">覆盖率 100%</div>
   </div>
   <div class="summary-card">
-    <div class="label">平均内容获取比</div>
-    <div class="value" style="color:#e85c2e">7.8×</div>
-    <div class="sub">火山每次捕获更多</div>
+    <div class="label">Apple 云端速度</div>
+    <div class="value">15–20×</div>
+    <div class="sub">实时速（无明显延迟）</div>
   </div>
 </div>
 
 <div class="findings">
-  <h2>主要发现</h2>
+  <h2>关键发现</h2>
   <ul>
-    <li><strong>内容覆盖率</strong>：Apple ASR 平均只捕获了火山 ASR 的 <strong>11–18%</strong> 的内容量，大量句子静默丢失。</li>
-    <li><strong>错误字</strong>：Apple 将「轰炸」转写为 <span class="err">婚纱</span>，「游泳道」中的「一个」转为 <span class="err">男友</span>，存在严重语义错误。</li>
-    <li><strong>块间断层</strong>：55s 切片后各块独立识别，上下文断裂，导致许多块返回空字符串或乱句。</li>
-    <li><strong>中文理解</strong>：火山能正确识别口语词（呃、嗯、吧）和中英混合词（VoiceDrop、skill、work），Apple 基本只保留了少量碎片句。</li>
-    <li><strong>Apple 方法局限</strong>：<code>SFSpeechRecognizer</code> 设计为短时实时听写（通常 &lt; 1 分钟），强制 on-device 模式对长录音劣化明显；火山 ASR 专为长录音离线转写设计。</li>
+    <li><strong>开启云端后质量飞跃</strong>：Apple on-device 平均覆盖 13%，云端跳到 79%，去掉 <code>requiresOnDeviceRecognition</code> 一行代码差距缩小到与火山相近。</li>
+    <li><strong>仍有技术词汇错误</strong>：Apple 云端将「Sonnet」转写为 <span class="err">Snit</span>、「判罚」→ <span class="err">办法</span>、「Kimi」→ <span class="err">K米</span>、「Codex」→ <span class="err">口des</span>；火山正确识别。</li>
+    <li><strong>速度不是问题</strong>：Apple 云端每个 55s 切片约 3.5s 完成，整体 15–20× 实时速，与火山（约 1× 实时）相比反而更快。延迟来源是 55s 的切片粒度，与网络无关。</li>
+    <li><strong>on-device 的根本问题</strong>：端侧模型上下文极短、中文语言模型偏弱，大量 55s 切片直接返回空；云端模型明显更大，内容捕获率质变。</li>
+    <li><strong>Apple vs 火山的差距来源</strong>：Apple 云端的 21% 差距主要在中英混词（技术术语、产品名）识别，以及口语犹豫词（呃、嗯）的保留。</li>
   </ul>
 </div>
 
 
-    <section class="clip" id="clip1">
-      <h2>片段 1 · 5m 00s <span class="loc">📍 月岛（中央区）</span></h2>
-      <p class="topic">话题：日本战争历史的感想 + 找咖啡馆</p>
-      <div class="stats-row">
-        <div class="stat-box apple-box">
-          <div class="stat-label">Apple ASR（on-device）</div>
-          <div class="stat-num">175 字</div>
-          <div class="bar-wrap"><div class="bar apple-bar" style="width:17%"></div></div>
-          <div class="stat-pct">17%</div>
-        </div>
-        <div class="stat-box volc-box">
-          <div class="stat-label">火山引擎（豆包 ASR）</div>
-          <div class="stat-num">1,012 字</div>
-          <div class="bar-wrap"><div class="bar volc-bar" style="width:100%"></div></div>
-          <div class="stat-pct">100%（基准）</div>
-        </div>
-        <div class="stat-box ratio-box">
-          <div class="stat-label">火山 / Apple</div>
-          <div class="stat-num ratio-num">5.8×</div>
-          <div class="stat-pct">火山捕获更多内容</div>
-        </div>
+  <section class="clip" id="clip1">
+    <h2>片段 1 · 5m 00s <span class="loc">📍 月岛（中央区）</span></h2>
+    <p class="topic">话题：日本战争历史的感想 + 找咖啡馆</p>
+    <div class="stats-row">
+      <div class="stat-box device-box">
+        <div class="stat-label">Apple on-device</div>
+        <div class="stat-num">175 字</div>
+        <div class="bar-wrap"><div class="bar device-bar" style="width:17%"></div></div>
+        <div class="stat-pct">17%</div>
       </div>
-      <div class="compare">
-        <div class="col apple-col">
-          <div class="col-header">Apple ASR</div>
-          <div class="col-body">达到全亚洲去的韩国中国菲律宾，然后缅甸 比如现在那天我去看了那个就是日本的轰炸的那个纪念馆，然后到现在我在这个区域看着所有的这些楼，尤其这些新的楼显示他们都是在五天以后的，我在想当时在婚纱的时候是什么样子，因为地什么都没有，然后重建，然后准备 的飞机呀，飞过来 咖啡馆在日本很有意思，找一个可以做电脑的咖啡馆，实在是痛苦，找不到星巴克非常少 还在日本</div>
-        </div>
-        <div class="col volc-col">
-          <div class="col-header">火山 ASR</div>
-          <div class="col-body">现在走在日本呢，总是有一种去脑子里面一直惦记着当时那个。<br>呃，二战的时候，我最近不是在看南京那个照相馆吗？<br>还有这个中途岛海战，还有珍珠港，就是东京空袭、杜立特空袭等等，这些历史包括埃森豪尔，包括那个马克啊啊，就是马卡阿瑟啊，过来占领日本等等这些历史，然后我现在就挥之不去的就是走在日本街头，我总是在想战争的事情，就是这个日本的当时这个民族是怎么大刀全亚洲去的？<br>打到韩国、中国，然后菲律宾，然后缅甸等等这个区域，然后当时的这个日本的国民情绪是什么样子的？<br>编辑以及他回答了以后，以及日本战后等等，这些东西就和现在的日本到处干干净净呀，然后窗明几净的，然后街道上也都很干净，就总觉得这几件事情好像凑不到一起，总觉得什么地方缺了一环似的，但又想不清楚到底是。<br>比如说现在，那天我去看了大轰炸，那个就是日本大轰炸的那个纪念馆，然后出来以后到现在我走在这个下定区域，看着所有的这些高楼，尤其这些新的楼，很显然他们都是在四五年以后的。<br>我继续在想当时在轰炸的时候是什么样子，夷为平地，什么都没有。<br>然后再完全重建，然后整个这个过程。<br>的故事，然后这个历史对于日本的影响，对于中国的影响，中国到底有多少人知道这些历史？<br>等等，所以。<br>决定在思考。<br>你看现在，我一听这边的那个。<br>救护车应该是救火车吧？<br>然后就感觉有点像当时通袭的时候的防空警报。<br>这似乎去美国的飞机要飞过来对他进行攻打。<br>然后就觉得。<br>历史还是蛮有意思的，还是应该多花点时间去学一学历史，感觉一下。<br>了解一下。<br>重庆现在的所有的这些事情的来龙去脉。<br>那我现在呢？<br>就在去，准备去找我那个咖啡馆叫做 telly 咖啡馆。<br>在日本很有意思，找到一个可以坐着用电脑的咖啡馆实在是痛苦，找不到，像星巴克非常少见啊。<br>也不是非常少见，反正就是非常稀疏，然后星巴克还算是最好的了，除此以外的大多数的咖啡馆似乎都是很小很小，只有那么三四个座位，然后每个座位也都不是极小的那种，做起来一点都不舒服，至少连一个稳定的座位都没有的那种。<br>我甚至在这个，他的那个车站有那种玻璃的跟一个淋浴间一样的那种那么小的办公的地点，我也去用过，还不是还，还别说，真的有的时候当你需要坐下来写点东西，然后处理一些东西，但是没有一个咖啡馆的话，这还真是一个不错的选择。<br>可以，还真挺在日本。<br>似乎吃着的店很多，但是咖啡馆来说，真的让你在那用电脑然后办公的咖啡馆老实说还真不多。<br>所以这个对我来说也是个问题。</div>
-        </div>
+      <div class="stat-box cloud-box">
+        <div class="stat-label">Apple 云端</div>
+        <div class="stat-num">771 字</div>
+        <div class="bar-wrap"><div class="bar cloud-bar" style="width:76%"></div></div>
+        <div class="stat-pct">76%  ·  <b>15s</b> 跑完（20.0× 实时速）</div>
       </div>
-    </section>
+      <div class="stat-box volc-box">
+        <div class="stat-label">火山（豆包）</div>
+        <div class="stat-num">1,012 字</div>
+        <div class="bar-wrap"><div class="bar volc-bar" style="width:100%"></div></div>
+        <div class="stat-pct">100%（基准）</div>
+      </div>
+    </div>
+    
+    <div class="compare">
+      <div class="col device-col">
+        <div class="col-header">Apple on-device</div>
+        <div class="col-body">达到全亚洲去的韩国中国菲律宾，然后缅甸 比如现在那天我去看了那个就是日本的轰炸的那个纪念馆，然后到现在我在这个区域看着所有的这些楼，尤其这些新的楼显示他们都是在五天以后的，我在想当时在婚纱的时候是什么样子，因为地什么都没有，然后重建，然后准备 的飞机呀，飞过来 咖啡馆在日本很有意思，找一个可以做电脑的咖啡馆，实在是痛苦，找不到星巴克非常少 还在日本</div>
+      </div>
+      <div class="col cloud-col">
+        <div class="col-header">Apple 云端</div>
+        <div class="col-body">现在走了，日本不是有一种哪个艺术惦着当时那个二战的时候，我最近不是在看南，因为那个照相馆吗还有这个中途岛海战，还有深港于空袭了红旗灯的这些历史包括3号还包括那个麻烦过来占领日本，然后现在就去的就是在日本街头总是在想战争的事情，就是这个日本的，当时这个民族是怎么达到全亚洲去的韩国中国菲律宾，然后缅甸 去拿当时的这个日本的国民情绪是什么样子的年纪以及他大了以后以及日本账号这些东西就和现在的日本到处干干净净呀，然后面的然后接到很轻事情好像抽不到一起，总觉得什么地方确立环似的，他想清楚到底是哪个，比如现在那天我去看了那个就是日本的轰炸的那个纪念馆，然后到现在我在这个区域看着所有的这些楼，尤其这些新的楼显示他们都是在五天以后的，我在想当时在婚纱的时候是什么样子？因为地什么都没有，然后重建，然后准备。 的故事，然后这个历史对于日本的影响对中国的影响，中国大学有多少人知道历史思考，你看现在我一听这边的那个救护车救火车吧，然后就感觉有点像当时空袭的时候警报的飞机呀，飞过来 历史还是蛮有意思的，来点差现在的所有的这些事情莱芜市吗？现在准备去找我那咖啡馆咖啡馆在日本很有意思，找一个可以做电脑的咖啡馆，实在是痛苦找不到星巴克非常少。 也不是非常少见，反正就是非常稀疏，然后星巴克算是最好的了，除此以外的大多数的咖啡馆似乎都是很小很小只三次的座位，然后每个座位也都是挺小的那种做起来一点都不舒服，至少连一个稳定的座位都没有的那种，我甚至在这个他的那个车站有那种玻璃的跟一个淋浴间一样的那种，那么小的办公的地点我去过还不嗨，还别说真的，有的时候当你需要对他洗点东西，然后处理一些东西，但是没有咖啡馆的话，还真是一个不错的选择，所以还在日本 似乎吃的店很多，但是咖啡馆来说真的让你在那儿用电脑，然后办公室的咖啡馆老师说还真不多，所以这个对我来说也是个问题</div>
+      </div>
+      <div class="col volc-col">
+        <div class="col-header">火山（豆包）</div>
+        <div class="col-body">现在走在日本呢，总是有一种去脑子里面一直惦记着当时那个。<br>呃，二战的时候，我最近不是在看南京那个照相馆吗？<br>还有这个中途岛海战，还有珍珠港，就是东京空袭、杜立特空袭等等，这些历史包括埃森豪尔，包括那个马克啊啊，就是马卡阿瑟啊，过来占领日本等等这些历史，然后我现在就挥之不去的就是走在日本街头，我总是在想战争的事情，就是这个日本的当时这个民族是怎么大刀全亚洲去的？<br>打到韩国、中国，然后菲律宾，然后缅甸等等这个区域，然后当时的这个日本的国民情绪是什么样子的？<br>编辑以及他回答了以后，以及日本战后等等，这些东西就和现在的日本到处干干净净呀，然后窗明几净的，然后街道上也都很干净，就总觉得这几件事情好像凑不到一起，总觉得什么地方缺了一环似的，但又想不清楚到底是。<br>比如说现在，那天我去看了大轰炸，那个就是日本大轰炸的那个纪念馆，然后出来以后到现在我走在这个下定区域，看着所有的这些高楼，尤其这些新的楼，很显然他们都是在四五年以后的。<br>我继续在想当时在轰炸的时候是什么样子，夷为平地，什么都没有。<br>然后再完全重建，然后整个这个过程。<br>的故事，然后这个历史对于日本的影响，对于中国的影响，中国到底有多少人知道这些历史？<br>等等，所以。<br>决定在思考。<br>你看现在，我一听这边的那个。<br>救护车应该是救火车吧？<br>然后就感觉有点像当时通袭的时候的防空警报。<br>这似乎去美国的飞机要飞过来对他进行攻打。<br>然后就觉得。<br>历史还是蛮有意思的，还是应该多花点时间去学一学历史，感觉一下。<br>了解一下。<br>重庆现在的所有的这些事情的来龙去脉。<br>那我现在呢？<br>就在去，准备去找我那个咖啡馆叫做 telly 咖啡馆。<br>在日本很有意思，找到一个可以坐着用电脑的咖啡馆实在是痛苦，找不到，像星巴克非常少见啊。<br>也不是非常少见，反正就是非常稀疏，然后星巴克还算是最好的了，除此以外的大多数的咖啡馆似乎都是很小很小，只有那么三四个座位，然后每个座位也都不是极小的那种，做起来一点都不舒服，至少连一个稳定的座位都没有的那种。<br>我甚至在这个，他的那个车站有那种玻璃的跟一个淋浴间一样的那种那么小的办公的地点，我也去用过，还不是还，还别说，真的有的时候当你需要坐下来写点东西，然后处理一些东西，但是没有一个咖啡馆的话，这还真是一个不错的选择。<br>可以，还真挺在日本。<br>似乎吃着的店很多，但是咖啡馆来说，真的让你在那用电脑然后办公的咖啡馆老实说还真不多。<br>所以这个对我来说也是个问题。</div>
+      </div>
+    </div>
+  </section>
 
-    <section class="clip" id="clip2">
-      <h2>片段 2 · 6m 30s <span class="loc">📍 月岛（中央区）</span></h2>
-      <p class="topic">话题：风格指纹 skill 的设计思路</p>
-      <div class="stats-row">
-        <div class="stat-box apple-box">
-          <div class="stat-label">Apple ASR（on-device）</div>
-          <div class="stat-num">208 字</div>
-          <div class="bar-wrap"><div class="bar apple-bar" style="width:12%"></div></div>
-          <div class="stat-pct">12%</div>
-        </div>
-        <div class="stat-box volc-box">
-          <div class="stat-label">火山引擎（豆包 ASR）</div>
-          <div class="stat-num">1,716 字</div>
-          <div class="bar-wrap"><div class="bar volc-bar" style="width:100%"></div></div>
-          <div class="stat-pct">100%（基准）</div>
-        </div>
-        <div class="stat-box ratio-box">
-          <div class="stat-label">火山 / Apple</div>
-          <div class="stat-num ratio-num">8.2×</div>
-          <div class="stat-pct">火山捕获更多内容</div>
-        </div>
+  <section class="clip" id="clip2">
+    <h2>片段 2 · 6m 30s <span class="loc">📍 月岛（中央区）</span></h2>
+    <p class="topic">话题：风格指纹 skill 的设计思路</p>
+    <div class="stats-row">
+      <div class="stat-box device-box">
+        <div class="stat-label">Apple on-device</div>
+        <div class="stat-num">208 字</div>
+        <div class="bar-wrap"><div class="bar device-bar" style="width:12%"></div></div>
+        <div class="stat-pct">12%</div>
       </div>
-      <div class="compare">
-        <div class="col apple-col">
-          <div class="col-header">Apple ASR</div>
-          <div class="col-body">20几块钱人民币吧 还做个经验，然后 他的管理员也还就是不怎么管也行，但是日本来说的话他真的很清楚，比如说我觉得大 劈成两半就是两个不同的方向，然后一个王这个钱一个再回来，然后这两个相对来说比较快的人在这边男友，然后再后 然后这里面的话，如果还有更多的舞蹈的话，还分数学者到就是 一样的地方是说他里面对这个所有东西的管理还是比较严格的，就是小心一定要带泳帽，这不用说了 日本人是怕死了，有人在里面拍照，所以就是该起来</div>
-        </div>
-        <div class="col volc-col">
-          <div class="col-header">火山 ASR</div>
-          <div class="col-body">啊？<br>说到风格的问题，我现在发现有一种方法到现在用起来还算是 work，跟大家分享一下。<br>就是说，呃，首先有两个非常重要的不同的地方，一个叫做 perspective，就是观点啊，这个是从很多的文章里面是可以把它给蒸出来的啊？<br>那个花书有一个叫做女娲 skilled，这方面做的蛮好的，就等于说能把从所有的文章里面把观点给呃拎出来，也就是说他会比较倾向知道我是用什么样的观点来说这件事情，从哪个，然后另外一个呢？<br>我认为叫做风格指纹，就是每个人的讲话都有一些他特定的风格，这就跟指纹一样的。<br>呃，沉浸在他说的每一句话，每一个比方、每个排比、每个反问啊？<br>每一个没有写完的句子以及冲突里面。<br>所以啊，如何去找到这种？<br>风格指纹就变得很重要，所以呢？<br>我就做了有一个叫做啊？<br>分割指纹的啊？<br>一个 skill，这个 skill 最主要的做法首先是给他一些文章啊，尽量多的文章他会拎出来其中的一些啊作为种子，从中间去提取出来风格、指纹。<br>然后呢？<br>他会，他其实就是大概从几十个维度吧？<br>每个维度都有去描述它，然后全描述完了以后，你怎么知道它这个做的好还是不好呢？<br>啊？<br>我就让他做了一整系列的攻防，这个是跟图像里面的那个干网络很像的，就是说每一轮让他生成46个，嗯，SUB agent，然后每个 agent 只给他一句话以及30个字的以内的中心思想，这些都是从这个另外的我已经写好的文章里面把它拎出来。<br>然后以及这个风格，他就只有这两样东西，就是这个文章的啊，标题30个字，以及那个刚才我们已经流出来的风格文档，然后让他啊用这个风格照写6篇文章，同时呢再把我的真实的文章6篇拿出来啊，这个系统给他起了个名字叫真迹，然后把真迹和伪造的是总共6篇加6篇。<br>是12篇，然后打伞，然后呢？<br>再把这12篇给一个完全不同的模型啊，就是为了这个 skill 更加方便，我就直接就只选了一个啊，cloud code 的另外一个模型，比如说 Opus 写的，就拿 sonnet 去那个判判罚，但是最好是说啊，你可以跨这个呃公司，比如说拿。<br>呃 Kimi 或者 clock，呃那个，那个，呃 kodak 就是 ChatGPT 的模型，然后来做判罚，然后这个判官要得出什么？<br>他要对所有这12篇进行独立的判断，来决定哪一篇是是。<br>呃真的，哪一篇是？<br>呃，假的，然后他会把一些很清晰的 AI 味，很清晰的和我的风格不符的部分拎出来，然后我现在的判罚要求就是说我需要他的判罚的准确率要低于50%，也就是说说它基本上分不太清楚是什么了，老实说50%它并不是一个越低越好的数字。<br>如果要是他的准确率总是低于20%，比如说那就是真的，呃，是判罚出了问题了，因为他会把大量的我真实写的文章给这个判定为不是我写的。<br>那么。<br>这样的话就是每一轮这个判定的人都会给打分的时候，都会对那些他认为不是我的风格的文章加了一个注释，说有的时候说，呃，这里面这个太整齐了，这或者说这一个的风格太，这个，呃就是三段论了。<br>还有的是说这一段的风格过于呃，就是呃，就是结尾呃有很多的呼应，和和开头有呼应，而这不是我的风格等等，他就写了很多的这样的判罚，然后每一个判罚呢？<br>呃，这个学生在拿着这个东西去，不是改这个文件本身，而是去改那个风格。<br>文件改完了以后呢？<br>然后再进入第二轮，也就等于拿一个新的更改过的下一个版本的风格文件，再跟6个随机的这个题目写出6分新的文章。<br>然后再去找6个随机的啊真实的文章，然后放进去，然后再让他挑出来啊，看看最后这个判定的能不能搞定。<br>所以我的这个版本呢？<br>来来回回干了两个多小时，找了6啊，9轮吧啊，最后做了一个定稿，我依然就是个把版本，并不是很完美，并不见得最好啊，我甚至怀疑它很多时候的判罚并不是判罚是不是像我的风格，而是仅仅判罚着像不像 AI 写的这两个还是有很大的差别的。<br>但是不管怎么样呢？<br>我这是我现在能达到的最好的一个版本啊，过两天我再继续迭代，然后基于这个版本的话，呃，我在可以，呃，开始继续。<br>啊啊，去迭代，然后看看未来有没有什么样一种办法去。<br>呃，客观的衡量啊，这个风格啊，指纹是更像我的还是更不像我的？<br>然后到那个时候我再继续跟大家更新。</div>
-        </div>
+      <div class="stat-box cloud-box">
+        <div class="stat-label">Apple 云端</div>
+        <div class="stat-num">1,493 字</div>
+        <div class="bar-wrap"><div class="bar cloud-bar" style="width:87%"></div></div>
+        <div class="stat-pct">87%  ·  <b>26s</b> 跑完（15.0× 实时速）</div>
       </div>
-    </section>
+      <div class="stat-box volc-box">
+        <div class="stat-label">火山（豆包）</div>
+        <div class="stat-num">1,716 字</div>
+        <div class="bar-wrap"><div class="bar volc-bar" style="width:100%"></div></div>
+        <div class="stat-pct">100%（基准）</div>
+      </div>
+    </div>
+    
+    <div class="compare">
+      <div class="col device-col">
+        <div class="col-header">Apple on-device</div>
+        <div class="col-body">20几块钱人民币吧 还做个经验，然后 他的管理员也还就是不怎么管也行，但是日本来说的话他真的很清楚，比如说我觉得大 劈成两半就是两个不同的方向，然后一个王这个钱一个再回来，然后这两个相对来说比较快的人在这边男友，然后再后 然后这里面的话，如果还有更多的舞蹈的话，还分数学者到就是 一样的地方是说他里面对这个所有东西的管理还是比较严格的，就是小心一定要带泳帽，这不用说了 日本人是怕死了，有人在里面拍照，所以就是该起来</div>
+      </div>
+      <div class="col cloud-col">
+        <div class="col-header">Apple 云端</div>
+        <div class="col-body">收到风格的问题，我现在发现有一种方法到现在用起来还算是word，真的要分享一下，就是说首先有两个非常重要的不同的地方，一个叫做perspective就是观点，这个是从很多的文章里面是可以把它给留出来的，有一个叫女娲的这方面做得蛮好的，就等于说能把从所有的文章里面把观点给领出来，也就是说他会比较倾向知道我是用什么样的观点来说这件事情从哪个角度，然后另外一个呢，我认为叫做风格指纹就是每个人的讲话都有一些他特定的风格，这就跟指纹一样的 沉浸在他说的每一句话，每一个比方，每个排比每一个反问每一个没有写完的句子以及冲突，所以如何去找到这种风格指纹就变得很重要，所以呢，我就做了有一个叫做风格指纹的一个这个给我最主要的做法，首先是给他一些文章啊，尽量多的文章，它会拎出来其中的一些作为种子，从中间去提取出来风格指纹，然后呢，它会他其实就是大概从几十个维度吧，每个维度都有去描述它，然后全描述完了以后你怎么知道他去做得好还是不好呢？我就让他 做了一种系列的工坊，这个是跟图像里面的那个盖网络很像的，就是说每一轮让他生成四六个agent，然后每个agent只给他一句话以及30个字的以内的中心思想，这些都是从这个另外的我已经写好的文章里面把它拎出来，然后以及这个风格，它就只有这两样东西，就是这个文章的标题30个字以及那个刚才我们已经蒸馏出来的风格文档，然后让他用这个风格照写六篇文章，同时呢，再把我的真实的文章六篇拿出来，这个系统给他起的名字叫真迹，然后把真迹 伪造的是总共六篇+6篇是12篇，然后打伞，然后呢，再把这12篇给一个完全不同的模型，就是为了这个Scale更加方便，我就直接就只选了一个cloud code的另外一个模型，比如说Oppo的就拿Snit去那个判法，但是最好是说你可以跨这个公司，比如是拿Km或者co那个那个口des就是ChatGPT的模型，然后来做办法，然后这个判官要得出什么他要对所有这12篇进行独立的判断来决定哪一篇是真的哪一篇是假的，然后他会 有一些很清晰的AI很清晰的和我的风格不符的部分拎出来，然后我现在的办法要求就是说我需要他的办法的准确率要低于50%，也就是说他基本上分不太清楚是什么了，老师说50%，他并不是一个越低越好的数字，如果要是他的准确率是低于20%，比如说那就是真的是派阀出问题了，因为他会把大量的我真实写的文章给这个判定为不是我写的，那么这样的话就是每一轮这个判定的人都会给打分的时候都会对那些，他认为不是我的风格的文章，加了一个注释，说有的时候说这里面这个太整 你那这或者说这一个的风格太这个就是三段论了，还有的是说这一段的风格过于就是就是结尾有很多的呼应和和开头有呼应，而且不是我的风格等等，他就写了很多这样的看法，然后每一个看法呢，这个学生在拿着这个东西去不是这个文件本身，而是去改那个风格文件改完了以后呢，然后再进入第二轮也就等于拿一个新的更改过的，下一个版本的风格文件再跟六个随机的这个题目写出六分新的文章，然后再去找六合随机的真实的文章，然后放进去，然后再让他挑出来 看看最后这个判定的能不能搞定，所以我的这个版本呢来来回回干了两个多小时，找了六九轮吧，最后做了一个定稿，我依然就是版本并不是很完美，并不见得最好我甚至怀疑他很多时候的办法并不是犯法，是不是像我的风格而是仅仅攀爬这相片AI写的这两个还是有很大的差别的，但是不管怎么样呢，我这是我现在能达到的最好的一个版本，过两天我再继续迭代，然后继续这个版本的话，我再可以开始继续去迭代，然后看看未来有没有什么样，一种办法去客观的衡量这个风格指纹是更像然后 这时候我继续跟他更新</div>
+      </div>
+      <div class="col volc-col">
+        <div class="col-header">火山（豆包）</div>
+        <div class="col-body">啊？<br>说到风格的问题，我现在发现有一种方法到现在用起来还算是 work，跟大家分享一下。<br>就是说，呃，首先有两个非常重要的不同的地方，一个叫做 perspective，就是观点啊，这个是从很多的文章里面是可以把它给蒸出来的啊？<br>那个花书有一个叫做女娲 skilled，这方面做的蛮好的，就等于说能把从所有的文章里面把观点给呃拎出来，也就是说他会比较倾向知道我是用什么样的观点来说这件事情，从哪个，然后另外一个呢？<br>我认为叫做风格指纹，就是每个人的讲话都有一些他特定的风格，这就跟指纹一样的。<br>呃，沉浸在他说的每一句话，每一个比方、每个排比、每个反问啊？<br>每一个没有写完的句子以及冲突里面。<br>所以啊，如何去找到这种？<br>风格指纹就变得很重要，所以呢？<br>我就做了有一个叫做啊？<br>分割指纹的啊？<br>一个 skill，这个 skill 最主要的做法首先是给他一些文章啊，尽量多的文章他会拎出来其中的一些啊作为种子，从中间去提取出来风格、指纹。<br>然后呢？<br>他会，他其实就是大概从几十个维度吧？<br>每个维度都有去描述它，然后全描述完了以后，你怎么知道它这个做的好还是不好呢？<br>啊？<br>我就让他做了一整系列的攻防，这个是跟图像里面的那个干网络很像的，就是说每一轮让他生成46个，嗯，SUB agent，然后每个 agent 只给他一句话以及30个字的以内的中心思想，这些都是从这个另外的我已经写好的文章里面把它拎出来。<br>然后以及这个风格，他就只有这两样东西，就是这个文章的啊，标题30个字，以及那个刚才我们已经流出来的风格文档，然后让他啊用这个风格照写6篇文章，同时呢再把我的真实的文章6篇拿出来啊，这个系统给他起了个名字叫真迹，然后把真迹和伪造的是总共6篇加6篇。<br>是12篇，然后打伞，然后呢？<br>再把这12篇给一个完全不同的模型啊，就是为了这个 skill 更加方便，我就直接就只选了一个啊，cloud code 的另外一个模型，比如说 Opus 写的，就拿 sonnet 去那个判判罚，但是最好是说啊，你可以跨这个呃公司，比如说拿。<br>呃 Kimi 或者 clock，呃那个，那个，呃 kodak 就是 ChatGPT 的模型，然后来做判罚，然后这个判官要得出什么？<br>他要对所有这12篇进行独立的判断，来决定哪一篇是是。<br>呃真的，哪一篇是？<br>呃，假的，然后他会把一些很清晰的 AI 味，很清晰的和我的风格不符的部分拎出来，然后我现在的判罚要求就是说我需要他的判罚的准确率要低于50%，也就是说说它基本上分不太清楚是什么了，老实说50%它并不是一个越低越好的数字。<br>如果要是他的准确率总是低于20%，比如说那就是真的，呃，是判罚出了问题了，因为他会把大量的我真实写的文章给这个判定为不是我写的。<br>那么。<br>这样的话就是每一轮这个判定的人都会给打分的时候，都会对那些他认为不是我的风格的文章加了一个注释，说有的时候说，呃，这里面这个太整齐了，这或者说这一个的风格太，这个，呃就是三段论了。<br>还有的是说这一段的风格过于呃，就是呃，就是结尾呃有很多的呼应，和和开头有呼应，而这不是我的风格等等，他就写了很多的这样的判罚，然后每一个判罚呢？<br>呃，这个学生在拿着这个东西去，不是改这个文件本身，而是去改那个风格。<br>文件改完了以后呢？<br>然后再进入第二轮，也就等于拿一个新的更改过的下一个版本的风格文件，再跟6个随机的这个题目写出6分新的文章。<br>然后再去找6个随机的啊真实的文章，然后放进去，然后再让他挑出来啊，看看最后这个判定的能不能搞定。<br>所以我的这个版本呢？<br>来来回回干了两个多小时，找了6啊，9轮吧啊，最后做了一个定稿，我依然就是个把版本，并不是很完美，并不见得最好啊，我甚至怀疑它很多时候的判罚并不是判罚是不是像我的风格，而是仅仅判罚着像不像 AI 写的这两个还是有很大的差别的。<br>但是不管怎么样呢？<br>我这是我现在能达到的最好的一个版本啊，过两天我再继续迭代，然后基于这个版本的话，呃，我在可以，呃，开始继续。<br>啊啊，去迭代，然后看看未来有没有什么样一种办法去。<br>呃，客观的衡量啊，这个风格啊，指纹是更像我的还是更不像我的？<br>然后到那个时候我再继续跟大家更新。</div>
+      </div>
+    </div>
+  </section>
 
-    <section class="clip" id="clip3">
-      <h2>片段 3 · 11m 16s <span class="loc">📍 月岛（中央区）</span></h2>
-      <p class="topic">话题：东京游泳池体验 + 日本公共设施管理</p>
-      <div class="stats-row">
-        <div class="stat-box apple-box">
-          <div class="stat-label">Apple ASR（on-device）</div>
-          <div class="stat-num">239 字</div>
-          <div class="bar-wrap"><div class="bar apple-bar" style="width:11%"></div></div>
-          <div class="stat-pct">11%</div>
-        </div>
-        <div class="stat-box volc-box">
-          <div class="stat-label">火山引擎（豆包 ASR）</div>
-          <div class="stat-num">2,224 字</div>
-          <div class="bar-wrap"><div class="bar volc-bar" style="width:100%"></div></div>
-          <div class="stat-pct">100%（基准）</div>
-        </div>
-        <div class="stat-box ratio-box">
-          <div class="stat-label">火山 / Apple</div>
-          <div class="stat-num ratio-num">9.3×</div>
-          <div class="stat-pct">火山捕获更多内容</div>
-        </div>
+  <section class="clip" id="clip3">
+    <h2>片段 3 · 11m 16s <span class="loc">📍 月岛（中央区）</span></h2>
+    <p class="topic">话题：东京游泳池体验 + 日本公共设施管理</p>
+    <div class="stats-row">
+      <div class="stat-box device-box">
+        <div class="stat-label">Apple on-device</div>
+        <div class="stat-num">239 字</div>
+        <div class="bar-wrap"><div class="bar device-bar" style="width:11%"></div></div>
+        <div class="stat-pct">11%</div>
       </div>
-      <div class="compare">
-        <div class="col apple-col">
-          <div class="col-header">Apple ASR</div>
-          <div class="col-body">20几块钱人民币吧 还做个经验，然后 他的管理员也还就是不怎么管也行，但是日本来说的话他真的很清楚，比如说我觉得大 劈成两半就是两个不同的方向，然后一个王这个钱一个再回来，然后这两个相对来说比较快的人在这边男友，然后再后 然后这里面的话，如果还有更多的舞蹈的话，还分数学者到就是 一样的地方是说他里面对这个所有东西的管理还是比较严格的，就是小心一定要带泳帽，这不用说了 日本人是怕死了，有人在里面拍照，所以就是该起来    他的意思地方就是他的那个，一般来说是有是有这个钥匙就有</div>
-        </div>
-        <div class="col volc-col">
-          <div class="col-header">火山 ASR</div>
-          <div class="col-body">好了，现在我准备去游泳，然后我今天选的这个地方是日本的中央区的月岛的 sport 体育中心，然后这边的，呃，日本的游泳的地方其实不多，呃。<br>它不像，呃，比如泰国、巴厘岛啊等等，这些地方热带就是到处都有，家家户户都有，然后随便一处酒店都有，日本特别，尤其东京，太小了。<br>嗯，所以呢，基本上没有什么让我们可以，就是到处都是。<br>如果从总数的话他一定不多，但是呢？<br>他有一个好处，就是说他有一些非常啊，就是设施良好的区的游泳馆以及城市的游泳馆，比如说中基本上大多数的这个区都有那么两三个甚至4个游泳池，这个游泳池呢？<br>都很像，我也不知道他是怎么可以做到如此之统一的，然后有非常好的就是呃，水基本还算比较干净啊，不算奢侈，但是水温比较高，比这个呃上海的一般的水温是因为上海一般就是28度左右，这里的话大概在29度到29.5度的样子。<br>嗯，然后价格也很便宜，基本上就只有500日元，相当于。<br>嗯，二十几块钱人民币吧。<br>嗯，然后这个价格你可以去很多地方。<br>呃，就是刚才我所说的区里当然也可以有很多市的啊，尤其是我印象比较深的。<br>呃，东京奥林匹克。<br>呃，水上中心那个其实就是东京奥运会的主场馆，然后那里也是随时进，然后基本上没什么游人，然后其实50米的池子啊，大概都有一米一米八九两米深吧，反正就是没有斜坡，一个标准的正方体，然后两边都是看台，那个还是体验还是相当不错的啊，我也蛮喜欢在那边游泳。<br>就是稍微有一点点远，骑自行车半个小时，或者还得做个精液性过去。<br>然后这边的管理是我会觉得在全球的所有游泳池里面最可圈可点的啊，这里的管理比，呃相比香港好很多了啊，上海就不用说了，我的天呐，上海的很多的，哪怕是东方体育中心，上海游泳馆这种市级的。<br>啊，最好的场子里面也没有任何规矩，所有的人都在里面乱来，根本没法游啊。<br>可能也是跟这个人数众多啊有关吧？<br>那美国的话也是有管理的，但是美国的好处是说他实在是人太少了啊，大多数时候那个游泳池里面都啊，泳道里面都只有一个人啊，最多两个人，所以他的管理也也还嗯，就是不怎么管也行，但是日本来说的话他分得很清楚，比如说我去的大多数的游泳馆的泳道肯定是最右边。<br>一般来说是一个。<br>走路道只能走路，不准游泳。<br>个人觉得走来走去，然后在中间呢？<br>两个是那个单独道，就是说只能单向游的，然后到了另外一头，从那个中水线这边底下翻过去，然后从另外一边回来，然后呢？<br>第三这是两，一般是两个道，然后另外一般来说还有两根道呢？<br>就是叫做往复游泳，就是一跟到是一是，呃，p 成两半，就是两个不同的方向，然后一个往这个前，一个再回来，然后这两个道是相对来说比较快的人在这边来游，然后再这个最那边的，一般来说就会有一个叫呃，团体的带切的，就是那个是。<br>就是上课呀什么的都是用那里，所以基本上来说的话，嗯，大多数的游泳馆就是这样的啊。<br>是没有什么差别，然后。<br>嗯。<br>然后这里面的话，如果还有更多的泳道的话，还分初学者道，呃，就是大家可以在里面那个练习游泳啊？<br>初学者道他有很多地方很有意思，都是分别有这个不同的。<br>呃，这个。<br>要求，比如说初学者用到里面是可以随时停下来的，但是在这个泳道里面你不能连续呃超过25米游泳，就是你可以一边游过去，但是你必须停下来，就，就是，那就是给初学的，呃，可以停，但是不能连续游，然后呢？<br>在往复道和其他的道呢？<br>你是可以连续游，但是中间不可以停，反正就是各自分好，还有一个很不一样的地方，是说它里面对这个所有东西的管理就还是比较严格的，就是首先要一定要戴泳帽，这不用说了啊。<br>其次呢手上是不允许带手环或者是手表，或者是运动耳机的，运动耳机它是一直不能带手环的话，它是要求你必须去搞一个它带有卖的那个，呃，塑料的，呃橡胶的，一个一个罩子，然后把它罩起来。<br>我想这里面最主要是两个原因吧？<br>一个是这个最主要是为了安全，就是说确保你肯定不会在游泳的时候碰到隔壁的人，然后那个可能会影响比较大，然后，嗯，有了这个罩子以后，至少来说它是软的。<br>然后第二个呢？<br>可能也是跟隐私有关，日本人是怕死了有人在里面拍照，所以就是盖起来啊。<br>然后还有一个很有意思的，和国内不太一样的地方，是说他会把，呃，就是大多数的游泳池他都不能连续游，都是一般来说会游到每个小时的55分，然后就哇啦哇啦吧说一阵子，然后大一个大声的哨子滴一吹，所有的人都上岸边罚站。<br>站到一定程度站5分钟，然后等到了整点，然后再哨子滴一声，再重新回去。<br>啊？<br>这个的作用呢？<br>我想最主要可能是一个是。<br>可能他第一是为了安全吧，让你不要长时间在里面游，出什么问题，那还有一个很重要的，就是说每个呃一个小时他会重新安排泳道，有的时候会把这个泳道从原来的往复道变成单道，或者说从原来的 public 道变成这个呃，就是呃有这个。<br>呃，就是呃，变成呃，预约到等等，他突然产生有各种各样的方法来做一调整，还有一个很这个。<br>要去的地方就是他的价格，区内和区外稍微有些差别啊，区内的话是300块钱日元，区外的话是500块钱中阳区外。<br>群内是350，区外是500。<br>好，这就是基本上日本的游泳。<br>嗯，至于他的这个，这个，呃，更衣室的干净呀？<br>然后里面提供的设施的相对来说比较简单，但是很完备啊。<br>还有就是他的哦，还有很有意思的地方，就是他的那个，呃，一般来说是由是有这个钥匙是有锁的啊？<br>然后呢？<br>几乎所有的泳池都不踢咕洗头啊，沐浴液跟洗头膏这些东西都需要自己棋盘，就这些关于日本的游泳。</div>
-        </div>
+      <div class="stat-box cloud-box">
+        <div class="stat-label">Apple 云端</div>
+        <div class="stat-num">1,710 字</div>
+        <div class="bar-wrap"><div class="bar cloud-bar" style="width:77%"></div></div>
+        <div class="stat-pct">77%  ·  <b>30s</b> 跑完（22.5× 实时速）</div>
       </div>
-    </section>
+      <div class="stat-box volc-box">
+        <div class="stat-label">火山（豆包）</div>
+        <div class="stat-num">2,224 字</div>
+        <div class="bar-wrap"><div class="bar volc-bar" style="width:100%"></div></div>
+        <div class="stat-pct">100%（基准）</div>
+      </div>
+    </div>
+    <div class="chunk-note">⚠️ 首 55s chunk 因并行冲突丢失，已补录覆盖率估算</div>
+    <div class="compare">
+      <div class="col device-col">
+        <div class="col-header">Apple on-device</div>
+        <div class="col-body">20几块钱人民币吧 还做个经验，然后 他的管理员也还就是不怎么管也行，但是日本来说的话他真的很清楚，比如说我觉得大 劈成两半就是两个不同的方向，然后一个王这个钱一个再回来，然后这两个相对来说比较快的人在这边男友，然后再后 然后这里面的话，如果还有更多的舞蹈的话，还分数学者到就是 一样的地方是说他里面对这个所有东西的管理还是比较严格的，就是小心一定要带泳帽，这不用说了 日本人是怕死了，有人在里面拍照，所以就是该起来    他的意思地方就是他的那个，一般来说是有是有这个钥匙就有</div>
+      </div>
+      <div class="col cloud-col">
+        <div class="col-header">Apple 云端</div>
+        <div class="col-body">沉浸在他说的每一句话，每一个比方，每个排比每一个反问每一个没有写完的句子以及冲突，所以如何去找到这种风格指纹就变得很重要，所以呢，我就做了有一个叫做风格指纹的一个这个给我最主要的做法，首先是给他一些文章啊，尽量多的文章，它会拎出来其中的一些作为种子，从中间去提取出来风格指纹，然后呢，它会他其实就是大概从几十个维度吧，每个维度都有去描述它，然后全描述完了以后你怎么知道他去做得好还是不好呢？我就让他 做了一种系列的工坊，这个是跟图像里面的那个盖网络很像的，就是说每一轮让他生成四六个agent，然后每个agent只给他一句话以及30个字的以内的中心思想，这些都是从这个另外的我已经写好的文章里面把它拎出来，然后以及这个风格，它就只有这两样东西，就是这个文章的标题30个字以及那个刚才我们已经蒸馏出来的风格文档，然后让他用这个风格照写六篇文章，同时呢，再把我的真实的文章六篇拿出来，这个系统给他起的名字叫真迹，然后把真迹 伪造的是总共六篇+6篇是12篇，然后打伞，然后呢，再把这12篇给一个完全不同的模型，就是为了这个Scale更加方便，我就直接就只选了一个cloud code的另外一个模型，比如说Oppo的就拿Snit去那个盼盼法，但是最好是说你可以跨这个公司，比如是拿K米或者co那个那个口des就是ChatGPT的模型，然后来做办法，然后这个判官要得出什么他要对所有这12篇进行独立的判断来决定哪一篇是真的哪一篇是假的，然后他会 有一些很清晰的AI很清晰的和我的风格不符的部分拎出来，然后我现在的办法要求就是说我需要他的办法的准确率要低于50%，也就是说他基本上分不太清楚是什么了，老师说50%，他并不是一个越低越好的数字，如果要是他的准确率是低于20%，比如说那就是真的是派阀出问题了，因为他会把大量的我真实写的文章给这个判定为不是我写的，那么这样的话就是每一轮这个判定的人都会给打分的时候都会对那些，他认为不是我的风格的文章，加了一个注释，说有的时候说这里面这个太整 你那这或者说这一个的风格太这个就是三段论了，还有的是说这一段的风格过于就是就是结尾有很多的呼应和和开头有呼应，而且不是我的风格等等，他就写了很多这样的看法，然后每一个看法呢，这个学生在拿着这个东西去不是这个文件本身，而是去改那个风格文件改完了以后呢，然后再进入第二轮也就等于拿一个新的更改过的，下一个版本的风格文件再跟六个随机的这个题目写出六分新的文章，然后再去找六合随机的真实的文章，然后放进去，然后再让他挑出来 看看最后这个判定的能不能搞定，所以我的这个版本呢来来回回干了两个多小时，找了六九轮吧，最后做了一个定稿，我依然就是版本并不是很完美，并不见得最好我甚至怀疑他很多时候的办法并不是犯法，是不是像我的风格而是仅仅攀爬这相片AI写的这两个还是有很大的差别的，但是不管怎么样呢，我这是我现在能达到的最好的一个版本，过两天我再继续迭代，然后继续这个版本的话，我再可以开始继续去迭代，然后看看未来有没有什么样，一种办法去客观的衡量这个风格指纹是更像然后 这时候我继续跟他更新 然后还有一个很有意思的和国内不太一样的地方，是说他会把就是大多数游泳池，他都不能连续有都是一般来说会有的，每个小时的55分，然后就我哇啦哇啦吧，说一阵子，然后大一个大声的哨子，第一吹所有的人都上岸边罚站站到应程度站5分钟，然后等到了整点，然后再哨子第一声再重新回去 这个的作用呢我想最主要可能是一个是可能他第一个是未来安全吧，让你不要长时间在里面，有出什么问题，还有一个很重要的，就是说每隔一个小时他会重新排五道，有的时候可以把这个甬道从原来的往辅道变成单道或者从原来的public变成这个就是有这个 就是变成预约到等等，他换成用各种各样的方法再重新调整，还有一个很这个有趣的地方，就是它的价格，区内和区外稍微有些差别，区内的话是300块钱，日元的话是500块钱三50,000 这就是基本的这个更衣室的干净啊，然后里面提供的设施的相对来说比较简单的时候完成他的意思地方就是他的那个，一般来说是有是有这个钥匙就有 然后呢，几乎所有的泳池都不提供洗头液跟洗头膏这些东西</div>
+      </div>
+      <div class="col volc-col">
+        <div class="col-header">火山（豆包）</div>
+        <div class="col-body">好了，现在我准备去游泳，然后我今天选的这个地方是日本的中央区的月岛的 sport 体育中心，然后这边的，呃，日本的游泳的地方其实不多，呃。<br>它不像，呃，比如泰国、巴厘岛啊等等，这些地方热带就是到处都有，家家户户都有，然后随便一处酒店都有，日本特别，尤其东京，太小了。<br>嗯，所以呢，基本上没有什么让我们可以，就是到处都是。<br>如果从总数的话他一定不多，但是呢？<br>他有一个好处，就是说他有一些非常啊，就是设施良好的区的游泳馆以及城市的游泳馆，比如说中基本上大多数的这个区都有那么两三个甚至4个游泳池，这个游泳池呢？<br>都很像，我也不知道他是怎么可以做到如此之统一的，然后有非常好的就是呃，水基本还算比较干净啊，不算奢侈，但是水温比较高，比这个呃上海的一般的水温是因为上海一般就是28度左右，这里的话大概在29度到29.5度的样子。<br>嗯，然后价格也很便宜，基本上就只有500日元，相当于。<br>嗯，二十几块钱人民币吧。<br>嗯，然后这个价格你可以去很多地方。<br>呃，就是刚才我所说的区里当然也可以有很多市的啊，尤其是我印象比较深的。<br>呃，东京奥林匹克。<br>呃，水上中心那个其实就是东京奥运会的主场馆，然后那里也是随时进，然后基本上没什么游人，然后其实50米的池子啊，大概都有一米一米八九两米深吧，反正就是没有斜坡，一个标准的正方体，然后两边都是看台，那个还是体验还是相当不错的啊，我也蛮喜欢在那边游泳。<br>就是稍微有一点点远，骑自行车半个小时，或者还得做个精液性过去。<br>然后这边的管理是我会觉得在全球的所有游泳池里面最可圈可点的啊，这里的管理比，呃相比香港好很多了啊，上海就不用说了，我的天呐，上海的很多的，哪怕是东方体育中心，上海游泳馆这种市级的。<br>啊，最好的场子里面也没有任何规矩，所有的人都在里面乱来，根本没法游啊。<br>可能也是跟这个人数众多啊有关吧？<br>那美国的话也是有管理的，但是美国的好处是说他实在是人太少了啊，大多数时候那个游泳池里面都啊，泳道里面都只有一个人啊，最多两个人，所以他的管理也也还嗯，就是不怎么管也行，但是日本来说的话他分得很清楚，比如说我去的大多数的游泳馆的泳道肯定是最右边。<br>一般来说是一个。<br>走路道只能走路，不准游泳。<br>个人觉得走来走去，然后在中间呢？<br>两个是那个单独道，就是说只能单向游的，然后到了另外一头，从那个中水线这边底下翻过去，然后从另外一边回来，然后呢？<br>第三这是两，一般是两个道，然后另外一般来说还有两根道呢？<br>就是叫做往复游泳，就是一跟到是一是，呃，p 成两半，就是两个不同的方向，然后一个往这个前，一个再回来，然后这两个道是相对来说比较快的人在这边来游，然后再这个最那边的，一般来说就会有一个叫呃，团体的带切的，就是那个是。<br>就是上课呀什么的都是用那里，所以基本上来说的话，嗯，大多数的游泳馆就是这样的啊。<br>是没有什么差别，然后。<br>嗯。<br>然后这里面的话，如果还有更多的泳道的话，还分初学者道，呃，就是大家可以在里面那个练习游泳啊？<br>初学者道他有很多地方很有意思，都是分别有这个不同的。<br>呃，这个。<br>要求，比如说初学者用到里面是可以随时停下来的，但是在这个泳道里面你不能连续呃超过25米游泳，就是你可以一边游过去，但是你必须停下来，就，就是，那就是给初学的，呃，可以停，但是不能连续游，然后呢？<br>在往复道和其他的道呢？<br>你是可以连续游，但是中间不可以停，反正就是各自分好，还有一个很不一样的地方，是说它里面对这个所有东西的管理就还是比较严格的，就是首先要一定要戴泳帽，这不用说了啊。<br>其次呢手上是不允许带手环或者是手表，或者是运动耳机的，运动耳机它是一直不能带手环的话，它是要求你必须去搞一个它带有卖的那个，呃，塑料的，呃橡胶的，一个一个罩子，然后把它罩起来。<br>我想这里面最主要是两个原因吧？<br>一个是这个最主要是为了安全，就是说确保你肯定不会在游泳的时候碰到隔壁的人，然后那个可能会影响比较大，然后，嗯，有了这个罩子以后，至少来说它是软的。<br>然后第二个呢？<br>可能也是跟隐私有关，日本人是怕死了有人在里面拍照，所以就是盖起来啊。<br>然后还有一个很有意思的，和国内不太一样的地方，是说他会把，呃，就是大多数的游泳池他都不能连续游，都是一般来说会游到每个小时的55分，然后就哇啦哇啦吧说一阵子，然后大一个大声的哨子滴一吹，所有的人都上岸边罚站。<br>站到一定程度站5分钟，然后等到了整点，然后再哨子滴一声，再重新回去。<br>啊？<br>这个的作用呢？<br>我想最主要可能是一个是。<br>可能他第一是为了安全吧，让你不要长时间在里面游，出什么问题，那还有一个很重要的，就是说每个呃一个小时他会重新安排泳道，有的时候会把这个泳道从原来的往复道变成单道，或者说从原来的 public 道变成这个呃，就是呃有这个。<br>呃，就是呃，变成呃，预约到等等，他突然产生有各种各样的方法来做一调整，还有一个很这个。<br>要去的地方就是他的价格，区内和区外稍微有些差别啊，区内的话是300块钱日元，区外的话是500块钱中阳区外。<br>群内是350，区外是500。<br>好，这就是基本上日本的游泳。<br>嗯，至于他的这个，这个，呃，更衣室的干净呀？<br>然后里面提供的设施的相对来说比较简单，但是很完备啊。<br>还有就是他的哦，还有很有意思的地方，就是他的那个，呃，一般来说是由是有这个钥匙是有锁的啊？<br>然后呢？<br>几乎所有的泳池都不踢咕洗头啊，沐浴液跟洗头膏这些东西都需要自己棋盘，就这些关于日本的游泳。</div>
+      </div>
+    </div>
+  </section>
 
+
+<div class="speed-section">
+  <h2>速度实测</h2>
+  <table class="speed-table">
+    <tr><th>片段</th><th>音频时长</th><th>Apple 云端耗时</th><th>速度倍率</th><th>火山耗时（参考）</th></tr>
+    <tr><td>片段 1</td><td>5m 00s</td><td>15s</td><td>20×</td><td>约 300s（1×）</td></tr>
+    <tr><td>片段 2</td><td>6m 30s</td><td>26s</td><td>15×</td><td>约 390s（1×）</td></tr>
+    <tr><td>片段 3</td><td>11m 16s</td><td>30s</td><td>22×</td><td>约 390s（4 并发≈1/4 时间）</td></tr>
+  </table>
+  <p style="margin-top:12px;font-size:.85rem;color:var(--muted)">Apple 云端速度快的原因：服务器端大批量推理，55s 的片段对云端 GPU 几乎是瞬时任务；火山流式 API 设计为实时 1× 速，但支持多连接并发（实测 4 路并发可压缩到 ~1/4 时间）。</p>
+</div>
 
 <div class="verdict">
   <h2>结论</h2>
-  <p>对于 VoiceDrop 场景（1–15 分钟的中文口述录音），<strong>火山引擎（豆包）的转写质量显著优于 Apple on-device ASR</strong>。</p>
-  <p>Apple SFSpeechRecognizer 的 on-device 中文模型在长录音上内容丢失率高达 85%+，且存在严重错字（如「婚纱」←「轰炸」），不适合作为 VoiceDrop 的转写引擎。</p>
-  <p>火山引擎在字量、准确率、口语词处理、中英混词识别等维度全面领先，VoiceDrop 继续沿用火山 ASR 是正确选择。</p>
+  <p>三方对比后，对 VoiceDrop 场景的推荐：</p>
+  <table>
+    <tr><th>维度</th><th>Apple on-device</th><th>Apple 云端</th><th>火山 bigmodel</th></tr>
+    <tr><td>内容覆盖率</td><td class="low">~13%</td><td class="mid">~79%</td><td class="best">100%</td></tr>
+    <tr><td>技术词 / 中英混词</td><td class="low">差</td><td class="mid">中（有错字）</td><td class="best">好</td></tr>
+    <tr><td>口语词保留</td><td class="low">差</td><td class="mid">中</td><td class="best">好</td></tr>
+    <tr><td>处理速度</td><td class="low">慢（~1× 实时）</td><td class="best">快（15–20×）</td><td class="mid">中（1–4× 实时）</td></tr>
+    <tr><td>隐私（不出境）</td><td class="best">✓ 完全本地</td><td class="low">✗ 走 Apple 服务器</td><td class="low">✗ 走火山服务器</td></tr>
+    <tr><td>适合 VoiceDrop</td><td class="low">不适合</td><td class="mid">可用（备选）</td><td class="best">首选</td></tr>
+  </table>
+  <p style="margin-top:14px">火山仍是首选，主要优势在全覆盖 + 技术词准确率。Apple 云端可作为「火山不可用时」的降级备选，质量已可接受但有技术词错误风险。on-device 完全不适合长录音转写场景。</p>
 </div>
 
 </body>
