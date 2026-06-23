@@ -308,15 +308,17 @@ export async function onRequest(context) {
       if (!obj) continue;
       try {
         const p = JSON.parse(await obj.text());
-        let title = '', count = 0, updatedAt = p.firstSharedAt;
+        // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
+        let title = p.title || '', count = (p.articles || []).length, updatedAt = p.updatedAt || p.firstSharedAt;
         if (p.articleKey) {
           const liveObj = await env.FILES.get(p.articleKey);
           if (liveObj) {
-            const live = JSON.parse(await liveObj.text());
-            const liveArticles = Array.isArray(live.articles) ? live.articles : (live.body ? [live] : []);
-            title = liveArticles[0]?.title ?? '';
-            count = liveArticles.length;
-            updatedAt = live.createdAt ?? updatedAt;
+            try {
+              const live = JSON.parse(await liveObj.text());
+              const liveArticles = Array.isArray(live.articles) ? live.articles : (live.body ? [live] : []);
+              title = liveArticles[0]?.title ?? title;
+              count = liveArticles.length;
+            } catch {}
           }
         }
         posts.push({ shareId: p.shareId, author: p.author, title,
@@ -349,7 +351,9 @@ export async function onRequest(context) {
     const obj = await env.FILES.get(`community/${shareId}.json`);
     if (!obj) return json({ error: 'not found' }, 404);
     let p; try { p = JSON.parse(await obj.text()); } catch { return json({ error: 'bad post' }, 500); }
-    let articles = [], title = '';
+    // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
+    let articles = (p.articles || []).map(a => ({ title: a.title, body: a.body }));
+    let title = p.title || articles[0]?.title || '';
     if (p.articleKey) {
       const liveObj = await env.FILES.get(p.articleKey);
       if (liveObj) {
@@ -358,7 +362,7 @@ export async function onRequest(context) {
           articles = Array.isArray(live.articles)
             ? live.articles.map(a => ({ title: a.title, body: a.body }))
             : (live.body ? [{ title: live.title || '(无题)', body: live.body }] : []);
-          title = articles[0]?.title ?? '';
+          title = articles[0]?.title ?? title;
         } catch {}
       }
     }
