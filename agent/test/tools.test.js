@@ -65,3 +65,21 @@ describe("write_article", () => {
     expect(await rt("write_article", { articles: [] }, CTX(env))).toEqual({ error: "empty_articles" });
   });
 });
+
+describe("style tools", () => {
+  it("read_style returns the CLAUDE.md text, empty when absent", async () => {
+    const env = fakeEnv({ "users/u/CLAUDE.md": "# 我的名字\n王建硕\n\n口语一点" });
+    expect(await rt("read_style", {}, CTX(env))).toEqual({ style: "# 我的名字\n王建硕\n\n口语一点" });
+    const env2 = fakeEnv({});
+    expect(await rt("read_style", {}, CTX(env2))).toEqual({ style: "" });
+  });
+  it("write_style overwrites CLAUDE.md", async () => {
+    const env = fakeEnv({ "users/u/CLAUDE.md": "old" });
+    expect(await rt("write_style", { content: "new style" }, CTX(env))).toEqual({ ok: true });
+    expect(env.FILES._store.get("users/u/CLAUDE.md")).toBe("new style");
+  });
+  it("write_style rejects empty content", async () => {
+    const env = fakeEnv({});
+    expect(await rt("write_style", { content: "" }, CTX(env))).toEqual({ error: "empty_content" });
+  });
+});

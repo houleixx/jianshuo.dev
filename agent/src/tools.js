@@ -77,3 +77,20 @@ register(
     return { ok: true, count: doc.articles.length };
   }
 );
+
+register(
+  { name: "read_style", description: "读取用户的写作文风（CLAUDE.md 的内容）。调整文风前先读出来。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
+  async (_args, { env, scope }) => {
+    const obj = await env.FILES.get(scope + "CLAUDE.md");
+    return { style: obj ? (await obj.text()) : "" };
+  }
+);
+
+register(
+  { name: "write_style", description: "整体覆盖写用户的写作文风（CLAUDE.md）。先 read_style 读出当前内容，改完再整体写回。影响以后所有挖矿和编辑。", input_schema: { type: "object", properties: { content: { type: "string" } }, required: ["content"], additionalProperties: false } },
+  async ({ content }, { env, scope }) => {
+    if (!content || !String(content).trim()) return { error: "empty_content" };
+    await env.FILES.put(scope + "CLAUDE.md", String(content), { httpMetadata: { contentType: "text/markdown" } });
+    return { ok: true };
+  }
+);
