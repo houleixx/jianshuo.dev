@@ -122,8 +122,14 @@ export class ArticleEditor extends Agent {
       const finalDoc = after ? JSON.parse(await after.text()) : doc;
       connection.send(JSON.stringify({ type: "updated", article: finalDoc }));
 
+      const summary = (result.finalText || "").trim();
+      if (summary) {
+        connection.send(JSON.stringify({ type: "reply", text: summary, ok: !result.hadError }));
+      } else if (result.hadError) {
+        connection.send(JSON.stringify({ type: "reply", text: "操作没完成", ok: false }));
+      }
+
       this.sql`INSERT INTO history (instruction, created_at) VALUES (${instruction}, ${Date.now()})`;
-      void result;
     } catch (e) {
       connection.send(JSON.stringify({ type: "error", message: String((e && e.message) || e) }));
     } finally {

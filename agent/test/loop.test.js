@@ -57,3 +57,22 @@ describe("runAgentLoop", () => {
     expect(r.steps).toBe(3);
   });
 });
+
+describe("runAgentLoop hadError", () => {
+  it("flags hadError when a tool returns an error", async () => {
+    const env = fakeEnv({ "users/u/articles/cur.json": JSON.stringify({ articles: [{ title: "C", body: "c" }] }) });
+    // read_article with a bad stem returns {error:"bad_stem"}; then Claude wraps up.
+    const script = [asst(toolUse("read_article", { stem: "../x" })), asst(text("读不了"))];
+    let i = 0;
+    const r = await runAgentLoop({ callClaude: async () => script[i++], ctx: ctx(env), system: "S", userText: "go" });
+    expect(r.hadError).toBe(true);
+  });
+
+  it("hadError is false for an all-success chain", async () => {
+    const env = fakeEnv({ "users/u/articles/cur.json": JSON.stringify({ articles: [{ title: "C", body: "c" }] }) });
+    const script = [asst(toolUse("write_article", { articles: [{ title: "C2", body: "c2" }] })), asst(text("改好了"))];
+    let i = 0;
+    const r = await runAgentLoop({ callClaude: async () => script[i++], ctx: ctx(env), system: "S", userText: "go" });
+    expect(r.hadError).toBe(false);
+  });
+});

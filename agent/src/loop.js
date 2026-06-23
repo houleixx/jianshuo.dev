@@ -14,6 +14,7 @@ export async function runAgentLoop({ callClaude, ctx, system, userText, maxSteps
   const messages = [{ role: "user", content: userText }];
   const calledTools = [];
   let finalText = "";
+  let hadError = false;
   let steps = 0;
   while (steps < maxSteps) {
     const resp = await callClaude({ system, messages, tools: TOOL_DEFS });
@@ -24,9 +25,11 @@ export async function runAgentLoop({ callClaude, ctx, system, userText, maxSteps
     const results = [];
     for (const tu of toolUses) {
       calledTools.push(tu.name);
-      results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(await runTool(tu.name, tu.input, ctx)) });
+      const result = await runTool(tu.name, tu.input, ctx);
+      if (result && result.error) hadError = true;
+      results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) });
     }
     messages.push({ role: "user", content: results });
   }
-  return { calledTools, finalText, steps };
+  return { calledTools, finalText, steps, hadError };
 }
