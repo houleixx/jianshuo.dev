@@ -289,10 +289,17 @@ export async function onRequest(context) {
     if (md) { const m = (await md.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/); if (m && m[1].trim()) author = m[1].trim(); }
     const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
     const communityKey = `community/${shareId}.json`;
+    let replyTo = null;
+    try { const body = await request.clone().json(); replyTo = (body && body.replyTo) || null; } catch {}
     let firstSharedAt = Date.now();
+    let existingReplyTo = null;
     const existing = await env.FILES.get(communityKey);
-    if (existing) { try { firstSharedAt = JSON.parse(await existing.text()).firstSharedAt || firstSharedAt; } catch {} }
-    const post = { schema: 2, shareId, owner: scope, articleKey, author, firstSharedAt };
+    if (existing) {
+      try { const ep = JSON.parse(await existing.text()); firstSharedAt = ep.firstSharedAt || firstSharedAt; existingReplyTo = ep.replyTo || null; } catch {}
+    }
+    if (!replyTo) replyTo = existingReplyTo;
+    const post = { schema: 2, shareId, owner: scope, articleKey, author, firstSharedAt,
+                   ...(replyTo ? { replyTo } : {}) };
     await env.FILES.put(communityKey, JSON.stringify(post), { httpMetadata: { contentType: 'application/json' } });
     return json({ ok: true, shareId });
   }
@@ -322,7 +329,8 @@ export async function onRequest(context) {
           }
         }
         posts.push({ shareId: p.shareId, author: p.author, title,
-                     firstSharedAt: p.firstSharedAt, updatedAt, count, mine: p.owner === scope });
+                     firstSharedAt: p.firstSharedAt, updatedAt, count, mine: p.owner === scope,
+                     ...(p.replyTo ? { replyTo: p.replyTo } : {}) });
       } catch {}
     }
     posts.sort((a, b) => (b.firstSharedAt || 0) - (a.firstSharedAt || 0));
@@ -366,7 +374,8 @@ export async function onRequest(context) {
         } catch {}
       }
     }
-    return json({ shareId: p.shareId, author: p.author, title, articles, firstSharedAt: p.firstSharedAt });
+    return json({ shareId: p.shareId, author: p.author, title, articles,
+                  firstSharedAt: p.firstSharedAt, ...(p.replyTo ? { replyTo: p.replyTo } : {}) });
   }
 
   // Whether the user's own article is currently shared; also returns shareId for unshare.
@@ -380,46 +389,33 @@ export async function onRequest(context) {
   }
 
 
-  // ── Community comments ────────────────────────────────────────────────────
-  // GET  /files/api/community/comments/<shareId>  → list all comments, oldest-first
-  // POST /files/api/community/comment/<shareId>   → post a new text comment
-  //
-  // Stored as community/comments/<shareId>/<commentId>.json — one tiny object
-  // per comment, no fan-out needed (posts are low-traffic).
-
-  if (request.method === 'GET' && action === 'community' && sub2 === 'comments') {
+  // List posts that are responses to `shareId`, oldest-first.
+  if (request.method === 'GET' && action === 'community' && sub2 === 'replies') {
     const shareId = segments[2] || '';
     if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
-    const listed = await env.FILES.list({ prefix: `community/comments/${shareId}/`, limit: 500 });
-    const comments = [];
-    for (const o of listed.objects) {
+    const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
+    const posts = [];
+    for (const o of listed.objects.filter(x => /^community\/[^/]+\.json$/.test(x.key))) {
       const obj = await env.FILES.get(o.key);
       if (!obj) continue;
-      try { comments.push(JSON.parse(await obj.text())); } catch {}
+      try {
+        const p = JSON.parse(await obj.text());
+        if (p.replyTo !== shareId) continue;
+        let title = p.title || '';
+        if (p.articleKey) {
+          const liveObj = await env.FILES.get(p.articleKey);
+          if (liveObj) {
+            try {
+              const live = JSON.parse(await liveObj.text());
+              title = (Array.isArray(live.articles) ? live.articles[0]?.title : live.title) ?? title;
+            } catch {}
+          }
+        }
+        posts.push({ shareId: p.shareId, author: p.author, title, firstSharedAt: p.firstSharedAt, replyTo: p.replyTo });
+      } catch {}
     }
-    comments.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    return json({ comments });
-  }
-
-  if (request.method === 'POST' && action === 'community' && sub2 === 'comment') {
-    if (!scope) return json({ error: 'unauthorized' }, 401);
-    const shareId = segments[2] || '';
-    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
-    const postExists = await env.FILES.head(`community/${shareId}.json`);
-    if (!postExists) return json({ error: 'post not found' }, 404);
-    let text = '';
-    try { const body = await request.json(); text = (body && body.text) || ''; } catch {}
-    text = text.trim();
-    if (!text || text.length > 500) return json({ error: 'bad text' }, 400);
-    let author = '匿名';
-    const md = await env.FILES.get(scope + 'CLAUDE.md');
-    if (md) { const m = (await md.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/); if (m && m[1].trim()) author = m[1].trim(); }
-    const createdAt = Date.now();
-    const commentId = (await sha256hex(`comment:${scope}:${shareId}:${createdAt}`)).slice(0, 16);
-    const comment = { commentId, author, text, createdAt };
-    await env.FILES.put(`community/comments/${shareId}/${commentId}.json`,
-      JSON.stringify(comment), { httpMetadata: { contentType: 'application/json' } });
-    return json({ ok: true, comment });
+    posts.sort((a, b) => (a.firstSharedAt || 0) - (b.firstSharedAt || 0));
+    return json({ posts });
   }
 
   // "加急处理": let a signed-in app user kick the article miner now instead of
