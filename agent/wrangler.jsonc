@@ -30,6 +30,9 @@
   ]
 
   // Secrets (set with `wrangler secret put`):
-  //   SESSION_SECRET  — same value as the Pages project (verifies app JWTs)
+  //   SESSION_SECRET  — same value as the Pages project (verifies app JWTs for
+  //                     /agent/edit + /agent/status; anon tokens work without it)
   //   CLAUDE_API_KEY  — Anthropic API key for the rewrite calls
+  //   FILES_TOKEN     — admin token (= Pages FILES_TOKEN); authenticates mine.py's
+  //                     POST /agent/notify. Missing it → notify 401 (status never updates).
 }
