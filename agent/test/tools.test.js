@@ -83,3 +83,39 @@ describe("style tools", () => {
     expect(await rt("write_style", { content: "" }, CTX(env))).toEqual({ error: "empty_content" });
   });
 });
+
+import { fakeFetch } from "./fakes.js";
+import { afterEach, vi } from "vitest";
+
+afterEach(() => { if (globalThis.fetch && globalThis.fetch.calls) delete globalThis.fetch; });
+
+describe("distribution tools", () => {
+  it("publish_wechat POSTs the scope-relative key with the bearer token", async () => {
+    const env = fakeEnv(seedTwoArticles());
+    globalThis.fetch = fakeFetch({
+      "POST https://jianshuo.dev/files/api/wechat/articles/s2.json": () => ({ ok: true, body: { ok: true, created: 1, updated: 0 } }),
+    });
+    const r = await rt("publish_wechat", {}, CTX(env));
+    expect(r).toEqual({ ok: true, created: 1, updated: 0 });
+    const call = globalThis.fetch.calls[0];
+    expect(call.method).toBe("POST");
+    expect(call.headers.Authorization).toBe("Bearer t");
+  });
+
+  it("share_to_community POSTs the scope-relative key and returns shareId", async () => {
+    const env = fakeEnv(seedTwoArticles());
+    globalThis.fetch = fakeFetch({
+      "POST https://jianshuo.dev/files/api/community/share/articles/s2.json": () => ({ ok: true, body: { ok: true, shareId: "abc123" } }),
+    });
+    const r = await rt("share_to_community", {}, CTX(env));
+    expect(r).toEqual({ ok: true, shareId: "abc123" });
+  });
+
+  it("surfaces a non-ok response body", async () => {
+    const env = fakeEnv(seedTwoArticles());
+    globalThis.fetch = fakeFetch({
+      "POST https://jianshuo.dev/files/api/wechat/articles/s2.json": () => ({ ok: false, status: 409, body: { error: "wechat_not_configured" } }),
+    });
+    expect(await rt("publish_wechat", {}, CTX(env))).toEqual({ error: "wechat_not_configured" });
+  });
+});

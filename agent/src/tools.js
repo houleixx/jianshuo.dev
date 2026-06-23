@@ -94,3 +94,27 @@ register(
     return { ok: true };
   }
 );
+
+function relKey({ articleKey, scope }) {
+  return articleKey.startsWith(scope) ? articleKey.slice(scope.length) : articleKey;
+}
+
+async function postFiles(path, { token, origin }) {
+  const resp = await fetch(`${origin}/files/api/${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = await resp.json().catch(() => null);
+  if (!resp.ok) return body || { error: `http_${resp.status}` };
+  return body;
+}
+
+register(
+  { name: "publish_wechat", description: "把当前这篇文章发布为微信公众号草稿（说了直接发）。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
+  async (_args, ctx) => postFiles(`wechat/${relKey(ctx)}`, ctx)
+);
+
+register(
+  { name: "share_to_community", description: "把当前这篇文章分享到 VoiceDrop 社区（立即分享）。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
+  async (_args, ctx) => postFiles(`community/share/${relKey(ctx)}`, ctx)
+);
