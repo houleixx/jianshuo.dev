@@ -46,6 +46,30 @@ export async function onRequest(context) {
     return json({ session, sub });
   }
 
+  // ---- Public (no auth): WeChat cover assets in assets/wechat-covers/ ----
+  // Non-sensitive cover images, read by the publish relay + the miner to pick a
+  // per-article cover by hash. Restricted to that one prefix, GET only.
+  if (request.method === 'GET' && action === 'asset' && sub2 === 'wechat-covers') {
+    const rel = name.slice('wechat-covers/'.length); // '' => listing
+    if (!rel) {
+      const listed = await env.FILES.list({ prefix: 'assets/wechat-covers/', limit: 1000 });
+      const covers = listed.objects
+        .map((o) => o.key.slice('assets/wechat-covers/'.length))
+        .filter((n) => n && !n.endsWith('/'));
+      return json({ covers });
+    }
+    if (rel.includes('..') || rel.startsWith('/')) return json({ error: 'bad name' }, 400);
+    const obj = await env.FILES.get('assets/wechat-covers/' + rel);
+    if (!obj) return json({ error: 'not found' }, 404);
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': obj.httpMetadata?.contentType || 'image/png',
+        'Content-Length': String(obj.size),
+        'Cache-Control': 'public, max-age=3600',
+      },
+    });
+  }
+
   // ---- Authenticate every other route ----
   const authHeader = request.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '') || url.searchParams.get('token') || '';
@@ -198,7 +222,7 @@ export async function onRequest(context) {
       const rr = await fetch(env.WECHAT_RELAY_URL, {
         method: 'POST',
         headers: { 'X-Relay-Secret': env.WECHAT_RELAY_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appid: wc.appid, secret: wc.secret, thumb_media_id: wc.thumb_media_id || '', article: doc }),
+        body: JSON.stringify({ appid: wc.appid, secret: wc.secret, cover_media_ids: wc.coverMediaIds || {}, article: doc }),
       });
       relay = await rr.json().catch(() => null);
       if (!rr.ok) return json({ error: 'relay_error', detail: relay }, 502);
@@ -212,8 +236,8 @@ export async function onRequest(context) {
 
     // Persist: the article now carries wechatMediaId(s); the cover thumb may be new.
     await env.FILES.put(key, JSON.stringify(relay.article), { httpMetadata: { contentType: 'application/json' } });
-    if (relay.thumb_media_id && relay.thumb_media_id !== wc.thumb_media_id) {
-      wc.thumb_media_id = relay.thumb_media_id;
+    if (relay.cover_media_ids && JSON.stringify(relay.cover_media_ids) !== JSON.stringify(wc.coverMediaIds || {})) {
+      wc.coverMediaIds = relay.cover_media_ids;
       await env.FILES.put(prefix + 'WECHAT.json', JSON.stringify(wc), { httpMetadata: { contentType: 'application/json' } });
     }
     return json({ ok: true, created: relay.created || 0, updated: relay.updated || 0 });
