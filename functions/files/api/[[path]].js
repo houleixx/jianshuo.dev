@@ -42,7 +42,7 @@ export async function onRequest(context) {
     } catch (e) {
       return json({ error: 'invalid apple token', detail: String(e.message || e) }, 401);
     }
-    const session = await mintSession(sub, env.SESSION_SECRET);
+    const session = await mintSession(`users/${sanitizeSeg(sub)}/`, true, env.SESSION_SECRET);
     return json({ session, sub });
   }
 
@@ -76,13 +76,15 @@ export async function onRequest(context) {
 
   let scope = null; // null = unauthorized, '' = admin/full bucket, 'users/<id>/' = user
   let readonly = false;
+  let apple = false; // true only for an Apple-verified session JWT (community write gate)
   if (env.FILES_TOKEN && token === env.FILES_TOKEN) {
     scope = '';
   } else if (token) {
-    const sub = env.SESSION_SECRET ? await verifySession(token, env.SESSION_SECRET) : null;
-    if (sub) {
-      // Signed-in (Sign in with Apple) user.
-      scope = `users/${sanitizeSeg(sub)}/`;
+    const sess = env.SESSION_SECRET ? await verifySession(token, env.SESSION_SECRET) : null;
+    if (sess) {
+      // Signed-in (Sign in with Apple) user — scope is carried in the JWT.
+      scope = sess.scope;
+      apple = sess.apple;
     } else {
       // Try 24 h read-only temp token (issued by GET /token/articles).
       const tempScope = env.SESSION_SECRET ? await verifyTempToken(token, env.SESSION_SECRET) : null;
@@ -446,10 +448,10 @@ async function verifyTempToken(tokenStr, secret) {
   return payload.scope;
 }
 
-async function mintSession(sub, secret) {
+async function mintSession(scope, apple, secret) {
   const now = Math.floor(Date.now() / 1000);
   const h = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const p = b64url(JSON.stringify({ sub, iat: now, exp: now + 365 * 24 * 3600 }));
+  const p = b64url(JSON.stringify({ scope, apple: !!apple, iat: now, exp: now + 365 * 24 * 3600 }));
   const sig = await hmacSign(`${h}.${p}`, secret);
   return `${h}.${p}.${sig}`;
 }
@@ -462,9 +464,9 @@ async function verifySession(tokenStr, secret) {
   if (!timingSafeEqual(s, expected)) return null;
   let payload;
   try { payload = JSON.parse(b64urlToString(p)); } catch { return null; }
-  if (!payload.sub) return null;
+  if (!payload.scope) return null;
   if (payload.exp && payload.exp * 1000 < Date.now()) return null;
-  return payload.sub;
+  return { scope: payload.scope, apple: !!payload.apple };
 }
 
 async function hmacSign(data, secret) {
