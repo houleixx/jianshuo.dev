@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "vitest run"
   },
   "dependencies": {
     "agents": "latest"
   },
   "devDependencies": {
-    "wrangler": "^4"
+    "wrangler": "^4",
+    "vitest": "^2"
   }
 }
