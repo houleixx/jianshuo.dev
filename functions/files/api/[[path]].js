@@ -42,8 +42,26 @@ export async function onRequest(context) {
     } catch (e) {
       return json({ error: 'invalid apple token', detail: String(e.message || e) }, 401);
     }
-    const session = await mintSession(`users/${sanitizeSeg(sub)}/`, true, env.SESSION_SECRET);
-    return json({ session, sub });
+    // Bind (alias) this Apple identity to a data box. If we've seen this sub,
+    // reuse its bound scope; otherwise bind it to the caller's current anon box
+    // (no data moves) or a fresh users/<sub>/ if they have none.
+    const linkKey = `links/apple-${sanitizeSeg(sub)}.json`;
+    let scope = null;
+    const existing = await env.FILES.get(linkKey);
+    if (existing) {
+      try { scope = JSON.parse(await existing.text()).scope; } catch {}
+    }
+    if (!scope) {
+      const callerAnon = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      scope = (await anonScopeFromToken(callerAnon)) || `users/${sanitizeSeg(sub)}/`;
+      const now = Date.now();
+      await env.FILES.put(linkKey, JSON.stringify({ scope, linkedAt: now }),
+        { httpMetadata: { contentType: 'application/json' } });
+      await env.FILES.put(`${scope}ACCOUNT.json`, JSON.stringify({ appleSub: sub, linkedAt: now }),
+        { httpMetadata: { contentType: 'application/json' } });
+    }
+    const session = await mintSession(scope, true, env.SESSION_SECRET);
+    return json({ session, scope });
   }
 
   // ---- Public (no auth): WeChat cover assets in assets/wechat-covers/ ----
@@ -489,6 +507,13 @@ function sanitizeSeg(s) { return String(s).replace(/[^A-Za-z0-9._-]/g, '_'); }
 async function sha256hex(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// The users/anon-<hash>/ scope an anon token maps to (mirrors the inline anon logic).
+async function anonScopeFromToken(token) {
+  if (!token || !token.startsWith('anon_') || token.length < 20) return null;
+  const id = (await sha256hex(token)).slice(0, 32);
+  return `users/anon-${id}/`;
 }
 
 function timingSafeEqual(a, b) {
