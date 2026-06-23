@@ -85,9 +85,9 @@ describe("style tools", () => {
 });
 
 import { fakeFetch } from "./fakes.js";
-import { afterEach, vi } from "vitest";
+import { afterEach } from "vitest";
 
-afterEach(() => { if (globalThis.fetch && globalThis.fetch.calls) delete globalThis.fetch; });
+afterEach(() => { delete globalThis.fetch; });
 
 describe("distribution tools", () => {
   it("publish_wechat POSTs the scope-relative key with the bearer token", async () => {
@@ -109,6 +109,8 @@ describe("distribution tools", () => {
     });
     const r = await rt("share_to_community", {}, CTX(env));
     expect(r).toEqual({ ok: true, shareId: "abc123" });
+    const call = globalThis.fetch.calls[0];
+    expect(call.headers.Authorization).toBe("Bearer t");
   });
 
   it("surfaces a non-ok response body", async () => {

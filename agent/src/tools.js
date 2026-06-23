@@ -96,11 +96,12 @@ register(
 );
 
 function relKey({ articleKey, scope }) {
-  return articleKey.startsWith(scope) ? articleKey.slice(scope.length) : articleKey;
+  if (!articleKey.startsWith(scope)) throw new Error("bad_scope");
+  return articleKey.slice(scope.length);
 }
 
 async function postFiles(path, { token, origin }) {
-  const resp = await fetch(`${origin}/files/api/${path}`, {
+  const resp = await globalThis.fetch(`${origin}/files/api/${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
