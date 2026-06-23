@@ -270,6 +270,7 @@ export async function onRequest(context) {
   // and firstSharedAt is preserved for stable newest-first ordering.
   if (request.method === 'POST' && action === 'community' && sub2 === 'share') {
     if (!scope) return json({ error: 'admin cannot share' }, 403);
+    if (!apple) return json({ error: 'needs_apple_signin' }, 403);
     if (!env.SESSION_SECRET) return json({ error: 'server misconfigured' }, 500);
     const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
     if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) {
@@ -321,6 +322,7 @@ export async function onRequest(context) {
   // Un-share (delete) a community post — owner only.
   if (request.method === 'POST' && action === 'community' && sub2 === 'unshare') {
     if (!scope) return json({ error: 'unauthorized' }, 403);
+    if (!apple) return json({ error: 'needs_apple_signin' }, 403);
     const shareId = segments[2] || '';
     if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
     const key = `community/${shareId}.json`;
