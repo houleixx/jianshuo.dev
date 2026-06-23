@@ -15,27 +15,10 @@
 // from raw client input.
 
 import { Agent, getAgentByName } from "agents";
+import { runAgentLoop } from "./loop.js";
+import { TOOL_DEFS } from "./tools.js";
 
 const MODEL = "claude-sonnet-4-6";
-
-// Structured-outputs schema — constrains the reply to valid JSON so a large
-// prose-heavy CLAUDE.md can't drift the model off clean JSON. GA on sonnet-4-6.
-const ARTICLES_SCHEMA = {
-  type: "object",
-  properties: {
-    articles: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: { title: { type: "string" }, body: { type: "string" } },
-        required: ["title", "body"],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: ["articles"],
-  additionalProperties: false,
-};
 
 // Owner-voice DNA — reused from mining/mine.py SYSTEM, reframed for REVISION.
 const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面给你：你这段录音的原始口述转写（事实来源）、当前的全部文章、以及历次修改要求。按「这次的修改要求」改写全部文章——可以改写、合并、拆分、增删某一篇。
@@ -55,6 +38,16 @@ const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面
 - 中英文之间留一个空格（盘古之白）。
 
 只输出一个 JSON 对象：{"articles": [{"title": "标题", "body": "正文 markdown"}, ...]}，不要输出任何其它文字。`;
+
+const SYSTEM = `你在用语音帮用户编辑他自己的公众号文章。你有一组工具，按用户这次的语音指令决定怎么做：
+- 改写当前这篇：直接调 write_article，传入改写后的完整文章数组。
+- 合并 / 参考其它文章：先 list_articles 看有哪些，再 read_article 读出来，融合后用 write_article 写回当前这一篇（只能写当前篇，其它篇只读）。
+- 发公众号：调 publish_wechat。分享到社区：调 share_to_community。
+- 调整文风：先 read_style 读出当前 CLAUDE.md，改完用 write_style 整体写回。
+默认就是「改写当前这篇」。做完简短说一句结果即可。
+
+写文章时遵守下面的语气 DNA：
+${REVISE_SYSTEM}`;
 
 // ---------------------------------------------------------------------------
 // The Durable Object: one instance per (user, article).
@@ -77,12 +70,11 @@ export class ArticleEditor extends Agent {
   onConnect(connection, ctx) {
     const key = ctx.request.headers.get("x-vd-article-key");
     const scope = ctx.request.headers.get("x-vd-scope");
-    if (key && scope) {
-      this.sql`INSERT INTO config (k, v) VALUES ('articleKey', ${key})
-               ON CONFLICT(k) DO UPDATE SET v = excluded.v`;
-      this.sql`INSERT INTO config (k, v) VALUES ('scope', ${scope})
-               ON CONFLICT(k) DO UPDATE SET v = excluded.v`;
-    }
+    const token = (ctx.request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    const set = (k, v) => { if (v) this.sql`INSERT INTO config (k, v) VALUES (${k}, ${v}) ON CONFLICT(k) DO UPDATE SET v = excluded.v`; };
+    set("articleKey", key);
+    set("scope", scope);
+    set("token", token);
   }
 
   _config() {
@@ -94,143 +86,66 @@ export class ArticleEditor extends Agent {
 
   async onMessage(connection, message) {
     let msg;
-    try { msg = JSON.parse(typeof message === "string" ? message : ""); }
-    catch { return; }
+    try { msg = JSON.parse(typeof message === "string" ? message : ""); } catch { return; }
     if (!msg || msg.type !== "instruct") return;
     const instruction = String(msg.text || "").trim();
-    if (!instruction) {
-      connection.send(JSON.stringify({ type: "error", message: "空指令" }));
-      return;
-    }
-    if (this._busy) {
-      connection.send(JSON.stringify({ type: "error", message: "正在修改，请稍候" }));
-      return;
-    }
+    if (!instruction) { connection.send(JSON.stringify({ type: "error", message: "空指令" })); return; }
+    if (this._busy) { connection.send(JSON.stringify({ type: "error", message: "正在修改，请稍候" })); return; }
     this._busy = true;
     connection.send(JSON.stringify({ type: "status", state: "working" }));
     try {
-      const doc = await this._rewrite(instruction);
-      connection.send(JSON.stringify({ type: "updated", article: doc }));
+      const { articleKey, scope, token } = this._config();
+      if (!articleKey) throw new Error("会话未初始化");
+      const obj = await this.env.FILES.get(articleKey);
+      if (!obj) throw new Error("文章不存在");
+      const doc = JSON.parse(await obj.text());
+      const articles = Array.isArray(doc.articles) && doc.articles.length
+        ? doc.articles : (doc.body ? [{ title: doc.title || "(无题)", body: doc.body }] : []);
+
+      const userText = [
+        "当前文章（你正在编辑这一篇）：",
+        JSON.stringify({ articles: articles.map((a) => ({ title: a.title, body: a.body })) }, null, 2),
+        "",
+        "原始口述转写（事实来源，只能用这里出现的事实，不可编造）：",
+        doc.transcript || "（无）",
+        "",
+        "这次的语音指令：",
+        instruction,
+      ].join("\n");
+
+      const ctx = { env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev" };
+      const result = await runAgentLoop({ callClaude: (p) => this._callClaude(p), ctx, system: SYSTEM, userText });
+
+      // Always push the (possibly unchanged) current doc so the app reloads and
+      // the in-flight queue item resolves — works for edit, merge, AND action-only turns.
+      const after = await this.env.FILES.get(articleKey);
+      const finalDoc = after ? JSON.parse(await after.text()) : doc;
+      connection.send(JSON.stringify({ type: "updated", article: finalDoc }));
+
+      this.sql`INSERT INTO history (instruction, created_at) VALUES (${instruction}, ${Date.now()})`;
+      void result;
     } catch (e) {
-      connection.send(JSON.stringify({ type: "error", message: String(e && e.message || e) }));
+      connection.send(JSON.stringify({ type: "error", message: String((e && e.message) || e) }));
     } finally {
       this._busy = false;
     }
   }
 
-  async _rewrite(instruction) {
-    const { articleKey, scope } = this._config();
-    if (!articleKey) throw new Error("会话未初始化");
-
-    const obj = await this.env.FILES.get(articleKey);
-    if (!obj) throw new Error("文章不存在");
-    const doc = JSON.parse(await obj.text());
-
-    // v1 fallback: a single title/body doc.
-    let articles = Array.isArray(doc.articles) ? doc.articles : null;
-    if (!articles || !articles.length) {
-      if (doc.body) articles = [{ title: doc.title || "(无题)", body: doc.body }];
-      else throw new Error("文章没有正文");
-    }
-
-    const styleObj = await this.env.FILES.get(scope + "CLAUDE.md");
-    const style = styleObj ? (await styleObj.text()).trim() : "";
-
-    const past = this.sql`SELECT instruction FROM history ORDER BY id ASC LIMIT 12`;
-    const pastList = past.map((r, i) => `${i + 1}. ${r.instruction}`).join("\n") || "（无）";
-
-    const user = [
-      "原始口述转写（事实来源，只能用这里出现的事实，不可编造）：",
-      doc.transcript || "（无）",
-      "",
-      "当前全部文章（JSON）：",
-      JSON.stringify({ articles: articles.map((a) => ({ title: a.title, body: a.body })) }, null, 2),
-      "",
-      "历次修改要求（从旧到新，供参考）：",
-      pastList,
-      "",
-      "这次的修改要求：",
-      instruction,
-      "",
-      '按这次要求改写全部文章，只输出 {"articles":[{"title","body"}]}。',
-    ].join("\n");
-
-    const revised = await this._callClaude(style, user);
-
-    // Merge back, preserving the schema and per-article WeChat draft ids by
-    // index (drop ids whose index no longer exists).
-    const merged = revised.map((a, i) => {
-      const out = { title: a.title, body: a.body };
-      const prev = articles[i];
-      if (prev && prev.wechatMediaId) out.wechatMediaId = prev.wechatMediaId;
-      return out;
+  // One Anthropic Messages call WITH tools. Returns the raw response JSON so the
+  // loop can read content blocks (text + tool_use).
+  async _callClaude({ system, messages, tools }) {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": this.env.CLAUDE_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: MODEL, max_tokens: 8000, system, messages, tools, tool_choice: { type: "auto" } }),
     });
-    doc.articles = merged;
-    doc.model = MODEL;
-    delete doc.title; delete doc.body;   // collapse any v1 remnants into v2
-
-    await this.env.FILES.put(articleKey, JSON.stringify(doc), {
-      httpMetadata: { contentType: "application/json" },
-    });
-
-    this.sql`INSERT INTO history (instruction, created_at) VALUES (${instruction}, ${Date.now()})`;
-    return doc;
+    if (!resp.ok) throw new Error(`Claude HTTP ${resp.status}: ${(await resp.text()).slice(0, 160)}`);
+    return resp.json();
   }
-
-  async _callClaude(style, userContent) {
-    const system = style ? `${REVISE_SYSTEM}\n\n---\n\n${style}` : REVISE_SYSTEM;
-    const payload = {
-      model: MODEL,
-      max_tokens: 8000,
-      system,
-      messages: [{ role: "user", content: userContent }],
-      output_config: { format: { type: "json_schema", schema: ARTICLES_SCHEMA } },
-    };
-    let articles = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": this.env.CLAUDE_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!resp.ok) throw new Error(`Claude HTTP ${resp.status}: ${(await resp.text()).slice(0, 120)}`);
-      const data = await resp.json();
-      const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-      articles = articlesFrom(text);
-      if (articles) break;
-    }
-    if (!articles) throw new Error("改写结果无法解析");
-    if (!articles.length) throw new Error("改写结果为空");
-    return articles;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// LLM reply parsing — ported from mine.py _parse_llm_json / _articles_from.
-// ---------------------------------------------------------------------------
-function parseLLMJson(text) {
-  let t = (text || "").trim();
-  if (t.startsWith("```")) {
-    t = t.replace(/^```/, "").replace(/```$/, "").trim();
-    if (t.slice(0, 4).toLowerCase() === "json") t = t.slice(4).trimStart();
-  }
-  const i = t.indexOf("{"), j = t.lastIndexOf("}");
-  if (i !== -1 && j > i) t = t.slice(i, j + 1);
-  return JSON.parse(t);
-}
-
-function articlesFrom(text) {
-  let obj;
-  try { obj = parseLLMJson(text); } catch { return null; }
-  const arts = Array.isArray(obj) ? obj : (obj && obj.articles);
-  if (!Array.isArray(arts)) return [];
-  return arts
-    .filter((a) => a && typeof a === "object" && String(a.body || "").trim())
-    .map((a) => ({ title: String(a.title || "(无题)").trim(), body: String(a.body).trim() }));
 }
 
 // ---------------------------------------------------------------------------
