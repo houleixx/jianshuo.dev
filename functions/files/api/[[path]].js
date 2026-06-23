@@ -263,14 +263,16 @@ export async function onRequest(context) {
     return json({ ok: true, created: relay.created || 0, updated: relay.updated || 0 });
   }
 
-  // ── Community: a shared, cross-user space of article snapshots ────────────
-  // Share (or re-share) one of the user's own articles to the community. The
-  // snapshot is a COPY — later edits don't change it until re-shared. shareId is
-  // derived from the article key so re-sharing updates the same post in place,
-  // and firstSharedAt is preserved for stable newest-first ordering.
+  // ── Community: live-linked cross-user article space ─────────────────────
+  // Posts are schema-2 pointers: {schema:2, shareId, owner, articleKey, author,
+  // firstSharedAt}. Content is always read from the live article — edits to the
+  // source article are immediately visible in the community.
+
+  // Share (or re-share) one of the user's own articles. Writes a schema-2 pointer
+  // with no content copy. shareId is HMAC-derived from the article key so re-sharing
+  // updates the same post in place; firstSharedAt is preserved.
   if (request.method === 'POST' && action === 'community' && sub2 === 'share') {
     if (!scope) return json({ error: 'admin cannot share' }, 403);
-    // if (!apple) return json({ error: 'needs_apple_signin' }, 403); // temp: allow anon community posts
     if (!env.SESSION_SECRET) return json({ error: 'server misconfigured' }, 500);
     const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
     if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) {
@@ -280,8 +282,7 @@ export async function onRequest(context) {
     if (!obj) return json({ error: 'article not found' }, 404);
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return json({ error: 'bad article' }, 400); }
     const articles = (Array.isArray(doc.articles) && doc.articles.length)
-      ? doc.articles
-      : (doc.body ? [{ title: doc.title || '(无题)', body: doc.body }] : []);
+      ? doc.articles : (doc.body ? [doc] : []);
     if (!articles.length) return json({ error: 'empty article' }, 400);
     let author = '匿名';
     const md = await env.FILES.get(scope + 'CLAUDE.md');
@@ -291,28 +292,35 @@ export async function onRequest(context) {
     let firstSharedAt = Date.now();
     const existing = await env.FILES.get(communityKey);
     if (existing) { try { firstSharedAt = JSON.parse(await existing.text()).firstSharedAt || firstSharedAt; } catch {} }
-    const post = {
-      schema: 1, shareId, owner: scope, author,
-      title: articles[0].title,
-      articles: articles.map((a) => ({ title: a.title, body: a.body })),
-      firstSharedAt, updatedAt: Date.now(),
-    };
+    const post = { schema: 2, shareId, owner: scope, articleKey, author, firstSharedAt };
     await env.FILES.put(communityKey, JSON.stringify(post), { httpMetadata: { contentType: 'application/json' } });
     return json({ ok: true, shareId });
   }
 
   // List community posts (metadata only), newest-first by first-share time.
+  // Reads the live article for each schema-2 post to get current title and count.
   if (request.method === 'GET' && action === 'community' && sub2 === 'list') {
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
     const posts = [];
-    for (const o of listed.objects.slice(0, 200)) {
+    const postObjects = listed.objects.filter(o => /^community\/[^/]+\.json$/.test(o.key));
+    for (const o of postObjects.slice(0, 200)) {
       const obj = await env.FILES.get(o.key);
       if (!obj) continue;
       try {
         const p = JSON.parse(await obj.text());
-        posts.push({ shareId: p.shareId, author: p.author, title: p.title,
-                     firstSharedAt: p.firstSharedAt, updatedAt: p.updatedAt,
-                     count: (p.articles || []).length, mine: p.owner === scope });
+        let title = '', count = 0, updatedAt = p.firstSharedAt;
+        if (p.articleKey) {
+          const liveObj = await env.FILES.get(p.articleKey);
+          if (liveObj) {
+            const live = JSON.parse(await liveObj.text());
+            const liveArticles = Array.isArray(live.articles) ? live.articles : (live.body ? [live] : []);
+            title = liveArticles[0]?.title ?? '';
+            count = liveArticles.length;
+            updatedAt = live.createdAt ?? updatedAt;
+          }
+        }
+        posts.push({ shareId: p.shareId, author: p.author, title,
+                     firstSharedAt: p.firstSharedAt, updatedAt, count, mine: p.owner === scope });
       } catch {}
     }
     posts.sort((a, b) => (b.firstSharedAt || 0) - (a.firstSharedAt || 0));
@@ -322,12 +330,11 @@ export async function onRequest(context) {
   // Un-share (delete) a community post — owner only.
   if (request.method === 'POST' && action === 'community' && sub2 === 'unshare') {
     if (!scope) return json({ error: 'unauthorized' }, 403);
-    // if (!apple) return json({ error: 'needs_apple_signin' }, 403); // temp: allow anon community posts
     const shareId = segments[2] || '';
     if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
     const key = `community/${shareId}.json`;
     const obj = await env.FILES.get(key);
-    if (!obj) return json({ ok: true });                 // already gone
+    if (!obj) return json({ ok: true });
     let owner = null;
     try { owner = JSON.parse(await obj.text()).owner; } catch {}
     if (owner !== scope) return json({ error: 'not owner' }, 403);
@@ -335,25 +342,39 @@ export async function onRequest(context) {
     return json({ ok: true });
   }
 
-  // Get one community post (full snapshot).
+  // Get one community post — reads the live article and merges with pointer metadata.
   if (request.method === 'GET' && action === 'community' && sub2 === 'get') {
     const shareId = segments[2] || '';
     if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
     const obj = await env.FILES.get(`community/${shareId}.json`);
     if (!obj) return json({ error: 'not found' }, 404);
-    return new Response(obj.body, { headers: { 'Content-Type': 'application/json' } });
+    let p; try { p = JSON.parse(await obj.text()); } catch { return json({ error: 'bad post' }, 500); }
+    let articles = [], title = '';
+    if (p.articleKey) {
+      const liveObj = await env.FILES.get(p.articleKey);
+      if (liveObj) {
+        try {
+          const live = JSON.parse(await liveObj.text());
+          articles = Array.isArray(live.articles)
+            ? live.articles.map(a => ({ title: a.title, body: a.body }))
+            : (live.body ? [{ title: live.title || '(无题)', body: live.body }] : []);
+          title = articles[0]?.title ?? '';
+        } catch {}
+      }
+    }
+    return json({ shareId: p.shareId, author: p.author, title, articles, firstSharedAt: p.firstSharedAt });
   }
 
-  // Whether the user's own article is currently shared to the community (for the
-  // 分享 / 更新 label on the article ⋯ menu).
+  // Whether the user's own article is currently shared; also returns shareId for unshare.
   if (request.method === 'GET' && action === 'community' && sub2 === 'shared') {
     if (!scope || !env.SESSION_SECRET) return json({ shared: false });
     const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
     if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) return json({ shared: false });
     const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
     const exists = await env.FILES.head(`community/${shareId}.json`);
-    return json({ shared: !!exists });
+    return json({ shared: !!exists, shareId: exists ? shareId : undefined });
   }
+
 
   // ── Community comments ────────────────────────────────────────────────────
   // GET  /files/api/community/comments/<shareId>  → list all comments, oldest-first
