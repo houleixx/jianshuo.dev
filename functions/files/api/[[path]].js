@@ -270,7 +270,7 @@ export async function onRequest(context) {
   // and firstSharedAt is preserved for stable newest-first ordering.
   if (request.method === 'POST' && action === 'community' && sub2 === 'share') {
     if (!scope) return json({ error: 'admin cannot share' }, 403);
-    if (!apple) return json({ error: 'needs_apple_signin' }, 403);
+    // if (!apple) return json({ error: 'needs_apple_signin' }, 403); // temp: allow anon community posts
     if (!env.SESSION_SECRET) return json({ error: 'server misconfigured' }, 500);
     const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
     if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) {
@@ -322,7 +322,7 @@ export async function onRequest(context) {
   // Un-share (delete) a community post — owner only.
   if (request.method === 'POST' && action === 'community' && sub2 === 'unshare') {
     if (!scope) return json({ error: 'unauthorized' }, 403);
-    if (!apple) return json({ error: 'needs_apple_signin' }, 403);
+    // if (!apple) return json({ error: 'needs_apple_signin' }, 403); // temp: allow anon community posts
     const shareId = segments[2] || '';
     if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
     const key = `community/${shareId}.json`;
@@ -353,6 +353,48 @@ export async function onRequest(context) {
     const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
     const exists = await env.FILES.head(`community/${shareId}.json`);
     return json({ shared: !!exists });
+  }
+
+  // ── Community comments ────────────────────────────────────────────────────
+  // GET  /files/api/community/comments/<shareId>  → list all comments, oldest-first
+  // POST /files/api/community/comment/<shareId>   → post a new text comment
+  //
+  // Stored as community/comments/<shareId>/<commentId>.json — one tiny object
+  // per comment, no fan-out needed (posts are low-traffic).
+
+  if (request.method === 'GET' && action === 'community' && sub2 === 'comments') {
+    const shareId = segments[2] || '';
+    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
+    const listed = await env.FILES.list({ prefix: `community/comments/${shareId}/`, limit: 500 });
+    const comments = [];
+    for (const o of listed.objects) {
+      const obj = await env.FILES.get(o.key);
+      if (!obj) continue;
+      try { comments.push(JSON.parse(await obj.text())); } catch {}
+    }
+    comments.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    return json({ comments });
+  }
+
+  if (request.method === 'POST' && action === 'community' && sub2 === 'comment') {
+    if (!scope) return json({ error: 'unauthorized' }, 401);
+    const shareId = segments[2] || '';
+    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
+    const postExists = await env.FILES.head(`community/${shareId}.json`);
+    if (!postExists) return json({ error: 'post not found' }, 404);
+    let text = '';
+    try { const body = await request.json(); text = (body && body.text) || ''; } catch {}
+    text = text.trim();
+    if (!text || text.length > 500) return json({ error: 'bad text' }, 400);
+    let author = '匿名';
+    const md = await env.FILES.get(scope + 'CLAUDE.md');
+    if (md) { const m = (await md.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/); if (m && m[1].trim()) author = m[1].trim(); }
+    const createdAt = Date.now();
+    const commentId = (await sha256hex(`comment:${scope}:${shareId}:${createdAt}`)).slice(0, 16);
+    const comment = { commentId, author, text, createdAt };
+    await env.FILES.put(`community/comments/${shareId}/${commentId}.json`,
+      JSON.stringify(comment), { httpMetadata: { contentType: 'application/json' } });
+    return json({ ok: true, comment });
   }
 
   // "加急处理": let a signed-in app user kick the article miner now instead of
