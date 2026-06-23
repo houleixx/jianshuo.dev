@@ -348,8 +348,8 @@ async function resolveScope(token, env) {
   if (!token) return null;
   if (env.FILES_TOKEN && token === env.FILES_TOKEN) return null; // admin has no single scope here
   if (env.SESSION_SECRET) {
-    const sub = await verifySession(token, env.SESSION_SECRET);
-    if (sub) return `users/${sanitizeSeg(sub)}/`;
+    const sess = await verifySession(token, env.SESSION_SECRET);
+    if (sess) return sess.scope;
   }
   if (token.startsWith("anon_") && token.length >= 20) {
     const id = (await sha256hex(token)).slice(0, 32);
@@ -369,9 +369,9 @@ async function verifySession(tokenStr, secret) {
   if (!timingSafeEqual(s, expected)) return null;
   let payload;
   try { payload = JSON.parse(b64urlToString(p)); } catch { return null; }
-  if (!payload.sub) return null;
+  if (!payload.scope) return null;
   if (payload.exp && payload.exp * 1000 < Date.now()) return null;
-  return payload.sub;
+  return { scope: payload.scope, apple: !!payload.apple };
 }
 
 async function hmacSign(data, secret) {
