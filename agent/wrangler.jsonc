@@ -19,12 +19,14 @@
 
   "durable_objects": {
     "bindings": [
-      { "name": "ArticleEditor", "class_name": "ArticleEditor" }
+      { "name": "ArticleEditor", "class_name": "ArticleEditor" },
+      { "name": "StatusHub", "class_name": "StatusHub" }
     ]
   },
 
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["ArticleEditor"] }
+    { "tag": "v1", "new_sqlite_classes": ["ArticleEditor"] },
+    { "tag": "v2", "new_sqlite_classes": ["StatusHub"] }
   ]
 
   // Secrets (set with `wrangler secret put`):

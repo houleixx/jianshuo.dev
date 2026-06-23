@@ -234,33 +234,111 @@ function articlesFrom(text) {
 }
 
 // ---------------------------------------------------------------------------
+// StatusHub: per-user Durable Object that brokers real-time status pushes.
+// The app connects via WebSocket (/agent/status); mine.py POSTs to
+// /agent/notify (authenticated with FILES_TOKEN) when a recording changes
+// state. The hub broadcasts to all connected app sockets for that user.
+// Uses WebSocket Hibernation so idle hubs cost nothing.
+// ---------------------------------------------------------------------------
+export class StatusHub {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    if (request.headers.get("Upgrade") === "websocket") {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.state.acceptWebSocket(server);
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
+    if (request.method === "POST" && url.pathname.endsWith("/broadcast")) {
+      const body = await request.json();
+      const msg = JSON.stringify({ type: "status_update", stem: body.stem, status: body.status });
+      for (const ws of this.state.getWebSockets()) {
+        try { ws.send(msg); } catch (_) {}
+      }
+      return new Response("ok");
+    }
+
+    return new Response("not found", { status: 404 });
+  }
+
+  webSocketMessage(_ws, _msg) {}
+  webSocketClose(_ws) {}
+  webSocketError(_ws) {}
+}
+
+// ---------------------------------------------------------------------------
 // Worker entry: authenticate, then route the WS upgrade to the right DO.
 // ---------------------------------------------------------------------------
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname !== "/agent/edit") return new Response("not found", { status: 404 });
-    if (request.headers.get("Upgrade") !== "websocket") {
-      return new Response("expected websocket", { status: 426 });
+
+    // ── /agent/edit ── existing article-editing agent ──────────────────────
+    if (url.pathname === "/agent/edit") {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("expected websocket", { status: 426 });
+      }
+      const auth = request.headers.get("Authorization") || "";
+      const token = auth.replace(/^Bearer\s+/i, "");
+      const scope = await resolveScope(token, env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
+
+      const stem = url.searchParams.get("stem") || "";
+      if (!stem || stem.startsWith("/") || stem.split("/").some((s) => s === ".." || s === "")) {
+        return new Response("bad stem", { status: 400 });
+      }
+      const articleKey = `${scope}articles/${stem}.json`;
+      const name = sanitizeName(scope + stem);
+
+      const agent = await getAgentByName(env.ArticleEditor, name);
+      const fwd = new Request(request);
+      fwd.headers.set("x-vd-article-key", articleKey);
+      fwd.headers.set("x-vd-scope", scope);
+      return agent.fetch(fwd);
     }
 
-    const auth = request.headers.get("Authorization") || "";
-    const token = auth.replace(/^Bearer\s+/i, "");
-    const scope = await resolveScope(token, env);
-    if (!scope) return new Response("unauthorized", { status: 401 });
+    // ── /agent/status ── app WebSocket for real-time status updates ─────────
+    if (url.pathname === "/agent/status") {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("expected websocket", { status: 426 });
+      }
+      const auth = request.headers.get("Authorization") || "";
+      const token = auth.replace(/^Bearer\s+/i, "");
+      const scope = await resolveScope(token, env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
 
-    const stem = url.searchParams.get("stem") || "";
-    if (!stem || stem.startsWith("/") || stem.split("/").some((s) => s === ".." || s === "")) {
-      return new Response("bad stem", { status: 400 });
+      const id = env.StatusHub.idFromName("status:" + scope);
+      const stub = env.StatusHub.get(id);
+      return stub.fetch(request);
     }
-    const articleKey = `${scope}articles/${stem}.json`;
-    const name = sanitizeName(scope + stem);
 
-    const agent = await getAgentByName(env.ArticleEditor, name);
-    const fwd = new Request(request);
-    fwd.headers.set("x-vd-article-key", articleKey);
-    fwd.headers.set("x-vd-scope", scope);
-    return agent.fetch(fwd);
+    // ── /agent/notify ── mine.py notifies about processing state ───────────
+    if (url.pathname === "/agent/notify") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const adminToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!env.FILES_TOKEN || adminToken !== env.FILES_TOKEN) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const { user_scope, stem, status } = await request.json();
+      if (!user_scope || !stem || !status) return new Response("bad request", { status: 400 });
+
+      const id = env.StatusHub.idFromName("status:" + user_scope);
+      const stub = env.StatusHub.get(id);
+      return stub.fetch(new Request("https://status-hub/broadcast", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stem, status }),
+      }));
+    }
+
+    return new Response("not found", { status: 404 });
   },
 };
 
