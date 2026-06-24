@@ -121,7 +121,7 @@ export async function onRequest(context) {
   }
   if (scope === null) return json({ error: 'unauthorized' }, 401);
   // Read-only tokens may only list and download.
-  if (readonly && !(request.method === 'GET' && (action === 'list' || action === 'download'))) {
+  if (readonly && !((request.method === 'GET' || request.method === 'HEAD') && (action === 'list' || action === 'download'))) {
     return json({ error: 'read-only token' }, 403);
   }
 
@@ -139,6 +139,34 @@ export async function onRequest(context) {
     const t = await mintTempToken(scope, env.SESSION_SECRET);
     const pageURL = `${url.origin}/voicedrop/articles?t=${encodeURIComponent(t)}`;
     return json({ token: t, url: pageURL, expires_in: 86400 });
+  }
+
+  // ── Admin-only: LLM interaction log (voicedrop/admin/llm.html) ──────────
+  // Records written by mine.py + the agent worker live under llmlogs/<date>/.
+  // `dates` lists the day-folders (newest first); `list?date=YYYY-MM-DD` lists
+  // that day's entries (reversed → newest first within the page, ?cursor= pages
+  // a very busy day). Reading a single record reuses GET /download/<key>.
+  if (request.method === 'GET' && action === 'llmlog') {
+    if (scope !== '') return json({ error: 'admin only' }, 403);
+    if (sub2 === 'dates') {
+      const listed = await env.FILES.list({ prefix: 'llmlogs/', delimiter: '/', limit: 1000 });
+      const dates = (listed.delimitedPrefixes || [])
+        .map((p) => p.slice('llmlogs/'.length).replace(/\/$/, ''))
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+        .sort().reverse();
+      return json({ dates });
+    }
+    if (sub2 === 'list') {
+      const date = url.searchParams.get('date') || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: 'date=YYYY-MM-DD required' }, 400);
+      const cursor = url.searchParams.get('cursor') || undefined;
+      const listed = await env.FILES.list({ prefix: `llmlogs/${date}/`, cursor, limit: 200 });
+      const objects = listed.objects
+        .map((o) => ({ key: o.key, size: o.size, uploaded: o.uploaded }))
+        .reverse();
+      return json({ objects, cursor: listed.truncated ? listed.cursor : null, truncated: !!listed.truncated });
+    }
+    return json({ error: 'unknown llmlog action' }, 404);
   }
 
   if (request.method === 'GET' && action === 'list') {
@@ -171,18 +199,19 @@ export async function onRequest(context) {
     return json({ ok: true, name });
   }
 
-  if (request.method === 'GET' && action === 'download' && name) {
+  if ((request.method === 'GET' || request.method === 'HEAD') && action === 'download' && name) {
     const key = keyFor(name);
     if (!key) return json({ error: 'bad name' }, 400);
-    const object = await env.FILES.get(key);
+    const object = request.method === 'HEAD' ? await env.FILES.head(key) : await env.FILES.get(key);
     if (!object) return json({ error: 'not found' }, 404);
-    return new Response(object.body, {
-      headers: {
-        'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
-        'Content-Length': String(object.size),
-        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name.split('/').pop())}`,
-      },
-    });
+    const headers = {
+      'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+      'Content-Length': String(object.size),
+    };
+    if (request.method === 'GET') {
+      headers['Content-Disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(name.split('/').pop())}`;
+    }
+    return new Response(request.method === 'HEAD' ? null : object.body, { headers });
   }
 
   if (request.method === 'DELETE' && action === 'file' && name) {
