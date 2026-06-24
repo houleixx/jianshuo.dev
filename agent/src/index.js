@@ -20,6 +20,29 @@ import { TOOL_DEFS } from "./tools.js";
 
 const MODEL = "claude-sonnet-4-6";
 
+// ── LLM interaction log ────────────────────────────────────────────────────
+// Every Anthropic call (mine.py + this agent) is recorded to R2 under llmlogs/
+// so the admin console (voicedrop/admin/llm.html) can replay exactly what was
+// sent and received. Admin-only (outside users/). Best-effort: a logging
+// failure must never break an edit. 30-day R2 lifecycle keeps volume bounded.
+function rand6() {
+  return Math.floor(crypto.getRandomValues(new Uint32Array(1))[0] % 1e6)
+    .toString().padStart(6, "0");
+}
+
+async function writeLlmLog(env, rec) {
+  try {
+    const ts = rec.ts || Date.now();
+    const id = `${ts}-${rand6()}`;
+    const date = new Date(ts).toISOString().slice(0, 10); // YYYY-MM-DD
+    const key = `llmlogs/${date}/${id}.json`;
+    const body = JSON.stringify({ id, ts, ...rec });
+    await env.FILES.put(key, body, { httpMetadata: { contentType: "application/json" } });
+  } catch (_) {
+    // swallow — logging must never interrupt the actual work
+  }
+}
+
 // Owner-voice DNA — reused from mining/mine.py SYSTEM, reframed for REVISION.
 const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面给你：你这段录音的原始口述转写（事实来源）、当前的全部文章、以及历次修改要求。按「这次的修改要求」改写全部文章——可以改写、合并、拆分、增删某一篇。
 
@@ -114,7 +137,10 @@ export class ArticleEditor extends Agent {
       ].join("\n");
 
       const ctx = { env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev" };
-      const result = await runAgentLoop({ callClaude: (p) => this._callClaude(p), ctx, system: SYSTEM, userText });
+      const stem = articleKey.replace(/\.json$/, "").split("/articles/").pop();
+      const turnId = `${Date.now()}-${rand6()}`;
+      const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction });
+      const result = await runAgentLoop({ callClaude, ctx, system: SYSTEM, userText });
 
       // Always push the (possibly unchanged) current doc so the app reloads and
       // the in-flight queue item resolves — works for edit, merge, AND action-only turns.
@@ -137,20 +163,50 @@ export class ArticleEditor extends Agent {
     }
   }
 
-  // One Anthropic Messages call WITH tools. Returns the raw response JSON so the
-  // loop can read content blocks (text + tool_use).
-  async _callClaude({ system, messages, tools }) {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": this.env.CLAUDE_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ model: MODEL, max_tokens: 8000, system, messages, tools, tool_choice: { type: "auto" } }),
-    });
-    if (!resp.ok) throw new Error(`Claude HTTP ${resp.status}: ${(await resp.text()).slice(0, 160)}`);
-    return resp.json();
+  // One Anthropic Messages call WITH tools. Returns a result object
+  // {ok, status, json, errorText} (never throws on HTTP/network errors) so the
+  // caller can both log the exchange and decide how to proceed.
+  async _callClaudeRaw(reqBody) {
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": this.env.CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(reqBody),
+      });
+      if (!resp.ok) {
+        return { ok: false, status: resp.status, json: null, errorText: (await resp.text()).slice(0, 2000) };
+      }
+      return { ok: true, status: resp.status, json: await resp.json(), errorText: "" };
+    } catch (e) {
+      return { ok: false, status: 0, json: null, errorText: String((e && e.message) || e) };
+    }
+  }
+
+  // A logging callClaude for runAgentLoop: builds the request body, calls the
+  // API, records one llmlogs/ entry per HTTP call (grouped by turnId), then
+  // returns the response JSON or throws (preserving the loop's prior behavior).
+  _makeLoggedCall({ turnId, scope, stem, instruction }) {
+    let step = 0;
+    return async ({ system, messages, tools }) => {
+      const reqBody = { model: MODEL, max_tokens: 8000, system, messages, tools, tool_choice: { type: "auto" } };
+      const myStep = step++;
+      const ts = Date.now();
+      const r = await this._callClaudeRaw(reqBody);
+      await writeLlmLog(this.env, {
+        ts, source: "agent", user_scope: scope, model: MODEL,
+        latency_ms: Date.now() - ts, http_status: r.status, ok: r.ok,
+        turn_id: turnId, step: myStep, request: reqBody,
+        response: r.ok ? r.json : undefined,
+        error: r.ok ? undefined : r.errorText,
+        meta: { stem, instruction },
+      });
+      if (!r.ok) throw new Error(`Claude HTTP ${r.status}: ${(r.errorText || "").slice(0, 160)}`);
+      return r.json;
+    };
   }
 }
 

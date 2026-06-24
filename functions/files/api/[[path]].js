@@ -19,6 +19,39 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
+// ---------------------------------------------------------------------------
+// Versioned article store — transparent to all callers above this layer.
+// Every write to users/.../articles/...json goes through writeArticleDoc so
+// history is maintained automatically.
+// ---------------------------------------------------------------------------
+const MAX_ARTICLE_HISTORY = 10;
+
+async function readArticleDoc(env, key) {
+  const obj = await env.FILES.get(key);
+  if (!obj) return null;
+  try { return JSON.parse(await obj.text()); } catch { return null; }
+}
+
+async function writeArticleDoc(env, key, newDoc, source = "unknown") {
+  const current = await readArticleDoc(env, key);
+  let version = 1;
+  let history = [];
+  if (current && Array.isArray(current.articles)) {
+    version = (current.version || 0) + 1;
+    const entry = {
+      v: current.version || 1,
+      savedAt: current.updatedAt || current.createdAt || Date.now(),
+      source: current._source || "unknown",
+      articles: current.articles,
+    };
+    history = [entry, ...(current.history || [])].slice(0, MAX_ARTICLE_HISTORY);
+  }
+  const doc = { ...newDoc, version, _source: source, updatedAt: Date.now(), history };
+  await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: 'application/json' } });
+  return doc;
+}
+
+
 export async function onRequest(context) {
   const { request, env, params } = context;
   const segments = Array.isArray(params.path) ? params.path : [params.path || ''];
@@ -192,9 +225,7 @@ export async function onRequest(context) {
     const key = keyFor(name);
     if (!key) return json({ error: 'bad name' }, 400);
     await env.FILES.put(key, request.body, {
-      httpMetadata: {
-        contentType: request.headers.get('Content-Type') || 'application/octet-stream',
-      },
+      httpMetadata: { contentType: request.headers.get('Content-Type') || 'application/octet-stream' },
     });
     // A new recording → kick the miner. Fire-and-forget so the upload returns
     // immediately; the mine.yml `concurrency: mine` group coalesces bursts into
@@ -291,7 +322,7 @@ export async function onRequest(context) {
     }
 
     // Persist: the article now carries wechatMediaId(s); the cover thumb may be new.
-    await env.FILES.put(key, JSON.stringify(relay.article), { httpMetadata: { contentType: 'application/json' } });
+    await writeArticleDoc(env, key, relay.article, 'wechat');
     if (relay.cover_media_ids && JSON.stringify(relay.cover_media_ids) !== JSON.stringify(wc.coverMediaIds || {})) {
       wc.coverMediaIds = relay.cover_media_ids;
       await env.FILES.put(prefix + 'WECHAT.json', JSON.stringify(wc), { httpMetadata: { contentType: 'application/json' } });
@@ -460,6 +491,151 @@ export async function onRequest(context) {
     const r = await dispatchMine(env);
     if (r.ok) return json({ ok: true });
     return json({ error: 'dispatch failed', detail: r.detail }, r.status === 0 ? 500 : 502);
+  }
+
+  // ── Article API ──────────────────────────────────────────────────────────
+  // High-level CRUD for articles. Version control is built in — callers never
+  // touch raw file keys. stem convention:
+  //   user token  → stem = filename only (e.g. "VoiceDrop-xxx")
+  //   admin token → stem = "<sub>/VoiceDrop-xxx" (includes user sub)
+  //
+  // Routes:
+  //   GET    /articles              list articles
+  //   GET    /articles/<stem>       read article
+  //   PUT    /articles/<stem>       write article (versioned)
+  //   DELETE /articles/<stem>       delete article + sidecars
+  //   PUT    /articles/<stem>/srt   write SRT sidecar
+  //   PUT    /articles/<stem>/empty mark as no-speech
+  //   GET    /articles/<stem>/history       version history
+  //   PUT    /articles/<stem>/revert/<v>    revert to version v
+
+  if (action === 'articles') {
+    // Parse stem and optional sub-action from URL segments.
+    // segments = ['articles', ...rest]
+    // For user token: rest = [stem] or [stem, subaction] or [stem, 'revert', v]
+    // For admin token: rest = [sub, stem] or [sub, stem, subaction] or [sub, stem, 'revert', v]
+    const rest = segments.slice(1);
+    let stem, subaction, revertV;
+
+    if (!scope) {
+      // Admin: first segment is <sub>, second is stem.
+      const adminSub = rest[0] || '';
+      stem = rest[1] || '';
+      subaction = rest[2] || '';
+      revertV = rest[3] ? parseInt(rest[3], 10) : null;
+      if (!adminSub || !stem) return json({ error: 'admin must supply <sub>/<stem>' }, 400);
+      // Override scope for this request to the target user's prefix.
+      var articleScope = `users/${adminSub}/`;
+    } else {
+      stem = rest[0] || '';
+      subaction = rest[1] || '';
+      revertV = rest[2] ? parseInt(rest[2], 10) : null;
+      var articleScope = scope;
+    }
+
+    function articleKey(s) {
+      if (!s || s.includes('..') || s.includes('/')) return null;
+      return `${articleScope}articles/${s}.json`;
+    }
+
+    // GET /articles — list
+    if (request.method === 'GET' && !stem) {
+      const prefix = `${articleScope}articles/`;
+      let cursor, allObjects = [];
+      do {
+        const listed = await env.FILES.list({ prefix, limit: 1000, cursor });
+        allObjects.push(...listed.objects);
+        cursor = listed.truncated ? listed.cursor : null;
+      } while (cursor);
+      const articles = [];
+      for (const o of allObjects) {
+        if (!o.key.endsWith('.json')) continue;
+        const s = o.key.slice(prefix.length, -'.json'.length);
+        const obj = await env.FILES.get(o.key);
+        if (!obj) continue;
+        let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
+        articles.push({
+          stem: s,
+          title: doc.articles?.[0]?.title || '(无题)',
+          version: doc.version || 1,
+          createdAt: doc.createdAt || 0,
+          updatedAt: doc.updatedAt || 0,
+          count: (doc.articles || []).length,
+        });
+      }
+      articles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      return json({ articles });
+    }
+
+    const key = articleKey(stem);
+    if (stem && !key) return json({ error: 'bad stem' }, 400);
+
+    // GET /articles/<stem> — read
+    if (request.method === 'GET' && stem && !subaction) {
+      const doc = await readArticleDoc(env, key);
+      if (!doc) return json({ error: 'not found' }, 404);
+      // Strip internal versioning fields from the response.
+      const { history: _h, _source: _s, ...pub } = doc;
+      return json(pub);
+    }
+
+    // GET /articles/<stem>/history — version history
+    if (request.method === 'GET' && subaction === 'history') {
+      const doc = await readArticleDoc(env, key);
+      if (!doc) return json({ error: 'not found' }, 404);
+      const current = { v: doc.version || 1, savedAt: doc.updatedAt || 0, source: doc._source || 'unknown', articles: doc.articles };
+      return json({ history: [current, ...(doc.history || [])] });
+    }
+
+    // PUT /articles/<stem> — write (versioned)
+    if (request.method === 'PUT' && stem && !subaction) {
+      let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+      const source = !scope ? 'mine' : 'agent';
+      const doc = await writeArticleDoc(env, key, body, source);
+      return json({ ok: true, version: doc.version });
+    }
+
+    // PUT /articles/<stem>/srt — write SRT sidecar
+    if (request.method === 'PUT' && subaction === 'srt') {
+      const srtKey = `${articleScope}articles/${stem}.srt`;
+      const text = await request.text();
+      await env.FILES.put(srtKey, text, { httpMetadata: { contentType: 'text/srt; charset=utf-8' } });
+      return json({ ok: true });
+    }
+
+    // PUT /articles/<stem>/empty — mark no-speech
+    if (request.method === 'PUT' && subaction === 'empty') {
+      const emptyKey = `${articleScope}articles/${stem}.empty`;
+      let body; try { body = await request.json(); } catch { body = {}; }
+      await env.FILES.put(emptyKey, JSON.stringify({ status: 'empty', reason: body.reason || 'no-speech' }), { httpMetadata: { contentType: 'application/json' } });
+      return json({ ok: true });
+    }
+
+    // PUT /articles/<stem>/revert/<v> — revert to version v
+    if (request.method === 'PUT' && subaction === 'revert' && revertV) {
+      const doc = await readArticleDoc(env, key);
+      if (!doc) return json({ error: 'not found' }, 404);
+      const current = { v: doc.version || 1, articles: doc.articles };
+      const all = [current, ...(doc.history || [])];
+      const target = all.find((e) => e.v === revertV);
+      if (!target) return json({ error: 'version not found' }, 404);
+      const reverted = { ...doc, articles: target.articles };
+      const saved = await writeArticleDoc(env, key, reverted, 'revert');
+      return json({ ok: true, version: saved.version, revertedTo: revertV });
+    }
+
+    // DELETE /articles/<stem> — delete article + all sidecars
+    if (request.method === 'DELETE' && stem && !subaction) {
+      const prefix = `${articleScope}articles/${stem}`;
+      await Promise.all([
+        env.FILES.delete(`${prefix}.json`),
+        env.FILES.delete(`${prefix}.srt`),
+        env.FILES.delete(`${prefix}.empty`),
+      ]);
+      return json({ ok: true });
+    }
+
+    return json({ error: 'bad request' }, 400);
   }
 
   return json({ error: 'bad request' }, 400);
