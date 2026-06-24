@@ -52,17 +52,32 @@ describe("read_article", () => {
 });
 
 describe("write_article", () => {
-  it("overwrites the CURRENT article and preserves wechatMediaId by index", async () => {
+  it("POSTs to the article API and preserves wechatMediaId by index", async () => {
     const env = fakeEnv(seedTwoArticles());
+    globalThis.fetch = fakeFetch({
+      "PUT https://jianshuo.dev/files/api/articles/s2": () => ({ ok: true, body: { ok: true, version: 2 } }),
+    });
     const r = await rt("write_article", { articles: [{ title: "A2x", body: "b2x" }] }, CTX(env));
     expect(r).toEqual({ ok: true, count: 1 });
-    const doc = JSON.parse(env.FILES._store.get("users/u/articles/s2.json"));
-    expect(doc.articles[0]).toEqual({ title: "A2x", body: "b2x", wechatMediaId: "m2" });
-    expect(doc.transcript).toBe("tx2"); // untouched
+    const call = globalThis.fetch.calls[0];
+    expect(call.method).toBe("PUT");
+    expect(call.url).toBe("https://jianshuo.dev/files/api/articles/s2");
+    expect(call.headers.Authorization).toBe("Bearer t");
+    const sent = JSON.parse(call.body);
+    expect(sent.articles[0]).toEqual({ title: "A2x", body: "b2x", wechatMediaId: "m2" });
+    expect(sent.transcript).toBe("tx2");
   });
-  it("rejects empty articles", async () => {
+  it("rejects empty articles before calling the API", async () => {
     const env = fakeEnv(seedTwoArticles());
     expect(await rt("write_article", { articles: [] }, CTX(env))).toEqual({ error: "empty_articles" });
+  });
+  it("returns upload_failed when the API responds non-ok", async () => {
+    const env = fakeEnv(seedTwoArticles());
+    globalThis.fetch = fakeFetch({
+      "PUT https://jianshuo.dev/files/api/articles/s2": () => ({ ok: false, status: 500, body: {} }),
+    });
+    const r = await rt("write_article", { articles: [{ title: "T", body: "B" }] }, CTX(env));
+    expect(r.error).toMatch(/upload_failed/);
   });
 });
 

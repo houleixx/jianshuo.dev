@@ -19,38 +19,7 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-// ---------------------------------------------------------------------------
-// Versioned article store — transparent to all callers above this layer.
-// Every write to users/.../articles/...json goes through writeArticleDoc so
-// history is maintained automatically.
-// ---------------------------------------------------------------------------
-const MAX_ARTICLE_HISTORY = 10;
-
-async function readArticleDoc(env, key) {
-  const obj = await env.FILES.get(key);
-  if (!obj) return null;
-  try { return JSON.parse(await obj.text()); } catch { return null; }
-}
-
-async function writeArticleDoc(env, key, newDoc, source = "unknown") {
-  const current = await readArticleDoc(env, key);
-  let version = 1;
-  let history = [];
-  if (current && Array.isArray(current.articles)) {
-    version = (current.version || 0) + 1;
-    const entry = {
-      v: current.version || 1,
-      savedAt: current.updatedAt || current.createdAt || Date.now(),
-      source: current._source || "unknown",
-      articles: current.articles,
-    };
-    history = [entry, ...(current.history || [])].slice(0, MAX_ARTICLE_HISTORY);
-  }
-  const doc = { ...newDoc, version, _source: source, updatedAt: Date.now(), history };
-  await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: 'application/json' } });
-  return doc;
-}
-
+import { readArticleDoc, writeArticleDoc } from "../../lib/article-store.js";
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -518,12 +487,13 @@ export async function onRequest(context) {
     let stem, subaction, revertV;
 
     if (!scope) {
-      // Admin: first segment is <sub>, second is stem.
+      // Admin: first segment is <sub>, second is stem (stem optional for list).
       const adminSub = rest[0] || '';
       stem = rest[1] || '';
       subaction = rest[2] || '';
       revertV = rest[3] ? parseInt(rest[3], 10) : null;
-      if (!adminSub || !stem) return json({ error: 'admin must supply <sub>/<stem>' }, 400);
+      if (!adminSub) return json({ error: 'admin must supply <sub>[/<stem>]' }, 400);
+      if (!stem && !(request.method === 'GET')) return json({ error: 'admin must supply <sub>/<stem>' }, 400);
       // Override scope for this request to the target user's prefix.
       var articleScope = `users/${adminSub}/`;
     } else {
