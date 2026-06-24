@@ -29,17 +29,26 @@ export async function onRequest(context) {
   if (!articles.length) {
     return html(page('暂无内容', '<p class="muted">这条录音还没有挖出文章。</p>'), 200);
   }
-  const title = articles[0].title || 'VoiceDrop';
+
+  // Honor a ?s=<index> selection — the section the user had open when they shared.
+  // The app sends the index of the on-screen article; render (and preview) just
+  // that one. An absent / out-of-range value falls back to the whole set so old
+  // links keep working.
+  const sel = parseInt(new URL(context.request.url).searchParams.get('s'), 10);
+  const shown = (Number.isInteger(sel) && sel >= 0 && sel < articles.length)
+    ? [articles[sel]]
+    : articles;
+  const title = shown[0].title || 'VoiceDrop';
 
   // Load session photos as inline data URIs (1-based), so [[photo:N]] markers in
   // the body render as <img> on the public page too. Photos live under the same
   // user prefix as the article key.
   const photoURIs = await loadPhotoURIs(env, key, doc.photos);
 
-  const bodyHtml = articles.map((a) =>
+  const bodyHtml = shown.map((a) =>
     `<article><h1>${esc(a.title || '无题')}</h1>${renderPhotos(mdToHtml(a.body || ''), photoURIs)}</article>`
   ).join('<hr/>');
-  const og = { description: plainExcerpt(stripPhotoMarkers(articles[0].body), 120), url: context.request.url };
+  const og = { description: plainExcerpt(stripPhotoMarkers(shown[0].body), 120), url: context.request.url };
   return html(page(title, bodyHtml, og), 200, true);
 }
 
