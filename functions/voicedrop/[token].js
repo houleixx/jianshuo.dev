@@ -30,11 +30,57 @@ export async function onRequest(context) {
     return html(page('暂无内容', '<p class="muted">这条录音还没有挖出文章。</p>'), 200);
   }
   const title = articles[0].title || 'VoiceDrop';
+
+  // Load session photos as inline data URIs (1-based), so [[photo:N]] markers in
+  // the body render as <img> on the public page too. Photos live under the same
+  // user prefix as the article key.
+  const photoURIs = await loadPhotoURIs(env, key, doc.photos);
+
   const bodyHtml = articles.map((a) =>
-    `<article><h1>${esc(a.title || '无题')}</h1>${mdToHtml(a.body || '')}</article>`
+    `<article><h1>${esc(a.title || '无题')}</h1>${renderPhotos(mdToHtml(a.body || ''), photoURIs)}</article>`
   ).join('<hr/>');
-  const og = { description: plainExcerpt(articles[0].body, 120), url: context.request.url };
+  const og = { description: plainExcerpt(stripPhotoMarkers(articles[0].body), 120), url: context.request.url };
   return html(page(title, bodyHtml, og), 200, true);
+}
+
+// Strip [[photo:N]] markers from text (for excerpts / fallback).
+function stripPhotoMarkers(s) {
+  return String(s).replace(/\[\[photo:\d+\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// Replace [[photo:N]] markers in rendered HTML with inline <figure><img>. A marker
+// on its own line became its own <p>; handle both that and any stray inline ones.
+function renderPhotos(htmlStr, photoURIs) {
+  const fig = (n) => {
+    const uri = photoURIs[Number(n)];
+    return uri ? `<figure class="vd-photo"><img src="${uri}" alt="" loading="lazy"/></figure>` : '';
+  };
+  return htmlStr
+    .replace(/<p>\s*\[\[photo:(\d+)\]\]\s*<\/p>/g, (_, n) => fig(n))
+    .replace(/\[\[photo:(\d+)\]\]/g, (_, n) => fig(n));
+}
+
+// Read each session photo from R2 and return a 1-based map index -> data URI.
+async function loadPhotoURIs(env, articleKey, photos) {
+  if (!Array.isArray(photos) || !photos.length) return {};
+  const prefix = articleKey.slice(0, articleKey.indexOf('/articles/') + 1);  // users/<sub>/
+  const out = {};
+  for (let i = 0; i < photos.length; i++) {
+    try {
+      const obj = await env.FILES.get(prefix + photos[i]);
+      if (!obj) continue;
+      const buf = await obj.arrayBuffer();
+      out[i + 1] = `data:image/jpeg;base64,${b64(buf)}`;
+    } catch { /* skip a missing photo */ }
+  }
+  return out;
+}
+
+function b64(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
 }
 
 // --- minimal, safe markdown -> HTML (escape first, then a few block rules) ---
@@ -126,6 +172,8 @@ li{margin:.25rem 0}
 code{background:#efeee9;padding:.1em .35em;border-radius:4px;font-size:.92em}
 strong{font-weight:650}
 hr{border:none;border-top:1px solid #e6e3dd;margin:2.4rem 0}
+.vd-photo{margin:1.4rem 0}
+.vd-photo img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;display:block}
 .muted{color:#86868b}
 footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid #ececec;
   color:#a1a1a6;font-size:.82rem}
