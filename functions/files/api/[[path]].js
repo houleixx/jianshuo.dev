@@ -172,8 +172,15 @@ export async function onRequest(context) {
   if (request.method === 'GET' && action === 'list') {
     const opts = { limit: 1000 };
     if (scope) opts.prefix = scope;
-    const listed = await env.FILES.list(opts);
-    const files = listed.objects.map((o) => ({
+    const allObjects = [];
+    let cursor;
+    do {
+      if (cursor) opts.cursor = cursor;
+      const listed = await env.FILES.list(opts);
+      allObjects.push(...listed.objects);
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+    const files = allObjects.map((o) => ({
       name: scope ? o.key.slice(scope.length) : o.key,
       size: o.size,
       uploaded: o.uploaded,
