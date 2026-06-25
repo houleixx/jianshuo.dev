@@ -18,20 +18,36 @@ const ORIGIN             = "https://jianshuo.dev";
 
 // ── Model config (R2 `config/model.json`, falls back to env + default) ─────────
 
+const PROVIDER_ENV_KEY = {
+  "anthropic":  "CLAUDE_API_KEY",
+  "openai":     "OPENAI_API_KEY",
+  "deepseek":   "DEEPSEEK_API_KEY",
+  "moonshot":   "MOONSHOT_API_KEY",
+  "qwen":       "QWEN_API_KEY",
+  "hunyuan":    "HUNYUAN_API_KEY",
+  "openrouter": "OPENROUTER_API_KEY",
+  "volc-ark":   "VOLC_ARK_API_KEY",
+};
+
 async function loadModelConfig(env) {
   try {
     const obj = await env.FILES.get("config/model.json");
     if (obj) {
       const cfg = await obj.json();
+      const providerKey = cfg.providerKey || "anthropic";
+      const provider    = providerKey === "anthropic" ? "anthropic" : "openai-compat";
+      const envKey      = PROVIDER_ENV_KEY[providerKey];
+      const apiKey      = envKey ? (env[envKey] || "") : "";
       return {
-        provider: cfg.provider || "anthropic",
-        model:    cfg.model    || MINE_MODEL_DEFAULT,
-        baseUrl:  cfg.baseUrl  || "",
-        apiKey:   cfg.apiKey   || env.CLAUDE_API_KEY || "",
+        providerKey,
+        provider,
+        model:   cfg.model   || MINE_MODEL_DEFAULT,
+        baseUrl: cfg.baseUrl || "",
+        apiKey,
       };
     }
   } catch (_) {}
-  return { provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "" };
+  return { providerKey: "anthropic", provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "" };
 }
 
 // ── System prompts (identical to mine.py) ─────────────────────────────────────

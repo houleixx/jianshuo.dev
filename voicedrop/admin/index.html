@@ -138,12 +138,19 @@ header.top .grow{flex:1}
     <!-- ── 模型设置面板 ── -->
     <div id="modelPanel" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px;box-shadow:var(--shadow)">
       <div style="font-weight:650;margin-bottom:14px;font-size:1rem">挖文模型设置</div>
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:12px">API Key 通过 Cloudflare Worker Secrets 管理，此处不需要填写。</div>
       <div style="display:grid;gap:10px;max-width:480px">
         <label>
           <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">供应商</div>
           <select id="mProvider" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb">
             <option value="anthropic">Anthropic (Claude)</option>
-            <option value="openai-compat">OpenAI 兼容（DeepSeek / Kimi / Qwen …）</option>
+            <option value="openai">OpenAI</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="moonshot">Kimi (Moonshot)</option>
+            <option value="qwen">通义千问 (Alibaba)</option>
+            <option value="hunyuan">混元 (Tencent)</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="volc-ark">火山方舟 (ByteDance) ⚠️ 需填 ep-xxx</option>
           </select>
         </label>
         <label>
@@ -152,11 +159,7 @@ header.top .grow{flex:1}
         </label>
         <label id="mBaseUrlRow" style="display:none">
           <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">Base URL</div>
-          <input id="mBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb"/>
-        </label>
-        <label>
-          <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">API Key</div>
-          <input id="mApiKey" type="password" placeholder="sk-…" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb"/>
+          <input id="mBaseUrl" type="text" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb"/>
         </label>
         <div style="display:flex;gap:10px;align-items:center;margin-top:2px">
           <button class="btn primary" id="mSave" style="width:auto;padding:9px 22px">保存</button>
@@ -455,34 +458,54 @@ $('#logout').onclick=()=>logout();
 if(TOKEN){ $('#app').hidden=false; load(); loadModelCfg(); } else { showGate(); }
 
 // ── 模型设置 ──────────────────────────────────────────────────────────────────
+const PROVIDERS = {
+  'anthropic':  { baseUrl: '',                                                    defaultModel: 'claude-sonnet-4-6' },
+  'openai':     { baseUrl: 'https://api.openai.com/v1',                          defaultModel: 'gpt-4o' },
+  'deepseek':   { baseUrl: 'https://api.deepseek.com/v1',                        defaultModel: 'deepseek-chat' },
+  'moonshot':   { baseUrl: 'https://api.moonshot.cn/v1',                         defaultModel: 'moonshot-v1-32k' },
+  'qwen':       { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-max' },
+  'hunyuan':    { baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',           defaultModel: 'hunyuan-turbo' },
+  'openrouter': { baseUrl: 'https://openrouter.ai/api/v1',                       defaultModel: 'deepseek/deepseek-chat' },
+  'volc-ark':   { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',           defaultModel: 'ep-xxxxxxxxxx' },
+};
+
 $('#modelBtn').onclick = () => {
   const p = $('#modelPanel');
   p.style.display = p.style.display === 'none' ? 'block' : 'none';
 };
 $('#mProvider').onchange = () => {
-  $('#mBaseUrlRow').style.display = $('#mProvider').value === 'openai-compat' ? 'block' : 'none';
+  const key = $('#mProvider').value;
+  const p = PROVIDERS[key] || {};
+  const isAnthro = key === 'anthropic';
+  $('#mBaseUrlRow').style.display = isAnthro ? 'none' : 'block';
+  if (p.baseUrl !== undefined) $('#mBaseUrl').value = p.baseUrl;
+  // auto-fill model only if currently empty or is a known default
+  const cur = $('#mModel').value.trim();
+  const knownDefaults = Object.values(PROVIDERS).map(v => v.defaultModel);
+  if (!cur || knownDefaults.includes(cur)) $('#mModel').value = p.defaultModel || '';
 };
 async function loadModelCfg() {
   try {
     const r = await fetch(`${API}/download/config/model.json`, { headers:{ Authorization:`Bearer ${TOKEN}` }});
     if (!r.ok) return;
     const cfg = await r.json();
-    if (cfg.provider) $('#mProvider').value = cfg.provider;
-    if (cfg.model)    $('#mModel').value    = cfg.model;
-    if (cfg.baseUrl)  $('#mBaseUrl').value  = cfg.baseUrl;
-    if (cfg.apiKey)   $('#mApiKey').value   = cfg.apiKey;
-    $('#mProvider').onchange();
+    const key = cfg.providerKey || cfg.provider || 'anthropic';
+    if ($(`#mProvider option[value="${key}"]`)) $('#mProvider').value = key;
+    if (cfg.model)   $('#mModel').value   = cfg.model;
+    if (cfg.baseUrl) $('#mBaseUrl').value = cfg.baseUrl;
+    const isAnthro = key === 'anthropic';
+    $('#mBaseUrlRow').style.display = isAnthro ? 'none' : 'block';
   } catch(_) {}
 }
 $('#mSave').onclick = async () => {
+  const providerKey = $('#mProvider').value;
   const cfg = {
-    provider: $('#mProvider').value,
-    model:    $('#mModel').value.trim(),
-    baseUrl:  $('#mBaseUrl').value.trim(),
-    apiKey:   $('#mApiKey').value.trim(),
+    providerKey,
+    model:   $('#mModel').value.trim(),
+    baseUrl: $('#mBaseUrl').value.trim(),
   };
   if (!cfg.model) { showMsg('请填写模型名称', 'var(--warn)'); return; }
-  if (cfg.provider === 'openai-compat' && !cfg.baseUrl) { showMsg('请填写 Base URL', 'var(--warn)'); return; }
+  if (providerKey !== 'anthropic' && !cfg.baseUrl) { showMsg('请填写 Base URL', 'var(--warn)'); return; }
   try {
     $('#mSave').disabled = true;
     const r = await fetch(`${API}/upload/config/model.json`, {
