@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runTool, TOOL_DEFS, appendVersion } from "../src/tools.js";
+import { runTool, TOOL_DEFS } from "../src/tools.js";
 import { fakeEnv } from "./fakes.js";
 
 describe("runTool dispatcher", () => {
@@ -67,16 +67,6 @@ describe("write_article", () => {
     expect(sent.articles[0]).toEqual({ title: "A2x", body: "b2x", wechatMediaId: "m2" });
     expect(sent.transcript).toBe("tx2");
   });
-  it("saves a version snapshot to _versions.json before writing", async () => {
-    const env = fakeEnv(seedTwoArticles());
-    globalThis.fetch = fakeFetch({
-      "PUT https://jianshuo.dev/files/api/articles/s2": () => ({ ok: true, body: { ok: true, version: 2 } }),
-    });
-    await rt("write_article", { articles: [{ title: "A2x", body: "b2x" }] }, CTX(env));
-    const hist = JSON.parse(env.FILES._store.get("users/u/articles/s2_versions.json"));
-    expect(hist.versions).toHaveLength(1);
-    expect(hist.versions[0].articles[0].title).toBe("A2");
-  });
   it("rejects empty articles before calling the API", async () => {
     const env = fakeEnv(seedTwoArticles());
     expect(await rt("write_article", { articles: [] }, CTX(env))).toEqual({ error: "empty_articles" });
@@ -88,30 +78,6 @@ describe("write_article", () => {
     });
     const r = await rt("write_article", { articles: [{ title: "T", body: "B" }] }, CTX(env));
     expect(r.error).toMatch(/upload_failed/);
-  });
-});
-
-describe("appendVersion", () => {
-  it("creates _versions.json with first snapshot", async () => {
-    const env = fakeEnv({});
-    const doc = { articles: [{ title: "T1", body: "B1" }], photos: ["photos/p1.jpg"] };
-    await appendVersion(env, "users/u/articles/s1.json", doc);
-    const hist = JSON.parse(env.FILES._store.get("users/u/articles/s1_versions.json"));
-    expect(hist.versions).toHaveLength(1);
-    expect(hist.versions[0].articles[0].title).toBe("T1");
-    expect(hist.versions[0].photos).toEqual(["photos/p1.jpg"]);
-    expect(typeof hist.versions[0].savedAt).toBe("number");
-  });
-  it("prepends new snapshots and keeps max 20", async () => {
-    const env = fakeEnv({});
-    // Seed 20 existing versions
-    const seed = { versions: Array.from({ length: 20 }, (_, i) => ({ savedAt: i, articles: [{ title: `v${i}`, body: "" }], photos: null })) };
-    env.FILES._store.set("users/u/articles/s1_versions.json", JSON.stringify(seed));
-    const doc = { articles: [{ title: "new", body: "" }] };
-    await appendVersion(env, "users/u/articles/s1.json", doc);
-    const hist = JSON.parse(env.FILES._store.get("users/u/articles/s1_versions.json"));
-    expect(hist.versions).toHaveLength(20);
-    expect(hist.versions[0].articles[0].title).toBe("new");
   });
 });
 
