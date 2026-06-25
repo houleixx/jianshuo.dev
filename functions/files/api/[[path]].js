@@ -171,6 +171,31 @@ export async function onRequest(context) {
     return json({ error: 'unknown llmlog action' }, 404);
   }
 
+  // ── Admin-only: mine run log (voicedrop/admin/mine.html) ─────────────────────
+  // Per-audio events written by miner.js under minelogs/<date>/<ts>-<stem>.json.
+  if (request.method === 'GET' && action === 'minelog') {
+    if (scope !== '') return json({ error: 'admin only' }, 403);
+    if (sub2 === 'dates') {
+      const listed = await env.FILES.list({ prefix: 'minelogs/', delimiter: '/', limit: 1000 });
+      const dates = (listed.delimitedPrefixes || [])
+        .map((p) => p.slice('minelogs/'.length).replace(/\/$/, ''))
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+        .sort().reverse();
+      return json({ dates });
+    }
+    if (sub2 === 'list') {
+      const date = url.searchParams.get('date') || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: 'date=YYYY-MM-DD required' }, 400);
+      const cursor = url.searchParams.get('cursor') || undefined;
+      const listed = await env.FILES.list({ prefix: `minelogs/${date}/`, cursor, limit: 200 });
+      const objects = listed.objects
+        .map((o) => ({ key: o.key, size: o.size, uploaded: o.uploaded }))
+        .reverse();
+      return json({ objects, cursor: listed.truncated ? listed.cursor : null, truncated: !!listed.truncated });
+    }
+    return json({ error: 'unknown minelog action' }, 404);
+  }
+
   if (request.method === 'GET' && action === 'list') {
     const opts = { limit: 1000 };
     if (scope) opts.prefix = scope;
@@ -201,7 +226,8 @@ export async function onRequest(context) {
     // at most one running + one queued run.
     const leaf = name.split('/').pop() || name;
     if (leaf.startsWith('VoiceDrop-') && leaf.endsWith('.m4a')) {
-      context.waitUntil(dispatchMine(env));
+      const userAuth = request.headers.get('Authorization') || '';
+      context.waitUntil(dispatchMine(userAuth));
     }
     return json({ ok: true, name });
   }
@@ -457,7 +483,7 @@ export async function onRequest(context) {
   // "加急处理": let a signed-in app user kick the article miner now instead of
   // waiting for the hourly cron. The GitHub token lives only as a Pages secret.
   if (request.method === 'POST' && action === 'mine') {
-    const r = await dispatchMine(env);
+    const r = await dispatchMine(request.headers.get('Authorization') || '');
     if (r.ok) return json({ ok: true });
     return json({ error: 'dispatch failed', detail: r.detail }, r.status === 0 ? 500 : 502);
   }
@@ -611,13 +637,13 @@ export async function onRequest(context) {
   return json({ error: 'bad request' }, 400);
 }
 
-// Kick the Cloudflare miner Worker. Used by POST /mine (加急处理) and
-// automatically on every new VoiceDrop-*.m4a upload.
-async function dispatchMine(env) {
+// Kick the Cloudflare miner Worker. authHeader is the caller's Authorization
+// header — any valid session token (user or admin) is accepted by /agent/mine/trigger.
+async function dispatchMine(authHeader) {
   try {
     const resp = await fetch('https://jianshuo.dev/agent/mine/trigger', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${env.FILES_TOKEN}` },
+      headers: { 'Authorization': authHeader },
     });
     if (resp.ok) return { ok: true, status: resp.status, detail: '' };
     return { ok: false, status: resp.status, detail: (await resp.text()).slice(0, 200) };

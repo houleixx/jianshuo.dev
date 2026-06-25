@@ -324,11 +324,13 @@ export default {
       return stub.fetch(request);
     }
 
-    // ── /agent/mine/trigger ── kick the miner now (authenticated with FILES_TOKEN) ──
+    // ── /agent/mine/trigger ── kick the miner (any authenticated user or admin) ──
     if (url.pathname === "/agent/mine/trigger") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const adminToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
-      if (!env.FILES_TOKEN || adminToken !== env.FILES_TOKEN) return new Response("unauthorized", { status: 401 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const isAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
+      const scope   = isAdmin ? "admin" : await resolveScope(tok, env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
       const stub = env.Miner.get(env.Miner.idFromName("miner"));
       return stub.fetch(request);
     }

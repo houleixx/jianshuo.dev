@@ -368,114 +368,148 @@ async function writeLlmLog(env, rec) {
   } catch (_) {}
 }
 
+// ── Mine run log (per-audio, written to R2) ────────────────────────────────────
+
+async function writeMineLog(env, rec) {
+  try {
+    const day = new Date(rec.ts).toISOString().slice(0, 10);
+    await env.FILES.put(
+      `minelogs/${day}/${rec.ts}-${rec.stem}.json`,
+      JSON.stringify(rec),
+      { httpMetadata: { contentType: "application/json" } },
+    );
+  } catch (_) {}
+}
+
 // ── Per-audio pipeline ─────────────────────────────────────────────────────────
 
 async function mineOneAudio(audioKey, allKeys, uploaded, env) {
   const leaf  = audioKey.split("/").pop();
   const scope = userPrefix(audioKey);
   const stem  = leaf.replace(/\.m4a$/, "");
+  const t0    = Date.now();
 
-  // Strongly-consistent check before doing any work
-  if (await env.FILES.head(articleKeyFor(audioKey)) || await env.FILES.head(emptyKeyFor(audioKey))) {
-    console.log(`   skip (already processed)`);
-    return "skip";
-  }
+  const events = [];
+  const log = (msg, data) => {
+    const entry = { ts: Date.now(), msg };
+    if (data !== undefined) entry.data = data;
+    events.push(entry);
+    console.log(`   ${msg}${data !== undefined ? " " + JSON.stringify(data) : ""}`);
+  };
 
-  await notifyStatus(scope, stem, "asr", env);
-
-  // ── ASR ──────────────────────────────────────────────────────────────────────
-  let transcript, srt;
+  let result = "error";
   try {
-    const t0 = Date.now();
-    ({ transcript, srt } = await transcribe(audioKey, env));
-    console.log(`   ASR → ${transcript.length} chars (${((Date.now()-t0)/1000).toFixed(1)}s)`);
-  } catch (e) {
-    if (e instanceof AsrError) {
-      await writeEmpty(audioKey, `asr-error:${e.code}`, env);
-      await notifyStatus(scope, stem, "empty", env);
-      console.log(`   ✗ ASR deterministic error ${e.code}`);
-      return "empty";
+    // Strongly-consistent check before doing any work
+    if (await env.FILES.head(articleKeyFor(audioKey)) || await env.FILES.head(emptyKeyFor(audioKey))) {
+      console.log(`   skip (already processed)`);
+      result = "skip";
+      return "skip";
     }
-    throw e;
-  }
 
-  if (!transcript) {
-    await writeEmpty(audioKey, "no-speech", env);
-    await notifyStatus(scope, stem, "empty", env);
-    console.log(`   ✗ no-speech`);
-    return "empty";
-  }
-  if (transcript.trim().length < MIN_CHARS) {
-    await writeEmpty(audioKey, "too-short", env);
-    await notifyStatus(scope, stem, "empty", env);
-    console.log(`   ✗ too-short (${transcript.trim().length} chars)`);
-    return "empty";
-  }
+    await notifyStatus(scope, stem, "asr", env);
 
-  await notifyStatus(scope, stem, "mining", env);
-
-  // ── Style card + photos ───────────────────────────────────────────────────────
-  const claudeMdObj = await env.FILES.get(scope + "CLAUDE.md");
-  const claudeMd    = claudeMdObj ? (await claudeMdObj.text()).trim() : "";
-  if (claudeMd) console.log(`   + CLAUDE.md (${claudeMd.length} chars)`);
-
-  const photoKeys = findSessionPhotos(audioKey, allKeys);
-  const photos    = [];
-  for (const pk of photoKeys) {
-    try { const p = await loadPhoto(pk, env); if (p) photos.push(p); }
-    catch (e) { console.log(`   ⚠ photo load failed (${pk}): ${e.message}`); }
-  }
-  if (photos.length) console.log(`   + ${photos.length} photo(s)`);
-
-  // ── LLM (first pass, then force retry) ───────────────────────────────────────
-  const turnId = `${Date.now()}-${stem.slice(-8)}`;
-  const meta   = { user_scope: scope, stem };
-  let articles;
-
-  const runLlm = async (force, step) => {
-    const t0 = Date.now();
+    // ── ASR ────────────────────────────────────────────────────────────────────
+    let transcript, srt;
     try {
-      const r = await generateArticles(transcript, force ? "" : claudeMd, force ? null : (photos.length ? photos : null), force, env);
-      await writeLlmLog(env, { ok: true, status: 200, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
-      console.log(`   claude mine${force ? " (force)" : ""} → ${r.articles.length} article(s) (${(r.latencyMs/1000).toFixed(1)}s)`);
-      return r.articles;
+      log("ASR 提交中");
+      const tAsr = Date.now();
+      ({ transcript, srt } = await transcribe(audioKey, env));
+      log("ASR 完成", { chars: transcript.length, duration_ms: Date.now() - tAsr });
     } catch (e) {
-      await writeLlmLog(env, { ok: false, status: 0, latency_ms: Date.now()-t0, step, turn_id: turnId, meta, error: String(e) });
+      if (e instanceof AsrError) {
+        await writeEmpty(audioKey, `asr-error:${e.code}`, env);
+        await notifyStatus(scope, stem, "empty", env);
+        log("ASR 错误", { code: e.code });
+        result = "empty";
+        return "empty";
+      }
       throw e;
     }
-  };
 
-  articles = await runLlm(false, 0);
-
-  if (!articles.length) {
-    console.log(`   ⚠ no-article on first pass, retrying (force mode)…`);
-    try {
-      articles = await runLlm(true, 1);
-    } catch (_) {
-      articles = [];
-    }
-    if (!articles.length) {
-      await writeEmpty(audioKey, "no-article", env);
+    if (!transcript) {
+      await writeEmpty(audioKey, "no-speech", env);
       await notifyStatus(scope, stem, "empty", env);
-      console.log(`   ✗ no-article (both passes) → empty`);
+      log("ASR 无语音");
+      result = "empty";
       return "empty";
     }
+    if (transcript.trim().length < MIN_CHARS) {
+      await writeEmpty(audioKey, "too-short", env);
+      await notifyStatus(scope, stem, "empty", env);
+      log("ASR 太短", { chars: transcript.trim().length });
+      result = "empty";
+      return "empty";
+    }
+
+    await notifyStatus(scope, stem, "mining", env);
+
+    // ── Style card + photos ───────────────────────────────────────────────────
+    const claudeMdObj = await env.FILES.get(scope + "CLAUDE.md");
+    const claudeMd    = claudeMdObj ? (await claudeMdObj.text()).trim() : "";
+    if (claudeMd) log("CLAUDE.md", { chars: claudeMd.length });
+
+    const photoKeys = findSessionPhotos(audioKey, allKeys);
+    const photos    = [];
+    for (const pk of photoKeys) {
+      try { const p = await loadPhoto(pk, env); if (p) photos.push(p); }
+      catch (e) { log("照片加载失败", { key: pk, err: e.message }); }
+    }
+    if (photos.length) log("照片", { count: photos.length });
+
+    // ── LLM (first pass, then force retry) ────────────────────────────────────
+    const turnId = `${Date.now()}-${stem.slice(-8)}`;
+    const meta   = { user_scope: scope, stem };
+    let articles;
+
+    const runLlm = async (force, step) => {
+      const tLlm = Date.now();
+      log(`LLM 开始${force ? " (force)" : ""}`, { step });
+      try {
+        const r = await generateArticles(transcript, force ? "" : claudeMd, force ? null : (photos.length ? photos : null), force, env);
+        await writeLlmLog(env, { ok: true, status: 200, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
+        return r.articles;
+      } catch (e) {
+        await writeLlmLog(env, { ok: false, status: 0, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
+        throw e;
+      }
+    };
+
+    articles = await runLlm(false, 0);
+
+    if (!articles.length) {
+      log("LLM 无文章，重试 (force)");
+      try { articles = await runLlm(true, 1); } catch (_) { articles = []; }
+      if (!articles.length) {
+        await writeEmpty(audioKey, "no-article", env);
+        await notifyStatus(scope, stem, "empty", env);
+        log("无文章 (两次均空)");
+        result = "empty";
+        return "empty";
+      }
+    }
+
+    // ── Write article ──────────────────────────────────────────────────────────
+    const relPhotos = photoKeys.map(k => k.slice(scope.length));
+    const doc = {
+      schema: 2, id: stem, sourceAudio: leaf,
+      createdAt: uploaded[audioKey] || new Date().toISOString(),
+      transcript, srt, articles, status: "ready", model: MINE_MODEL,
+      ...(relPhotos.length && { photos: relPhotos }),
+    };
+
+    await writeArticle(audioKey, doc, env);
+    if (srt) await writeSrt(audioKey, srt, env);
+    await notifyStatus(scope, stem, "ready", env);
+    log("写入完成", { articles: articles.length, titles: articles.map(a => a.title) });
+    result = "mined";
+    return "mined";
+
+  } finally {
+    if (result !== "skip") {
+      await writeMineLog(env, { ts: t0, stem, audioKey, result, elapsed_ms: Date.now() - t0, events });
+    }
   }
-
-  // ── Write article ─────────────────────────────────────────────────────────────
-  const relPhotos = photoKeys.map(k => k.slice(scope.length));
-  const doc = {
-    schema: 2, id: stem, sourceAudio: leaf,
-    createdAt: uploaded[audioKey] || new Date().toISOString(),
-    transcript, srt, articles, status: "ready", model: MINE_MODEL,
-    ...(relPhotos.length && { photos: relPhotos }),
-  };
-
-  await writeArticle(audioKey, doc, env);
-  if (srt) await writeSrt(audioKey, srt, env);
-  await notifyStatus(scope, stem, "ready", env);
-  console.log(`   ✓ ${articles.length} article(s): ${articles.map(a => a.title).join(" | ")}`);
-  return "mined";
 }
 
 // ── Main loop ──────────────────────────────────────────────────────────────────

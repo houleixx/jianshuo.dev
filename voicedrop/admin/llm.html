@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>LLM 日志 · VoiceDrop</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f5f2; --panel:#ffffff; --ink:#1d1d1f; --muted:#86868b;
+  --line:#e8e5df; --line2:#f0eee9;
+  --accent:#0a7d52; --accent-bg:#e7f6ee;
+  --warn:#9a6b00; --warn-bg:#fbf2dc;
+  --err:#c0392b; --err-bg:#fdecea;
+  --idle:#5b6470; --idle-bg:#eef1f4;
+  --blue:#0a66c2; --mine:#7a4fd0; --mine-bg:#f0eafb; --agent:#0a66c2; --agent-bg:#e8f1fb;
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+a{color:var(--blue);text-decoration:none}
+.wrap{max-width:1280px;margin:0 auto;padding:24px 18px 60px}
+
+/* ---- gate ---- */
+#gate{max-width:420px;margin:14vh auto 0;background:var(--panel);
+  border:1px solid var(--line);border-radius:16px;padding:30px 26px;box-shadow:var(--shadow)}
+#gate h1{font-size:1.25rem;margin:0 0 4px}
+#gate p{color:var(--muted);margin:0 0 18px;font-size:.92rem}
+#gate input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;
+  font-size:.95rem;background:#fcfcfb;margin-bottom:12px}
+#gate input:focus{outline:none;border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:.88rem;font-weight:560}
+.btn:hover{background:#faf9f7}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;justify-content:center;padding:11px}
+.btn.primary:hover{filter:brightness(1.05)}
+.err{color:var(--err);font-size:.86rem;min-height:1.2em;margin-top:2px}
+
+/* ---- header ---- */
+header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+header.top h1{font-size:1.3rem;margin:0;font-weight:700;letter-spacing:-.01em}
+header.top .grow{flex:1}
+.tag{font-size:.74rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);
+  padding:3px 9px;border-radius:999px}
+select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;background:#fcfcfb;font-size:.86rem;color:var(--ink)}
+
+/* ---- two-pane layout ---- */
+.panes{display:grid;grid-template-columns:380px 1fr;gap:16px;align-items:start}
+@media(max-width:860px){.panes{grid-template-columns:1fr}}
+.list{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+  max-height:calc(100vh - 150px);overflow-y:auto}
+.grp{border-top:1px solid var(--line2)}
+.grp:first-child{border-top:none}
+.grphd{font-size:.72rem;color:var(--muted);padding:7px 14px 3px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.row{padding:9px 14px;border-top:1px solid var(--line2);cursor:pointer;display:flex;align-items:center;gap:8px}
+.grphd + .row{border-top:none}
+.row:hover{background:#faf9f7}
+.row.sel{background:var(--accent-bg)}
+.row .t{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;color:var(--muted);flex:none}
+.row .grow{flex:1}
+.badge{font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:6px;flex:none;letter-spacing:.02em}
+.badge.mine{background:var(--mine-bg);color:var(--mine)}
+.badge.agent{background:var(--agent-bg);color:var(--agent)}
+.badge.ok{background:var(--accent-bg);color:var(--accent)}
+.badge.err{background:var(--err-bg);color:var(--err)}
+.row .tok{font-size:.72rem;color:var(--muted);flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* ---- detail ---- */
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+  padding:18px 20px;min-height:200px}
+.detail .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.82rem;color:var(--muted);margin-bottom:14px}
+.detail .meta b{color:var(--ink);font-weight:600}
+h3.sec{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
+  margin:18px 0 8px;border-bottom:1px solid var(--line2);padding-bottom:5px}
+.msg{border:1px solid var(--line2);border-radius:9px;padding:9px 12px;margin:8px 0;background:#fcfcfb}
+.msg .role{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px}
+.msg.user .role{color:var(--blue)} .msg.assistant .role{color:var(--accent)}
+.tx{white-space:pre-wrap;font-size:.88rem;line-height:1.65;word-break:break-word}
+.blk{margin:6px 0;padding:6px 10px;border-left:3px solid var(--line);background:#fff;border-radius:0 7px 7px 0}
+.blk .bt{font-size:.7rem;font-weight:700;color:var(--mine);text-transform:uppercase;letter-spacing:.03em}
+pre.code{white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:#fbfaf8;border:1px solid var(--line2);border-radius:8px;padding:10px 12px;margin:4px 0;overflow-x:auto;color:#333}
+details.fold{margin:6px 0}
+details.fold>summary{cursor:pointer;font-size:.82rem;color:var(--blue);user-select:none}
+.errbox{background:var(--err-bg);border:1px solid #f3c9c2;border-radius:9px;padding:10px 12px;color:var(--err);
+  white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+.empty-state{text-align:center;color:var(--muted);padding:60px 0}
+.loading{color:var(--muted);font-size:.85rem;padding:14px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
+  border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.usage{font-size:.78rem;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- token gate -->
+  <div id="gate" hidden>
+    <h1>LLM 日志</h1>
+    <p>输入 master token 查看所有与大语言模型的交互。token 只存在本机浏览器，不上传。</p>
+    <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+    <div class="err" id="gateErr"></div>
+    <button class="btn primary" id="enter">进入</button>
+  </div>
+
+  <!-- app -->
+  <div id="app" hidden>
+    <header class="top">
+      <h1>LLM 日志</h1>
+      <span class="tag" id="count"></span>
+      <span class="grow"></span>
+      <select id="date" title="按日期"></select>
+      <button class="btn" id="refresh">刷新</button>
+      <a class="btn" href="./">← 控制台</a>
+      <button class="btn" id="logout">退出</button>
+    </header>
+    <div class="panes">
+      <div class="list" id="list"></div>
+      <div class="detail" id="detail"><div class="empty-state">选一条交互查看发出 / 收回的全部细节</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = '/files/api';
+const TKEY = 'vd_admin_token';            // shared with index.html — token carries over
+let TOKEN = localStorage.getItem(TKEY) || '';
+let RECORDS = [];                          // current day's records, newest first
+const $ = (s) => document.querySelector(s);
+
+function encKey(k){ return k.split('/').map(encodeURIComponent).join('/'); }
+async function api(path){
+  const r = await fetch(`${API}/${path}`, { headers:{ Authorization:`Bearer ${TOKEN}` }});
+  if(!r.ok){ let m='';try{m=(await r.json()).error||'';}catch{} throw new Error(m||`HTTP ${r.status}`); }
+  return r.json();
+}
+
+function fmtTime(ts){ const d=new Date(ts); const p=(n)=>String(n).padStart(2,'0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function shortModel(m){ return String(m||'').replace(/^claude-/,'').replace(/-\d{8}$/,''); }
+function usageStr(u){ if(!u) return ''; const i=u.input_tokens??u.inputTokens, o=u.output_tokens??u.outputTokens;
+  if(i==null&&o==null) return ''; return `${i??'?'}→${o??'?'} tok`; }
+
+// ---- load one day: fetch all pages (ascending), then reverse → newest first ----
+async function loadDay(date){
+  $('#list').innerHTML = `<div class="loading"><span class="spin"></span>加载 ${date} …</div>`;
+  let objects=[], cursor=null;
+  do{
+    const q = `llmlog/list?date=${encodeURIComponent(date)}` + (cursor?`&cursor=${encodeURIComponent(cursor)}`:'');
+    const r = await api(q);
+    objects = objects.concat(r.objects||[]);   // each page already newest-first within page
+    cursor = r.cursor;
+  } while(cursor);
+  // globally newest first by key (key embeds epoch ms)
+  objects.sort((a,b)=> a.key<b.key?1:a.key>b.key?-1:0);
+  RECORDS = await fetchRecords(objects);
+  renderList();
+}
+
+async function fetchRecords(objects){
+  const out=[]; const CONC=8;
+  for(let i=0;i<objects.length;i+=CONC){
+    const batch = objects.slice(i,i+CONC).map(async (o)=>{
+      try{ const rec = await api(`download/${encKey(o.key)}`); rec._key=o.key; return rec; }
+      catch{ return { _key:o.key, _broken:true, ts:0 }; }
+    });
+    out.push(...await Promise.all(batch));
+  }
+  return out;
+}
+
+// ---- render the grouped list ----
+function renderList(){
+  const list = $('#list');
+  if(!RECORDS.length){ list.innerHTML = `<div class="empty-state">这一天没有交互</div>`; $('#count').textContent=''; return; }
+  $('#count').textContent = `${RECORDS.length} 次交互`;
+  const groups = new Map();
+  for(const r of RECORDS){ const k=r.turn_id||r._key; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(r); }
+  const ordered = [...groups.values()].map((g)=>{ g.sort((a,b)=>(a.step??0)-(b.step??0)); return g; })
+    .sort((a,b)=> Math.max(...b.map(r=>r.ts||0)) - Math.max(...a.map(r=>r.ts||0)));
+  let html='';
+  for(const g of ordered){
+    const multi = g.length>1;
+    if(multi){ html += `<div class="grp"><div class="grphd">turn · ${g.length} 步 · ${esc(g[0].meta?.stem||'')}</div>`; }
+    else html += `<div class="grp">`;
+    for(const r of g){
+      const idx = RECORDS.indexOf(r);
+      const okCls = r._broken?'err':(r.ok?'ok':'err');
+      const okTxt = r._broken?'损坏':(r.ok?'ok':'err');
+      html += `<div class="row" data-i="${idx}">
+        <span class="t">${esc(fmtTime(r.ts||0))}</span>
+        <span class="badge ${r.source==='mine'?'mine':'agent'}">${esc(r.source||'?')}</span>
+        <span class="grow">${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
+        <span class="tok">${esc(usageStr(r.response&&r.response.usage))}</span>
+        <span class="badge ${okCls}">${okTxt}</span>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  list.innerHTML = html;
+  list.querySelectorAll('.row').forEach((el)=> el.addEventListener('click',()=>select(+el.dataset.i, el)));
+}
+
+function select(i, el){
+  $('#list').querySelectorAll('.row.sel').forEach((e)=>e.classList.remove('sel'));
+  if(el) el.classList.add('sel');
+  renderDetail(RECORDS[i]);
+}
+
+// ---- render one record's full request + response ----
+function blocksHtml(content){
+  if(content==null) return '';
+  if(typeof content==='string') return `<div class="tx">${esc(content)}</div>`;
+  if(!Array.isArray(content)) return `<pre class="code">${esc(JSON.stringify(content,null,2))}</pre>`;
+  return content.map((b)=>{
+    if(b.type==='text') return `<div class="tx">${esc(b.text)}</div>`;
+    if(b.type==='tool_use') return `<div class="blk"><div class="bt">tool_use · ${esc(b.name)}</div><pre class="code">${esc(JSON.stringify(b.input,null,2))}</pre></div>`;
+    if(b.type==='tool_result'){ const c=typeof b.content==='string'?b.content:JSON.stringify(b.content,null,2);
+      return `<div class="blk"><div class="bt">tool_result</div><pre class="code">${esc(c)}</pre></div>`; }
+    return `<pre class="code">${esc(JSON.stringify(b,null,2))}</pre>`;
+  }).join('');
+}
+
+function msgsHtml(messages){
+  if(!Array.isArray(messages)) return '';
+  return messages.map((m)=>`<div class="msg ${m.role==='assistant'?'assistant':'user'}">
+    <div class="role">${esc(m.role)}</div>${blocksHtml(m.content)}</div>`).join('');
+}
+
+function renderDetail(r){
+  const d = $('#detail');
+  if(!r){ d.innerHTML=`<div class="empty-state">—</div>`; return; }
+  if(r._broken){ d.innerHTML=`<div class="errbox">这条日志读取失败：${esc(r._key)}</div>`; return; }
+  const req=r.request||{}, resp=r.response;
+  let h = `<div class="meta">
+    <span><b>${esc(r.source||'?')}</b></span>
+    <span>${esc(shortModel(r.model))}</span>
+    <span>${esc(new Date(r.ts).toLocaleString('zh-CN'))}</span>
+    <span>耗时 <b>${r.latency_ms!=null?(r.latency_ms/1000).toFixed(1)+'s':'—'}</b></span>
+    <span>HTTP <b>${esc(r.http_status)}</b> ${r.ok?'':'· <b style="color:var(--err)">失败</b>'}</span>
+    ${r.user_scope?`<span>${esc(r.user_scope)}</span>`:''}
+    ${r.meta&&r.meta.stem?`<span>${esc(r.meta.stem)}</span>`:''}
+    ${r.turn_id?`<span class="usage">turn ${esc(r.turn_id)}${r.step!=null?` #${r.step}`:''}</span>`:''}
+  </div>`;
+
+  if(r.meta&&r.meta.instruction){
+    h += `<h3 class="sec">语音指令</h3><div class="msg user"><div class="tx">${esc(r.meta.instruction)}</div></div>`;
+  }
+
+  h += `<h3 class="sec">发出 · request</h3>`;
+  h += `<div class="usage">model=${esc(req.model)} · max_tokens=${esc(req.max_tokens)}${req.tool_choice?` · tool_choice=${esc(JSON.stringify(req.tool_choice))}`:''}</div>`;
+  if(req.system) h += `<details class="fold"><summary>system prompt（${String(req.system).length} 字）</summary><pre class="code">${esc(req.system)}</pre></details>`;
+  h += msgsHtml(req.messages);
+  if(req.tools&&req.tools.length) h += `<details class="fold"><summary>tools（${req.tools.length}）</summary><pre class="code">${esc(JSON.stringify(req.tools,null,2))}</pre></details>`;
+  if(req.output_config) h += `<details class="fold"><summary>output_config（结构化输出 schema）</summary><pre class="code">${esc(JSON.stringify(req.output_config,null,2))}</pre></details>`;
+
+  h += `<h3 class="sec">收回 · response</h3>`;
+  if(r.error!=null || !r.ok){
+    h += `<div class="errbox">${esc(r.error||'(无响应体)')}</div>`;
+  }
+  if(resp){
+    if(resp.stop_reason||resp.usage) h += `<div class="usage">stop_reason=${esc(resp.stop_reason||'—')}${resp.usage?` · usage ${esc(JSON.stringify(resp.usage))}`:''}</div>`;
+    h += `<div class="msg assistant"><div class="role">assistant</div>${blocksHtml(resp.content)}</div>`;
+  }
+
+  h += `<details class="fold"><summary>原始 JSON（整条记录）</summary><pre class="code">${esc(JSON.stringify(r,null,2))}</pre></details>`;
+  d.innerHTML = h;
+  d.scrollTop = 0;
+}
+
+// ---- dates + boot ----
+async function loadDates(){
+  const { dates } = await api('llmlog/dates');
+  const sel = $('#date');
+  if(!dates || !dates.length){ sel.innerHTML=`<option>无数据</option>`; $('#list').innerHTML=`<div class="empty-state">还没有任何 LLM 交互日志</div>`; return; }
+  sel.innerHTML = dates.map((d)=>`<option value="${d}">${d}</option>`).join('');
+  sel.value = dates[0];
+  await loadDay(dates[0]);
+}
+
+function showGate(msg){ $('#app').hidden=true; $('#gate').hidden=false; $('#gateErr').textContent=msg||''; $('#tok').focus(); }
+function logout(msg){ TOKEN=''; localStorage.removeItem(TKEY); showGate(msg); }
+async function boot(){
+  $('#gate').hidden=true; $('#app').hidden=false;
+  try{ await loadDates(); }
+  catch(e){ if(String(e.message).match(/unauthorized|admin only|HTTP 401|HTTP 403/)){ logout('token 无效'); } else { $('#list').innerHTML=`<div class="errbox">${esc(e.message)}</div>`; } }
+}
+function enter(){
+  const v=$('#tok').value.trim();
+  if(!v){ $('#gateErr').textContent='请输入 token'; return; }
+  TOKEN=v; localStorage.setItem(TKEY,v); boot();
+}
+
+$('#enter').addEventListener('click', enter);
+$('#tok').addEventListener('keydown',(e)=>{ if(e.key==='Enter') enter(); });
+$('#logout').addEventListener('click',()=>logout());
+$('#refresh').addEventListener('click',()=>{ const d=$('#date').value; if(d&&d!=='无数据') loadDay(d).catch((e)=>$('#list').innerHTML=`<div class="errbox">${esc(e.message)}</div>`); });
+$('#date').addEventListener('change',(e)=>{ const d=e.target.value; if(d&&d!=='无数据') loadDay(d).catch((er)=>$('#list').innerHTML=`<div class="errbox">${esc(er.message)}</div>`); });
+
+if(TOKEN) boot(); else showGate();
+</script>
+</body>
+</html>
