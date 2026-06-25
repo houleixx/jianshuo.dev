@@ -25,6 +25,16 @@ function badStem(stem) {
   return !stem || typeof stem !== "string" || stem.includes("/") || stem.includes("..");
 }
 
+// Current articles[] from a raw doc regardless of schema version.
+// Schema-3: versions[head]; schema-2: top-level articles; v1: none here.
+function currentArticles(doc) {
+  if (Array.isArray(doc.versions) && doc.head) {
+    const cv = doc.versions.find((e) => e.v === doc.head);
+    if (cv && Array.isArray(cv.articles)) return cv.articles;
+  }
+  return Array.isArray(doc.articles) ? doc.articles : [];
+}
+
 register(
   { name: "list_articles", description: "列出当前用户的全部已成文文章（最新在前）。用来挑选要合并/参考的文章。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   async (_args, { env, scope }) => {
@@ -39,7 +49,7 @@ register(
       const obj = await env.FILES.get(prefix + stem + ".json");
       if (!obj) continue;
       let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
-      const title = (doc.articles && doc.articles[0] && doc.articles[0].title) || "(无题)";
+      const title = currentArticles(doc)[0]?.title || "(无题)";
       out.push({ stem, title, createdAt: doc.createdAt || 0 });
     }
     out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -54,7 +64,7 @@ register(
     const obj = await env.FILES.get(scope + "articles/" + stem + ".json");
     if (!obj) return { error: "not_found" };
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
-    const articles = Array.isArray(doc.articles) ? doc.articles.map((a) => ({ title: a.title, body: a.body })) : [];
+    const articles = currentArticles(doc).map((a) => ({ title: a.title, body: a.body }));
     return { transcript: doc.transcript || "", articles };
   }
 );
@@ -67,13 +77,7 @@ register(
     if (!obj) return { error: "not_found" };
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
     // Schema-3: current articles are in versions[head], not at top level.
-    const prev = (() => {
-      if (Array.isArray(doc.versions) && doc.head) {
-        const cv = doc.versions.find((e) => e.v === doc.head);
-        if (cv && Array.isArray(cv.articles)) return cv.articles;
-      }
-      return Array.isArray(doc.articles) ? doc.articles : [];
-    })();
+    const prev = currentArticles(doc);
     doc.articles = articles.map((a, i) => {
       const out = { title: String(a.title || "(无题)"), body: String(a.body || "") };
       if (prev[i] && prev[i].wechatMediaId) out.wechatMediaId = prev[i].wechatMediaId;

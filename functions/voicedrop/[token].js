@@ -122,9 +122,15 @@ function esc(s) {
 }
 
 function resolveArticles(doc) {
-  if (Array.isArray(doc.articles) && doc.articles.length) {
-    return doc.articles.filter((a) => a && (a.body || '').trim());
+  // Schema-3: current content lives in versions[head]; schema-2: top-level
+  // articles; v1: a single title/body. Pull the active list, then drop empties.
+  let list = null;
+  if (Array.isArray(doc.versions) && doc.head) {
+    const cv = doc.versions.find((e) => e.v === doc.head);
+    if (cv && Array.isArray(cv.articles)) list = cv.articles;
   }
+  if (!list && Array.isArray(doc.articles)) list = doc.articles;
+  if (list && list.length) return list.filter((a) => a && (a.body || '').trim());
   if (doc.body && String(doc.body).trim()) return [{ title: doc.title || '无题', body: doc.body }];
   return [];
 }

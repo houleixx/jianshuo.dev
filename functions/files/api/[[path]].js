@@ -481,7 +481,7 @@ export async function onRequest(context) {
           if (liveObj) {
             try {
               const live = JSON.parse(await liveObj.text());
-              title = (Array.isArray(live.articles) ? live.articles[0]?.title : live.title) ?? title;
+              title = resolveArticles(live)[0]?.title ?? title;
             } catch {}
           }
         }

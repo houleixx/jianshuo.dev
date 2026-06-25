@@ -26,12 +26,30 @@ function seedTwoArticles() {
   };
 }
 
+// A schema-3 doc: current content lives in versions[head], not top-level.
+function seedSchema3() {
+  return {
+    "users/u/articles/s3a.json": JSON.stringify({
+      createdAt: 3000, transcript: "tx3", head: 2,
+      versions: [
+        { v: 1, savedAt: 1, source: "mine", articles: [{ title: "OLD", body: "old" }] },
+        { v: 2, savedAt: 2, source: "agent", articles: [{ title: "NEW", body: "new" }] },
+      ],
+    }),
+  };
+}
+
 describe("list_articles", () => {
   it("lists json articles newest-first and skips .empty/.srt", async () => {
     const env = fakeEnv(seedTwoArticles());
     const r = await rt("list_articles", {}, CTX(env));
     expect(r.articles.map((a) => a.stem)).toEqual(["s2", "s1"]);
     expect(r.articles[0]).toMatchObject({ stem: "s2", title: "A2", createdAt: 2000 });
+  });
+  it("reads the head version's title for a schema-3 doc", async () => {
+    const env = fakeEnv(seedSchema3());
+    const r = await rt("list_articles", {}, CTX(env));
+    expect(r.articles[0]).toMatchObject({ stem: "s3a", title: "NEW" });
   });
 });
 
@@ -48,6 +66,11 @@ describe("read_article", () => {
   it("404s a missing stem", async () => {
     const env = fakeEnv(seedTwoArticles());
     expect(await rt("read_article", { stem: "nope" }, CTX(env))).toEqual({ error: "not_found" });
+  });
+  it("returns the head version's articles for a schema-3 doc", async () => {
+    const env = fakeEnv(seedSchema3());
+    const r = await rt("read_article", { stem: "s3a" }, CTX(env));
+    expect(r).toEqual({ transcript: "tx3", articles: [{ title: "NEW", body: "new" }] });
   });
 });
 
