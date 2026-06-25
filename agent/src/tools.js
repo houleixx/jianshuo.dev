@@ -66,7 +66,14 @@ register(
     const obj = await env.FILES.get(articleKey);
     if (!obj) return { error: "not_found" };
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
-    const prev = Array.isArray(doc.articles) ? doc.articles : [];
+    // Schema-3: current articles are in versions[head], not at top level.
+    const prev = (() => {
+      if (Array.isArray(doc.versions) && doc.head) {
+        const cv = doc.versions.find((e) => e.v === doc.head);
+        if (cv && Array.isArray(cv.articles)) return cv.articles;
+      }
+      return Array.isArray(doc.articles) ? doc.articles : [];
+    })();
     doc.articles = articles.map((a, i) => {
       const out = { title: String(a.title || "(无题)"), body: String(a.body || "") };
       if (prev[i] && prev[i].wechatMediaId) out.wechatMediaId = prev[i].wechatMediaId;

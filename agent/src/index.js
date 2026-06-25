@@ -44,6 +44,24 @@ async function writeLlmLog(env, rec) {
   }
 }
 
+// Return the current articles[] from a doc regardless of schema version.
+// Schema-3: articles live in versions[head]; schema-2: top-level articles; v1: body.
+function resolveArticles(doc) {
+  if (Array.isArray(doc.versions) && doc.head) {
+    const cv = doc.versions.find((e) => e.v === doc.head);
+    if (cv && Array.isArray(cv.articles) && cv.articles.length) return cv.articles;
+  }
+  if (Array.isArray(doc.articles) && doc.articles.length) return doc.articles;
+  if (doc.body) return [{ title: doc.title || "(无题)", body: doc.body }];
+  return [];
+}
+
+// Ensure the doc has a top-level `articles` field for iOS backwards compat.
+function withTopLevelArticles(doc) {
+  if (Array.isArray(doc.articles) && doc.articles.length) return doc;
+  return { ...doc, articles: resolveArticles(doc) };
+}
+
 // Owner-voice DNA — reused from mining/mine.py SYSTEM, reframed for REVISION.
 const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面给你：你这段录音的原始口述转写（事实来源）、当前的全部文章、以及历次修改要求。按「这次的修改要求」改写全部文章——可以改写、合并、拆分、增删某一篇。
 
@@ -129,8 +147,8 @@ export class ArticleEditor extends Agent {
       const obj = await this.env.FILES.get(articleKey);
       if (!obj) throw new Error("文章不存在");
       const doc = JSON.parse(await obj.text());
-      const articles = Array.isArray(doc.articles) && doc.articles.length
-        ? doc.articles : (doc.body ? [{ title: doc.title || "(无题)", body: doc.body }] : []);
+      // Schema-3 stores articles inside versions[head], not at the top level.
+      const articles = resolveArticles(doc);
 
       const userText = [
         "当前文章（你正在编辑这一篇）：",
@@ -153,7 +171,8 @@ export class ArticleEditor extends Agent {
       // the in-flight queue item resolves — works for edit, merge, AND action-only turns.
       const after = await this.env.FILES.get(articleKey);
       const finalDoc = after ? JSON.parse(await after.text()) : doc;
-      connection.send(JSON.stringify({ type: "updated", article: finalDoc }));
+      // iOS ArticleDoc expects top-level `articles`; reconstruct it from schema-3.
+      connection.send(JSON.stringify({ type: "updated", article: withTopLevelArticles(finalDoc) }));
 
       const summary = (result.finalText || "").trim();
       if (summary) {
