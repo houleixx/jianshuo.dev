@@ -641,7 +641,9 @@ export async function onRequest(context) {
 // header — any valid session token (user or admin) is accepted by /agent/mine/trigger.
 async function dispatchMine(authHeader) {
   try {
-    const resp = await fetch('https://jianshuo.dev/agent/mine/trigger', {
+    // Use the workers.dev URL to bypass same-zone Pages routing (which returns
+    // 405 for POST on static paths before the Worker zone route can handle it).
+    const resp = await fetch('https://voicedrop-agent.jianshuo.workers.dev/agent/mine/trigger', {
       method: 'POST',
       headers: { 'Authorization': authHeader },
     });

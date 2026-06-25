@@ -13,6 +13,10 @@
     { "pattern": "jianshuo.dev/agent/*", "zone_name": "jianshuo.dev" }
   ],
 
+  // workers.dev subdomain: lets same-zone Pages Functions call us without
+  // hitting the Pages router (which returns 405 for POST on static paths).
+  "workers_dev": true,
+
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "jianshuo-dev-files" }
   ],
