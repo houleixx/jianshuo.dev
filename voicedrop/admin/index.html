@@ -130,9 +130,41 @@ header.top .grow{flex:1}
       <span class="grow"></span>
       <a class="btn" href="./mine.html">挖文日志</a>
       <a class="btn" href="./llm.html">LLM 日志</a>
+      <button class="btn" id="modelBtn">模型设置</button>
       <button class="btn" id="refresh">刷新</button>
       <button class="btn" id="logout">退出</button>
     </header>
+
+    <!-- ── 模型设置面板 ── -->
+    <div id="modelPanel" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px;box-shadow:var(--shadow)">
+      <div style="font-weight:650;margin-bottom:14px;font-size:1rem">挖文模型设置</div>
+      <div style="display:grid;gap:10px;max-width:480px">
+        <label>
+          <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">供应商</div>
+          <select id="mProvider" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb">
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai-compat">OpenAI 兼容（DeepSeek / Kimi / Qwen …）</option>
+          </select>
+        </label>
+        <label>
+          <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">模型名称</div>
+          <input id="mModel" type="text" placeholder="claude-sonnet-4-6" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb"/>
+        </label>
+        <label id="mBaseUrlRow" style="display:none">
+          <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">Base URL</div>
+          <input id="mBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb"/>
+        </label>
+        <label>
+          <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">API Key</div>
+          <input id="mApiKey" type="password" placeholder="sk-…" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb"/>
+        </label>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:2px">
+          <button class="btn primary" id="mSave" style="width:auto;padding:9px 22px">保存</button>
+          <span id="mMsg" style="font-size:.86rem"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="cards" id="cards"></div>
     <div id="users"></div>
   </div>
@@ -413,14 +445,60 @@ function enter(){
   const v=$('#tok').value.trim();
   if(!v){ $('#gateErr').textContent='请输入 token'; return; }
   TOKEN=v; localStorage.setItem(TKEY,v);
-  $('#gate').hidden=true; $('#app').hidden=false; load();
+  $('#gate').hidden=true; $('#app').hidden=false; load(); loadModelCfg();
 }
 $('#enter').onclick=enter;
 $('#tok').addEventListener('keydown',e=>{ if(e.key==='Enter')enter(); });
 $('#refresh').onclick=load;
 $('#logout').onclick=()=>logout();
 
-if(TOKEN){ $('#app').hidden=false; load(); } else { showGate(); }
+if(TOKEN){ $('#app').hidden=false; load(); loadModelCfg(); } else { showGate(); }
+
+// ── 模型设置 ──────────────────────────────────────────────────────────────────
+$('#modelBtn').onclick = () => {
+  const p = $('#modelPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+};
+$('#mProvider').onchange = () => {
+  $('#mBaseUrlRow').style.display = $('#mProvider').value === 'openai-compat' ? 'block' : 'none';
+};
+async function loadModelCfg() {
+  try {
+    const r = await fetch(`${API}/download/config/model.json`, { headers:{ Authorization:`Bearer ${TOKEN}` }});
+    if (!r.ok) return;
+    const cfg = await r.json();
+    if (cfg.provider) $('#mProvider').value = cfg.provider;
+    if (cfg.model)    $('#mModel').value    = cfg.model;
+    if (cfg.baseUrl)  $('#mBaseUrl').value  = cfg.baseUrl;
+    if (cfg.apiKey)   $('#mApiKey').value   = cfg.apiKey;
+    $('#mProvider').onchange();
+  } catch(_) {}
+}
+$('#mSave').onclick = async () => {
+  const cfg = {
+    provider: $('#mProvider').value,
+    model:    $('#mModel').value.trim(),
+    baseUrl:  $('#mBaseUrl').value.trim(),
+    apiKey:   $('#mApiKey').value.trim(),
+  };
+  if (!cfg.model) { showMsg('请填写模型名称', 'var(--warn)'); return; }
+  if (cfg.provider === 'openai-compat' && !cfg.baseUrl) { showMsg('请填写 Base URL', 'var(--warn)'); return; }
+  try {
+    $('#mSave').disabled = true;
+    const r = await fetch(`${API}/upload/config/model.json`, {
+      method: 'PUT',
+      headers: { Authorization:`Bearer ${TOKEN}`, 'Content-Type':'application/json' },
+      body: JSON.stringify(cfg),
+    });
+    if (!r.ok) throw new Error(`${r.status}`);
+    showMsg('已保存 ✓', 'var(--accent)');
+  } catch(e) { showMsg('保存失败：'+e.message, '#c0392b'); }
+  finally { $('#mSave').disabled = false; }
+};
+function showMsg(txt, color) {
+  const m = $('#mMsg'); m.textContent = txt; m.style.color = color;
+  setTimeout(() => { m.textContent = ''; }, 3000);
+}
 </script>
 </body>
 </html>

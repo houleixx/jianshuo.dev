@@ -12,9 +12,27 @@
 //   R2_ACCESS_KEY_ID       R2 S3-compatible access key
 //   R2_SECRET_ACCESS_KEY   R2 S3-compatible secret key
 
-const MINE_MODEL = "claude-sonnet-4-6";
-const MIN_CHARS  = 20;
-const ORIGIN     = "https://jianshuo.dev";
+const MINE_MODEL_DEFAULT = "claude-sonnet-4-6";
+const MIN_CHARS          = 20;
+const ORIGIN             = "https://jianshuo.dev";
+
+// ── Model config (R2 `config/model.json`, falls back to env + default) ─────────
+
+async function loadModelConfig(env) {
+  try {
+    const obj = await env.FILES.get("config/model.json");
+    if (obj) {
+      const cfg = await obj.json();
+      return {
+        provider: cfg.provider || "anthropic",
+        model:    cfg.model    || MINE_MODEL_DEFAULT,
+        baseUrl:  cfg.baseUrl  || "",
+        apiKey:   cfg.apiKey   || env.CLAUDE_API_KEY || "",
+      };
+    }
+  } catch (_) {}
+  return { provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "" };
+}
 
 // ── System prompts (identical to mine.py) ─────────────────────────────────────
 
@@ -279,7 +297,7 @@ function findSessionPhotos(audioKey, allKeys) {
 
 // ── Claude (article generation) ───────────────────────────────────────────────
 
-async function generateArticles(transcript, claudeMd, photos, force, env) {
+async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg) {
   let system;
   if (force) {
     system = SYSTEM_FORCE;
@@ -289,34 +307,68 @@ async function generateArticles(transcript, claudeMd, photos, force, env) {
     system = SYSTEM + (photos?.length ? _PHOTO_INSTR : "");
   }
 
-  let content;
-  if (!photos?.length || force) {
-    content = `口述转写：\n\n${transcript}`;
-  } else {
-    content = [{ type: "text", text: `口述转写：\n\n${transcript}` }];
-    for (let i = 0; i < photos.length; i++) {
-      content.push({ type: "text", text: `\n[照片 ${i + 1}，拍摄于 ${photos[i].label}]` });
-      content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } });
+  const t0 = Date.now();
+  let text, latencyMs, rawResp;
+
+  if (modelCfg.provider === "openai-compat") {
+    // ── OpenAI-compatible (DeepSeek / Kimi / Qwen / etc.) ────────────────────
+    let userContent;
+    if (!photos?.length || force) {
+      userContent = `口述转写：\n\n${transcript}`;
+    } else {
+      userContent = [{ type: "text", text: `口述转写：\n\n${transcript}` }];
+      for (let i = 0; i < photos.length; i++) {
+        userContent.push({ type: "text", text: `\n[照片 ${i + 1}，拍摄于 ${photos[i].label}]` });
+        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${photos[i].b64}`, detail: "low" } });
+      }
     }
+    const payload = {
+      model: modelCfg.model,
+      max_tokens: force ? 2000 : 8000,
+      messages: [
+        { role: "system", content: system },
+        { role: "user",   content: userContent },
+      ],
+      response_format: { type: "json_object" },
+    };
+    const resp = await fetch(`${modelCfg.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${modelCfg.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    latencyMs = Date.now() - t0;
+    if (!resp.ok) throw new Error(`LLM ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+    rawResp = await resp.json();
+    text = rawResp.choices?.[0]?.message?.content || "";
+  } else {
+    // ── Anthropic ─────────────────────────────────────────────────────────────
+    let content;
+    if (!photos?.length || force) {
+      content = `口述转写：\n\n${transcript}`;
+    } else {
+      content = [{ type: "text", text: `口述转写：\n\n${transcript}` }];
+      for (let i = 0; i < photos.length; i++) {
+        content.push({ type: "text", text: `\n[照片 ${i + 1}，拍摄于 ${photos[i].label}]` });
+        content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } });
+      }
+    }
+    const payload = {
+      model: modelCfg.model, max_tokens: force ? 2000 : 8000, system,
+      messages: [{ role: "user", content }],
+    };
+    if (!force) payload.output_config = { format: { type: "json_schema", schema: ARTICLES_SCHEMA } };
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": modelCfg.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    latencyMs = Date.now() - t0;
+    if (!resp.ok) throw new Error(`Claude ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+    rawResp = await resp.json();
+    text = (rawResp.content || []).filter(b => b.type === "text").map(b => b.text).join("");
   }
 
-  const payload = {
-    model: MINE_MODEL, max_tokens: force ? 2000 : 8000, system,
-    messages: [{ role: "user", content }],
-  };
-  if (!force) payload.output_config = { format: { type: "json_schema", schema: ARTICLES_SCHEMA } };
-
-  const t0   = Date.now();
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": env.CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const latencyMs = Date.now() - t0;
-  if (!resp.ok) throw new Error(`Claude ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-  const data = await resp.json();
-  const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-  return { articles: parseArticles(text), latencyMs, rawResp: data };
+  return { articles: parseArticles(text), latencyMs, rawResp };
 }
 
 // ── Article API writes (via versioned article API so history is preserved) ─────
@@ -363,7 +415,7 @@ async function writeLlmLog(env, rec) {
     const rid = `${ts}-${[...crypto.getRandomValues(new Uint8Array(3))].map(b => b.toString(16).padStart(2,"0")).join("")}`;
     const day = new Date(ts).toISOString().slice(0, 10);
     await env.FILES.put(`llmlogs/${day}/${rid}.json`,
-      JSON.stringify({ id: rid, ts, source: "mine", model: MINE_MODEL, ...rec }),
+      JSON.stringify({ id: rid, ts, source: "mine", ...rec }),
       { httpMetadata: { contentType: "application/json" } });
   } catch (_) {}
 }
@@ -383,7 +435,7 @@ async function writeMineLog(env, rec) {
 
 // ── Per-audio pipeline ─────────────────────────────────────────────────────────
 
-async function mineOneAudio(audioKey, allKeys, uploaded, env) {
+async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
   const leaf  = audioKey.split("/").pop();
   const scope = userPrefix(audioKey);
   const stem  = leaf.replace(/\.m4a$/, "");
@@ -465,12 +517,12 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env) {
       const tLlm = Date.now();
       log(`LLM 开始${force ? " (force)" : ""}`, { step });
       try {
-        const r = await generateArticles(transcript, force ? "" : claudeMd, force ? null : (photos.length ? photos : null), force, env);
-        await writeLlmLog(env, { ok: true, status: 200, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        const r = await generateArticles(transcript, force ? "" : claudeMd, force ? null : (photos.length ? photos : null), force, env, modelCfg);
+        await writeLlmLog(env, { ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
         log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
         return r.articles;
       } catch (e) {
-        await writeLlmLog(env, { ok: false, status: 0, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
+        await writeLlmLog(env, { ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
         throw e;
       }
     };
@@ -494,7 +546,7 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env) {
     const doc = {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
-      transcript, srt, articles, status: "ready", model: MINE_MODEL,
+      transcript, srt, articles, status: "ready", model: modelCfg.model,
       ...(relPhotos.length && { photos: relPhotos }),
     };
 
@@ -516,6 +568,8 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env) {
 
 export async function runMine(env) {
   const t0 = Date.now();
+  const modelCfg = await loadModelConfig(env);
+  console.log(`[mine] model: ${modelCfg.provider}/${modelCfg.model}`);
 
   // Paginated list of all R2 objects
   let cursor, allObjects = [];
@@ -538,7 +592,7 @@ export async function runMine(env) {
   for (let i = 0; i < todo.length; i++) {
     console.log(`[mine] ── ${todo[i].split("/").pop()} (${i+1}/${todo.length})`);
     try {
-      const r = await mineOneAudio(todo[i], allKeys, uploaded, env);
+      const r = await mineOneAudio(todo[i], allKeys, uploaded, env, modelCfg);
       if (r === "mined") mined++;
       else if (r === "empty") empty++;
     } catch (e) {
