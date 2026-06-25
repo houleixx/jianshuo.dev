@@ -354,6 +354,53 @@ export default {
       }));
     }
 
+    // ── /agent/history/<stem> ── article version history ────────────────────
+    if (url.pathname.startsWith("/agent/history/")) {
+      if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const sc = await resolveScope(tok, env);
+      if (!sc) return new Response("unauthorized", { status: 401 });
+
+      const stem = url.pathname.slice("/agent/history/".length);
+      if (!stem || stem.includes("/") || stem.includes("..")) {
+        return new Response("bad stem", { status: 400 });
+      }
+      const histKey = `${sc}articles/${stem}_versions.json`;
+      const obj = await env.FILES.get(histKey);
+      const hist = obj ? JSON.parse(await obj.text()) : { versions: [] };
+      return Response.json(hist);
+    }
+
+    // ── /agent/revert/<stem>/<index> ── revert article to a version ─────────
+    if (url.pathname.startsWith("/agent/revert/")) {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const sc = await resolveScope(tok, env);
+      if (!sc) return new Response("unauthorized", { status: 401 });
+
+      const rest = url.pathname.slice("/agent/revert/".length); // "<stem>/<index>"
+      const lastSlash = rest.lastIndexOf("/");
+      if (lastSlash < 1) return new Response("bad request", { status: 400 });
+      const stem = rest.slice(0, lastSlash);
+      const idx = parseInt(rest.slice(lastSlash + 1), 10);
+      if (!stem || stem.includes("..") || isNaN(idx)) return new Response("bad request", { status: 400 });
+
+      const histKey = `${sc}articles/${stem}_versions.json`;
+      const histObj = await env.FILES.get(histKey);
+      if (!histObj) return new Response("no history", { status: 404 });
+      const hist = JSON.parse(await histObj.text());
+      const ver = hist.versions[idx];
+      if (!ver) return new Response("version not found", { status: 404 });
+
+      const articleKey = `${sc}articles/${stem}.json`;
+      const currObj = await env.FILES.get(articleKey);
+      const curr = currObj ? JSON.parse(await currObj.text()) : {};
+      const restored = { ...curr, articles: ver.articles, photos: ver.photos ?? curr.photos };
+      await env.FILES.put(articleKey, JSON.stringify(restored),
+        { httpMetadata: { contentType: "application/json" } });
+      return Response.json({ ok: true, doc: restored });
+    }
+
     return new Response("not found", { status: 404 });
   },
 

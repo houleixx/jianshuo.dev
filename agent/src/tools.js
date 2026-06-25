@@ -59,6 +59,25 @@ register(
   }
 );
 
+// ── Version history helper ─────────────────────────────────────────────────
+// Saves the current article doc as a version snapshot to a separate
+// <stem>_versions.json sidecar before any write. Called by write_article.
+export async function appendVersion(env, articleKey, currentDoc) {
+  const histKey = articleKey.replace(".json", "_versions.json");
+  let hist = { versions: [] };
+  try {
+    const obj = await env.FILES.get(histKey);
+    if (obj) hist = JSON.parse(await obj.text());
+  } catch {}
+  hist.versions.unshift({
+    savedAt: Date.now(),
+    articles: currentDoc.articles || [],
+    photos: currentDoc.photos || null,
+  });
+  hist.versions = hist.versions.slice(0, 20);
+  await env.FILES.put(histKey, JSON.stringify(hist), { httpMetadata: { contentType: "application/json" } });
+}
+
 register(
   { name: "write_article", description: "把改写后的全部文章写回当前正在编辑的这一篇（只能写当前篇）。输入是完整的文章数组。", input_schema: { type: "object", properties: { articles: { type: "array", items: { type: "object", properties: { title: { type: "string" }, body: { type: "string" } }, required: ["title", "body"], additionalProperties: false } } }, required: ["articles"], additionalProperties: false } },
   async ({ articles }, { env, articleKey, token, origin }) => {
@@ -66,6 +85,8 @@ register(
     const obj = await env.FILES.get(articleKey);
     if (!obj) return { error: "not_found" };
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
+    // Save existing doc as a version snapshot before overwriting.
+    await appendVersion(env, articleKey, doc);
     const prev = Array.isArray(doc.articles) ? doc.articles : [];
     doc.articles = articles.map((a, i) => {
       const out = { title: String(a.title || "(无题)"), body: String(a.body || "") };
