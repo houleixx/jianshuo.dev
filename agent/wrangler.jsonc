@@ -28,7 +28,7 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ArticleEditor"] },
     { "tag": "v2", "new_sqlite_classes": ["StatusHub"] },
-    { "tag": "v3", "new_classes":        ["Miner"] }
+    { "tag": "v3", "new_sqlite_classes": ["Miner"] }
   ],
 
   "triggers": {
