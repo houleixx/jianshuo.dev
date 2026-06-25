@@ -141,31 +141,80 @@ export class ArticleEditor extends Agent {
     if (this._busy) { connection.send(JSON.stringify({ type: "error", message: "正在修改，请稍候" })); return; }
     this._busy = true;
     connection.send(JSON.stringify({ type: "status", state: "working" }));
+
+    // Images attached to this instruction (base64 thumbnails + R2 keys).
+    const msgImages = Array.isArray(msg.images)
+      ? msg.images.filter((i) => i && i.data && i.key)
+      : [];
+
     try {
       const { articleKey, scope, token } = this._config();
       if (!articleKey) throw new Error("会话未初始化");
       const obj = await this.env.FILES.get(articleKey);
       if (!obj) throw new Error("文章不存在");
-      const doc = JSON.parse(await obj.text());
+      let doc = JSON.parse(await obj.text());
+
+      // Pre-append new photo keys to doc.photos so write_article preserves them.
+      // This is a metadata-only update (no new version created).
+      if (msgImages.length > 0) {
+        const existing = Array.isArray(doc.photos) ? doc.photos : [];
+        const fresh = msgImages.map((i) => i.key).filter((k) => !existing.includes(k));
+        if (fresh.length > 0) {
+          doc = { ...doc, photos: [...existing, ...fresh] };
+          await this.env.FILES.put(articleKey, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+        }
+      }
+
       // Schema-3 stores articles inside versions[head], not at the top level.
       const articles = resolveArticles(doc);
+      const currentPhotos = Array.isArray(doc.photos) ? doc.photos : [];
 
-      const userText = [
+      // Build the text portion of the user message.
+      const textLines = [
         "当前文章（你正在编辑这一篇）：",
         JSON.stringify({ articles: articles.map((a) => ({ title: a.title, body: a.body })) }, null, 2),
         "",
         "原始口述转写（事实来源，只能用这里出现的事实，不可编造）：",
         doc.transcript || "（无）",
         "",
-        "这次的语音指令：",
-        instruction,
-      ].join("\n");
+      ];
+
+      if (msgImages.length > 0) {
+        // Tell the model exactly which [[photo:N]] number each uploaded image maps to.
+        const baseIdx = currentPhotos.length - msgImages.length; // photos were just pre-appended
+        textLines.push(
+          "本次上传的新照片（已在消息里附上缩略图，按顺序对应上方图片）：",
+          ...msgImages.map((img, i) =>
+            `  [[photo:${baseIdx + i + 1}]] → key: ${img.key}`
+          ),
+          "",
+          "⚠️ 必须把以上每一张照片都插入文章正文里合适的段落，使用对应的 [[photo:N]] 标记。一张都不能漏。",
+          "",
+        );
+      }
+
+      textLines.push("这次的语音指令：", instruction);
+
+      // If images are present, build a multi-block content array (vision + text).
+      // Otherwise, pass the text string directly (backward-compatible path).
+      let userContent;
+      if (msgImages.length > 0) {
+        userContent = [
+          ...msgImages.map((img) => ({
+            type: "image",
+            source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data },
+          })),
+          { type: "text", text: textLines.join("\n") },
+        ];
+      } else {
+        userContent = textLines.join("\n");
+      }
 
       const ctx = { env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev" };
       const stem = articleKey.replace(/\.json$/, "").split("/articles/").pop();
       const turnId = `${Date.now()}-${rand6()}`;
       const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction });
-      const result = await runAgentLoop({ callClaude, ctx, system: SYSTEM, userText });
+      const result = await runAgentLoop({ callClaude, ctx, system: SYSTEM, userContent });
 
       // Always push the (possibly unchanged) current doc so the app reloads and
       // the in-flight queue item resolves — works for edit, merge, AND action-only turns.

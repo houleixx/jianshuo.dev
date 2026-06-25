@@ -10,8 +10,9 @@ export function parseAssistant(resp) {
 }
 
 // Drive Claude with tools until it stops calling them (or maxSteps).
-export async function runAgentLoop({ callClaude, ctx, system, userText, maxSteps = 8 }) {
-  const messages = [{ role: "user", content: userText }];
+// userContent: string (text-only) or content-block array (e.g. with image blocks).
+export async function runAgentLoop({ callClaude, ctx, system, userContent, maxSteps = 8 }) {
+  const messages = [{ role: "user", content: userContent }];
   const calledTools = [];
   let finalText = "";
   let hadError = false;
