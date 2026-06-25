@@ -333,6 +333,18 @@ export async function onRequest(context) {
   // firstSharedAt}. Content is always read from the live article — edits to the
   // source article are immediately visible in the community.
 
+  // Resolve current articles[] regardless of schema version.
+  // Schema-3: articles live in versions[head]; schema-2: top-level articles; v1: body.
+  function resolveArticles(doc) {
+    if (Array.isArray(doc.versions) && doc.head) {
+      const cv = doc.versions.find((e) => e.v === doc.head);
+      if (cv && Array.isArray(cv.articles) && cv.articles.length) return cv.articles;
+    }
+    if (Array.isArray(doc.articles) && doc.articles.length) return doc.articles;
+    if (doc.body) return [{ title: doc.title || '(无题)', body: doc.body }];
+    return [];
+  }
+
   // Share (or re-share) one of the user's own articles. Writes a schema-2 pointer
   // with no content copy. shareId is HMAC-derived from the article key so re-sharing
   // updates the same post in place; firstSharedAt is preserved.
@@ -346,8 +358,7 @@ export async function onRequest(context) {
     const obj = await env.FILES.get(articleKey);
     if (!obj) return json({ error: 'article not found' }, 404);
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return json({ error: 'bad article' }, 400); }
-    const articles = (Array.isArray(doc.articles) && doc.articles.length)
-      ? doc.articles : (doc.body ? [doc] : []);
+    const articles = resolveArticles(doc);
     if (!articles.length) return json({ error: 'empty article' }, 400);
     let author = '匿名';
     const md = await env.FILES.get(scope + 'CLAUDE.md');
@@ -387,7 +398,7 @@ export async function onRequest(context) {
           if (liveObj) {
             try {
               const live = JSON.parse(await liveObj.text());
-              const liveArticles = Array.isArray(live.articles) ? live.articles : (live.body ? [live] : []);
+              const liveArticles = resolveArticles(live);
               title = liveArticles[0]?.title ?? title;
               count = liveArticles.length;
             } catch {}
@@ -432,9 +443,7 @@ export async function onRequest(context) {
       if (liveObj) {
         try {
           const live = JSON.parse(await liveObj.text());
-          articles = Array.isArray(live.articles)
-            ? live.articles.map(a => ({ title: a.title, body: a.body }))
-            : (live.body ? [{ title: live.title || '(无题)', body: live.body }] : []);
+          articles = resolveArticles(live).map(a => ({ title: a.title, body: a.body }));
           title = articles[0]?.title ?? title;
         } catch {}
       }

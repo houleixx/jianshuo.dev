@@ -156,9 +156,12 @@ export class ArticleEditor extends Agent {
 
       // Pre-append new photo keys to doc.photos so write_article preserves them.
       // This is a metadata-only update (no new version created).
-      if (msgImages.length > 0) {
+      const newKeysFromImages = msgImages.length > 0
+        ? msgImages.map((i) => i.key)
+        : (instruction.match(/photos\/[\w\-\/]+\.jpe?g/g) || []);
+      if (newKeysFromImages.length > 0) {
         const existing = Array.isArray(doc.photos) ? doc.photos : [];
-        const fresh = msgImages.map((i) => i.key).filter((k) => !existing.includes(k));
+        const fresh = newKeysFromImages.filter((k) => !existing.includes(k));
         if (fresh.length > 0) {
           doc = { ...doc, photos: [...existing, ...fresh] };
           await this.env.FILES.put(articleKey, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
