@@ -17,6 +17,7 @@
 import { Agent, getAgentByName } from "agents";
 import { runAgentLoop } from "./loop.js";
 import { TOOL_DEFS } from "./tools.js";
+import { runMine } from "./miner.js";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -257,6 +258,27 @@ export class StatusHub {
 }
 
 // ---------------------------------------------------------------------------
+// Miner: singleton Durable Object that serialises mine runs via alarm().
+// One alarm at a time prevents duplicate ASR calls when uploads burst.
+// ---------------------------------------------------------------------------
+export class Miner {
+  constructor(state, env) {
+    this.state = state;
+    this.env   = env;
+  }
+
+  async fetch(_request) {
+    const existing = await this.state.storage.getAlarm();
+    if (!existing) await this.state.storage.setAlarm(Date.now() + 500);
+    return new Response("queued", { status: 202 });
+  }
+
+  async alarm() {
+    await runMine(this.env);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Worker entry: authenticate, then route the WS upgrade to the right DO.
 // ---------------------------------------------------------------------------
 export default {
@@ -302,6 +324,15 @@ export default {
       return stub.fetch(request);
     }
 
+    // ── /agent/mine/trigger ── kick the miner now (authenticated with FILES_TOKEN) ──
+    if (url.pathname === "/agent/mine/trigger") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const adminToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!env.FILES_TOKEN || adminToken !== env.FILES_TOKEN) return new Response("unauthorized", { status: 401 });
+      const stub = env.Miner.get(env.Miner.idFromName("miner"));
+      return stub.fetch(request);
+    }
+
     // ── /agent/notify ── mine.py notifies about processing state ───────────
     if (url.pathname === "/agent/notify") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
@@ -322,6 +353,12 @@ export default {
     }
 
     return new Response("not found", { status: 404 });
+  },
+
+  // CF Cron Trigger: fires the miner on schedule (every 6 hours).
+  async scheduled(_event, env, ctx) {
+    const stub = env.Miner.get(env.Miner.idFromName("miner"));
+    ctx.waitUntil(stub.fetch(new Request("https://miner/trigger", { method: "POST" })));
   },
 };
 

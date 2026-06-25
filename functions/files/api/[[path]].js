@@ -611,32 +611,16 @@ export async function onRequest(context) {
   return json({ error: 'bad request' }, 400);
 }
 
-// Dispatch the GitHub article-miner workflow (mine.yml). Used by POST /mine
-// (加急处理) and automatically on every new VoiceDrop-*.m4a upload.
+// Kick the Cloudflare miner Worker. Used by POST /mine (加急处理) and
+// automatically on every new VoiceDrop-*.m4a upload.
 async function dispatchMine(env) {
-  return dispatchWorkflow(env, 'mine.yml');
-}
-
-// Fire a repository workflow_dispatch on jianshuo/voicedrop. `inputs` is optional
-// (mine.yml takes none; publish-wechat.yml takes {article_key}). The GitHub token
-// lives only as a Pages secret.
-async function dispatchWorkflow(env, workflow, inputs) {
-  if (!env.GH_DISPATCH_TOKEN) return { ok: false, status: 0, detail: 'no GH_DISPATCH_TOKEN' };
   try {
-    const body = { ref: 'main' };
-    if (inputs) body.inputs = inputs;
-    const gh = await fetch(`https://api.github.com/repos/jianshuo/voicedrop/actions/workflows/${workflow}/dispatches`, {
+    const resp = await fetch('https://jianshuo.dev/agent/mine/trigger', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.GH_DISPATCH_TOKEN}`,
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'voicedrop-files',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify(body),
+      headers: { 'Authorization': `Bearer ${env.FILES_TOKEN}` },
     });
-    if (gh.status === 204) return { ok: true, status: 204, detail: '' };
-    return { ok: false, status: gh.status, detail: (await gh.text()).slice(0, 200) };
+    if (resp.ok) return { ok: true, status: resp.status, detail: '' };
+    return { ok: false, status: resp.status, detail: (await resp.text()).slice(0, 200) };
   } catch (e) {
     return { ok: false, status: 0, detail: String(e && e.message || e) };
   }

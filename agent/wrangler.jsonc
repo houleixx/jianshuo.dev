@@ -20,19 +20,28 @@
   "durable_objects": {
     "bindings": [
       { "name": "ArticleEditor", "class_name": "ArticleEditor" },
-      { "name": "StatusHub", "class_name": "StatusHub" }
+      { "name": "StatusHub",     "class_name": "StatusHub"     },
+      { "name": "Miner",         "class_name": "Miner"         }
     ]
   },
 
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ArticleEditor"] },
-    { "tag": "v2", "new_sqlite_classes": ["StatusHub"] }
-  ]
+    { "tag": "v2", "new_sqlite_classes": ["StatusHub"] },
+    { "tag": "v3", "new_classes":        ["Miner"] }
+  ],
+
+  "triggers": {
+    "crons": ["0 */6 * * *"]
+  }
 
   // Secrets (set with `wrangler secret put`):
-  //   SESSION_SECRET  — same value as the Pages project (verifies app JWTs for
-  //                     /agent/edit + /agent/status; anon tokens work without it)
-  //   CLAUDE_API_KEY  — Anthropic API key for the rewrite calls
-  //   FILES_TOKEN     — admin token (= Pages FILES_TOKEN); authenticates mine.py's
-  //                     POST /agent/notify. Missing it → notify 401 (status never updates).
+  //   SESSION_SECRET         — same value as the Pages project
+  //   CLAUDE_API_KEY         — Anthropic API key
+  //   FILES_TOKEN            — admin token for jianshuo.dev/files
+  //   VOLC_ASR_APPID         — Volcano ASR app id       (was GitHub secret)
+  //   VOLC_ASR_ACCESS_TOKEN  — Volcano ASR access token (was GitHub secret)
+  //   R2_ACCOUNT_ID          — Cloudflare account id    (was GitHub secret)
+  //   R2_ACCESS_KEY_ID       — R2 S3 access key         (was GitHub secret)
+  //   R2_SECRET_ACCESS_KEY   — R2 S3 secret key         (was GitHub secret)
 }
