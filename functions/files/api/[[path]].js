@@ -19,7 +19,7 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-import { readArticleDoc, writeArticleDoc } from "../../lib/article-store.js";
+import { readArticleDoc, writeArticleDoc, setHead } from "../../lib/article-store.js";
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -287,11 +287,13 @@ export async function onRequest(context) {
     if (wcObj) { try { wc = JSON.parse(await wcObj.text()); } catch {} }
     if (!wc || !wc.appid || !wc.secret) return json({ error: 'wechat_not_configured' }, 409);
 
-    // Load the article doc.
-    const docObj = await env.FILES.get(key);
-    if (!docObj) return json({ error: 'not found' }, 404);
-    let doc;
-    try { doc = JSON.parse(await docObj.text()); } catch { return json({ error: 'bad article' }, 500); }
+    // Load the article doc (schema-3; current content = versions[head]).
+    const doc = await readArticleDoc(env, key);
+    if (!doc) return json({ error: 'not found' }, 404);
+    const currentArticles = doc.versions?.find((e) => e.v === doc.head)?.articles ?? [];
+    // Relay expects a flat article object with top-level `articles`.
+    const relayDoc = { ...doc, articles: currentArticles };
+    delete relayDoc.versions; delete relayDoc.head;
 
     // Publish SYNCHRONOUSLY via the Tokyo VPS relay — its IP is WeChat-whitelisted,
     // so it calls api.weixin.qq.com directly and returns the real result (vs. the old
@@ -304,7 +306,7 @@ export async function onRequest(context) {
       const rr = await fetch(env.WECHAT_RELAY_URL, {
         method: 'POST',
         headers: { 'X-Relay-Secret': env.WECHAT_RELAY_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appid: wc.appid, secret: wc.secret, cover_media_ids: wc.coverMediaIds || {}, article: doc }),
+        body: JSON.stringify({ appid: wc.appid, secret: wc.secret, cover_media_ids: wc.coverMediaIds || {}, article: relayDoc }),
       });
       relay = await rr.json().catch(() => null);
       if (!rr.ok) return json({ error: 'relay_error', detail: relay }, 502);
@@ -316,8 +318,9 @@ export async function onRequest(context) {
       return json({ error: 'wechat', errcode: relay && relay.errcode, errmsg: relay && relay.errmsg }, 502);
     }
 
-    // Persist: the article now carries wechatMediaId(s); the cover thumb may be new.
-    await writeArticleDoc(env, key, relay.article, 'wechat');
+    // Persist: the relay returns the article with wechatMediaId(s) added.
+    // Merge updated articles back into the current doc and write as a new version.
+    await writeArticleDoc(env, key, { ...doc, articles: relay.article.articles ?? currentArticles }, 'wechat');
     if (relay.cover_media_ids && JSON.stringify(relay.cover_media_ids) !== JSON.stringify(wc.coverMediaIds || {})) {
       wc.coverMediaIds = relay.cover_media_ids;
       await env.FILES.put(prefix + 'WECHAT.json', JSON.stringify(wc), { httpMetadata: { contentType: 'application/json' } });
@@ -502,22 +505,21 @@ export async function onRequest(context) {
   //   PUT    /articles/<stem>/srt   write SRT sidecar
   //   PUT    /articles/<stem>/empty mark as no-speech
   //   GET    /articles/<stem>/history       version history
-  //   PUT    /articles/<stem>/revert/<v>    revert to version v
+  //   PATCH  /articles/<stem>/head          move head pointer (undo/redo, no new version)
 
   if (action === 'articles') {
     // Parse stem and optional sub-action from URL segments.
     // segments = ['articles', ...rest]
-    // For user token: rest = [stem] or [stem, subaction] or [stem, 'revert', v]
-    // For admin token: rest = [sub, stem] or [sub, stem, subaction] or [sub, stem, 'revert', v]
+    // For user token: rest = [stem] or [stem, subaction]
+    // For admin token: rest = [sub, stem] or [sub, stem, subaction]
     const rest = segments.slice(1);
-    let stem, subaction, revertV;
+    let stem, subaction;
 
     if (!scope) {
       // Admin: first segment is <sub>, second is stem (stem optional for list).
       const adminSub = rest[0] || '';
       stem = rest[1] || '';
       subaction = rest[2] || '';
-      revertV = rest[3] ? parseInt(rest[3], 10) : null;
       if (!adminSub) return json({ error: 'admin must supply <sub>[/<stem>]' }, 400);
       if (!stem && !(request.method === 'GET')) return json({ error: 'admin must supply <sub>/<stem>' }, 400);
       // Override scope for this request to the target user's prefix.
@@ -525,7 +527,6 @@ export async function onRequest(context) {
     } else {
       stem = rest[0] || '';
       subaction = rest[1] || '';
-      revertV = rest[2] ? parseInt(rest[2], 10) : null;
       var articleScope = scope;
     }
 
@@ -550,13 +551,14 @@ export async function onRequest(context) {
         const obj = await env.FILES.get(o.key);
         if (!obj) continue;
         let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
+        const currentArticles = doc.versions?.find((e) => e.v === doc.head)?.articles ?? doc.articles ?? [];
         articles.push({
           stem: s,
-          title: doc.articles?.[0]?.title || '(无题)',
-          version: doc.version || 1,
+          title: currentArticles[0]?.title || '(无题)',
+          head: doc.head || 1,
           createdAt: doc.createdAt || 0,
           updatedAt: doc.updatedAt || 0,
-          count: (doc.articles || []).length,
+          count: currentArticles.length,
         });
       }
       articles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -570,17 +572,18 @@ export async function onRequest(context) {
     if (request.method === 'GET' && stem && !subaction) {
       const doc = await readArticleDoc(env, key);
       if (!doc) return json({ error: 'not found' }, 404);
-      // Strip internal versioning fields from the response.
-      const { history: _h, _source: _s, ...pub } = doc;
-      return json(pub);
+      // Reconstruct top-level `articles` from the current head version for
+      // backwards compatibility with all callers (iOS, miner, agent worker).
+      const currentArticles = doc.versions?.find((e) => e.v === doc.head)?.articles ?? [];
+      const { versions: _vs, head: _h, ...pub } = doc;
+      return json({ ...pub, articles: currentArticles });
     }
 
     // GET /articles/<stem>/history — version history
     if (request.method === 'GET' && subaction === 'history') {
       const doc = await readArticleDoc(env, key);
       if (!doc) return json({ error: 'not found' }, 404);
-      const current = { v: doc.version || 1, savedAt: doc.updatedAt || 0, source: doc._source || 'unknown', articles: doc.articles };
-      return json({ history: [current, ...(doc.history || [])] });
+      return json({ head: doc.head, versions: doc.versions || [] });
     }
 
     // PUT /articles/<stem> — write (versioned)
@@ -588,7 +591,17 @@ export async function onRequest(context) {
       let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
       const source = !scope ? 'mine' : 'agent';
       const doc = await writeArticleDoc(env, key, body, source);
-      return json({ ok: true, version: doc.version });
+      return json({ ok: true, head: doc.head });
+    }
+
+    // PATCH /articles/<stem>/head — move head pointer only (undo/redo)
+    if (request.method === 'PATCH' && subaction === 'head') {
+      let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+      const newHead = typeof body.head === 'number' ? body.head : null;
+      if (!newHead) return json({ error: 'head required' }, 400);
+      const doc = await setHead(env, key, newHead);
+      if (!doc) return json({ error: 'version not found' }, 404);
+      return json({ ok: true, head: doc.head });
     }
 
     // PUT /articles/<stem>/srt — write SRT sidecar
@@ -607,20 +620,7 @@ export async function onRequest(context) {
       return json({ ok: true });
     }
 
-    // PUT /articles/<stem>/revert/<v> — revert to version v
-    if (request.method === 'PUT' && subaction === 'revert' && revertV) {
-      const doc = await readArticleDoc(env, key);
-      if (!doc) return json({ error: 'not found' }, 404);
-      const current = { v: doc.version || 1, articles: doc.articles };
-      const all = [current, ...(doc.history || [])];
-      const target = all.find((e) => e.v === revertV);
-      if (!target) return json({ error: 'version not found' }, 404);
-      const reverted = { ...doc, articles: target.articles };
-      const saved = await writeArticleDoc(env, key, reverted, 'revert');
-      return json({ ok: true, version: saved.version, revertedTo: revertV });
-    }
-
-    // DELETE /articles/<stem> — delete article + all sidecars
+// DELETE /articles/<stem> — delete article + all sidecars
     if (request.method === 'DELETE' && stem && !subaction) {
       const prefix = `${articleScope}articles/${stem}`;
       await Promise.all([

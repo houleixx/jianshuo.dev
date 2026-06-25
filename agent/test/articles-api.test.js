@@ -2,24 +2,10 @@ import { describe, it, expect } from "vitest";
 import { onRequest } from "../../functions/files/api/[[path]].js";
 import { fakeEnv } from "./fakes.js";
 
-// Simulate a Cloudflare Pages Function context.
-// scope=null → admin token; scope="users/u/" → user token.
-function ctx(method, path, { body, scope = "users/u/" } = {}) {
+// Simulate a Cloudflare Pages Function context (admin token throughout).
+function ctx(method, path, { body } = {}) {
   const segments = ["articles", ...path.split("/").filter(Boolean)];
   const env = { ...fakeEnv(), FILES_TOKEN: "admin", SESSION_SECRET: "secret" };
-
-  // Inject a pre-verified scope so we bypass the real JWT/token logic.
-  // We achieve this by providing a token that equals FILES_TOKEN for admin,
-  // or by patching scope into the env for user. Since the real code reads
-  // the Bearer token, we instead expose a test-only override via env.
-  // Simpler: supply FILES_TOKEN as the bearer and set FILES_TOKEN so it matches.
-  const token = scope === null ? "admin" : "user-token";
-  if (scope !== null) {
-    // Provide a fake session-validated scope by pre-seeding the env with a
-    // secret that makes the HMAC verify — too complex. Instead, test the
-    // admin path only (FILES_TOKEN), which is simpler and covers versioning.
-    // User-scoped paths are covered via tools.test.js + article-store.test.js.
-  }
 
   const request = new Request(`https://jianshuo.dev/files/api/${segments.join("/")}`, {
     method,
@@ -27,29 +13,28 @@ function ctx(method, path, { body, scope = "users/u/" } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  return {
-    request,
-    env: { ...env, FILES_TOKEN: "admin" },
-    params: { path: segments },
-  };
+  return { request, env: { ...env, FILES_TOKEN: "admin" }, params: { path: segments } };
 }
 
-// Seed an article for a user sub "u", stem "s1".
-function seedArticle(env, stem = "s1", doc = {}) {
+// Seed a schema-3 article for user "u", stem defaulting to "s1".
+function seedArticle(env, stem = "s1", extra = {}) {
   const key = `users/u/articles/${stem}.json`;
-  env.FILES._store.set(key, JSON.stringify({
-    schema: 2, createdAt: 1000, transcript: "tx", version: 1, _source: "mine",
-    articles: [{ title: "T1", body: "B1" }], history: [], ...doc,
-  }));
+  const base = {
+    schema: 3, createdAt: 1000, transcript: "tx",
+    head: 1,
+    versions: [{ v: 1, savedAt: 1000, source: "mine", articles: [{ title: "T1", body: "B1" }] }],
+  };
+  env.FILES._store.set(key, JSON.stringify({ ...base, ...extra }));
   return key;
 }
+
+// ── list ────────────────────────────────────────────────────────────────────
 
 describe("GET /articles — list", () => {
   it("returns articles newest-first", async () => {
     const context = ctx("GET", "");
     seedArticle(context.env, "s1", { createdAt: 1000 });
     seedArticle(context.env, "s2", { createdAt: 2000 });
-    // Admin list for user "u": GET /articles/u → params = ["articles", "u"]
     context.params.path = ["articles", "u"];
     const resp = await onRequest(context);
     const body = await resp.json();
@@ -58,89 +43,120 @@ describe("GET /articles — list", () => {
   });
 });
 
+// ── read ────────────────────────────────────────────────────────────────────
+
 describe("GET /articles/<sub>/<stem> — read (admin)", () => {
-  it("returns doc without history/_source fields", async () => {
+  it("returns top-level articles from current head, strips versions/head", async () => {
     const context = ctx("GET", "u/s1");
     seedArticle(context.env, "s1");
     const resp = await onRequest(context);
     const body = await resp.json();
     expect(resp.status).toBe(200);
     expect(body.articles[0].title).toBe("T1");
-    expect(body.history).toBeUndefined();
-    expect(body._source).toBeUndefined();
+    expect(body.versions).toBeUndefined();
+    expect(body.head).toBeUndefined();
+  });
+
+  it("returns articles from head version, not latest version", async () => {
+    const context = ctx("GET", "u/s1");
+    seedArticle(context.env, "s1", {
+      head: 1,
+      versions: [
+        { v: 1, savedAt: 1000, source: "mine",  articles: [{ title: "old", body: "" }] },
+        { v: 2, savedAt: 2000, source: "agent", articles: [{ title: "new", body: "" }] },
+      ],
+    });
+    const resp = await onRequest(context);
+    const body = await resp.json();
+    expect(body.articles[0].title).toBe("old");   // head=1, not the latest v2
   });
 
   it("404s a missing stem", async () => {
     const context = ctx("GET", "u/nope");
-    const resp = await onRequest(context);
-    expect(resp.status).toBe(404);
+    expect((await onRequest(context)).status).toBe(404);
   });
 });
 
+// ── write ────────────────────────────────────────────────────────────────────
+
 describe("PUT /articles/<sub>/<stem> — write (admin)", () => {
-  it("creates a new versioned article", async () => {
+  it("creates a new article with head=1", async () => {
     const context = ctx("PUT", "u/s1", { body: { articles: [{ title: "New", body: "Body" }] } });
     const resp = await onRequest(context);
     const body = await resp.json();
     expect(resp.status).toBe(200);
     expect(body.ok).toBe(true);
-    expect(body.version).toBe(1);
+    expect(body.head).toBe(1);
     const stored = JSON.parse(context.env.FILES._store.get("users/u/articles/s1.json"));
-    expect(stored.version).toBe(1);
-    expect(stored._source).toBe("mine");
+    expect(stored.head).toBe(1);
+    expect(stored.versions[0].source).toBe("mine");
   });
 
-  it("increments version on second write", async () => {
+  it("increments head on second write", async () => {
     const context = ctx("PUT", "u/s1", { body: { articles: [{ title: "v2", body: "" }] } });
     seedArticle(context.env, "s1");
     const resp = await onRequest(context);
     const body = await resp.json();
-    expect(body.version).toBe(2);
+    expect(body.head).toBe(2);
     const stored = JSON.parse(context.env.FILES._store.get("users/u/articles/s1.json"));
-    expect(stored.history).toHaveLength(1);
-    expect(stored.history[0].v).toBe(1);
+    expect(stored.versions).toHaveLength(2);
+    expect(stored.versions[0].v).toBe(1);
+    expect(stored.versions[1].v).toBe(2);
   });
 });
+
+// ── history ─────────────────────────────────────────────────────────────────
 
 describe("GET /articles/<sub>/<stem>/history", () => {
-  it("returns current + history array", async () => {
+  it("returns {head, versions} oldest-first", async () => {
     const context = ctx("GET", "u/s1/history");
     seedArticle(context.env, "s1", {
-      version: 2, _source: "agent",
-      history: [{ v: 1, savedAt: 900, source: "mine", articles: [{ title: "old", body: "" }] }],
+      head: 2,
+      versions: [
+        { v: 1, savedAt: 900,  source: "mine",  articles: [{ title: "old", body: "" }] },
+        { v: 2, savedAt: 2000, source: "agent", articles: [{ title: "new", body: "" }] },
+      ],
     });
     const resp = await onRequest(context);
     const body = await resp.json();
     expect(resp.status).toBe(200);
-    expect(body.history).toHaveLength(2);
-    expect(body.history[0].v).toBe(2);
-    expect(body.history[1].v).toBe(1);
+    expect(body.head).toBe(2);
+    expect(body.versions).toHaveLength(2);
+    expect(body.versions[0].v).toBe(1);
+    expect(body.versions[1].v).toBe(2);
   });
 });
 
-describe("PUT /articles/<sub>/<stem>/revert/<v>", () => {
-  it("reverts to a previous version and increments version", async () => {
-    const context = ctx("PUT", "u/s1/revert/1");
+// ── PATCH head ───────────────────────────────────────────────────────────────
+
+describe("PATCH /articles/<sub>/<stem>/head", () => {
+  it("moves head to a valid version", async () => {
+    const context = ctx("PATCH", "u/s1/head", { body: { head: 1 } });
     seedArticle(context.env, "s1", {
-      version: 2, articles: [{ title: "current", body: "" }],
-      history: [{ v: 1, savedAt: 900, source: "mine", articles: [{ title: "original", body: "" }] }],
+      head: 2,
+      versions: [
+        { v: 1, savedAt: 1000, source: "mine",  articles: [{ title: "T1", body: "" }] },
+        { v: 2, savedAt: 2000, source: "agent", articles: [{ title: "T2", body: "" }] },
+      ],
     });
     const resp = await onRequest(context);
     const body = await resp.json();
     expect(resp.status).toBe(200);
-    expect(body.revertedTo).toBe(1);
-    expect(body.version).toBe(3);
+    expect(body.ok).toBe(true);
+    expect(body.head).toBe(1);
     const stored = JSON.parse(context.env.FILES._store.get("users/u/articles/s1.json"));
-    expect(stored.articles[0].title).toBe("original");
+    expect(stored.head).toBe(1);
+    expect(stored.versions).toHaveLength(2);   // versions unchanged
   });
 
-  it("404s if version not in history", async () => {
-    const context = ctx("PUT", "u/s1/revert/99");
+  it("404s if head value is not in versions", async () => {
+    const context = ctx("PATCH", "u/s1/head", { body: { head: 99 } });
     seedArticle(context.env, "s1");
-    const resp = await onRequest(context);
-    expect(resp.status).toBe(404);
+    expect((await onRequest(context)).status).toBe(404);
   });
 });
+
+// ── SRT / empty / delete (unchanged) ────────────────────────────────────────
 
 describe("PUT /articles/<sub>/<stem>/srt", () => {
   it("stores the SRT content", async () => {
