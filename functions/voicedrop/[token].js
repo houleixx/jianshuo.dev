@@ -40,10 +40,9 @@ export async function onRequest(context) {
     : articles;
   const title = shown[0].title || 'VoiceDrop';
 
-  // Load session photos as inline data URIs (1-based), so [[photo:N]] markers in
-  // the body render as <img> on the public page too. Photos live under the same
-  // user prefix as the article key.
-  const photoURIs = await loadPhotoURIs(env, key, doc.photos);
+  // Load only the photos the body actually references ([[photo:<key>]] markers;
+  // legacy [[photo:N]] resolves via doc.photos). The body is the source of truth.
+  const photoURIs = await loadPhotoURIs(env, key, shown.map((a) => a.body || ''), doc.photos);
 
   const bodyHtml = shown.map((a) =>
     `<article><h1>${esc(a.title || '无题')}</h1>${renderPhotos(mdToHtml(a.body || ''), photoURIs)}</article>`
@@ -52,34 +51,62 @@ export async function onRequest(context) {
   return html(page(title, bodyHtml, og), 200, true);
 }
 
-// Strip [[photo:N]] markers from text (for excerpts / fallback).
-function stripPhotoMarkers(s) {
-  return String(s).replace(/\[\[photo:\d+\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+// Strip [[photo:<token>]] markers from text (for excerpts / fallback). Token is a
+// relative key (new) or a legacy digit index — both match.
+export function stripPhotoMarkers(s) {
+  return String(s).replace(/\[\[photo:[^\]]+\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// Replace [[photo:N]] markers in rendered HTML with inline <figure><img>. A marker
-// on its own line became its own <p>; handle both that and any stray inline ones.
-function renderPhotos(htmlStr, photoURIs) {
-  const fig = (n) => {
-    const uri = photoURIs[Number(n)];
+// Replace [[photo:<token>]] markers in rendered HTML with inline <figure><img>. A
+// marker on its own line became its own <p>; handle both that and stray inline ones.
+// `photoURIs` is keyed BOTH by 1-based index (legacy) and by relative key (new), so
+// a numeric token resolves via the index and a key token resolves directly.
+export function renderPhotos(htmlStr, photoURIs) {
+  const fig = (tok) => {
+    const uri = /^\d+$/.test(tok) ? photoURIs[Number(tok)] : photoURIs[tok];
     return uri ? `<figure class="vd-photo"><img src="${uri}" alt="" loading="lazy"/></figure>` : '';
   };
   return htmlStr
-    .replace(/<p>\s*\[\[photo:(\d+)\]\]\s*<\/p>/g, (_, n) => fig(n))
-    .replace(/\[\[photo:(\d+)\]\]/g, (_, n) => fig(n));
+    .replace(/<p>\s*\[\[photo:([^\]]+)\]\]\s*<\/p>/g, (_, t) => fig(t))
+    .replace(/\[\[photo:([^\]]+)\]\]/g, (_, t) => fig(t));
 }
 
-// Read each session photo from R2 and return a 1-based map index -> data URI.
-async function loadPhotoURIs(env, articleKey, photos) {
-  if (!Array.isArray(photos) || !photos.length) return {};
+// Collect the photo keys the article bodies actually reference, in first-appearance
+// order, deduped by token. Token = relative key (new [[photo:<key>]]) or a legacy
+// 1-based index into `legacyPhotos` (old [[photo:N]]). Legacy tokens with no array
+// entry are dropped. The body is the source of truth — there is no photos array to
+// maintain for new articles.
+export function photoRefsInBodies(bodies, legacyPhotos = []) {
+  const legacy = Array.isArray(legacyPhotos) ? legacyPhotos : [];
+  const out = [];
+  const seen = new Set();
+  const re = /\[\[photo:([^\]]+)\]\]/g;
+  for (const body of bodies) {
+    let m;
+    while ((m = re.exec(String(body || ''))) !== null) {
+      const token = m[1];
+      if (seen.has(token)) continue;
+      seen.add(token);
+      const key = /^\d+$/.test(token) ? legacy[Number(token) - 1] : token;
+      if (key) out.push({ token, key });
+    }
+  }
+  return out;
+}
+
+// Load each referenced photo from R2 and return a map: token -> data URI. Keyed by
+// the raw token so renderPhotos' fig(token) resolves it (a numeric token "1" and
+// the number 1 are the same object key in JS).
+async function loadPhotoURIs(env, articleKey, bodies, legacyPhotos) {
+  const refs = photoRefsInBodies(bodies, legacyPhotos);
+  if (!refs.length) return {};
   const prefix = articleKey.slice(0, articleKey.indexOf('/articles/') + 1);  // users/<sub>/
   const out = {};
-  for (let i = 0; i < photos.length; i++) {
+  for (const { token, key } of refs) {
     try {
-      const obj = await env.FILES.get(prefix + photos[i]);
+      const obj = await env.FILES.get(prefix + key);
       if (!obj) continue;
-      const buf = await obj.arrayBuffer();
-      out[i + 1] = `data:image/jpeg;base64,${b64(buf)}`;
+      out[token] = `data:image/jpeg;base64,${b64(await obj.arrayBuffer())}`;
     } catch { /* skip a missing photo */ }
   }
   return out;

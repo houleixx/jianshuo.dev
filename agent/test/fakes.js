@@ -5,7 +5,7 @@ export function fakeEnv(seed = {}) {
     async get(key) {
       if (!store.has(key)) return null;
       const v = store.get(key);
-      return { text: async () => v };
+      return { text: async () => v, json: async () => JSON.parse(v) };
     },
     async put(key, value) { store.set(key, typeof value === "string" ? value : String(value)); },
     async head(key) { return store.has(key) ? {} : null; },

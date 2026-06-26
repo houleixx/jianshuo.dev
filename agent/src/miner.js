@@ -12,13 +12,13 @@
 //   R2_ACCESS_KEY_ID       R2 S3-compatible access key
 //   R2_SECRET_ACCESS_KEY   R2 S3-compatible secret key
 
-const MINE_MODEL_DEFAULT = "claude-sonnet-4-6";
+export const MINE_MODEL_DEFAULT = "claude-sonnet-4-6";
 const MIN_CHARS          = 20;
 const ORIGIN             = "https://jianshuo.dev";
 
 // ── Model config (R2 `config/model.json`, falls back to env + default) ─────────
 
-const PROVIDER_ENV_KEY = {
+export const PROVIDER_ENV_KEY = {
   "anthropic":  "CLAUDE_API_KEY",
   "openai":     "OPENAI_API_KEY",
   "deepseek":   "DEEPSEEK_API_KEY",
@@ -29,7 +29,7 @@ const PROVIDER_ENV_KEY = {
   "volc-ark":   "VOLC_ARK_API_KEY",
 };
 
-async function loadModelConfig(env) {
+export async function loadModelConfig(env) {
   try {
     const obj = await env.FILES.get("config/model.json");
     if (obj) {
@@ -50,12 +50,22 @@ async function loadModelConfig(env) {
   return { providerKey: "anthropic", provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "" };
 }
 
+// Voice editing (ArticleEditor) runs an Anthropic tool-use loop, so it can only
+// execute on Claude. Honor the admin's model choice when the configured provider
+// is Anthropic (e.g. switch sonnet↔opus); for any non-Anthropic provider fall
+// back to the default Claude model — the agentic edit loop can't run there.
+export function resolveEditModel(modelCfg) {
+  return (modelCfg && modelCfg.providerKey === "anthropic" && modelCfg.model)
+    ? modelCfg.model
+    : MINE_MODEL_DEFAULT;
+}
+
 // ── System prompts (identical to mine.py) ─────────────────────────────────────
 
 const _PHOTO_INSTR = `
-另外附上了几张照片，每张标了编号和拍摄时刻。照片是作者一边说一边拍的，拍摄时刻能帮你判断这张照片对应口述里的哪一段。要求：
+另外附上了几张照片，每张都标了它的 key 和拍摄时刻。照片是作者一边说一边拍的，拍摄时刻能帮你判断这张照片对应口述里的哪一段。要求：
 - 把照片的场景自然融进叙述，就像亲眼看到一样直接写进去，不要机械地写「照片里是…」。
-- 在正文里、口述提到这个场景的那个位置，单独起一行插入照片标记 \`[[photo:N]]\`（N 是照片编号）。标记必须独占一行，前后空行。
+- 在正文里、口述提到这个场景的那个位置，单独起一行插入照片标记 \`[[photo:<key>]]\`（<key> 原样填我给你的那张照片的 key）。标记必须独占一行，前后空行。
 - 每张照片在全文里只插入一次，按拍摄时刻对应到合适的段落附近。
 - 如果某张照片实在和口述对不上，就放在最相关的那段后面。`;
 
@@ -300,7 +310,11 @@ async function loadPhoto(photoKey, env) {
   const parts = name.split("-");
   const label = (parts.length >= 4 && parts[3]?.length === 6)
     ? `${parts[3].slice(0,2)}:${parts[3].slice(2,4)}:${parts[3].slice(4)}` : name;
-  return { b64, label };
+  // Relative key (drop the users/<sub>/ prefix) — matches doc.photos and is the
+  // token the model writes into [[photo:<key>]] markers.
+  const i = photoKey.indexOf("photos/");
+  const relKey = i >= 0 ? photoKey.slice(i) : photoKey;
+  return { b64, label, relKey };
 }
 
 function findSessionPhotos(audioKey, allKeys) {
@@ -334,7 +348,7 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
     } else {
       userContent = [{ type: "text", text: `口述转写：\n\n${transcript}` }];
       for (let i = 0; i < photos.length; i++) {
-        userContent.push({ type: "text", text: `\n[照片 ${i + 1}，拍摄于 ${photos[i].label}]` });
+        userContent.push({ type: "text", text: `\n[照片 key:${photos[i].relKey}，拍摄于 ${photos[i].label}]` });
         userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${photos[i].b64}`, detail: "low" } });
       }
     }
@@ -364,7 +378,7 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
     } else {
       content = [{ type: "text", text: `口述转写：\n\n${transcript}` }];
       for (let i = 0; i < photos.length; i++) {
-        content.push({ type: "text", text: `\n[照片 ${i + 1}，拍摄于 ${photos[i].label}]` });
+        content.push({ type: "text", text: `\n[照片 key:${photos[i].relKey}，拍摄于 ${photos[i].label}]` });
         content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } });
       }
     }
@@ -558,12 +572,12 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     }
 
     // ── Write article ──────────────────────────────────────────────────────────
-    const relPhotos = photoKeys.map(k => k.slice(scope.length));
+    // No photos array — the model inserts [[photo:<key>]] markers into the body,
+    // which is the sole source of truth for which photos appear and where.
     const doc = {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
       transcript, srt, articles, status: "ready", model: modelCfg.model,
-      ...(relPhotos.length && { photos: relPhotos }),
     };
 
     await writeArticle(audioKey, doc, env);
@@ -586,6 +600,16 @@ export async function runMine(env) {
   const t0 = Date.now();
   const modelCfg = await loadModelConfig(env);
   console.log(`[mine] model: ${modelCfg.provider}/${modelCfg.model}`);
+
+  // Guard: the admin selected a provider whose API key secret isn't configured.
+  // Without this, every call would go out with an empty Bearer token, 401, and the
+  // recording would stay 待处理 forever — retried every run, with no surfaced cause.
+  // Abort loudly instead; recordings are untouched and process once the secret is set.
+  if (!modelCfg.apiKey) {
+    const envName = PROVIDER_ENV_KEY[modelCfg.providerKey] || "CLAUDE_API_KEY";
+    console.error(`[mine] ABORT: 供应商 "${modelCfg.providerKey}" 已选中，但 Worker Secret ${envName} 未配置（API key 为空）— 跳过本次挖文，录音保持待处理`);
+    return;
+  }
 
   // Paginated list of all R2 objects
   let cursor, allObjects = [];

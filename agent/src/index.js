@@ -17,8 +17,11 @@
 import { Agent, getAgentByName } from "agents";
 import { runAgentLoop } from "./loop.js";
 import { TOOL_DEFS } from "./tools.js";
-import { runMine } from "./miner.js";
+import { runMine, loadModelConfig, resolveEditModel } from "./miner.js";
 
+// Fallback model when no config/model.json is set. Editing is Anthropic-only
+// (tool-use loop), so the live model is resolved per-turn from the admin config
+// via resolveEditModel — honoring a Claude model choice, ignoring non-Anthropic.
 const MODEL = "claude-sonnet-4-6";
 
 // ── LLM interaction log ────────────────────────────────────────────────────
@@ -78,7 +81,7 @@ const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面
 - 保留口语词（吧 / 呢 / 啊 / 了）、自造词、家常比喻——这是你的声音，别改成书面语。
 - 不加 AI 味连接词（首先 / 其次 / 综上所述 / 值得注意的是），不加 emoji。
 - 中英文之间留一个空格（盘古之白）。
-- 正文里可能有形如 [[photo:1]] 的照片标记，这是配图的位置。改写时默认原样保留每一个标记，放在和原来意思相符的段落附近；不要新增、不要改编号。
+- 正文里可能有形如 [[photo:photos/2026-…/….jpg]] 的照片标记，方括号里就是这张照片的 key，标明配图位置。改写时默认原样保留每一个标记（连同里面的 key），放在和原来意思相符的段落附近；不要新增、不要改动标记里的 key。
 
 用户会用「行号 / 图号」指位置（app 在按住说话时把这些号浮在正文左边距和图片角上）：
 - 「第N行」= 正文里第 N 个非空段落（按真实换行的段落顺序，从 1 数起）。例：「把第3行改简洁点」= 改写第 3 段。
@@ -152,25 +155,14 @@ export class ArticleEditor extends Agent {
       if (!articleKey) throw new Error("会话未初始化");
       const obj = await this.env.FILES.get(articleKey);
       if (!obj) throw new Error("文章不存在");
-      let doc = JSON.parse(await obj.text());
+      const doc = JSON.parse(await obj.text());
 
-      // Pre-append new photo keys to doc.photos so write_article preserves them.
-      // This is a metadata-only update (no new version created).
-      const newKeysFromImages = msgImages.length > 0
-        ? msgImages.map((i) => i.key)
-        : (instruction.match(/photos\/[\w\-\/]+\.jpe?g/g) || []);
-      if (newKeysFromImages.length > 0) {
-        const existing = Array.isArray(doc.photos) ? doc.photos : [];
-        const fresh = newKeysFromImages.filter((k) => !existing.includes(k));
-        if (fresh.length > 0) {
-          doc = { ...doc, photos: [...existing, ...fresh] };
-          await this.env.FILES.put(articleKey, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
-        }
-      }
+      // Photos are referenced solely by [[photo:<key>]] markers the model writes
+      // into the body — there is no doc.photos array to maintain. write_article
+      // persists the body, so each photo reference lives with the text.
 
       // Schema-3 stores articles inside versions[head], not at the top level.
       const articles = resolveArticles(doc);
-      const currentPhotos = Array.isArray(doc.photos) ? doc.photos : [];
 
       // Build the text portion of the user message.
       const textLines = [
@@ -183,15 +175,14 @@ export class ArticleEditor extends Agent {
       ];
 
       if (msgImages.length > 0) {
-        // Tell the model exactly which [[photo:N]] number each uploaded image maps to.
-        const baseIdx = currentPhotos.length - msgImages.length; // photos were just pre-appended
+        // Each uploaded photo is referenced by its OWN key as the marker — no array
+        // index to keep in sync (renderers resolve [[photo:<key>]] directly). The
+        // image blocks below are in the same order as these keys.
         textLines.push(
-          "本次上传的新照片（已在消息里附上缩略图，按顺序对应上方图片）：",
-          ...msgImages.map((img, i) =>
-            `  [[photo:${baseIdx + i + 1}]] → key: ${img.key}`
-          ),
+          "本次上传的新照片（已在消息里附上缩略图，按顺序对应上方图片）。把每一张插到正文最合适的位置，用它自己的 key 作标记，原样写进正文：",
+          ...msgImages.map((img) => `  [[photo:${img.key}]]`),
           "",
-          "⚠️ 必须把以上每一张照片都插入文章正文里合适的段落，使用对应的 [[photo:N]] 标记。一张都不能漏。",
+          "⚠️ 必须把以上每一张照片都插入文章正文里合适的段落，使用对应的 [[photo:<key>]] 标记。一张都不能漏。",
           "",
         );
       }
@@ -216,7 +207,10 @@ export class ArticleEditor extends Agent {
       const ctx = { env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev" };
       const stem = articleKey.replace(/\.json$/, "").split("/articles/").pop();
       const turnId = `${Date.now()}-${rand6()}`;
-      const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction });
+      // Editing is an Anthropic tool-use loop; honor the admin's model choice
+      // when it's a Claude model, else fall back to the default Claude.
+      const editModel = resolveEditModel(await loadModelConfig(this.env));
+      const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction, model: editModel });
       const result = await runAgentLoop({ callClaude, ctx, system: SYSTEM, userContent });
 
       // Always push the (possibly unchanged) current doc so the app reloads and
@@ -267,15 +261,15 @@ export class ArticleEditor extends Agent {
   // A logging callClaude for runAgentLoop: builds the request body, calls the
   // API, records one llmlogs/ entry per HTTP call (grouped by turnId), then
   // returns the response JSON or throws (preserving the loop's prior behavior).
-  _makeLoggedCall({ turnId, scope, stem, instruction }) {
+  _makeLoggedCall({ turnId, scope, stem, instruction, model = MODEL }) {
     let step = 0;
     return async ({ system, messages, tools }) => {
-      const reqBody = { model: MODEL, max_tokens: 8000, system, messages, tools, tool_choice: { type: "auto" } };
+      const reqBody = { model, max_tokens: 8000, system, messages, tools, tool_choice: { type: "auto" } };
       const myStep = step++;
       const ts = Date.now();
       const r = await this._callClaudeRaw(reqBody);
       await writeLlmLog(this.env, {
-        ts, source: "agent", user_scope: scope, model: MODEL,
+        ts, source: "agent", user_scope: scope, model,
         latency_ms: Date.now() - ts, http_status: r.status, ok: r.ok,
         turn_id: turnId, step: myStep, request: reqBody,
         response: r.ok ? r.json : undefined,
