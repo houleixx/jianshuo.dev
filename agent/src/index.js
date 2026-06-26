@@ -69,8 +69,9 @@ function withTopLevelArticles(doc) {
 const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面给你：你这段录音的原始口述转写（事实来源）、当前的全部文章、以及历次修改要求。按「这次的修改要求」改写全部文章——可以改写、合并、拆分、增删某一篇。
 
 事实纪律（重要）：
-- 只用原始口述转写里出现的事实，绝不编造新的事实、数字、人名、公司名。需要时用「我们公司」。
-- 修改要求是「怎么改」，不是新的事实来源；除非要求里明确给了新信息，否则不要往文章里加转写里没有的内容。
+- 默认只用原始口述转写里出现的事实，不要自己脑补转写里没有、用户也没说的新事实、数字、人名、公司名。需要时用「我们公司」。
+- 但「这次的修改要求」本身就是用户的授权输入：如果要求里直接给了新内容（例如「在最后加一句X」「把价格改成1300」「补一句Y」），那 X / Y 就是用户当场提供的新信息，照加、照改，这不算编造——别拿事实纪律把用户明确要加的话顶回去。编造特指你自己虚构、用户既没说、转写里也没有的东西。
+- 只有当要求纯粹是「怎么改」、没给新信息时，才不要往文章里加转写里没有的内容。
 
 每一篇都遵守的语气 DNA：
 - 胸有成竹地下断言，不绕弯、不加「我觉得可能也许」的缓冲。
@@ -164,21 +165,28 @@ export class ArticleEditor extends Agent {
       // Schema-3 stores articles inside versions[head], not at the top level.
       const articles = resolveArticles(doc);
 
-      // Build the text portion of the user message.
-      const textLines = [
+      // STABLE prefix first, VOLATILE suffix last — so the unchanging part can be a
+      // cached prefix. The source transcript never changes across edits of this
+      // recording, so it leads and carries the cache breakpoint; the article being
+      // edited + this turn's instruction follow, after the breakpoint.
+      // NOTE: Haiku's cache floor is 4096 tokens — for short transcripts the prefix
+      // is below it and this is a harmless no-op (cache_creation=0, no cost); it
+      // only actually caches when the transcript is long.
+      const stableText = [
+        "原始口述转写（事实来源，只能用这里出现的事实，不可编造）：",
+        doc.transcript || "（无）",
+      ].join("\n");
+
+      const varLines = [
         "当前文章（你正在编辑这一篇）：",
         JSON.stringify({ articles: articles.map((a) => ({ title: a.title, body: a.body })) }, null, 2),
         "",
-        "原始口述转写（事实来源，只能用这里出现的事实，不可编造）：",
-        doc.transcript || "（无）",
-        "",
       ];
-
       if (msgImages.length > 0) {
         // Each uploaded photo is referenced by its OWN key as the marker — no array
         // index to keep in sync (renderers resolve [[photo:<key>]] directly). The
         // image blocks below are in the same order as these keys.
-        textLines.push(
+        varLines.push(
           "本次上传的新照片（已在消息里附上缩略图，按顺序对应上方图片）。把每一张插到正文最合适的位置，用它自己的 key 作标记，原样写进正文：",
           ...msgImages.map((img) => `  [[photo:${img.key}]]`),
           "",
@@ -186,23 +194,17 @@ export class ArticleEditor extends Agent {
           "",
         );
       }
+      varLines.push("这次的语音指令：", instruction);
 
-      textLines.push("这次的语音指令：", instruction);
-
-      // If images are present, build a multi-block content array (vision + text).
-      // Otherwise, pass the text string directly (backward-compatible path).
-      let userContent;
-      if (msgImages.length > 0) {
-        userContent = [
-          ...msgImages.map((img) => ({
-            type: "image",
-            source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data },
-          })),
-          { type: "text", text: textLines.join("\n") },
-        ];
-      } else {
-        userContent = textLines.join("\n");
-      }
+      // Blocks: [stable transcript (cache breakpoint)] → [images] → [volatile text].
+      const userContent = [
+        { type: "text", text: stableText, cache_control: { type: "ephemeral" } },
+        ...msgImages.map((img) => ({
+          type: "image",
+          source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data },
+        })),
+        { type: "text", text: varLines.join("\n") },
+      ];
 
       const ctx = { env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev" };
       const stem = articleKey.replace(/\.json$/, "").split("/articles/").pop();
