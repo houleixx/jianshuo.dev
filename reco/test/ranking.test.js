@@ -29,6 +29,13 @@ describe("postScore", () => {
     const now = 1_000_000_000_000;
     expect(postScore({}, 0, undefined, now)).toBeGreaterThan(0);
   });
+
+  it("reply 权重最高:1 个 reply 抬分高于 1 个 like", () => {
+    const now = 1_000_000_000_000;
+    const oneReply = postScore({}, 1, now, now);
+    const oneLike = postScore({ like: 1 }, 0, now, now);
+    expect(oneReply).toBeGreaterThan(oneLike);
+  });
 });
 
 describe("rankPosts", () => {
