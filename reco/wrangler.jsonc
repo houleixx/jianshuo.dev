@@ -15,8 +15,8 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "voicedrop-reco", "database_id": "feeee5df-0f48-43ca-8845-473d8b4809c3" }
   ]
-  // Secret（可选，wrangler secret put）：
-  //   SESSION_SECRET — 仅用于验 Apple 登录 JWT。当前全部用户走 anon token（不需要它），
-  //   故暂不设置；auth.js 对缺失 secret 已优雅处理（anon 正常，Apple JWT → 401 → app 回退时间序）。
-  //   将来若启用 Apple 登录，再 `npx wrangler secret put SESSION_SECRET`（与核心 Pages 同值），无需改码。
+  // Secret：无需任何 secret（2026-06-27）。app 的 engage/rank 一律发 anon token，reco 永远收不到
+  //   Apple JWT，故 SESSION_SECRET 不设、不需要。Apple 登录的 session scope 本身就是 users/anon-<hash>/，
+  //   所以 anon 身份对所有用户都正确。auth.js 仍保留验 JWT 的死代码（无害）；真要让 reco 验 Apple JWT，
+  //   再 `npx wrangler secret put SESSION_SECRET`（与核心 Pages 同值），无需改码。
 }
