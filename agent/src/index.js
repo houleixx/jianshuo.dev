@@ -18,6 +18,7 @@ import { Agent, getAgentByName } from "agents";
 import { runAgentLoop } from "./loop.js";
 import { TOOL_DEFS } from "./tools.js";
 import { runMine, loadModelConfig, resolveEditModel } from "./miner.js";
+import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -108,12 +109,16 @@ export class ArticleEditor extends Agent {
   onStart() {
     // config: the verified article key + scope (survives hibernation/eviction).
     this.sql`CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT)`;
-    // history: every instruction, for cross-turn context.
+    // history: every (instruction, reply) turn — replayed as real conversation
+    // messages so the model has cross-turn context.
     this.sql`CREATE TABLE IF NOT EXISTS history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       instruction TEXT,
+      reply TEXT,
       created_at INTEGER
     )`;
+    // Migrate older instances that predate the `reply` column (no-op once added).
+    try { this.sql`ALTER TABLE history ADD COLUMN reply TEXT`; } catch (_) {}
   }
 
   // The Worker has already authenticated the request and injected the
@@ -165,13 +170,9 @@ export class ArticleEditor extends Agent {
       // Schema-3 stores articles inside versions[head], not at the top level.
       const articles = resolveArticles(doc);
 
-      // STABLE prefix first, VOLATILE suffix last — so the unchanging part can be a
-      // cached prefix. The source transcript never changes across edits of this
-      // recording, so it leads and carries the cache breakpoint; the article being
-      // edited + this turn's instruction follow, after the breakpoint.
-      // NOTE: Haiku's cache floor is 4096 tokens — for short transcripts the prefix
-      // is below it and this is a harmless no-op (cache_creation=0, no cost); it
-      // only actually caches when the transcript is long.
+      // The current turn carries the full latest state: the source transcript (fact
+      // source) then the current article. Prior turns are replayed as conversation
+      // messages (below) and carry only instruction/reply text, not the article.
       const stableText = [
         "原始口述转写（事实来源，只能用这里出现的事实，不可编造）：",
         doc.transcript || "（无）",
@@ -196,15 +197,23 @@ export class ArticleEditor extends Agent {
       }
       varLines.push("这次的语音指令：", instruction);
 
-      // Blocks: [stable transcript (cache breakpoint)] → [images] → [volatile text].
+      // Blocks: [transcript] → [images] → [article + this turn's instruction].
       const userContent = [
-        { type: "text", text: stableText, cache_control: { type: "ephemeral" } },
+        { type: "text", text: stableText },
         ...msgImages.map((img) => ({
           type: "image",
           source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data },
         })),
         { type: "text", text: varLines.join("\n") },
       ];
+
+      // Prior turns → real conversation messages, prepended so "撤销刚才那个 /
+      // 像上次那样 / 你刚才说的" resolve against the actual back-and-forth.
+      let history = [];
+      try {
+        const rows = this.sql`SELECT instruction, reply FROM history ORDER BY id DESC LIMIT 100`;
+        history = buildHistoryMessages([...rows].reverse(), { maxTurns: HISTORY_MAX_TURNS });
+      } catch (_) {}
 
       const ctx = { env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev" };
       const stem = articleKey.replace(/\.json$/, "").split("/articles/").pop();
@@ -213,7 +222,7 @@ export class ArticleEditor extends Agent {
       // when it's a Claude model, else fall back to the default Claude.
       const editModel = resolveEditModel(await loadModelConfig(this.env));
       const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction, model: editModel });
-      const result = await runAgentLoop({ callClaude, ctx, system: SYSTEM, userContent });
+      const result = await runAgentLoop({ callClaude, ctx, system: SYSTEM, userContent, history });
 
       // Always push the (possibly unchanged) current doc so the app reloads and
       // the in-flight queue item resolves — works for edit, merge, AND action-only turns.
@@ -228,15 +237,14 @@ export class ArticleEditor extends Agent {
       const summary = (result.finalText || "").trim();
       const TERMINAL = ["write_article", "write_style", "publish_wechat", "share_to_community"];
       const didAct = (result.calledTools || []).some((n) => TERMINAL.includes(n));
-      if (summary) {
-        connection.send(JSON.stringify({ type: "reply", text: summary, ok: !result.hadError }));
-      } else if (result.hadError) {
-        connection.send(JSON.stringify({ type: "reply", text: "操作没完成", ok: false }));
-      } else if (didAct) {
-        connection.send(JSON.stringify({ type: "reply", text: "改好了", ok: true }));
+      const replyText = summary || (result.hadError ? "操作没完成" : (didAct ? "改好了" : ""));
+      if (replyText) {
+        connection.send(JSON.stringify({ type: "reply", text: replyText, ok: !result.hadError }));
       }
 
-      this.sql`INSERT INTO history (instruction, created_at) VALUES (${instruction}, ${Date.now()})`;
+      // Record this turn (instruction + the reply the user saw) so the next edit
+      // replays it as conversation context.
+      this.sql`INSERT INTO history (instruction, reply, created_at) VALUES (${instruction}, ${replyText || "（已处理）"}, ${Date.now()})`;
     } catch (e) {
       connection.send(JSON.stringify({ type: "error", message: String((e && e.message) || e) }));
     } finally {

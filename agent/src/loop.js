@@ -17,8 +17,10 @@ export function parseAssistant(resp) {
 
 // Drive Claude with tools until it stops calling them (or maxSteps).
 // userContent: string (text-only) or content-block array (e.g. with image blocks).
-export async function runAgentLoop({ callClaude, ctx, system, userContent, maxSteps = 8 }) {
-  const messages = [{ role: "user", content: userContent }];
+export async function runAgentLoop({ callClaude, ctx, system, userContent, history = [], maxSteps = 8 }) {
+  // `history` = prior conversation turns (alternating user/assistant text messages)
+  // prepended so the model has cross-turn context; the current turn follows.
+  const messages = [...history, { role: "user", content: userContent }];
   const calledTools = [];
   let finalText = "";
   let hadError = false;

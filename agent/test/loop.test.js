@@ -59,6 +59,19 @@ describe("runAgentLoop", () => {
     delete globalThis.fetch;
   });
 
+  it("prepends prior-turn history before the current user message", async () => {
+    const env = fakeEnv({ "users/u/articles/cur.json": JSON.stringify({ articles: [{ title: "C", body: "c" }] }) });
+    let seen;
+    const callClaude = async ({ messages }) => { seen = messages; return asst(text("ok")); };
+    const history = [
+      { role: "user", content: "把第3行改简洁" },
+      { role: "assistant", content: "改好了" },
+    ];
+    await runAgentLoop({ callClaude, ctx: ctx(env), system: "S", userContent: "再简洁点", history });
+    expect(seen.slice(0, 2)).toEqual(history);
+    expect(seen[2]).toEqual({ role: "user", content: "再简洁点" });
+  });
+
   it("stops at maxSteps even if Claude never yields", async () => {
     const env = fakeEnv({ "users/u/articles/cur.json": JSON.stringify({ articles: [{ title: "C", body: "c" }] }) });
     const callClaude = async () => asst(toolUse("read_article", { stem: "cur" }));
