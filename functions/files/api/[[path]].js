@@ -359,7 +359,9 @@ export async function onRequest(context) {
       const rr = await fetch(env.WECHAT_RELAY_URL, {
         method: 'POST',
         headers: { 'X-Relay-Secret': env.WECHAT_RELAY_SECRET, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appid: wc.appid, secret: wc.secret, cover_media_ids: wc.coverMediaIds || {}, article: relayDoc }),
+        // `owner` (= users/<sub>/) lets the relay resolve the body's [[photo:<relkey>]]
+        // markers to full keys and embed those session photos into the draft.
+        body: JSON.stringify({ appid: wc.appid, secret: wc.secret, owner: prefix, cover_media_ids: wc.coverMediaIds || {}, article: relayDoc }),
       });
       relay = await rr.json().catch(() => null);
       if (!rr.ok) return json({ error: 'relay_error', detail: relay }, 502);
