@@ -386,6 +386,23 @@ export async function onRequest(context) {
   // firstSharedAt}. Content is always read from the live article — edits to the
   // source article are immediately visible in the community.
 
+  // Run async `fn` over `items` with bounded concurrency, preserving input order.
+  // The community list/replies need ~2 R2 reads per post; doing them serially made
+  // those endpoints take 7–12s for ~27 posts. This fans them out (capped so we stay
+  // well under the Workers subrequest budget even for a large community).
+  async function mapLimit(items, limit, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < items.length) {
+        const idx = next++;
+        out[idx] = await fn(items[idx], idx);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return out;
+  }
+
   // Resolve current articles[] regardless of schema version.
   // Schema-3: articles live in versions[head]; schema-2: top-level articles; v1: body.
   function resolveArticles(doc) {
@@ -462,27 +479,28 @@ export async function onRequest(context) {
   // Reads the live article for each schema-2 post to get current title and count.
   if (request.method === 'GET' && action === 'community' && sub2 === 'list') {
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
-    const posts = [];
-    const postObjects = listed.objects.filter(o => /^community\/[^/]+\.json$/.test(o.key));
-    for (const o of postObjects.slice(0, 200)) {
+    const postObjects = listed.objects.filter(o => /^community\/[^/]+\.json$/.test(o.key)).slice(0, 200);
+    // Fan out the per-post reads (pointer + live article) — see mapLimit above.
+    const results = await mapLimit(postObjects, 32, async (o) => {
       const obj = await env.FILES.get(o.key);
-      if (!obj) continue;
+      if (!obj) return null;
       try {
         const p = JSON.parse(await obj.text());
         // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
         let title = p.title || '', count = (p.articles || []).length, updatedAt = p.updatedAt || p.firstSharedAt;
         if (p.articleKey) {
           const live = await liveDocForPointer(o.key, p);
-          if (!live) continue;   // orphan (reaped) or mid-regeneration — drop the empty row
+          if (!live) return null;   // orphan (reaped) or mid-regeneration — drop the empty row
           const liveArticles = resolveArticles(live);
           title = liveArticles[0]?.title ?? title;
           count = liveArticles.length;
         }
-        posts.push({ shareId: p.shareId, author: p.author, title,
-                     firstSharedAt: p.firstSharedAt, updatedAt, count, mine: p.owner === scope,
-                     ...(p.replyTo ? { replyTo: p.replyTo } : {}) });
-      } catch {}
-    }
+        return { shareId: p.shareId, author: p.author, title,
+                 firstSharedAt: p.firstSharedAt, updatedAt, count, mine: p.owner === scope,
+                 ...(p.replyTo ? { replyTo: p.replyTo } : {}) };
+      } catch { return null; }
+    });
+    const posts = results.filter(Boolean);
     posts.sort((a, b) => (b.firstSharedAt || 0) - (a.firstSharedAt || 0));
     return json({ posts });
   }
@@ -546,22 +564,23 @@ export async function onRequest(context) {
     const shareId = segments[2] || '';
     if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
-    const posts = [];
-    for (const o of listed.objects.filter(x => /^community\/[^/]+\.json$/.test(x.key))) {
+    const objs = listed.objects.filter(x => /^community\/[^/]+\.json$/.test(x.key));
+    const results = await mapLimit(objs, 32, async (o) => {
       const obj = await env.FILES.get(o.key);
-      if (!obj) continue;
+      if (!obj) return null;
       try {
         const p = JSON.parse(await obj.text());
-        if (p.replyTo !== shareId) continue;
+        if (p.replyTo !== shareId) return null;
         let title = p.title || '';
         if (p.articleKey) {
           const live = await liveDocForPointer(o.key, p);
-          if (!live) continue;   // orphan reply (reaped) or mid-regeneration — drop it
+          if (!live) return null;   // orphan reply (reaped) or mid-regeneration — drop it
           title = resolveArticles(live)[0]?.title ?? title;
         }
-        posts.push({ shareId: p.shareId, author: p.author, title, firstSharedAt: p.firstSharedAt, replyTo: p.replyTo });
-      } catch {}
-    }
+        return { shareId: p.shareId, author: p.author, title, firstSharedAt: p.firstSharedAt, replyTo: p.replyTo };
+      } catch { return null; }
+    });
+    const posts = results.filter(Boolean);
     posts.sort((a, b) => (a.firstSharedAt || 0) - (b.firstSharedAt || 0));
     return json({ posts });
   }
