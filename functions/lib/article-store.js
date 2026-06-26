@@ -29,15 +29,22 @@ function migrateToV3(doc) {
   const latestV = olderVersions.length > 0
     ? olderVersions[olderVersions.length - 1].v + 1
     : (doc.version || 1);
+  // v1 docs had no `articles[]` — content lived in a top-level `body`. Carry it
+  // into the migrated version so reading/re-saving a v1 doc doesn't blank it out.
+  // (Mirrors the v1 fallback in every resolveArticles across the Files/share/agent code.)
+  const currentArticles = (Array.isArray(doc.articles) && doc.articles.length)
+    ? doc.articles
+    : (doc.body ? [{ title: doc.title || "(无题)", body: doc.body }] : []);
   const currentEntry = {
     v: latestV,
     savedAt: doc.updatedAt || 0,
     source: doc._source || "unknown",
-    articles: doc.articles || [],
+    articles: currentArticles,
   };
   const versions = [...olderVersions, currentEntry];
 
-  const { articles: _a, history: _h, version: _v, _source: _s, ...rest } = doc;
+  // strip v1 content remnants (body/title) too — they now live in versions[].articles
+  const { articles: _a, history: _h, version: _v, _source: _s, body: _b, title: _t, ...rest } = doc;
   return { ...rest, head: latestV, versions };
 }
 

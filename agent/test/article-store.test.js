@@ -51,6 +51,21 @@ describe("readArticleDoc", () => {
     expect(doc.history).toBeUndefined();     // history gone
     expect(doc.transcript).toBe("tx");       // other metadata preserved
   });
+
+  it("migrates a v1 doc (top-level body, no articles[]) without losing content", async () => {
+    const env = seed({
+      version: 1, _source: "mine", updatedAt: 1500,
+      title: "老标题", body: "v1 正文内容", transcript: "tx",
+    });
+    const doc = await readArticleDoc(env, KEY);
+    expect(Array.isArray(doc.versions)).toBe(true);
+    expect(doc.versions).toHaveLength(1);
+    expect(doc.versions[0].articles).toHaveLength(1);
+    expect(doc.versions[0].articles[0].title).toBe("老标题");
+    expect(doc.versions[0].articles[0].body).toBe("v1 正文内容");  // body NOT dropped
+    expect(doc.head).toBe(doc.versions[0].v);
+    expect(doc.body).toBeUndefined();        // v1 body field gone after migrate
+  });
 });
 
 // ── writeArticleDoc ─────────────────────────────────────────────────────────
