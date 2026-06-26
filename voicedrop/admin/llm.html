@@ -70,6 +70,9 @@ select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;backgroun
 .badge.ok{background:var(--accent-bg);color:var(--accent)}
 .badge.err{background:var(--err-bg);color:var(--err)}
 .row .tok{font-size:.72rem;color:var(--muted);flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.row .cost{font-size:.72rem;color:var(--accent);flex:none;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-width:56px;text-align:right}
+.grphd .gcost{float:right;color:var(--accent);font-weight:700}
+.tag.cost{color:var(--accent);border-color:var(--accent-bg);background:var(--accent-bg);font-weight:700}
 
 /* ---- detail ---- */
 .detail{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
@@ -150,6 +153,30 @@ function shortModel(m){ return String(m||'').replace(/^claude-/,'').replace(/-\d
 function usageStr(u){ if(!u) return ''; const i=u.input_tokens??u.inputTokens, o=u.output_tokens??u.outputTokens;
   if(i==null&&o==null) return ''; return `${i??'?'}→${o??'?'} tok`; }
 
+// ---- pricing: $ per 1M tokens [input, output]; cache-write +25%, cache-read −90% ----
+const PRICING = {
+  'fable-5':[10,50], 'mythos-5':[10,50],
+  'opus-4-8':[5,25], 'opus-4-7':[5,25], 'opus-4-6':[5,25],
+  'sonnet-4-6':[3,15], 'sonnet-4-5':[3,15],
+  'haiku-4-5':[1,5],
+};
+function priceFor(model){ return PRICING[shortModel(model)] || null; }
+function costOf(rec){
+  const u = rec && rec.response && rec.response.usage; if(!u) return null;
+  const p = priceFor(rec.model); if(!p) return null;
+  const [pin,pout] = p;
+  const inp=u.input_tokens||0, out=u.output_tokens||0,
+        cc=u.cache_creation_input_tokens||0, cr=u.cache_read_input_tokens||0;
+  return (inp*pin + cc*pin*1.25 + cr*pin*0.1 + out*pout) / 1e6;
+}
+function fmtUSD(c){
+  if(c==null) return '';
+  if(c===0) return '$0';
+  if(c<0.01) return '$'+c.toFixed(4);
+  if(c<1) return '$'+c.toFixed(3);
+  return '$'+c.toFixed(2);
+}
+
 // ---- load one day: fetch all pages (ascending), then reverse → newest first ----
 async function loadDay(date){
   $('#list').innerHTML = `<div class="loading"><span class="spin"></span>加载 ${date} …</div>`;
@@ -182,7 +209,8 @@ async function fetchRecords(objects){
 function renderList(){
   const list = $('#list');
   if(!RECORDS.length){ list.innerHTML = `<div class="empty-state">这一天没有交互</div>`; $('#count').textContent=''; return; }
-  $('#count').textContent = `${RECORDS.length} 次交互`;
+  const dayCost = RECORDS.reduce((s,r)=> s + (costOf(r)||0), 0);
+  $('#count').innerHTML = `${RECORDS.length} 次交互 · <span class="tag cost">今日 ${esc(fmtUSD(dayCost))}</span>`;
   const groups = new Map();
   for(const r of RECORDS){ const k=r.turn_id||r._key; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(r); }
   const ordered = [...groups.values()].map((g)=>{ g.sort((a,b)=>(a.step??0)-(b.step??0)); return g; })
@@ -190,7 +218,10 @@ function renderList(){
   let html='';
   for(const g of ordered){
     const multi = g.length>1;
-    if(multi){ html += `<div class="grp"><div class="grphd">turn · ${g.length} 步 · ${esc(g[0].meta?.stem||'')}</div>`; }
+    if(multi){
+      const turnCost = g.reduce((s,r)=> s + (costOf(r)||0), 0);
+      html += `<div class="grp"><div class="grphd">turn · ${g.length} 步 · ${esc(g[0].meta?.stem||'')}<span class="gcost">${esc(fmtUSD(turnCost))}</span></div>`;
+    }
     else html += `<div class="grp">`;
     for(const r of g){
       const idx = RECORDS.indexOf(r);
@@ -201,6 +232,7 @@ function renderList(){
         <span class="badge ${r.source==='mine'?'mine':'agent'}">${esc(r.source||'?')}</span>
         <span class="grow">${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
         <span class="tok">${esc(usageStr(r.response&&r.response.usage))}</span>
+        <span class="cost">${esc(fmtUSD(costOf(r)))}</span>
         <span class="badge ${okCls}">${okTxt}</span>
       </div>`;
     }
@@ -241,12 +273,14 @@ function renderDetail(r){
   if(!r){ d.innerHTML=`<div class="empty-state">—</div>`; return; }
   if(r._broken){ d.innerHTML=`<div class="errbox">这条日志读取失败：${esc(r._key)}</div>`; return; }
   const req=r.request||{}, resp=r.response;
+  const cost=costOf(r);
   let h = `<div class="meta">
     <span><b>${esc(r.source||'?')}</b></span>
     <span>${esc(shortModel(r.model))}</span>
     <span>${esc(new Date(r.ts).toLocaleString('zh-CN'))}</span>
     <span>耗时 <b>${r.latency_ms!=null?(r.latency_ms/1000).toFixed(1)+'s':'—'}</b></span>
     <span>HTTP <b>${esc(r.http_status)}</b> ${r.ok?'':'· <b style="color:var(--err)">失败</b>'}</span>
+    ${cost!=null?`<span>价格 <b style="color:var(--accent)">${esc(fmtUSD(cost))}</b></span>`:''}
     ${r.user_scope?`<span>${esc(r.user_scope)}</span>`:''}
     ${r.meta&&r.meta.stem?`<span>${esc(r.meta.stem)}</span>`:''}
     ${r.turn_id?`<span class="usage">turn ${esc(r.turn_id)}${r.step!=null?` #${r.step}`:''}</span>`:''}
