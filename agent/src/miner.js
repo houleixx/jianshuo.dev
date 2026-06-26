@@ -50,14 +50,16 @@ export async function loadModelConfig(env) {
   return { providerKey: "anthropic", provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "" };
 }
 
-// Voice editing (ArticleEditor) runs an Anthropic tool-use loop, so it can only
-// execute on Claude. Honor the admin's model choice when the configured provider
-// is Anthropic (e.g. switch sonnet↔opus); for any non-Anthropic provider fall
-// back to the default Claude model — the agentic edit loop can't run there.
+// Voice editing runs an Anthropic tool-use loop (Claude only). It's a quick,
+// mechanical rewrite where latency matters far more than raw quality, so it uses
+// a FAST model (Haiku) by default — deliberately decoupled from the mining model
+// (which is quality-critical). An explicit Claude `editModel` in config/model.json
+// overrides; the mining provider/model is irrelevant to editing.
+export const EDIT_MODEL_DEFAULT = "claude-haiku-4-5";
+
 export function resolveEditModel(modelCfg) {
-  return (modelCfg && modelCfg.providerKey === "anthropic" && modelCfg.model)
-    ? modelCfg.model
-    : MINE_MODEL_DEFAULT;
+  const m = modelCfg && modelCfg.editModel;
+  return (typeof m === "string" && m.startsWith("claude-")) ? m : EDIT_MODEL_DEFAULT;
 }
 
 // ── System prompts (identical to mine.py) ─────────────────────────────────────

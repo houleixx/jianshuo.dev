@@ -28,30 +28,34 @@ describe("runAgentLoop", () => {
     globalThis.fetch = fakeFetch({
       "PUT https://x/files/api/articles/cur": () => ({ ok: true, body: { ok: true, version: 2 } }),
     });
+    // The write step carries the model's own explanation; the short-circuit uses
+    // it as finalText and never makes the 4th call.
     const script = [
       asst(toolUse("list_articles", {})),
       asst(toolUse("read_article", { stem: "old" })),
-      asst(toolUse("write_article", { articles: [{ title: "Merged", body: "c\n\no" }] })),
-      asst(text("合并好了")),
+      asst(text("合并好了"), toolUse("write_article", { articles: [{ title: "Merged", body: "c\n\no" }] })),
+      asst(text("不应该走到这一步")),
     ];
     let i = 0;
     const callClaude = async () => script[i++];
     const r = await runAgentLoop({ callClaude, ctx: ctx(env), system: "S", userText: "把 old 合并进来" });
     expect(r.calledTools).toEqual(["list_articles", "read_article", "write_article"]);
     expect(r.finalText).toBe("合并好了");
+    expect(i).toBe(3); // short-circuited after write_article — no extra confirmation round-trip
     // write_article now calls the HTTP API; verify the PUT was made with the merged content.
     const call = globalThis.fetch.calls[0];
     expect(JSON.parse(call.body).articles[0].title).toBe("Merged");
   });
 
-  it("handles an action-only turn (publish) with no write", async () => {
+  it("short-circuits an action-only turn (publish) without a confirmation call", async () => {
     const env = fakeEnv({ "users/u/articles/cur.json": JSON.stringify({ articles: [{ title: "C", body: "c" }] }) });
     globalThis.fetch = (async () => ({ ok: true, status: 200, json: async () => ({ ok: true, created: 1 }) }));
-    const script = [asst(toolUse("publish_wechat", {})), asst(text("已发草稿"))];
+    const script = [asst(text("已发草稿"), toolUse("publish_wechat", {})), asst(text("不应该走到这一步"))];
     let i = 0;
     const r = await runAgentLoop({ callClaude: async () => script[i++], ctx: ctx(env), system: "S", userText: "发公众号" });
     expect(r.calledTools).toEqual(["publish_wechat"]);
     expect(r.finalText).toBe("已发草稿");
+    expect(i).toBe(1); // short-circuited after publish_wechat
     delete globalThis.fetch;
   });
 

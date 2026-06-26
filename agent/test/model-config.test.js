@@ -8,6 +8,7 @@ import {
   resolveEditModel,
   runMine,
   MINE_MODEL_DEFAULT,
+  EDIT_MODEL_DEFAULT,
 } from "../src/miner.js";
 import { fakeEnv } from "./fakes.js";
 
@@ -58,16 +59,18 @@ describe("loadModelConfig", () => {
   });
 });
 
-describe("resolveEditModel (voice editing is Anthropic-only)", () => {
-  it("Anthropic provider → honors the admin's Claude model", () => {
-    expect(resolveEditModel({ providerKey: "anthropic", model: "claude-opus-4-8" })).toBe("claude-opus-4-8");
+describe("resolveEditModel (voice editing uses a fast Claude model, decoupled from mining)", () => {
+  it("ignores the mining provider/model — always the fast edit default", () => {
+    expect(resolveEditModel({ providerKey: "deepseek", model: "deepseek-chat" })).toBe(EDIT_MODEL_DEFAULT);
+    expect(resolveEditModel({ providerKey: "anthropic", model: "claude-opus-4-8" })).toBe(EDIT_MODEL_DEFAULT);
+    expect(EDIT_MODEL_DEFAULT).not.toBe(MINE_MODEL_DEFAULT); // editing model is faster than mining default
   });
-  it("non-Anthropic provider → falls back to default Claude (editing can't run there)", () => {
-    expect(resolveEditModel({ providerKey: "deepseek", model: "deepseek-chat" })).toBe(MINE_MODEL_DEFAULT);
+  it("honors an explicit Claude editModel override", () => {
+    expect(resolveEditModel({ editModel: "claude-opus-4-8" })).toBe("claude-opus-4-8");
   });
-  it("missing/empty model or cfg → default Claude", () => {
-    expect(resolveEditModel({ providerKey: "anthropic" })).toBe(MINE_MODEL_DEFAULT);
-    expect(resolveEditModel(null)).toBe(MINE_MODEL_DEFAULT);
+  it("ignores a non-Claude editModel and missing cfg", () => {
+    expect(resolveEditModel({ editModel: "deepseek-chat" })).toBe(EDIT_MODEL_DEFAULT);
+    expect(resolveEditModel(null)).toBe(EDIT_MODEL_DEFAULT);
   });
 });
 

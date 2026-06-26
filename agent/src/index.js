@@ -220,11 +220,18 @@ export class ArticleEditor extends Agent {
       // iOS ArticleDoc expects top-level `articles`; reconstruct it from schema-3.
       connection.send(JSON.stringify({ type: "updated", article: withTopLevelArticles(finalDoc) }));
 
+      // We now skip the extra confirmation round-trip after a successful action,
+      // so finalText may be empty when the model went straight to the tool. Fall
+      // back to a canned reply so the user still hears a confirmation.
       const summary = (result.finalText || "").trim();
+      const TERMINAL = ["write_article", "write_style", "publish_wechat", "share_to_community"];
+      const didAct = (result.calledTools || []).some((n) => TERMINAL.includes(n));
       if (summary) {
         connection.send(JSON.stringify({ type: "reply", text: summary, ok: !result.hadError }));
       } else if (result.hadError) {
         connection.send(JSON.stringify({ type: "reply", text: "操作没完成", ok: false }));
+      } else if (didAct) {
+        connection.send(JSON.stringify({ type: "reply", text: "改好了", ok: true }));
       }
 
       this.sql`INSERT INTO history (instruction, created_at) VALUES (${instruction}, ${Date.now()})`;
