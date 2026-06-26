@@ -1,0 +1,4 @@
+# reco is served by its own Worker (voicedrop-reco on /reco/*), not Pages.
+# Keep its source + 200MB node_modules out of the Pages asset upload.
+reco/
+node_modules
