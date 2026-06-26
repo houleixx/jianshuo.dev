@@ -32,15 +32,18 @@ export async function onRequest(context) {
   // ---- Unauthenticated: exchange an Apple identity token for a session ----
   if (request.method === 'POST' && action === 'auth' && sub2 === 'apple') {
     if (!env.SESSION_SECRET) return json({ error: 'server misconfigured: no SESSION_SECRET' }, 500);
-    let idToken = '';
+    let idToken = '', bodyName = null, bodyEmail = null;
     try {
       const body = await request.json();
       idToken = (body && (body.identityToken || body.id_token)) || '';
+      bodyName = (body && body.fullName) || null;   // present only on the user's FIRST authorization
+      bodyEmail = (body && body.email) || null;
     } catch { idToken = (await request.text()).trim(); }
     if (!idToken) return json({ error: 'missing identityToken' }, 400);
-    let sub;
+    let sub, tokenEmail = null;
     try {
-      sub = await verifyAppleIdentityToken(idToken, env.APPLE_BUNDLE_ID || 'com.wangjianshuo.VoiceDrop');
+      const verified = await verifyAppleIdentityToken(idToken, env.APPLE_BUNDLE_ID || 'com.wangjianshuo.VoiceDrop');
+      sub = verified.sub; tokenEmail = verified.email;
     } catch (e) {
       return json({ error: 'invalid apple token', detail: String(e.message || e) }, 401);
     }
@@ -53,13 +56,29 @@ export async function onRequest(context) {
     if (existing) {
       try { scope = JSON.parse(await existing.text()).scope; } catch {}
     }
+    const now = Date.now();
     if (!scope) {
       const callerAnon = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
       scope = (await anonScopeFromToken(callerAnon)) || `users/${sanitizeSeg(sub)}/`;
-      const now = Date.now();
       await env.FILES.put(linkKey, JSON.stringify({ scope, linkedAt: now }),
         { httpMetadata: { contentType: 'application/json' } });
-      await env.FILES.put(`${scope}ACCOUNT.json`, JSON.stringify({ appleSub: sub, linkedAt: now }),
+    }
+    // Persist the Apple-provided identity. fullName is handed over ONLY on the first
+    // authorization (and again only if the user revokes + re-grants), so it is
+    // first-write-wins; email rides in the verified token and is refreshed each sign-in.
+    // Merge so a later null never clobbers a previously-captured name.
+    {
+      const acctKey = `${scope}ACCOUNT.json`;
+      let acct = {};
+      const acctObj = await env.FILES.get(acctKey);
+      if (acctObj) { try { acct = JSON.parse(await acctObj.text()); } catch {} }
+      acct.appleSub = sub;
+      if (!acct.linkedAt) acct.linkedAt = now;
+      acct.lastSeenAt = now;
+      const email = tokenEmail || bodyEmail;
+      if (email) acct.email = email;
+      if (bodyName && !acct.name) acct.name = bodyName;
+      await env.FILES.put(acctKey, JSON.stringify(acct),
         { httpMetadata: { contentType: 'application/json' } });
     }
     const session = await mintSession(scope, true, env.SESSION_SECRET);
@@ -351,6 +370,10 @@ export async function onRequest(context) {
   if (request.method === 'POST' && action === 'community' && sub2 === 'share') {
     if (!scope) return json({ error: 'admin cannot share' }, 403);
     if (!env.SESSION_SECRET) return json({ error: 'server misconfigured' }, 500);
+    // Community write gate: posting to the shared space requires an Apple-verified
+    // identity (accountability). A bare anon/temp token gets 403 needs_apple_signin,
+    // which the app catches -> presents the Apple sheet -> binds -> retries the share.
+    if (!apple) return json({ error: 'needs_apple_signin' }, 403);
     const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
     if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) {
       return json({ error: 'not shareable' }, 400);
@@ -416,6 +439,8 @@ export async function onRequest(context) {
   // Un-share (delete) a community post — owner only.
   if (request.method === 'POST' && action === 'community' && sub2 === 'unshare') {
     if (!scope) return json({ error: 'unauthorized' }, 403);
+    // Same Apple-verified gate as share: editing the shared space needs accountability.
+    if (!apple) return json({ error: 'needs_apple_signin' }, 403);
     const shareId = segments[2] || '';
     if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
     const key = `community/${shareId}.json`;
@@ -707,7 +732,7 @@ async function verifyAppleIdentityToken(idToken, expectedAud) {
   if (!auds.includes(expectedAud)) throw new Error(`bad aud: ${payload.aud}`);
   if (!payload.sub) throw new Error('no sub');
   if (payload.exp * 1000 < Date.now()) throw new Error('expired');
-  return payload.sub;
+  return { sub: payload.sub, email: payload.email || null };
 }
 
 // ---------------------------------------------------------------------------
