@@ -109,6 +109,32 @@ export async function onRequest(context) {
     });
   }
 
+  // ---- Public (no auth): a session photo by its full R2 key ----
+  // GET photo/<users/<sub>/photos/.../x.jpg> — the ONE photo endpoint used everywhere
+  // (VD社区, the public /voicedrop share page, exported HTML, anywhere): render straight
+  // from the photo's original R2 location as a plain <img src>. No token, no per-post
+  // reference check. The only guard is a file-type allowlist — it can serve ONLY
+  // `users/*/photos/*.(jpg|jpeg|png)`, never articles or credentials (WECHAT.json) —
+  // plus a `..` traversal block. Photo keys carry a hashed user id + timestamp + random
+  // tail, so a full key is effectively unguessable; only keys already embedded in shared
+  // content are ever visible. CORS `*` + public cache so any page can load + cache it.
+  if (request.method === 'GET' && action === 'photo') {
+    const key = decodeURIComponent(segments.slice(1).join('/'));
+    if (key.includes('..') || !/^users\/[^/]+\/photos\/.+\.(jpe?g|png)$/i.test(key)) {
+      return json({ error: 'not a photo' }, 400);
+    }
+    const obj = await env.FILES.get(key);
+    if (!obj) return json({ error: 'not found' }, 404);
+    return new Response(obj.body, {
+      headers: {
+        'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
+        'Content-Length': String(obj.size),
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  }
+
   // ---- Authenticate every other route ----
   const authHeader = request.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '') || url.searchParams.get('token') || '';
@@ -151,6 +177,14 @@ export async function onRequest(context) {
     if (!n) return null;
     if (n.startsWith('/') || n.split('/').some((s) => s === '..')) return null;
     return scope + n;
+  }
+
+  // Who am I — returns the caller's resolved data scope ("users/<sub>/"). The app
+  // caches it once, then joins scope + a relative photo key to build the full R2 key
+  // and load its OWN photos from the same public /photo/<key> endpoint the community +
+  // share pages use — one photo logic everywhere. (Admin scope is "".)
+  if (request.method === 'GET' && action === 'whoami') {
+    return json({ scope });
   }
 
   // Mint a 24 h read-only articles link for the current user's scope.
@@ -364,6 +398,27 @@ export async function onRequest(context) {
     return [];
   }
 
+  // A schema-2 community post is a pointer to a live article; its title/body are
+  // read fresh from `articleKey` every time. When the user deletes the underlying
+  // recording, that article JSON is gone — the post then renders as an empty,
+  // titleless row that opens to "这篇分享已不可用". This resolves the live doc for a
+  // pointer and self-heals orphans:
+  //   • live article present        → return the parsed doc (display it).
+  //   • article gone, audio gone too → whole recording was deleted → reap the
+  //     orphan pointer and return null (gone for good).
+  //   • article gone, audio present  → article is mid-重新生成 (delete-then-remine);
+  //     keep the pointer, return null so the post is hidden until the re-mine lands.
+  // Returns null for legacy schema-1 posts (no articleKey, inline content) — callers
+  // fall back to their stored content for those.
+  async function liveDocForPointer(pointerKey, p) {
+    if (!p.articleKey) return null;
+    const liveObj = await env.FILES.get(p.articleKey);
+    if (liveObj) { try { return JSON.parse(await liveObj.text()); } catch { return null; } }
+    const audioKey = p.articleKey.replace('/articles/', '/').replace(/\.json$/, '.m4a');
+    if (!(await env.FILES.head(audioKey))) await env.FILES.delete(pointerKey);
+    return null;
+  }
+
   // Share (or re-share) one of the user's own articles. Writes a schema-2 pointer
   // with no content copy. shareId is HMAC-derived from the article key so re-sharing
   // updates the same post in place; firstSharedAt is preserved.
@@ -417,15 +472,11 @@ export async function onRequest(context) {
         // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
         let title = p.title || '', count = (p.articles || []).length, updatedAt = p.updatedAt || p.firstSharedAt;
         if (p.articleKey) {
-          const liveObj = await env.FILES.get(p.articleKey);
-          if (liveObj) {
-            try {
-              const live = JSON.parse(await liveObj.text());
-              const liveArticles = resolveArticles(live);
-              title = liveArticles[0]?.title ?? title;
-              count = liveArticles.length;
-            } catch {}
-          }
+          const live = await liveDocForPointer(o.key, p);
+          if (!live) continue;   // orphan (reaped) or mid-regeneration — drop the empty row
+          const liveArticles = resolveArticles(live);
+          title = liveArticles[0]?.title ?? title;
+          count = liveArticles.length;
         }
         posts.push({ shareId: p.shareId, author: p.author, title,
                      firstSharedAt: p.firstSharedAt, updatedAt, count, mine: p.owner === scope,
@@ -463,18 +514,20 @@ export async function onRequest(context) {
     // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
     let articles = (p.articles || []).map(a => ({ title: a.title, body: a.body }));
     let title = p.title || articles[0]?.title || '';
+    let legacyPhotos = p.photos;   // legacy [[photo:N]] resolution; new posts have none
     if (p.articleKey) {
-      const liveObj = await env.FILES.get(p.articleKey);
-      if (liveObj) {
-        try {
-          const live = JSON.parse(await liveObj.text());
-          articles = resolveArticles(live).map(a => ({ title: a.title, body: a.body }));
-          title = articles[0]?.title ?? title;
-        } catch {}
-      }
+      const live = await liveDocForPointer(`community/${shareId}.json`, p);
+      if (!live) return json({ error: 'not found' }, 404);   // orphan (reaped) or mid-regeneration
+      articles = resolveArticles(live).map(a => ({ title: a.title, body: a.body }));
+      title = articles[0]?.title ?? title;
+      legacyPhotos = live.photos;
     }
-    return json({ shareId: p.shareId, author: p.author, title, articles,
-                  firstSharedAt: p.firstSharedAt, ...(p.replyTo ? { replyTo: p.replyTo } : {}) });
+    // `owner` (= the photo files' "users/<sub>/" prefix) + `photos` let the client build
+    // the full R2 key for each [[photo:…]] marker and load it from the public photo URL.
+    return json({ shareId: p.shareId, author: p.author, title, articles, owner: p.owner,
+                  firstSharedAt: p.firstSharedAt,
+                  ...(Array.isArray(legacyPhotos) && legacyPhotos.length ? { photos: legacyPhotos } : {}),
+                  ...(p.replyTo ? { replyTo: p.replyTo } : {}) });
   }
 
   // Whether the user's own article is currently shared; also returns shareId for unshare.
@@ -502,13 +555,9 @@ export async function onRequest(context) {
         if (p.replyTo !== shareId) continue;
         let title = p.title || '';
         if (p.articleKey) {
-          const liveObj = await env.FILES.get(p.articleKey);
-          if (liveObj) {
-            try {
-              const live = JSON.parse(await liveObj.text());
-              title = resolveArticles(live)[0]?.title ?? title;
-            } catch {}
-          }
+          const live = await liveDocForPointer(o.key, p);
+          if (!live) continue;   // orphan reply (reaped) or mid-regeneration — drop it
+          title = resolveArticles(live)[0]?.title ?? title;
         }
         posts.push({ shareId: p.shareId, author: p.author, title, firstSharedAt: p.firstSharedAt, replyTo: p.replyTo });
       } catch {}

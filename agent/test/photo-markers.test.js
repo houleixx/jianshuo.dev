@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { renderPhotos, stripPhotoMarkers, photoRefsInBodies } from "../../functions/voicedrop/[token].js";
 
 // photoURIs is keyed BOTH by 1-based index (legacy) and relative key (new),
-// exactly as loadPhotoURIs builds it.
+// exactly as buildPhotoURLs builds it.
 const URIS = {
   1: "data:img1", 2: "data:img2",
   "photos/s/a.jpg": "data:imgA",
