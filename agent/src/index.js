@@ -20,33 +20,19 @@ import { TOOL_DEFS } from "./tools.js";
 import { runMine, loadModelConfig, resolveEditModel } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
+import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
+import { writeLlmLog } from "./llmlog.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
 // via resolveEditModel — honoring a Claude model choice, ignoring non-Anthropic.
 const MODEL = "claude-sonnet-4-6";
 
-// ── LLM interaction log ────────────────────────────────────────────────────
-// Every Anthropic call (mine.py + this agent) is recorded to R2 under llmlogs/
-// so the admin console (voicedrop/admin/llm.html) can replay exactly what was
-// sent and received. Admin-only (outside users/). Best-effort: a logging
-// failure must never break an edit. 30-day R2 lifecycle keeps volume bounded.
+// writeLlmLog is imported from ./llmlog.js (shared with miner.js).
+// rand6 stays here — also used to build per-turn ids below.
 function rand6() {
   return Math.floor(crypto.getRandomValues(new Uint32Array(1))[0] % 1e6)
     .toString().padStart(6, "0");
-}
-
-async function writeLlmLog(env, rec) {
-  try {
-    const ts = rec.ts || Date.now();
-    const id = `${ts}-${rand6()}`;
-    const date = new Date(ts).toISOString().slice(0, 10); // YYYY-MM-DD
-    const key = `llmlogs/${date}/${id}.json`;
-    const body = JSON.stringify({ id, ts, ...rec });
-    await env.FILES.put(key, body, { httpMetadata: { contentType: "application/json" } });
-  } catch (_) {
-    // swallow — logging must never interrupt the actual work
-  }
 }
 
 // resolveArticles + withTopLevelArticles are imported from the shared
@@ -441,64 +427,12 @@ async function resolveScope(token, env) {
     const sess = await verifySession(token, env.SESSION_SECRET);
     if (sess) return sess.scope;
   }
-  if (token.startsWith("anon_") && token.length >= 20) {
-    const id = (await sha256hex(token)).slice(0, 32);
-    return `users/anon-${id}/`;
-  }
+  const anonScope = await anonScopeFromToken(token);
+  if (anonScope) return anonScope;
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Auth + crypto helpers — ported verbatim from functions/files/api/[[path]].js.
-// ---------------------------------------------------------------------------
-async function verifySession(tokenStr, secret) {
-  const parts = tokenStr.split(".");
-  if (parts.length !== 3) return null;
-  const [h, p, s] = parts;
-  const expected = await hmacSign(`${h}.${p}`, secret);
-  if (!timingSafeEqual(s, expected)) return null;
-  let payload;
-  try { payload = JSON.parse(b64urlToString(p)); } catch { return null; }
-  if (!payload.scope) return null;
-  if (payload.exp && payload.exp * 1000 < Date.now()) return null;
-  return { scope: payload.scope, apple: !!payload.apple };
-}
-
-async function hmacSign(data, secret) {
-  const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
-  return bytesToB64url(new Uint8Array(sig));
-}
-
-function sanitizeSeg(s) { return String(s).replace(/[^A-Za-z0-9._-]/g, "_"); }
+// verifySession / anonScopeFromToken are imported from the shared
+// functions/lib/auth.js (single source of truth — see import at top).
+// sanitizeName stays here: agent-only, not part of the shared auth surface.
 function sanitizeName(s) { return String(s).replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 200); }
-
-async function sha256hex(s) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-function bytesToB64url(bytes) {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function b64urlToBytes(s) {
-  s = s.replace(/-/g, "+").replace(/_/g, "/");
-  while (s.length % 4) s += "=";
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-function b64urlToString(s) { return new TextDecoder().decode(b64urlToBytes(s)); }

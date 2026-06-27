@@ -124,12 +124,13 @@ select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;backgroun
 
 </div>
 
+<script src="/voicedrop/shared.js"></script>
 <script>
 const API = '/files/api';
 const TKEY = 'vd_admin_token';
 let TOKEN = localStorage.getItem(TKEY) || '';
 let RECORDS = [];
-const $ = (s) => document.querySelector(s);
+// $ / esc come from /voicedrop/shared.js (single source of truth).
 
 function encKey(k){ return k.split('/').map(encodeURIComponent).join('/'); }
 async function api(path){
@@ -141,7 +142,6 @@ async function api(path){
 function fmtTime(ts){ const d=new Date(ts); const p=(n)=>String(n).padStart(2,'0');
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
 function fmtElapsed(ms){ if(ms==null) return '—'; if(ms<1000) return `${ms}ms`; return `${(ms/1000).toFixed(1)}s`; }
-function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function shortStem(stem){ return stem.replace(/^VoiceDrop-/,'').replace(/-[A-Za-z]+-[A-Za-z]+-[A-Za-z]+$/,''); }
 
 async function loadDay(date){

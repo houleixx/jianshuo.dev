@@ -132,12 +132,13 @@ details.fold>summary{cursor:pointer;font-size:.82rem;color:var(--blue);user-sele
 
 </div>
 
+<script src="/voicedrop/shared.js"></script>
 <script>
 const API = '/files/api';
 const TKEY = 'vd_admin_token';            // shared with index.html — token carries over
 let TOKEN = localStorage.getItem(TKEY) || '';
 let RECORDS = [];                          // current day's records, newest first
-const $ = (s) => document.querySelector(s);
+// $ / esc come from /voicedrop/shared.js (single source of truth).
 
 function encKey(k){ return k.split('/').map(encodeURIComponent).join('/'); }
 async function api(path){
@@ -148,7 +149,6 @@ async function api(path){
 
 function fmtTime(ts){ const d=new Date(ts); const p=(n)=>String(n).padStart(2,'0');
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
-function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function shortModel(m){ return String(m||'').replace(/^claude-/,'').replace(/-\d{8}$/,''); }
 function usageStr(u){ if(!u) return ''; const i=u.input_tokens??u.inputTokens, o=u.output_tokens??u.outputTokens;
   if(i==null&&o==null) return ''; return `${i??'?'}→${o??'?'} tok`; }

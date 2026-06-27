@@ -174,14 +174,14 @@ header.top .grow{flex:1}
 
 </div>
 
+<script src="/voicedrop/shared.js"></script>
 <script>
 const API = '/files/api';
 const TKEY = 'vd_admin_token';
 let TOKEN = localStorage.getItem(TKEY) || '';
 
-const $ = (s, r=document) => r.querySelector(s);
+// $ / esc / resolveArticles come from /voicedrop/shared.js (single source of truth).
 const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
-const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 // ---- API helpers (admin scope: raw keys) ----
 async function apiList(){
@@ -419,11 +419,7 @@ function renderRec(r){
 async function fillDetail(detail, r, wrap){
   if(r.json){
     const doc = await apiGetJSON(r.json.name);
-    const cur = Array.isArray(doc.versions)&&doc.versions.length
-      ? (doc.versions.find(v=>v.v===doc.head) || doc.versions[doc.versions.length-1]) : null;
-    const arts = cur&&Array.isArray(cur.articles)&&cur.articles.length ? cur.articles
-      : Array.isArray(doc.articles)&&doc.articles.length ? doc.articles
-      : (doc.body? [{title:doc.title,body:doc.body}] : []);
+    const arts = resolveArticles(doc);
     let h='';
     h += `<div class="kv">${esc(doc.model||'')}${doc.createdAt?(' · '+esc(new Date(doc.createdAt).toLocaleString('zh-CN'))):''}${doc.status?(' · '+esc(doc.status)):''}</div>`;
     if(arts.length){

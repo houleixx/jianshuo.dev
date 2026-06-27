@@ -56,6 +56,7 @@
 
 </div>
 
+<script src="/voicedrop/shared.js"></script>
 <script>
 const API = '/files/api';
 const params = new URLSearchParams(location.search);
@@ -156,11 +157,7 @@ function renderArticle(a) {
       });
       if (!r.ok) throw new Error(r.status);
       const doc = await r.json();
-      const cur = Array.isArray(doc.versions) && doc.versions.length
-        ? (doc.versions.find(v => v.v === doc.head) || doc.versions[doc.versions.length - 1]) : null;
-      const arts = cur && Array.isArray(cur.articles) && cur.articles.length ? cur.articles
-        : Array.isArray(doc.articles) && doc.articles.length ? doc.articles
-        : doc.body ? [{ title: doc.title, body: doc.body }] : [];
+      const arts = resolveArticles(doc);
       if (!arts.length) { body.innerHTML = '<div class="art-loading">没有挖出文章内容。</div>'; return; }
       const main = arts[0];
       // Update header title
@@ -178,7 +175,7 @@ function renderArticle(a) {
   return wrap;
 }
 
-function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// esc / resolveArticles come from /voicedrop/shared.js (single source of truth).
 </script>
 </body>
 </html>

@@ -12,6 +12,8 @@
 //   R2_ACCESS_KEY_ID       R2 S3-compatible access key
 //   R2_SECRET_ACCESS_KEY   R2 S3-compatible secret key
 
+import { writeLlmLog } from "./llmlog.js";
+
 export const MINE_MODEL_DEFAULT = "claude-sonnet-4-6";
 const MIN_CHARS          = 20;
 const ORIGIN             = "https://jianshuo.dev";
@@ -439,18 +441,8 @@ async function notifyStatus(scope, stem, status, env) {
   } catch (_) {}
 }
 
-// ── LLM log ───────────────────────────────────────────────────────────────────
-
-async function writeLlmLog(env, rec) {
-  try {
-    const ts  = Date.now();
-    const rid = `${ts}-${[...crypto.getRandomValues(new Uint8Array(3))].map(b => b.toString(16).padStart(2,"0")).join("")}`;
-    const day = new Date(ts).toISOString().slice(0, 10);
-    await env.FILES.put(`llmlogs/${day}/${rid}.json`,
-      JSON.stringify({ id: rid, ts, source: "mine", ...rec }),
-      { httpMetadata: { contentType: "application/json" } });
-  } catch (_) {}
-}
+// writeLlmLog is imported from ./llmlog.js (shared with index.js). Mine calls
+// pass source:"mine" in the record.
 
 // ── Mine run log (per-audio, written to R2) ────────────────────────────────────
 
@@ -550,11 +542,11 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       log(`LLM 开始${force ? " (force)" : ""}`, { step });
       try {
         const r = await generateArticles(transcript, force ? "" : claudeMd, force ? null : (photos.length ? photos : null), force, env, modelCfg);
-        await writeLlmLog(env, { ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        await writeLlmLog(env, { source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
         log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
         return r.articles;
       } catch (e) {
-        await writeLlmLog(env, { ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
+        await writeLlmLog(env, { source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
         throw e;
       }
     };
