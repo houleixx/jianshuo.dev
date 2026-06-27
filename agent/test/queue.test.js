@@ -61,10 +61,20 @@ describe("ArticleQueue.drain", () => {
   });
 
   it("skips the model when the doc already carries this instruction's id (exactly-once)", async () => {
-    const { q, ran } = harness({ loadDoc: async () => ({ lastEditId: "a", articles: [] }) });
+    const { q, store, events, ran } = harness({ loadDoc: async () => ({ lastEditId: "a", articles: [] }) });
     await q.submit({ id: "a", text: "1" });
     await q.drain();
     expect(ran).toEqual([]); // never called runTurn
+    expect(store.get("a").status).toBe("done");
+    expect(events.filter((e) => e.type === "updated").map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("a throwing loadDoc does not abort the drain — the row still runs", async () => {
+    const { q, store, ran } = harness({ loadDoc: async () => { throw new Error("storage down"); } });
+    await q.submit({ id: "a", text: "1" });
+    await q.drain();
+    expect(ran).toEqual(["a"]);
+    expect(store.get("a").status).toBe("done");
   });
 });
 
@@ -75,6 +85,13 @@ describe("ArticleQueue.recover + snapshot", () => {
     store.markRunning("a");
     expect(q.recover()).toBe(true);
     expect(store.get("a").status).toBe("pending");
+  });
+
+  it("recover returns false when no work is pending", async () => {
+    const { q, store } = harness();
+    await q.submit({ id: "a", text: "1" });
+    await q.drain(); // a -> done
+    expect(q.recover()).toBe(false);
   });
 
   it("snapshot lists id+text+status in seq order", async () => {

@@ -116,7 +116,10 @@ export class ArticleQueue {
   async _runRow(row) {
     // Crash-safe exactly-once: if the article already carries this id, the effect
     // already landed — mark done and re-broadcast without re-running the model.
-    const pre = await this.loadDoc();
+    // Best-effort: a loadDoc() failure (transient storage error) must not abort the
+    // drain nor permanently error the row — fall through and run the turn normally.
+    let pre = null;
+    try { pre = await this.loadDoc(); } catch (_) { pre = null; }
     if (pre && pre.lastEditId === row.id) {
       this.store.markDone(row.id, row.reply || "（已完成）");
       this.broadcast({ type: "updated", id: row.id, article: pre });
