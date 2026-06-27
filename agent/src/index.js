@@ -20,6 +20,7 @@ import { runMine, loadModelConfig, resolveEditModel } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
+import { buildBroadcastMessage } from "./devicelink.js";
 import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
@@ -277,7 +278,7 @@ export class StatusHub {
 
     if (request.method === "POST" && url.pathname.endsWith("/broadcast")) {
       const body = await request.json();
-      const msg = JSON.stringify({ type: "status_update", stem: body.stem, status: body.status });
+      const msg = JSON.stringify(buildBroadcastMessage(body));
       for (const ws of this.state.getWebSockets()) {
         try { ws.send(msg); } catch (_) {}
       }
