@@ -20,7 +20,7 @@ import { runMine, loadModelConfig, resolveEditModel } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
-import { buildBroadcastMessage } from "./devicelink.js";
+import { buildBroadcastMessage, createPairing, verifyPairing, completePairing, resolveMatchingScopes, genDistinctCodes, CODE_TTL_MS } from "./devicelink.js";
 import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
@@ -312,6 +312,84 @@ export class Miner {
   async alarm() {
     await runMine(this.env);
   }
+}
+
+// ---------------------------------------------------------------------------
+// LinkBroker: per-pairing Durable Object (idFromName(pairingId)). Holds the
+// pairing state and the NEW device's wait-socket. Self-expires via alarm().
+// All decision logic lives in devicelink.js — this is a thin shell.
+// ---------------------------------------------------------------------------
+export class LinkBroker {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    // New device's wait-socket.
+    if (request.headers.get("Upgrade") === "websocket") {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.state.acceptWebSocket(server);
+      const s = await this.state.storage.get("pairing");
+      if (s && s.blob) { try { server.send(JSON.stringify({ type: "link_ready", blob: s.blob })); } catch (_) {} }
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const now = Date.now();
+
+    if (body.op === "create") {
+      const s = createPairing({ pubkey: body.pubkey, entries: body.entries, now, ttlMs: CODE_TTL_MS });
+      await this.state.storage.put("pairing", s);
+      await this.state.storage.setAlarm(now + CODE_TTL_MS);
+      return Response.json({ ok: true });
+    }
+
+    const s = await this.state.storage.get("pairing");
+    if (!s) return Response.json({ ok: false, error: "not_found" }, { status: 404 });
+
+    if (body.op === "verify") {
+      const { state, result } = verifyPairing(s, body.code, now);
+      await this.state.storage.put("pairing", state);
+      return Response.json(result);
+    }
+
+    if (body.op === "complete") {
+      const { state, result } = completePairing(s, body.callerScope, body.blob, now);
+      await this.state.storage.put("pairing", state);
+      if (result.ok) {
+        for (const ws of this.state.getWebSockets()) {
+          try { ws.send(JSON.stringify({ type: "link_ready", blob: body.blob })); } catch (_) {}
+        }
+      }
+      return Response.json(result, { status: result.ok ? 200 : 403 });
+    }
+
+    if (body.op === "cancel") {
+      if (!s.entries.some((e) => e.scope === body.callerScope)) {
+        return Response.json({ ok: false, error: "forbidden" }, { status: 403 });
+      }
+      for (const ws of this.state.getWebSockets()) {
+        try { ws.send(JSON.stringify({ type: "link_cancelled" })); } catch (_) {}
+      }
+      await this.state.storage.delete("pairing");
+      return Response.json({ ok: true });
+    }
+
+    return new Response("bad op", { status: 400 });
+  }
+
+  async alarm() {
+    for (const ws of this.state.getWebSockets()) {
+      try { ws.send(JSON.stringify({ type: "link_expired" })); } catch (_) {}
+    }
+    await this.state.storage.delete("pairing");
+  }
+
+  webSocketMessage(_ws, _msg) {}
+  webSocketClose(_ws) {}
+  webSocketError(_ws) {}
 }
 
 // ---------------------------------------------------------------------------
