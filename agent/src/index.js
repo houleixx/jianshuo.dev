@@ -22,6 +22,8 @@ import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
 import { writeLlmLog } from "./llmlog.js";
+import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
+import { runEditTurn } from "./edit-turn.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -79,18 +81,18 @@ ${REVISE_SYSTEM}`;
 // ---------------------------------------------------------------------------
 export class ArticleEditor extends Agent {
   onStart() {
-    // config: the verified article key + scope (survives hibernation/eviction).
     this.sql`CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT)`;
-    // history: every (instruction, reply) turn — replayed as real conversation
-    // messages so the model has cross-turn context.
     this.sql`CREATE TABLE IF NOT EXISTS history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       instruction TEXT,
       reply TEXT,
       created_at INTEGER
     )`;
-    // Migrate older instances that predate the `reply` column (no-op once added).
     try { this.sql`ALTER TABLE history ADD COLUMN reply TEXT`; } catch (_) {}
+    this.sql([QUEUE_TABLE_SQL]); // CREATE TABLE IF NOT EXISTS queue (...)
+    // Recover after hibernation/eviction: reset any leftover 'running' row and
+    // drain whatever is pending — even with no client connected.
+    if (this._queue.recover()) this.schedule(0, "drainQueue");
   }
 
   // The Worker has already authenticated the request and injected the
@@ -104,6 +106,14 @@ export class ArticleEditor extends Agent {
     set("articleKey", key);
     set("scope", scope);
     set("token", token);
+    // Connect-time snapshot: current doc + queue states, so a reconnecting /
+    // relaunching app reconciles. Best-effort; never blocks the connection.
+    (async () => {
+      try {
+        const doc = await this._queue.loadDoc();
+        connection.send(JSON.stringify({ type: "snapshot", article: doc, queue: this._queue.snapshot() }));
+      } catch (_) {}
+    })();
   }
 
   _config() {
@@ -113,115 +123,87 @@ export class ArticleEditor extends Agent {
     return out;
   }
 
+  get _queue() {
+    if (!this.__queue) {
+      const sql = this.sql.bind(this);
+      this.__queue = new ArticleQueue({
+        store: makeSqlStore(sql),
+        broadcast: (obj) => this.broadcast(JSON.stringify(obj)),
+        schedule: () => this.schedule(0, "drainQueue"),
+        loadDoc: async () => {
+          const { articleKey } = this._config();
+          if (!articleKey) return null;
+          const obj = await this.env.FILES.get(articleKey);
+          if (!obj) return null;
+          try { return withTopLevelArticles(JSON.parse(await obj.text())); } catch { return null; }
+        },
+        runTurn: (row) => this.runTurn(row),
+      });
+    }
+    return this.__queue;
+  }
+
+  // Scheduled drain entry point (durable; survives hibernation/eviction).
+  async drainQueue() { await this._queue.drain(); }
+
+  // Execute one queued instruction via the shared turn runner. Builds the logged
+  // Claude call + history exactly as the old onMessage did.
+  async runTurn(row) {
+    const { articleKey, scope, token } = this._config();
+    if (!articleKey) return { ok: false, error: "会话未初始化" };
+    const stem = articleKey.replace(/\.json$/, "").split("/articles/").pop();
+    const turnId = `${Date.now()}-${rand6()}`;
+    const editModel = resolveEditModel(await loadModelConfig(this.env));
+    const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction: row.text, model: editModel });
+
+    let history = [];
+    try {
+      const rows = this.sql`SELECT instruction, reply FROM history ORDER BY id DESC LIMIT 100`;
+      history = buildHistoryMessages([...rows].reverse(), { maxTurns: HISTORY_MAX_TURNS });
+    } catch (_) {}
+
+    const images = row.images ? (() => { try { return JSON.parse(row.images); } catch { return []; } })() : [];
+    const res = await runEditTurn({
+      env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev",
+      editId: row.id, instruction: row.text, images, system: SYSTEM, history, callClaude,
+    });
+
+    // Record the turn so the next edit replays it as conversation context.
+    const replyText = res.reply || (res.hadError ? "操作没完成" : "（已处理）");
+    this.sql`INSERT INTO history (instruction, reply, created_at) VALUES (${row.text}, ${replyText}, ${Date.now()})`;
+    return { ok: res.ok, reply: res.reply, error: res.hadError ? (res.reply || "操作没完成") : undefined, article: res.article };
+  }
+
   async onMessage(connection, message) {
     let msg;
     try { msg = JSON.parse(typeof message === "string" ? message : ""); } catch { return; }
     if (!msg || msg.type !== "instruct") return;
     const instruction = String(msg.text || "").trim();
     if (!instruction) { connection.send(JSON.stringify({ type: "error", message: "空指令" })); return; }
-    if (this._busy) { connection.send(JSON.stringify({ type: "error", message: "正在修改，请稍候" })); return; }
-    this._busy = true;
-    connection.send(JSON.stringify({ type: "status", state: "working" }));
 
-    // Images attached to this instruction (base64 thumbnails + R2 keys).
-    const msgImages = Array.isArray(msg.images)
-      ? msg.images.filter((i) => i && i.data && i.key)
-      : [];
+    // Stable id: client-supplied (new app) or synthesized (old app — degrades
+    // gracefully, no dedup but never worse than before).
+    const id = (typeof msg.id === "string" && msg.id) ? msg.id : `srv-${Date.now()}-${rand6()}`;
+    const images = Array.isArray(msg.images) ? msg.images.filter((i) => i && i.data && i.key) : [];
 
-    try {
-      const { articleKey, scope, token } = this._config();
-      if (!articleKey) throw new Error("会话未初始化");
-      const obj = await this.env.FILES.get(articleKey);
-      if (!obj) throw new Error("文章不存在");
-      const doc = JSON.parse(await obj.text());
-
-      // Photos are referenced solely by [[photo:<key>]] markers the model writes
-      // into the body — there is no doc.photos array to maintain. write_article
-      // persists the body, so each photo reference lives with the text.
-
-      // Schema-3 stores articles inside versions[head], not at the top level.
-      const articles = resolveArticles(doc);
-
-      // The current turn carries the full latest state: the source transcript (fact
-      // source) then the current article. Prior turns are replayed as conversation
-      // messages (below) and carry only instruction/reply text, not the article.
-      const stableText = [
-        "原始口述转写（事实来源，只能用这里出现的事实，不可编造）：",
-        doc.transcript || "（无）",
-      ].join("\n");
-
-      const varLines = [
-        "当前文章（你正在编辑这一篇）：",
-        JSON.stringify({ articles: articles.map((a) => ({ title: a.title, body: a.body })) }, null, 2),
-        "",
-      ];
-      if (msgImages.length > 0) {
-        // Each uploaded photo is referenced by its OWN key as the marker — no array
-        // index to keep in sync (renderers resolve [[photo:<key>]] directly). The
-        // image blocks below are in the same order as these keys.
-        varLines.push(
-          "本次上传的新照片（已在消息里附上缩略图，按顺序对应上方图片）。把每一张插到正文最合适的位置，用它自己的 key 作标记，原样写进正文：",
-          ...msgImages.map((img) => `  [[photo:${img.key}]]`),
-          "",
-          "⚠️ 必须把以上每一张照片都插入文章正文里合适的段落，使用对应的 [[photo:<key>]] 标记。一张都不能漏。",
-          "",
-        );
+    const r = await this._queue.submit({ id, text: instruction, images });
+    if (r.kind === "replay") {
+      // Already known — re-push its cached result to THIS caller, never re-run.
+      const row = r.row;
+      if (row.status === "done") {
+        const doc = await this._queue.loadDoc();
+        connection.send(JSON.stringify({ type: "updated", id, article: doc }));
+        if (row.reply) connection.send(JSON.stringify({ type: "reply", id, text: row.reply, ok: true }));
+      } else if (row.status === "error") {
+        connection.send(JSON.stringify({ type: "error", id, message: row.error || "操作没完成" }));
+      } else {
+        connection.send(JSON.stringify({ type: "status", state: "working", id }));
       }
-      varLines.push("这次的语音指令：", instruction);
-
-      // Blocks: [transcript] → [images] → [article + this turn's instruction].
-      const userContent = [
-        { type: "text", text: stableText },
-        ...msgImages.map((img) => ({
-          type: "image",
-          source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data },
-        })),
-        { type: "text", text: varLines.join("\n") },
-      ];
-
-      // Prior turns → real conversation messages, prepended so "撤销刚才那个 /
-      // 像上次那样 / 你刚才说的" resolve against the actual back-and-forth.
-      let history = [];
-      try {
-        const rows = this.sql`SELECT instruction, reply FROM history ORDER BY id DESC LIMIT 100`;
-        history = buildHistoryMessages([...rows].reverse(), { maxTurns: HISTORY_MAX_TURNS });
-      } catch (_) {}
-
-      const ctx = { env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev" };
-      const stem = articleKey.replace(/\.json$/, "").split("/articles/").pop();
-      const turnId = `${Date.now()}-${rand6()}`;
-      // Editing is an Anthropic tool-use loop; honor the admin's model choice
-      // when it's a Claude model, else fall back to the default Claude.
-      const editModel = resolveEditModel(await loadModelConfig(this.env));
-      const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction, model: editModel });
-      const result = await runAgentLoop({ callClaude, ctx, system: SYSTEM, userContent, history });
-
-      // Always push the (possibly unchanged) current doc so the app reloads and
-      // the in-flight queue item resolves — works for edit, merge, AND action-only turns.
-      const after = await this.env.FILES.get(articleKey);
-      const finalDoc = after ? JSON.parse(await after.text()) : doc;
-      // iOS ArticleDoc expects top-level `articles`; reconstruct it from schema-3.
-      connection.send(JSON.stringify({ type: "updated", article: withTopLevelArticles(finalDoc) }));
-
-      // We now skip the extra confirmation round-trip after a successful action,
-      // so finalText may be empty when the model went straight to the tool. Fall
-      // back to a canned reply so the user still hears a confirmation.
-      const summary = (result.finalText || "").trim();
-      const TERMINAL = ["write_article", "write_style", "publish_wechat", "share_to_community"];
-      const didAct = (result.calledTools || []).some((n) => TERMINAL.includes(n));
-      const replyText = summary || (result.hadError ? "操作没完成" : (didAct ? "改好了" : ""));
-      if (replyText) {
-        connection.send(JSON.stringify({ type: "reply", text: replyText, ok: !result.hadError }));
-      }
-
-      // Record this turn (instruction + the reply the user saw) so the next edit
-      // replays it as conversation context.
-      this.sql`INSERT INTO history (instruction, reply, created_at) VALUES (${instruction}, ${replyText || "（已处理）"}, ${Date.now()})`;
-    } catch (e) {
-      connection.send(JSON.stringify({ type: "error", message: String((e && e.message) || e) }));
-    } finally {
-      this._busy = false;
+      return;
     }
+    // New work — tell the caller we're on it, then ensure the durable drain runs.
+    connection.send(JSON.stringify({ type: "status", state: "working", id }));
+    this.schedule(0, "drainQueue");
   }
 
   // One Anthropic Messages call WITH tools. Returns a result object
