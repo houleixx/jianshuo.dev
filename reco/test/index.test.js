@@ -54,6 +54,21 @@ describe("reco worker", () => {
     expect(j.liked).toContain("z");
   });
 
+  it("engage report 被接受并写入,rank 把被举报帖排到最后", async () => {
+    const e = env();
+    const t = await token("users/u1/");
+    const ra = await worker.fetch(req("/reco/engage/bad", { body: { action: "report" }, auth: t }), e);
+    expect(ra.status).toBe(200);
+    const now = Date.now();
+    const posts = [
+      { shareId: "good", firstSharedAt: now, author: "A", replyCount: 0 },
+      { shareId: "bad", firstSharedAt: now, author: "B", replyCount: 0 },
+    ];
+    const r = await worker.fetch(req("/reco/rank", { body: { posts }, auth: t }), e);
+    const j = await r.json();
+    expect(j.order[j.order.length - 1]).toBe("bad");
+  });
+
   it("env.DB 缺失 → rank 不崩,按输入序返回", async () => {
     const t = await token("users/u1/");
     const now = Date.now();

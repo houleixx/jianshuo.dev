@@ -1,10 +1,13 @@
-// 互动加权(起步值,= recommendation_system.md §3.1)
-export const W = { view: 1, finish: 4, like: 3, reply: 5 };
+// 互动加权(起步值,= recommendation_system.md §3.1)。
+// report 是负权重:一个举报 = 3 个负的点赞(= -3 × like = -9),既能把冷启动帖压到
+// 负分沉底,又不会让一两个举报就抹掉一篇真有互动的热帖(防单点举报滥用)。
+export const W = { view: 1, finish: 4, like: 3, reply: 5, report: -9 };
 
 // HN/牛顿冷却:新帖起高分,随时间冷却。firstSharedAt 是 ms。
 export function postScore(eng, replyCount, firstSharedAt, now) {
   const e = W.view * (eng.view || 0) + W.finish * (eng.finish || 0)
-          + W.like * (eng.like || 0) + W.reply * (replyCount || 0);
+          + W.like * (eng.like || 0) + W.reply * (replyCount || 0)
+          + W.report * (eng.report || 0);
   const ageHours = Math.max(0, (now - (firstSharedAt || now)) / 3600000);
   return (1 + e) / Math.pow(ageHours + 2, 1.5);
 }

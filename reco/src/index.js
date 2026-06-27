@@ -29,7 +29,7 @@ export default {
       if (!ID_RE.test(shareId)) return json({ error: "bad id" }, 400);
       const body = await request.json().catch(() => ({}));
       const action = body.action;
-      if (!["view", "finish", "like"].includes(action)) return json({ error: "bad action" }, 400);
+      if (!["view", "finish", "like", "report"].includes(action)) return json({ error: "bad action" }, 400);
       if (!env.DB) return json({ ok: true });   // D1 缺失 → no-op,绝不崩
       await recordEngagement(env, shareId, scope, action, body.on, Date.now());
       return json(action === "like" ? { ok: true, liked: body.on !== false } : { ok: true });

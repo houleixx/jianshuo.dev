@@ -1,4 +1,5 @@
-const ACTIONS = new Set(["view", "finish", "like"]);
+// report 走默认 INSERT OR IGNORE 路径:每用户去重、一次性、不可撤销(无 on=false 分支)。
+const ACTIONS = new Set(["view", "finish", "like", "report"]);
 
 export async function recordEngagement(env, shareId, sub, action, on, now) {
   if (!ACTIONS.has(action)) return;

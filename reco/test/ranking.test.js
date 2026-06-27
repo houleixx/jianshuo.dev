@@ -36,6 +36,21 @@ describe("postScore", () => {
     const oneLike = postScore({ like: 1 }, 0, now, now);
     expect(oneReply).toBeGreaterThan(oneLike);
   });
+
+  it("一个举报 ≈ 3 个负赞:把零互动新帖压到负分、沉到正常帖之下", () => {
+    const now = 1_000_000_000_000;
+    const reported = postScore({ report: 1 }, 0, now, now);
+    const coldNew = postScore({}, 0, now, now);
+    expect(reported).toBeLessThan(coldNew);
+    expect(reported).toBeLessThan(0);
+  });
+
+  it("一个举报正好抵消 3 个点赞(净零等价)", () => {
+    const now = 1_000_000_000_000;
+    const likedThenReported = postScore({ like: 3, report: 1 }, 0, now, now);
+    const neutral = postScore({}, 0, now, now);
+    expect(likedThenReported).toBeCloseTo(neutral, 10);
+  });
 });
 
 describe("rankPosts", () => {
@@ -66,5 +81,15 @@ describe("rankPosts", () => {
     ];
     const order = rankPosts(posts, { y: { like: 10 } }, now);
     expect(order[0]).toBe("y");
+  });
+
+  it("被举报帖排到最后", () => {
+    const now = 1_000_000_000_000;
+    const posts = [
+      { shareId: "x", firstSharedAt: now, author: "A", replyCount: 0 },
+      { shareId: "y", firstSharedAt: now, author: "B", replyCount: 0 },
+    ];
+    const order = rankPosts(posts, { x: { report: 1 } }, now);
+    expect(order[order.length - 1]).toBe("x");
   });
 });
