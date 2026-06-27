@@ -57,6 +57,20 @@ describe("resolveMatchingScopes", () => {
     const env = fakeEnv({ [`users/anon-${OTHER}/articles/c.json`]: "{}" });
     expect(await resolveMatchingScopes(env, "7f3a9c")).toEqual([]);
   });
+
+  it("caps at MAX_MATCH (10) distinct scopes", async () => {
+    const seed = {};
+    for (let i = 0; i < 12; i++) {
+      const h = "abcdef" + String(i).padStart(2, "0") + "0".repeat(24); // 32 hex, all share prefix abcdef
+      seed[`users/anon-${h}/articles/a.json`] = "{}";
+    }
+    const scopes = await resolveMatchingScopes(fakeEnv(seed), "abcdef");
+    expect(scopes.length).toBe(10);
+  });
+
+  it("rejects a 7-char over-length prefix", async () => {
+    expect(await resolveMatchingScopes(fakeEnv(), "7f3a9cc")).toEqual([]);
+  });
 });
 
 import { createPairing, verifyPairing, completePairing, isExpired } from "../src/devicelink.js";

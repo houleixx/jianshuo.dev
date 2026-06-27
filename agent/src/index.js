@@ -359,6 +359,7 @@ export class LinkBroker {
       const { state, result } = completePairing(s, body.callerScope, body.blob, now);
       await this.state.storage.put("pairing", state);
       if (result.ok) {
+        await this.state.storage.deleteAlarm();
         for (const ws of this.state.getWebSockets()) {
           try { ws.send(JSON.stringify({ type: "link_ready", blob: state.blob })); } catch (_) {}
         }
@@ -373,6 +374,7 @@ export class LinkBroker {
       for (const ws of this.state.getWebSockets()) {
         try { ws.send(JSON.stringify({ type: "link_cancelled" })); } catch (_) {}
       }
+      await this.state.storage.deleteAlarm();
       await this.state.storage.delete("pairing");
       return Response.json({ ok: true });
     }
