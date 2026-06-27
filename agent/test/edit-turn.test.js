@@ -1,0 +1,75 @@
+import { describe, it, expect } from "vitest";
+import { runEditTurn } from "../src/edit-turn.js";
+import { fakeEnv, fakeFetch } from "./fakes.js";
+
+// A callClaude that drives exactly one write_article tool call, then stops.
+function writeArticleClaude(articles) {
+  let step = 0;
+  return async () => {
+    step++;
+    if (step === 1) {
+      return { content: [
+        { type: "text", text: "改好了" },
+        { type: "tool_use", id: "tu1", name: "write_article", input: { articles } },
+      ] };
+    }
+    return { content: [{ type: "text", text: "改好了" }] };
+  };
+}
+
+describe("runEditTurn", () => {
+  it("runs the loop, writes the doc with lastEditId, returns the client-ready article", async () => {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "原文", articles: [{ title: "old", body: "old body" }] }),
+    });
+    // Route the write_article PUT through the real versioned writer so the fake
+    // R2 actually updates and we can read the result back.
+    const { writeArticleDoc } = await import("../../functions/lib/article-store.js");
+    const fetchFake = fakeFetch({
+      "PUT https://jianshuo.dev/files/api/articles/s": async ({ init }) => {
+        await writeArticleDoc(env, "users/u/articles/s.json", JSON.parse(init.body), "agent");
+        return { ok: true, body: { ok: true } };
+      },
+    });
+    const orig = globalThis.fetch; globalThis.fetch = fetchFake;
+    try {
+      const res = await runEditTurn({
+        env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+        token: "t", origin: "https://jianshuo.dev", editId: "edit-1",
+        instruction: "把标题改成 NEW", images: [], system: "SYS", history: [],
+        callClaude: writeArticleClaude([{ title: "NEW", body: "new body" }]),
+      });
+      expect(res.ok).toBe(true);
+      expect(res.reply).toBe("改好了");
+      // Client-ready doc carries top-level articles + the stamped id.
+      expect(res.article.articles[0].title).toBe("NEW");
+      expect(res.article.lastEditId).toBe("edit-1");
+    } finally { globalThis.fetch = orig; }
+  });
+
+  it("reports hadError + ok:false when the doc is missing", async () => {
+    const env = fakeEnv({});
+    const res = await runEditTurn({
+      env, scope: "users/u/", articleKey: "users/u/articles/missing.json",
+      token: "t", origin: "https://jianshuo.dev", editId: "e", instruction: "x",
+      images: [], system: "SYS", history: [], callClaude: async () => ({ content: [] }),
+    });
+    expect(res.ok).toBe(false);
+  });
+
+  it("is idempotent on its own — skips the model when the doc already carries this editId", async () => {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "原文", lastEditId: "edit-1", articles: [{ title: "已改", body: "已改 body" }] }),
+    });
+    let claudeCalls = 0;
+    const res = await runEditTurn({
+      env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+      token: "t", origin: "https://jianshuo.dev", editId: "edit-1",
+      instruction: "把标题改成 NEW", images: [], system: "SYS", history: [],
+      callClaude: async () => { claudeCalls++; return { content: [] }; },
+    });
+    expect(claudeCalls).toBe(0);                 // model never invoked
+    expect(res.ok).toBe(true);
+    expect(res.article.articles[0].title).toBe("已改"); // unchanged
+  });
+});
