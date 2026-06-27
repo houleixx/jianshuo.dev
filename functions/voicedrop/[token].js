@@ -8,6 +8,8 @@
 // mapping (e.g. "privacy") falls through to the static assets, so it never
 // shadows /voicedrop/ or /voicedrop/privacy/.
 
+import { resolveArticles } from "../lib/article-store.js";
+
 export async function onRequest(context) {
   const { params, env } = context;
   const id = params.token || '';
@@ -25,7 +27,7 @@ export async function onRequest(context) {
   let doc;
   try { doc = JSON.parse(await obj.text()); } catch { return html(page('无法打开', '<p class="muted">文章内容损坏。</p>'), 500); }
 
-  const articles = resolveArticles(doc);
+  const articles = resolveArticles(doc).filter((a) => a && (a.body || '').trim());
   if (!articles.length) {
     return html(page('暂无内容', '<p class="muted">这条录音还没有挖出文章。</p>'), 200);
   }
@@ -139,19 +141,8 @@ function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function resolveArticles(doc) {
-  // Schema-3: current content lives in versions[head]; schema-2: top-level
-  // articles; v1: a single title/body. Pull the active list, then drop empties.
-  let list = null;
-  if (Array.isArray(doc.versions) && doc.head) {
-    const cv = doc.versions.find((e) => e.v === doc.head);
-    if (cv && Array.isArray(cv.articles)) list = cv.articles;
-  }
-  if (!list && Array.isArray(doc.articles)) list = doc.articles;
-  if (list && list.length) return list.filter((a) => a && (a.body || '').trim());
-  if (doc.body && String(doc.body).trim()) return [{ title: doc.title || '无题', body: doc.body }];
-  return [];
-}
+// resolveArticles is imported from ../lib/article-store.js (single source of truth).
+// The caller drops empty-body articles for display.
 
 // A short, plain-text excerpt for og:description — strip markdown marks, collapse
 // whitespace, trim to `max` chars on a clean-ish boundary.

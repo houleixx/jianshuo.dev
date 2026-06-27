@@ -19,7 +19,7 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-import { readArticleDoc, writeArticleDoc, setHead } from "../../lib/article-store.js";
+import { readArticleDoc, writeArticleDoc, setHead, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -288,6 +288,17 @@ export async function onRequest(context) {
   if ((request.method === 'GET' || request.method === 'HEAD') && action === 'download' && name) {
     const key = keyFor(name);
     if (!key) return json({ error: 'bad name' }, 400);
+    // Build-61 compat: old iOS builds (≤ build 77) read the article doc via this
+    // raw /download/articles/<stem>.json route and expect a top-level `articles`.
+    // Schema-3 docs keep content under versions[head], so those builds got an
+    // empty doc and showed 还没成文 even when the list said 已成文. Resolve it here
+    // via the same single withTopLevelArticles/resolveArticles as everywhere else,
+    // so legacy raw-download clients work without an app update. Newer builds use
+    // GET /articles/<stem> and never reach this branch.
+    if (request.method === 'GET' && /\/articles\/[^/]+\.json$/.test(key)) {
+      const doc = await readArticleDoc(env, key);
+      if (doc) return json(withTopLevelArticles(doc));
+    }
     const object = request.method === 'HEAD' ? await env.FILES.head(key) : await env.FILES.get(key);
     if (!object) return json({ error: 'not found' }, 404);
     const headers = {
@@ -343,7 +354,7 @@ export async function onRequest(context) {
     // Load the article doc (schema-3; current content = versions[head]).
     const doc = await readArticleDoc(env, key);
     if (!doc) return json({ error: 'not found' }, 404);
-    const currentArticles = doc.versions?.find((e) => e.v === doc.head)?.articles ?? [];
+    const currentArticles = resolveArticles(doc);
     // Relay expects a flat article object with top-level `articles`.
     const relayDoc = { ...doc, articles: currentArticles };
     delete relayDoc.versions; delete relayDoc.head;
@@ -405,17 +416,7 @@ export async function onRequest(context) {
     return out;
   }
 
-  // Resolve current articles[] regardless of schema version.
-  // Schema-3: articles live in versions[head]; schema-2: top-level articles; v1: body.
-  function resolveArticles(doc) {
-    if (Array.isArray(doc.versions) && doc.head) {
-      const cv = doc.versions.find((e) => e.v === doc.head);
-      if (cv && Array.isArray(cv.articles) && cv.articles.length) return cv.articles;
-    }
-    if (Array.isArray(doc.articles) && doc.articles.length) return doc.articles;
-    if (doc.body) return [{ title: doc.title || '(无题)', body: doc.body }];
-    return [];
-  }
+  // resolveArticles is imported from ../../lib/article-store.js (single source of truth).
 
   // A schema-2 community post is a pointer to a live article; its title/body are
   // read fresh from `articleKey` every time. When the user deletes the underlying
@@ -655,7 +656,7 @@ export async function onRequest(context) {
         const obj = await env.FILES.get(o.key);
         if (!obj) continue;
         let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
-        const currentArticles = doc.versions?.find((e) => e.v === doc.head)?.articles ?? doc.articles ?? [];
+        const currentArticles = resolveArticles(doc);
         articles.push({
           stem: s,
           title: currentArticles[0]?.title || '(无题)',
@@ -678,9 +679,8 @@ export async function onRequest(context) {
       if (!doc) return json({ error: 'not found' }, 404);
       // Reconstruct top-level `articles` from the current head version for
       // backwards compatibility with all callers (iOS, miner, agent worker).
-      const currentArticles = doc.versions?.find((e) => e.v === doc.head)?.articles ?? [];
       const { versions: _vs, head: _h, ...pub } = doc;
-      return json({ ...pub, articles: currentArticles });
+      return json({ ...pub, articles: resolveArticles(doc) });
     }
 
     // GET /articles/<stem>/history — version history

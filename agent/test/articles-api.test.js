@@ -195,3 +195,46 @@ describe("DELETE /articles/<sub>/<stem>", () => {
     expect(context.env.FILES._store.has("users/u/articles/s1.empty")).toBe(false);
   });
 });
+
+// ── raw /download of an article json — legacy raw-download clients (build ≤77) ─
+// Old iOS builds fetch /download/users/<sub>/articles/<stem>.json and read a
+// top-level `articles`. Schema-3 docs keep content under versions[head], so the
+// download route must reconstruct `articles` via the shared resolveArticles.
+
+describe("GET /download/<key> for an article json — build-61 compat", () => {
+  function dlCtx(key) {
+    const segments = ["download", ...key.split("/")];
+    const env = { ...fakeEnv(), FILES_TOKEN: "admin", SESSION_SECRET: "secret" };
+    const request = new Request(`https://jianshuo.dev/files/api/${segments.join("/")}`, {
+      method: "GET",
+      headers: { Authorization: "Bearer admin" },
+    });
+    return { request, env, params: { path: segments } };
+  }
+
+  it("reconstructs top-level articles from versions[head] for a schema-3 doc", async () => {
+    const context = dlCtx("users/u/articles/s1.json");
+    seedArticle(context.env, "s1");   // schema-3: no top-level articles, content in versions[head]
+    const resp = await onRequest(context);
+    const body = await resp.json();
+    expect(resp.status).toBe(200);
+    expect(Array.isArray(body.articles)).toBe(true);
+    expect(body.articles[0].title).toBe("T1");
+    expect(body.articles[0].body).toBe("B1");
+    // versions/head left intact (additive) so version-aware readers are unaffected
+    expect(body.head).toBe(1);
+  });
+
+  it("resolves the head version, not a stale one, after an undo (head < latest)", async () => {
+    const context = dlCtx("users/u/articles/s1.json");
+    seedArticle(context.env, "s1", {
+      head: 1,   // head points back at v1 (an undo), even though v2 exists
+      versions: [
+        { v: 1, savedAt: 1000, source: "mine",  articles: [{ title: "V1", body: "B1" }] },
+        { v: 2, savedAt: 2000, source: "agent", articles: [{ title: "V2", body: "B2" }] },
+      ],
+    });
+    const body = await (await onRequest(context)).json();
+    expect(body.articles[0].title).toBe("V1");
+  });
+});

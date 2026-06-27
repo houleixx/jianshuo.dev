@@ -19,6 +19,7 @@ import { runAgentLoop } from "./loop.js";
 import { TOOL_DEFS } from "./tools.js";
 import { runMine, loadModelConfig, resolveEditModel } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
+import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -48,23 +49,8 @@ async function writeLlmLog(env, rec) {
   }
 }
 
-// Return the current articles[] from a doc regardless of schema version.
-// Schema-3: articles live in versions[head]; schema-2: top-level articles; v1: body.
-function resolveArticles(doc) {
-  if (Array.isArray(doc.versions) && doc.head) {
-    const cv = doc.versions.find((e) => e.v === doc.head);
-    if (cv && Array.isArray(cv.articles) && cv.articles.length) return cv.articles;
-  }
-  if (Array.isArray(doc.articles) && doc.articles.length) return doc.articles;
-  if (doc.body) return [{ title: doc.title || "(无题)", body: doc.body }];
-  return [];
-}
-
-// Ensure the doc has a top-level `articles` field for iOS backwards compat.
-function withTopLevelArticles(doc) {
-  if (Array.isArray(doc.articles) && doc.articles.length) return doc;
-  return { ...doc, articles: resolveArticles(doc) };
-}
+// resolveArticles + withTopLevelArticles are imported from the shared
+// functions/lib/article-store.js (single source of truth).
 
 // Owner-voice DNA — reused from mining/mine.py SYSTEM, reframed for REVISION.
 const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面给你：你这段录音的原始口述转写（事实来源）、当前的全部文章、以及历次修改要求。按「这次的修改要求」改写全部文章——可以改写、合并、拆分、增删某一篇。

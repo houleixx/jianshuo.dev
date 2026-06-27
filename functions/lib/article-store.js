@@ -92,3 +92,30 @@ export async function setHead(env, key, newHead) {
   await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
   return doc;
 }
+
+// ── Current-articles resolution — SINGLE SOURCE OF TRUTH ──────────────────────
+// Every reader of an article doc must agree on "what is the current article
+// list": the Files API (read/list/relay), the agent worker, the public share
+// page, and old iOS builds that fetch the raw doc. Keep that logic HERE only and
+// import it — change it once, every surface updates together. Do not re-inline.
+//
+// Schema-3: content lives in versions[head]; schema-2: top-level articles; v1: a
+// single title/body.
+export function resolveArticles(doc) {
+  if (Array.isArray(doc.versions) && doc.head) {
+    const cv = doc.versions.find((e) => e.v === doc.head);
+    if (cv && Array.isArray(cv.articles) && cv.articles.length) return cv.articles;
+  }
+  if (Array.isArray(doc.articles) && doc.articles.length) return doc.articles;
+  if (doc.body) return [{ title: doc.title || "(无题)", body: doc.body }];
+  return [];
+}
+
+// A doc carrying a top-level `articles` field rebuilt from the current head
+// version — backwards compat for any caller that reads the raw doc (old iOS
+// builds via /download, the admin/share web pages). versions/head stay intact
+// (purely additive), so version-aware readers are unaffected.
+export function withTopLevelArticles(doc) {
+  if (Array.isArray(doc.articles) && doc.articles.length) return doc;
+  return { ...doc, articles: resolveArticles(doc) };
+}
