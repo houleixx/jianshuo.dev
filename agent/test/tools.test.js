@@ -177,4 +177,21 @@ describe("write_article stamps lastEditId", () => {
       expect(putBody.lastEditId).toBe("edit-123");
     } finally { globalThis.fetch = orig; }
   });
+
+  it("omits lastEditId from the PUT body when ctx.editId is absent", async () => {
+    const env = fakeEnv({
+      "users/u/articles/s2.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "tx", articles: [{ title: "A", body: "b" }] }),
+    });
+    let putBody = null;
+    const fetchFake = fakeFetch({
+      "PUT https://jianshuo.dev/files/api/articles/s2": ({ init }) => { putBody = JSON.parse(init.body); return { ok: true, body: { ok: true, head: 2 } }; },
+    });
+    const orig = globalThis.fetch; globalThis.fetch = fetchFake;
+    try {
+      const ctx = { env, scope: "users/u/", articleKey: "users/u/articles/s2.json", token: "t", origin: "https://jianshuo.dev" };
+      const r = await rt("write_article", { articles: [{ title: "A2", body: "b2" }] }, ctx);
+      expect(r).toMatchObject({ ok: true });
+      expect(putBody.lastEditId).toBeUndefined();
+    } finally { globalThis.fetch = orig; }
+  });
 });

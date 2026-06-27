@@ -55,6 +55,8 @@ describe("runEditTurn", () => {
       images: [], system: "SYS", history: [], callClaude: async () => ({ content: [] }),
     });
     expect(res.ok).toBe(false);
+    expect(res.hadError).toBe(true);
+    expect(res.article).toBeNull();
   });
 
   it("is idempotent on its own — skips the model when the doc already carries this editId", async () => {
@@ -70,6 +72,7 @@ describe("runEditTurn", () => {
     });
     expect(claudeCalls).toBe(0);                 // model never invoked
     expect(res.ok).toBe(true);
+    expect(res.reply).toBe("");
     expect(res.article.articles[0].title).toBe("已改"); // unchanged
   });
 });

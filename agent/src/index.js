@@ -15,11 +15,10 @@
 // from raw client input.
 
 import { Agent, getAgentByName } from "agents";
-import { runAgentLoop } from "./loop.js";
 import { TOOL_DEFS } from "./tools.js";
 import { runMine, loadModelConfig, resolveEditModel } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
-import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
+import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
 import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
@@ -113,7 +112,7 @@ export class ArticleEditor extends Agent {
         const doc = await this._queue.loadDoc();
         connection.send(JSON.stringify({ type: "snapshot", article: doc, queue: this._queue.snapshot() }));
       } catch (_) {}
-    })();
+    })().catch(() => {});
   }
 
   _config() {
