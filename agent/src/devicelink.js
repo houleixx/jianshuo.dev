@@ -40,3 +40,36 @@ export async function resolveMatchingScopes(env, prefix, max = MAX_MATCH) {
   }
   return [...scopes];
 }
+
+export function createPairing({ pubkey, entries, now, ttlMs = CODE_TTL_MS }) {
+  return { createdAt: now, ttlMs, attempts: 0, status: "pending", pubkey, entries, releasingScope: null, blob: null };
+}
+
+export function isExpired(s, now) {
+  return now - s.createdAt > s.ttlMs;
+}
+
+export function verifyPairing(s, code, now) {
+  if (isExpired(s, now)) return { state: { ...s, status: "expired" }, result: { ok: false, expired: true } };
+  if (s.status !== "pending") return { state: s, result: { ok: false, dead: true } };
+  const attempts = s.attempts + 1;
+  const entry = s.entries.find((e) => timingSafeEqual(e.code, String(code)));
+  if (!entry) {
+    const dead = attempts >= MAX_ATTEMPTS;
+    return {
+      state: { ...s, attempts, status: dead ? "dead" : "pending" },
+      result: { ok: false, remaining: Math.max(0, MAX_ATTEMPTS - attempts), dead },
+    };
+  }
+  return {
+    state: { ...s, attempts, status: "verified", releasingScope: entry.scope },
+    result: { ok: true, scope: entry.scope },
+  };
+}
+
+export function completePairing(s, callerScope, blob, now) {
+  if (isExpired(s, now)) return { state: { ...s, status: "expired" }, result: { ok: false, expired: true } };
+  if (s.status !== "verified") return { state: s, result: { ok: false, error: "not_verified" } };
+  if (callerScope !== s.releasingScope) return { state: s, result: { ok: false, error: "forbidden" } };
+  return { state: { ...s, status: "done", blob }, result: { ok: true } };
+}

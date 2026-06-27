@@ -58,3 +58,75 @@ describe("resolveMatchingScopes", () => {
     expect(await resolveMatchingScopes(env, "7f3a9c")).toEqual([]);
   });
 });
+
+import { createPairing, verifyPairing, completePairing, isExpired } from "../src/devicelink.js";
+
+const ENTRIES = [{ scope: "users/anon-aaa/", code: "1234" }, { scope: "users/anon-bbb/", code: "5678" }];
+function fresh(now = 1000) { return createPairing({ pubkey: "PK", entries: ENTRIES, now }); }
+
+describe("createPairing", () => {
+  it("starts pending with zero attempts and the agreed ttl", () => {
+    const s = fresh();
+    expect(s.status).toBe("pending");
+    expect(s.attempts).toBe(0);
+    expect(s.ttlMs).toBe(120000);
+    expect(s.releasingScope).toBe(null);
+    expect(s.blob).toBe(null);
+  });
+});
+
+describe("verifyPairing", () => {
+  it("wrong code decrements remaining, stays pending", () => {
+    const { state, result } = verifyPairing(fresh(), "0000", 2000);
+    expect(result).toEqual({ ok: false, remaining: 4, dead: false });
+    expect(state.status).toBe("pending");
+    expect(state.attempts).toBe(1);
+  });
+
+  it("correct code -> verified + releasingScope = that entry's scope", () => {
+    const { state, result } = verifyPairing(fresh(), "5678", 2000);
+    expect(result).toEqual({ ok: true, scope: "users/anon-bbb/" });
+    expect(state.status).toBe("verified");
+    expect(state.releasingScope).toBe("users/anon-bbb/");
+  });
+
+  it("dies after MAX_ATTEMPTS wrong tries", () => {
+    let s = fresh();
+    let r;
+    for (let i = 0; i < 5; i++) ({ state: s, result: r } = verifyPairing(s, "0000", 2000));
+    expect(r.dead).toBe(true);
+    expect(s.status).toBe("dead");
+    // a 6th attempt is rejected as dead
+    expect(verifyPairing(s, "1234", 2000).result).toEqual({ ok: false, dead: true });
+  });
+
+  it("rejects once expired", () => {
+    const { result } = verifyPairing(fresh(1000), "1234", 1000 + 120001);
+    expect(result).toEqual({ ok: false, expired: true });
+  });
+});
+
+describe("completePairing", () => {
+  function verified() { return verifyPairing(fresh(), "1234", 2000).state; } // releasingScope = aaa
+  it("ok when caller scope matches releasingScope", () => {
+    const { state, result } = completePairing(verified(), "users/anon-aaa/", { epk: "e", sealed: "s" }, 3000);
+    expect(result).toEqual({ ok: true });
+    expect(state.status).toBe("done");
+    expect(state.blob).toEqual({ epk: "e", sealed: "s" });
+  });
+  it("forbidden when caller scope differs", () => {
+    expect(completePairing(verified(), "users/anon-bbb/", {}, 3000).result)
+      .toEqual({ ok: false, error: "forbidden" });
+  });
+  it("rejects when not yet verified", () => {
+    expect(completePairing(fresh(), "users/anon-aaa/", {}, 3000).result)
+      .toEqual({ ok: false, error: "not_verified" });
+  });
+});
+
+describe("isExpired", () => {
+  it("true past ttl", () => {
+    expect(isExpired(fresh(1000), 1000 + 120001)).toBe(true);
+    expect(isExpired(fresh(1000), 1000 + 1)).toBe(false);
+  });
+});
