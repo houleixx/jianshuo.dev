@@ -247,14 +247,29 @@ async function asrPoll({ taskId, logId }, env, deadlineMs) {
     if (code && code !== "20000001" && code !== "20000002") throw new AsrError(code);
     await new Promise(r => setTimeout(r, 2000));
   }
-  throw new Error("ASR timed out after 600s");
+  throw new Error("ASR timed out");
+}
+
+// 从 VoiceDrop 文件名的 `-<m>m<s>s-` 段解析音频时长(秒)。解析不到返回 null。
+function audioDurationSeconds(key) {
+  const m = key.match(/-(\d+)m(\d+)s-/);
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+}
+
+// 轮询火山 ASR 的死线。旧的写死 600s 只够短录音;长录音(如 67 分钟)在 10 分钟内
+// 跑不完 → 超时 → 当成瞬时错误无限重试 = "一直报错"。按时长伸缩:~2x 实时 + 300s,
+// 600s 下限、2h 上限。
+function asrDeadlineMs(key) {
+  const dur = audioDurationSeconds(key);
+  if (dur == null) return 600 * 1000;
+  return Math.min(7200, Math.max(600, dur * 2 + 300)) * 1000;
 }
 
 async function transcribe(audioKey, env) {
   const audioUrl = await presignR2(audioKey, env);
   const task = await asrSubmit(audioUrl, env);
   console.log(`   [asr] submitted task=${task.taskId.slice(0, 8)}…`);
-  const res    = await asrPoll(task, env, Date.now() + 600_000);
+  const res    = await asrPoll(task, env, Date.now() + asrDeadlineMs(audioKey));
   const result = res.result || {};
   const utts   = result.utterances || [];
   const text   = (result.text || "").trim() || utts.map(u => u.text || "").join("").trim();
