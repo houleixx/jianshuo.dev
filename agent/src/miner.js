@@ -250,10 +250,12 @@ async function asrPoll({ taskId, logId }, env, deadlineMs) {
   throw new Error("ASR timed out");
 }
 
-// 从 VoiceDrop 文件名的 `-<m>m<s>s-` 段解析音频时长(秒)。解析不到返回 null。
+// 从 VoiceDrop 文件名的 <dur> 段解析音频时长(秒)。命名规范见 voicedrop/admin/index.html:
+//   VoiceDrop-<date>-<HHMMSS>-<dur>-<weekday>-…   <dur> 形如 67m12s 或 45s,且可整段缺省。
+// 锚定「数字+(m 数字)?+s」且其后紧跟 `-`/`.`/结尾,避免把 HHMMSS 时间段误判成时长。
 function audioDurationSeconds(key) {
-  const m = key.match(/-(\d+)m(\d+)s-/);
-  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+  const m = key.match(/-(?:(\d+)m)?(\d+)s(?=[-.]|$)/);
+  return m ? parseInt(m[1] || 0, 10) * 60 + parseInt(m[2], 10) : null;
 }
 
 // 轮询火山 ASR 的死线。旧的写死 600s 只够短录音;长录音(如 67 分钟)在 10 分钟内
@@ -261,7 +263,10 @@ function audioDurationSeconds(key) {
 // 600s 下限、2h 上限。
 function asrDeadlineMs(key) {
   const dur = audioDurationSeconds(key);
-  if (dur == null) return 600 * 1000;
+  // 解析不到时长往往正是「长录音但文件名缺 <dur> 段」这种会失败的情形——若仍退回 600s
+  // 就会重蹈超时覆辙。宁可给足上限(2h)让它真正跑完;命中确定性错误码时 asrPoll 会
+  // 立即抛出退出,不会白等到死线。
+  if (dur == null) return 7200 * 1000;
   return Math.min(7200, Math.max(600, dur * 2 + 300)) * 1000;
 }
 
