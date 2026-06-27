@@ -104,6 +104,14 @@ describe("verifyPairing", () => {
     const { result } = verifyPairing(fresh(1000), "1234", 1000 + 120001);
     expect(result).toEqual({ ok: false, expired: true });
   });
+
+  it("a rejected attempt on a dead pairing does not increment attempts", () => {
+    let s = fresh();
+    for (let i = 0; i < 5; i++) s = verifyPairing(s, "0000", 2000).state;
+    expect(s.attempts).toBe(5);
+    const after = verifyPairing(s, "0000", 2000).state;
+    expect(after.attempts).toBe(5);
+  });
 });
 
 describe("completePairing", () => {
@@ -121,6 +129,12 @@ describe("completePairing", () => {
   it("rejects when not yet verified", () => {
     expect(completePairing(fresh(), "users/anon-aaa/", {}, 3000).result)
       .toEqual({ ok: false, error: "not_verified" });
+  });
+
+  it("rejects once expired even if verified", () => {
+    const v = verifyPairing(fresh(1000), "1234", 2000).state;
+    const { result } = completePairing(v, "users/anon-aaa/", { epk: "e", sealed: "s" }, 1000 + 120001);
+    expect(result).toEqual({ ok: false, expired: true });
   });
 });
 
