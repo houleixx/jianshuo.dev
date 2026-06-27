@@ -360,7 +360,7 @@ export class LinkBroker {
       await this.state.storage.put("pairing", state);
       if (result.ok) {
         for (const ws of this.state.getWebSockets()) {
-          try { ws.send(JSON.stringify({ type: "link_ready", blob: body.blob })); } catch (_) {}
+          try { ws.send(JSON.stringify({ type: "link_ready", blob: state.blob })); } catch (_) {}
         }
       }
       return Response.json(result, { status: result.ok ? 200 : 403 });
@@ -468,6 +468,94 @@ export default {
       }));
     }
 
+    // ── /agent/link/* ── device-link pairing (new device logs into old account) ──
+    if (url.pathname === "/agent/link/start") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!(await resolveScope(tok, env))) return new Response("unauthorized", { status: 401 });
+      const { prefix, pubkey } = await request.json().catch(() => ({}));
+      if (!/^[0-9a-fA-F]{6}$/.test(prefix || "") || !pubkey) return new Response("bad request", { status: 400 });
+      const scopes = await resolveMatchingScopes(env, prefix);
+      if (scopes.length === 0) return Response.json({ ok: false, reason: "no_match" });
+      const codes = genDistinctCodes(scopes.length);
+      const entries = scopes.map((scope, i) => ({ scope, code: codes[i] }));
+      const pairingId = randomId();
+      const broker = env.LinkBroker.get(env.LinkBroker.idFromName(pairingId));
+      await broker.fetch(new Request("https://link/op", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ op: "create", pubkey, entries }),
+      }));
+      for (const { scope, code } of entries) {
+        const hub = env.StatusHub.get(env.StatusHub.idFromName("status:" + scope));
+        await hub.fetch(new Request("https://status-hub/broadcast", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ payload: { type: "link_request", pairingId, code, pubkey } }),
+        }));
+      }
+      return Response.json({ ok: true, pairingId, matchCount: scopes.length });
+    }
+
+    if (url.pathname === "/agent/link/socket") {
+      if (request.headers.get("Upgrade") !== "websocket") return new Response("expected websocket", { status: 426 });
+      const pairingId = url.searchParams.get("pairingId") || "";
+      if (!/^[0-9a-f]{32}$/.test(pairingId)) return new Response("bad request", { status: 400 });
+      const broker = env.LinkBroker.get(env.LinkBroker.idFromName(pairingId));
+      return broker.fetch(request);
+    }
+
+    if (url.pathname === "/agent/link/verify") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!(await resolveScope(tok, env))) return new Response("unauthorized", { status: 401 });
+      const { pairingId, code } = await request.json().catch(() => ({}));
+      if (!/^[0-9a-f]{32}$/.test(pairingId || "") || !/^\d{4}$/.test(code || "")) return new Response("bad request", { status: 400 });
+      const broker = env.LinkBroker.get(env.LinkBroker.idFromName(pairingId));
+      const r = await broker.fetch(new Request("https://link/op", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ op: "verify", code }),
+      }));
+      const result = await r.json();
+      if (result.ok) {
+        const hub = env.StatusHub.get(env.StatusHub.idFromName("status:" + result.scope));
+        await hub.fetch(new Request("https://status-hub/broadcast", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ payload: { type: "link_release", pairingId } }),
+        }));
+      }
+      // never leak the matched scope to the new device
+      return Response.json({ ok: !!result.ok, remaining: result.remaining, dead: result.dead, expired: result.expired });
+    }
+
+    if (url.pathname === "/agent/link/complete") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const caller = await resolveScope(tok, env);
+      if (!caller) return new Response("unauthorized", { status: 401 });
+      const { pairingId, blob } = await request.json().catch(() => ({}));
+      if (!/^[0-9a-f]{32}$/.test(pairingId || "") || !blob) return new Response("bad request", { status: 400 });
+      const broker = env.LinkBroker.get(env.LinkBroker.idFromName(pairingId));
+      const r = await broker.fetch(new Request("https://link/op", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ op: "complete", callerScope: caller, blob }),
+      }));
+      return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json" } });
+    }
+
+    if (url.pathname === "/agent/link/cancel") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const caller = await resolveScope(tok, env);
+      if (!caller) return new Response("unauthorized", { status: 401 });
+      const { pairingId } = await request.json().catch(() => ({}));
+      if (!/^[0-9a-f]{32}$/.test(pairingId || "")) return new Response("bad request", { status: 400 });
+      const broker = env.LinkBroker.get(env.LinkBroker.idFromName(pairingId));
+      const r = await broker.fetch(new Request("https://link/op", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ op: "cancel", callerScope: caller }),
+      }));
+      return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json" } });
+    }
+
     return new Response("not found", { status: 404 });
   },
 
@@ -496,3 +584,8 @@ async function resolveScope(token, env) {
 // functions/lib/auth.js (single source of truth — see import at top).
 // sanitizeName stays here: agent-only, not part of the shared auth surface.
 function sanitizeName(s) { return String(s).replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 200); }
+function randomId() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
