@@ -66,7 +66,7 @@ register(
 
 register(
   { name: "write_article", description: "把改写后的全部文章写回当前正在编辑的这一篇（只能写当前篇）。输入是完整的文章数组。", input_schema: { type: "object", properties: { articles: { type: "array", items: { type: "object", properties: { title: { type: "string" }, body: { type: "string" } }, required: ["title", "body"], additionalProperties: false } } }, required: ["articles"], additionalProperties: false } },
-  async ({ articles }, { env, articleKey, token, origin }) => {
+  async ({ articles }, { env, articleKey, token, origin, editId }) => {
     if (!Array.isArray(articles) || !articles.length) return { error: "empty_articles" };
     const obj = await env.FILES.get(articleKey);
     if (!obj) return { error: "not_found" };
@@ -79,6 +79,10 @@ register(
       return out;
     });
     delete doc.title; delete doc.body; // collapse any v1 remnants
+    // Stamp the instruction id that produced this doc — drives crash-safe
+    // exactly-once in the durable queue (queue.js _runRow). writeArticleDoc's
+    // {...rest} preserves this top-level field.
+    if (editId) doc.lastEditId = editId;
     // Write through the article API so version control is handled in one place.
     // articleKey = "users/<sub>/articles/<stem>.json"; stem = last segment without .json
     const stem = articleKey.split("/articles/").pop().replace(/\.json$/, "");
