@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { genDistinctCodes, buildBroadcastMessage, CODE_TTL_MS, MAX_ATTEMPTS, MAX_MATCH } from "../src/devicelink.js";
+import { genDistinctCodes, buildBroadcastMessage, CODE_TTL_MS, MAX_ATTEMPTS, MAX_MATCH, resolveMatchingScopes } from "../src/devicelink.js";
+import { fakeEnv } from "./fakes.js";
 
 describe("constants", () => {
   it("are the agreed protocol values", () => {
@@ -28,5 +29,32 @@ describe("buildBroadcastMessage", () => {
   it("falls back to the legacy status_update shape (back-compat)", () => {
     expect(buildBroadcastMessage({ stem: "s1", status: "ready" }))
       .toEqual({ type: "status_update", stem: "s1", status: "ready" });
+  });
+});
+
+describe("resolveMatchingScopes", () => {
+  const H1 = "7f3a9c" + "0".repeat(26); // two distinct 32-hex hashes sharing prefix 7f3a9c
+  const H2 = "7f3a9c" + "1".repeat(26);
+  const OTHER = "abcdef" + "0".repeat(26);
+
+  it("dedups to distinct user scopes that share the 6-hex prefix", async () => {
+    const env = fakeEnv({
+      [`users/anon-${H1}/articles/a.json`]: "{}",
+      [`users/anon-${H1}/VoiceDrop-x.m4a`]: "{}",
+      [`users/anon-${H2}/articles/b.json`]: "{}",
+      [`users/anon-${OTHER}/articles/c.json`]: "{}",
+    });
+    const scopes = await resolveMatchingScopes(env, "7F3A9C"); // case-insensitive
+    expect(scopes.sort()).toEqual([`users/anon-${H1}/`, `users/anon-${H2}/`]);
+  });
+
+  it("returns [] for a malformed prefix", async () => {
+    expect(await resolveMatchingScopes(fakeEnv(), "xyz")).toEqual([]);
+    expect(await resolveMatchingScopes(fakeEnv(), "7f3a9")).toEqual([]);
+  });
+
+  it("returns [] when nothing matches", async () => {
+    const env = fakeEnv({ [`users/anon-${OTHER}/articles/c.json`]: "{}" });
+    expect(await resolveMatchingScopes(env, "7f3a9c")).toEqual([]);
   });
 });

@@ -24,3 +24,19 @@ export function genDistinctCodes(n, randInt = defaultRandInt) {
 export function buildBroadcastMessage(body) {
   return body.payload ?? { type: "status_update", stem: body.stem, status: body.status };
 }
+
+// List objects under users/anon-<6hex> and dedup the distinct users/anon-<32hex>/ scopes.
+// (Derived from object keys — works with both real R2 and the Map-backed test fake,
+// and avoids depending on R2 list delimiter support.)
+export async function resolveMatchingScopes(env, prefix, max = MAX_MATCH) {
+  if (!/^[0-9a-fA-F]{6}$/.test(prefix || "")) return [];
+  const p = prefix.toLowerCase();
+  const { objects } = await env.FILES.list({ prefix: "users/anon-" + p });
+  const scopes = new Set();
+  for (const o of objects) {
+    const m = o.key.match(/^(users\/anon-[0-9a-f]{32}\/)/);
+    if (m) scopes.add(m[1]);
+    if (scopes.size >= max) break;
+  }
+  return [...scopes];
+}
