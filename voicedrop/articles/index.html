@@ -156,7 +156,10 @@ function renderArticle(a) {
       });
       if (!r.ok) throw new Error(r.status);
       const doc = await r.json();
-      const arts = Array.isArray(doc.articles) && doc.articles.length ? doc.articles
+      const cur = Array.isArray(doc.versions) && doc.versions.length
+        ? (doc.versions.find(v => v.v === doc.head) || doc.versions[doc.versions.length - 1]) : null;
+      const arts = cur && Array.isArray(cur.articles) && cur.articles.length ? cur.articles
+        : Array.isArray(doc.articles) && doc.articles.length ? doc.articles
         : doc.body ? [{ title: doc.title, body: doc.body }] : [];
       if (!arts.length) { body.innerHTML = '<div class="art-loading">没有挖出文章内容。</div>'; return; }
       const main = arts[0];

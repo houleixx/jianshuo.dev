@@ -419,7 +419,10 @@ function renderRec(r){
 async function fillDetail(detail, r, wrap){
   if(r.json){
     const doc = await apiGetJSON(r.json.name);
-    const arts = Array.isArray(doc.articles)&&doc.articles.length ? doc.articles
+    const cur = Array.isArray(doc.versions)&&doc.versions.length
+      ? (doc.versions.find(v=>v.v===doc.head) || doc.versions[doc.versions.length-1]) : null;
+    const arts = cur&&Array.isArray(cur.articles)&&cur.articles.length ? cur.articles
+      : Array.isArray(doc.articles)&&doc.articles.length ? doc.articles
       : (doc.body? [{title:doc.title,body:doc.body}] : []);
     let h='';
     h += `<div class="kv">${esc(doc.model||'')}${doc.createdAt?(' · '+esc(new Date(doc.createdAt).toLocaleString('zh-CN'))):''}${doc.status?(' · '+esc(doc.status)):''}</div>`;
