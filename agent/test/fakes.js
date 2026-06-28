@@ -35,3 +35,25 @@ export function fakeFetch(routes) {
   fn.calls = calls;
   return fn;
 }
+
+import Database from "better-sqlite3";
+
+// Minimal D1-compatible handle backed by in-memory SQLite (real SQL).
+export function fakeD1(migrationSql) {
+  const db = new Database(":memory:");
+  if (migrationSql) db.exec(migrationSql);
+  return {
+    prepare(sql) {
+      const stmt = db.prepare(sql);
+      let args = [];
+      const api = {
+        bind(...a) { args = a; return api; },
+        run() { const r = stmt.run(...args); return { success: true, meta: { changes: r.changes, last_row_id: r.lastInsertRowid } }; },
+        first(col) { const row = stmt.get(...args); if (col != null) return row ? row[col] : null; return row ?? null; },
+        all() { return { results: stmt.all(...args) }; },
+      };
+      return api;
+    },
+    exec(sql) { db.exec(sql); return { count: 0 }; },
+  };
+}
