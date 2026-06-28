@@ -16,7 +16,7 @@
 
 import { Agent, getAgentByName } from "agents";
 import { TOOL_DEFS } from "./tools.js";
-import { runMine, loadModelConfig, resolveEditModel } from "./miner.js";
+import { runMine, loadModelConfig, resolveEditModel, MINE_RESUME_MS } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
@@ -343,7 +343,11 @@ export class Miner {
   }
 
   async alarm() {
-    await runMine(this.env);
+    // runMine processes a bounded slice (subrequest budget) and tells us if ASR is
+    // still cooking or work was deferred — if so, come back soon to resume so long
+    // audio finishes across passes instead of timing out in one invocation.
+    const r = await runMine(this.env);
+    if (r && r.moreWork) await this.state.storage.setAlarm(Date.now() + MINE_RESUME_MS);
   }
 }
 
