@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildVolcAsrRequest } from "../src/asr-proxy.js";
+import { buildVolcAsrRequest, toSendablePayload } from "../src/asr-proxy.js";
 
 describe("buildVolcAsrRequest", () => {
   it("forwards a WebSocket upgrade to Volc ASR using server-side credentials", () => {
@@ -26,5 +26,25 @@ describe("buildVolcAsrRequest", () => {
   it("fails fast when Volc ASR secrets are missing", () => {
     expect(() => buildVolcAsrRequest(new Request("https://jianshuo.dev/agent/asr"), {}))
       .toThrow("VOLC_ASR_APPID or VOLC_ASR_ACCESS_TOKEN is not configured");
+  });
+});
+
+describe("toSendablePayload (binary frames must NOT coerce to '[object Blob]')", () => {
+  it("passes strings through unchanged", async () => {
+    expect(await toSendablePayload("hello")).toBe("hello");
+  });
+
+  it("passes an ArrayBuffer through unchanged (no Blob coercion)", async () => {
+    const ab = new Uint8Array([0x11, 0x22, 0x33]).buffer;
+    expect(await toSendablePayload(ab)).toBe(ab);
+  });
+
+  it("converts a Blob to its bytes instead of the string '[object Blob]'", async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    const blob = { arrayBuffer: async () => bytes.buffer }; // Blob-like
+    const out = await toSendablePayload(blob);
+    expect(out).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(out)).toEqual(bytes);
+    expect(String(out)).not.toBe("[object Blob]");
   });
 });
