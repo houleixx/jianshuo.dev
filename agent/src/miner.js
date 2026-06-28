@@ -128,30 +128,58 @@ function userPrefix(key) {
   return i > 0 ? key.slice(0, i + 1) : "";
 }
 
+// Leaf filename minus its extension. Works for any source — `.m4a` recordings,
+// `.txt` shared text, `.docx` style docs — so the article/marker key for an item
+// is independent of which kind of file it came from.
+function stemOf(key) {
+  return key.split("/").pop().replace(/\.[^./]+$/, "");
+}
+
 function sessionTs(audioKey) {
-  const leaf = audioKey.split("/").pop().replace(/\.m4a$/, "");
-  const parts = leaf.split("-");
+  const parts = stemOf(audioKey).split("-");
   return (parts.length >= 5 && parts[0] === "VoiceDrop") ? parts.slice(1, 5).join("-") : null;
 }
 
-function articleKeyFor(audioKey) {
-  const parts = audioKey.split("/");
-  const stem = parts.pop().replace(/\.m4a$/, "");
+function articleKeyFor(key) {
+  const parts = key.split("/"); const stem = stemOf(key); parts.pop();
   return `${parts.join("/")}/articles/${stem}.json`;
 }
 
-function emptyKeyFor(audioKey) {
-  const parts = audioKey.split("/");
-  const stem = parts.pop().replace(/\.m4a$/, "");
+function emptyKeyFor(key) {
+  const parts = key.split("/"); const stem = stemOf(key); parts.pop();
   return `${parts.join("/")}/articles/${stem}.empty`;
 }
 
-// "users/<sub>/VoiceDrop-stem.m4a" → "<sub>/VoiceDrop-stem"  (admin article API path)
-function adminArticlePath(audioKey) {
-  const prefix = userPrefix(audioKey);
+// Per-user 训练风格 corpus entry for a shared style submission. The sample file's
+// existence doubles as the "already collected" marker (skip on the next run).
+function styleSampleKeyFor(key) {
+  return `${userPrefix(key)}style/${stemOf(key)}.json`;
+}
+
+// "users/<sub>/VoiceDrop-stem.<ext>" → "<sub>/VoiceDrop-stem"  (admin article API path)
+function adminArticlePath(key) {
+  const prefix = userPrefix(key);
   const sub = prefix.startsWith("users/") ? prefix.slice(6, -1) : prefix.slice(0, -1);
-  const stem = audioKey.split("/").pop().replace(/\.m4a$/, "");
-  return `${sub}/${stem}`;
+  return `${sub}/${stemOf(key)}`;
+}
+
+// Route a freshly-listed R2 key to a pipeline. The app's Share Extension tags
+// shared items with a filename prefix (VoiceDrop-mine-* / VoiceDrop-style-*);
+// in-app recordings keep their plain VoiceDrop-<date>-… name and mine as audio.
+//   "audio"     → ASR → articles (in-app recordings + shared .m4a for 挖文章)
+//   "mine-text" → shared text/links for 挖文章; skip ASR, the text IS the transcript
+//   "style"     → shared text/word/links for 训练风格; collected into the corpus
+//   null        → not ours, an output/marker, or a type we don't mine yet
+//                 (shared images for 挖文章 and .docx text extraction are deferred)
+export function classifyKey(key) {
+  if (key.includes("/articles/") || key.includes("/style/")) return null;
+  const leaf = key.split("/").pop();
+  if (!leaf.startsWith("VoiceDrop-")) return null;
+  const ext = (leaf.match(/\.([^.]+)$/)?.[1] || "").toLowerCase();
+  if (leaf.startsWith("VoiceDrop-style-")) return "style";
+  if (leaf.startsWith("VoiceDrop-mine-") && (ext === "txt" || ext === "md")) return "mine-text";
+  if (ext === "m4a") return "audio";
+  return null;
 }
 
 // ── R2 presigned URL (manual SigV4 — no extra dependencies) ───────────────────
@@ -482,7 +510,7 @@ async function writeMineLog(env, rec) {
 async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
   const leaf  = audioKey.split("/").pop();
   const scope = userPrefix(audioKey);
-  const stem  = leaf.replace(/\.m4a$/, "");
+  const stem  = stemOf(audioKey);
   const t0    = Date.now();
 
   const events = [];
@@ -608,6 +636,124 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
   }
 }
 
+// ── Per-text pipeline (shared 挖文章 text/links — no ASR) ───────────────────────
+
+async function mineOneText(textKey, uploaded, env, modelCfg) {
+  const leaf  = textKey.split("/").pop();
+  const scope = userPrefix(textKey);
+  const stem  = stemOf(textKey);
+  const t0    = Date.now();
+
+  const events = [];
+  const log = (msg, data) => {
+    const entry = { ts: Date.now(), msg };
+    if (data !== undefined) entry.data = data;
+    events.push(entry);
+    console.log(`   ${msg}${data !== undefined ? " " + JSON.stringify(data) : ""}`);
+  };
+
+  let result = "error";
+  try {
+    if (await env.FILES.head(articleKeyFor(textKey)) || await env.FILES.head(emptyKeyFor(textKey))) {
+      console.log(`   skip (already processed)`);
+      return (result = "skip");
+    }
+
+    const obj  = await env.FILES.get(textKey);
+    const text = obj ? (await obj.text()).trim() : "";
+    if (text.length < MIN_CHARS) {
+      await writeEmpty(textKey, text ? "too-short" : "empty-text", env);
+      await notifyStatus(scope, stem, "empty", env);
+      log("文本太短/为空", { chars: text.length });
+      return (result = "empty");
+    }
+
+    await notifyStatus(scope, stem, "mining", env);
+
+    const claudeMdObj = await env.FILES.get(scope + "CLAUDE.md");
+    const claudeMd    = claudeMdObj ? (await claudeMdObj.text()).trim() : "";
+    if (claudeMd) log("CLAUDE.md", { chars: claudeMd.length });
+
+    const turnId = `${Date.now()}-${stem.slice(-8)}`;
+    const meta   = { user_scope: scope, stem, source: "text" };
+
+    const runLlm = async (force, step) => {
+      const tLlm = Date.now();
+      log(`LLM 开始${force ? " (force)" : ""}`, { step });
+      try {
+        const r = await generateArticles(text, force ? "" : claudeMd, null, force, env, modelCfg);
+        await writeLlmLog(env, { source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
+        return r.articles;
+      } catch (e) {
+        await writeLlmLog(env, { source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
+        throw e;
+      }
+    };
+
+    let articles = await runLlm(false, 0);
+    if (!articles.length) {
+      log("LLM 无文章，重试 (force)");
+      try { articles = await runLlm(true, 1); } catch (_) { articles = []; }
+      if (!articles.length) {
+        await writeEmpty(textKey, "no-article", env);
+        await notifyStatus(scope, stem, "empty", env);
+        log("无文章 (两次均空)");
+        return (result = "empty");
+      }
+    }
+
+    const doc = {
+      schema: 2, id: stem, sourceText: leaf,
+      createdAt: uploaded[textKey] || new Date().toISOString(),
+      transcript: text, srt: "", articles, status: "ready", model: modelCfg.model,
+    };
+    await writeArticle(textKey, doc, env);
+    await notifyStatus(scope, stem, "ready", env);
+    log("写入完成", { articles: articles.length, titles: articles.map(a => a.title) });
+    return (result = "mined");
+
+  } finally {
+    if (result !== "skip") {
+      await writeMineLog(env, { ts: t0, stem, audioKey: textKey, result, elapsed_ms: Date.now() - t0, events });
+    }
+  }
+}
+
+// ── Per-style pipeline (训练风格 corpus collection — no article mining) ──────────
+// One JSON sample per submission under `<scope>style/`; its existence is also the
+// processed marker. The corpus is what a later distill step (or the
+// wjs-distilling-style skill) reads to tune the user's writing-voice card.
+// Text/links are captured verbatim; .docx / images are recorded but their text
+// extraction is deferred (needsExtraction:true).
+async function collectStyle(styleKey, uploaded, env) {
+  const scope     = userPrefix(styleKey);
+  const stem      = stemOf(styleKey);
+  const sampleKey = styleSampleKeyFor(styleKey);
+  if (await env.FILES.head(sampleKey)) return "skip";
+
+  const leaf = styleKey.split("/").pop();
+  const ext  = (leaf.match(/\.([^.]+)$/)?.[1] || "").toLowerCase();
+  const isText = ext === "txt" || ext === "md" || ext === "url";
+
+  let text = null, needsExtraction = false;
+  if (isText) {
+    const obj = await env.FILES.get(styleKey);
+    text = obj ? (await obj.text()).trim() : "";
+  } else {
+    needsExtraction = true;   // .docx / .doc / image — kept as-is, extract later
+  }
+
+  const sample = {
+    stem, sourceFile: leaf, type: ext, needsExtraction,
+    collectedAt: uploaded[styleKey] || new Date().toISOString(), text,
+  };
+  await env.FILES.put(sampleKey, JSON.stringify(sample), { httpMetadata: { contentType: "application/json" } });
+  await notifyStatus(scope, stem, "style", env);
+  console.log(`   style 收录 ${leaf}${needsExtraction ? " (待提取文本)" : ` (${(text||"").length} 字)`}`);
+  return "style";
+}
+
 // ── Main loop ──────────────────────────────────────────────────────────────────
 
 export async function runMine(env) {
@@ -637,14 +783,19 @@ export async function runMine(env) {
   const uploaded = Object.fromEntries(allObjects.map(o => [o.key, o.uploaded?.toISOString?.() || ""]));
   const keySet   = new Set(allKeys);
 
-  const audios = allKeys.filter(k => k.split("/").pop().startsWith("VoiceDrop-") && k.endsWith(".m4a"));
+  const audios = allKeys.filter(k => classifyKey(k) === "audio");
   const todo   = audios.filter(a => !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
+  const texts  = allKeys.filter(k => classifyKey(k) === "mine-text")
+                        .filter(t => !keySet.has(articleKeyFor(t)) && !keySet.has(emptyKeyFor(t)));
+  const styles = allKeys.filter(k => classifyKey(k) === "style")
+                        .filter(s => !keySet.has(styleSampleKeyFor(s)));
 
-  console.log(`[mine] list: ${audios.length} audio · ${todo.length} unprocessed (${((Date.now()-t0)/1000).toFixed(1)}s)`);
+  console.log(`[mine] list: ${audios.length} audio · ${texts.length} text · ${styles.length} style · ${todo.length + texts.length + styles.length} unprocessed (${((Date.now()-t0)/1000).toFixed(1)}s)`);
 
-  let mined = 0, empty = 0;
+  let mined = 0, empty = 0, styled = 0;
+
   for (let i = 0; i < todo.length; i++) {
-    console.log(`[mine] ── ${todo[i].split("/").pop()} (${i+1}/${todo.length})`);
+    console.log(`[mine] ── ${todo[i].split("/").pop()} (audio ${i+1}/${todo.length})`);
     try {
       const r = await mineOneAudio(todo[i], allKeys, uploaded, env, modelCfg);
       if (r === "mined") mined++;
@@ -654,6 +805,26 @@ export async function runMine(env) {
     }
   }
 
+  for (let i = 0; i < texts.length; i++) {
+    console.log(`[mine] ── ${texts[i].split("/").pop()} (text ${i+1}/${texts.length})`);
+    try {
+      const r = await mineOneText(texts[i], uploaded, env, modelCfg);
+      if (r === "mined") mined++;
+      else if (r === "empty") empty++;
+    } catch (e) {
+      console.error(`[mine] FAILED ${texts[i]}: ${e.message || e}`);
+    }
+  }
+
+  for (let i = 0; i < styles.length; i++) {
+    console.log(`[mine] ── ${styles[i].split("/").pop()} (style ${i+1}/${styles.length})`);
+    try {
+      if (await collectStyle(styles[i], uploaded, env) === "style") styled++;
+    } catch (e) {
+      console.error(`[mine] FAILED style ${styles[i]}: ${e.message || e}`);
+    }
+  }
+
   const elapsed = ((Date.now()-t0)/1000).toFixed(0);
-  console.log(`[mine] DONE: ${mined} mined · ${empty} empty · ${elapsed}s total`);
+  console.log(`[mine] DONE: ${mined} mined · ${empty} empty · ${styled} style · ${elapsed}s total`);
 }
