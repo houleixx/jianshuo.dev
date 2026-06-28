@@ -16,10 +16,27 @@ export async function onRequest(context) {
 
   // Only short, URL-safe ids are share links; anything else → static fallthrough.
   if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) return context.next();
+
+  // ONE public page serves TWO link kinds, both resolving to an article key and
+  // rendering identically (same og:image + description):
+  //   1. shares/<id>           — a user's own article share (GET /files/api/share/<key>)
+  //   2. community/<id>.json    — a VD社区 post (schema-2 live pointer {…,articleKey})
+  // So a 社区 post shares to WeChat exactly like an article — no separate page/crawler path.
+  let key = null;
   const map = await env.FILES.get(`shares/${id}`);
-  if (!map) return context.next();
-  const key = await map.text();
-  if (!/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) return context.next();
+  if (map) {
+    key = await map.text();
+  } else {
+    const cm = await env.FILES.get(`community/${id}.json`);
+    if (cm) {
+      // A reported (taken-down) post must not stay publicly viewable (Apple 1.2).
+      if (await env.FILES.head(`community/reports/${id}.json`)) {
+        return html(page('已不可用', '<p class="muted">这篇分享已被移除。</p>'), 404);
+      }
+      try { key = JSON.parse(await cm.text()).articleKey || null; } catch { /* fallthrough */ }
+    }
+  }
+  if (!key || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) return context.next();
 
   const obj = await env.FILES.get(key);
   if (!obj) return html(page('文章不存在', '<p class="muted">这篇文章可能已经被删除了。</p>'), 404);

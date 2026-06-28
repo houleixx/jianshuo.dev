@@ -98,3 +98,41 @@ describe("onRequest — section-aware card (the s=1/s=2 title contract)", () => 
     expect(body).not.toContain("[[photo:");
   });
 });
+
+// A VD社区 post reuses the SAME public page — it resolves by its community shareId
+// (community/<id>.json, a schema-2 live pointer) instead of shares/<id>, then renders
+// + emits og tags identically. So a 社区 post shares to WeChat exactly like an article:
+// first photo + description, no separate page.
+describe("onRequest — VD社区 post via community/<shareId> (same page, same card)", () => {
+  function seededCommunity(extra = {}) {
+    return fakeEnv({
+      "community/Cm12shareId00.json": JSON.stringify({
+        schema: 2, shareId: "Cm12shareId00", owner: "users/u9/",
+        articleKey: "users/u9/articles/VoiceDrop-c.json", author: "阿珍", firstSharedAt: 1,
+      }),
+      "users/u9/articles/VoiceDrop-c.json": JSON.stringify(TWO_SECTIONS),
+      ...extra,
+    });
+  }
+
+  it("renders a community post by its shareId, with the SAME og:image + description", async () => {
+    const res = await onRequest(ctx("Cm12shareId00", seededCommunity(), "?s=1"));
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("<title>第二篇标题</title>");
+    expect(body).toContain('<meta property="og:title" content="第二篇标题"/>');
+    expect(body).toContain(
+      '<meta property="og:image" content="https://jianshuo.dev/files/api/photo/users/u9/photos/2026-06-28-120000/3-abc.jpg"/>',
+    );
+    expect(body).toContain('<meta name="description" content="第二篇正文，里面带一张照片。');
+  });
+
+  it("a reported (taken-down) community post is NOT publicly viewable (Apple 1.2)", async () => {
+    const env = seededCommunity({
+      "community/reports/Cm12shareId00.json": JSON.stringify({ shareId: "Cm12shareId00", status: "pending" }),
+    });
+    const res = await onRequest(ctx("Cm12shareId00", env, ""));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain("已不可用");
+  });
+});
