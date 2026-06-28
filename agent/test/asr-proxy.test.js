@@ -14,7 +14,7 @@ describe("buildVolcAsrRequest", () => {
       VOLC_ASR_ACCESS_TOKEN: "token-1",
     });
 
-    expect(req.url).toBe("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel");
+    expect(req.url).toBe("https://openspeech.bytedance.com/api/v3/sauc/bigmodel");
     expect(req.headers.get("Upgrade")).toBe("websocket");
     expect(req.headers.get("Authorization")).toBeNull();
     expect(req.headers.get("X-Api-App-Key")).toBe("appid-1");

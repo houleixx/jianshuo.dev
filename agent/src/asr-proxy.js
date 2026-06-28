@@ -1,4 +1,6 @@
-const VOLC_ASR_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel";
+// CF Workers outbound WebSocket requires an https:// URL + `Upgrade: websocket`
+// header — a wss:// scheme makes fetch() throw "Fetch API cannot load".
+const VOLC_ASR_ENDPOINT = "https://openspeech.bytedance.com/api/v3/sauc/bigmodel";
 const VOLC_ASR_RESOURCE_ID = "volc.bigasr.sauc.duration";
 
 export function buildVolcAsrRequest(_clientRequest, env) {
