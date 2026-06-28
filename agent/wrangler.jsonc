@@ -21,6 +21,10 @@
     { "binding": "FILES", "bucket_name": "jianshuo-dev-files" }
   ],
 
+  "d1_databases": [
+    { "binding": "USAGE", "database_name": "voicedrop-usage", "database_id": "317b7cd5-e926-49f0-a6c9-497e4740aea8" }
+  ],
+
   "durable_objects": {
     "bindings": [
       { "name": "ArticleEditor", "class_name": "ArticleEditor" },

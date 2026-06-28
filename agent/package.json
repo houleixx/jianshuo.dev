@@ -12,7 +12,8 @@
     "agents": "latest"
   },
   "devDependencies": {
-    "wrangler": "^4",
-    "vitest": "^2"
+    "better-sqlite3": "^12.11.1",
+    "vitest": "^2",
+    "wrangler": "^4"
   }
 }
