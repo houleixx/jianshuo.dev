@@ -24,6 +24,8 @@ import { buildBroadcastMessage, createPairing, verifyPairing, completePairing, r
 import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
+import { editGate, claudeCostUY } from "./usage.js";
+import { ensureAccount, getBalanceUY, debit, editCount } from "./usage_store.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -35,6 +37,17 @@ const MODEL = "claude-sonnet-4-6";
 function rand6() {
   return Math.floor(crypto.getRandomValues(new Uint32Array(1))[0] % 1e6)
     .toString().padStart(6, "0");
+}
+
+// meteredEditGate — exported so test/usage_edit.test.js can unit-test it.
+// Fail-open: if USAGE is undefined (env binding absent), returns "ok".
+export async function meteredEditGate(db, scope, stem, now) {
+  if (!db) return "ok";
+  try {
+    const bal = await ensureAccount(db, scope, now);
+    const edits = await editCount(db, scope, stem);
+    return editGate(bal, edits);
+  } catch { return "ok"; }
 }
 
 // resolveArticles + withTopLevelArticles are imported from the shared
@@ -154,6 +167,12 @@ export class ArticleEditor extends Agent {
     const { articleKey, scope, token } = this._config();
     if (!articleKey) return { ok: false, error: "会话未初始化" };
     const stem = articleKey.replace(/\.json$/, "").split("/articles/").pop();
+
+    // Usage gate: check balance + per-article edit cap before spending any tokens.
+    const decision = await meteredEditGate(this.env.USAGE, scope, stem, Date.now());
+    if (decision === "no-credit") return { ok: false, error: "算力不足，无法继续编辑" };
+    if (decision === "limit") return { ok: false, error: "这篇已达编辑上限（100 次）" };
+
     const turnId = `${Date.now()}-${rand6()}`;
     const editModel = resolveEditModel(await loadModelConfig(this.env));
     const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction: row.text, model: editModel });
@@ -253,6 +272,14 @@ export class ArticleEditor extends Agent {
         error: r.ok ? undefined : r.errorText,
         meta: { stem, instruction },
       });
+      // Debit the cost of this API call. Best-effort: never breaks the edit.
+      try {
+        if (this.env.USAGE) {
+          const u = r.json?.usage || {};
+          await debit(this.env.USAGE, scope, claudeCostUY(model, u.input_tokens, u.output_tokens),
+            "edit", { model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem }, Date.now());
+        }
+      } catch {}
       if (!r.ok) throw new Error(`Claude HTTP ${r.status}: ${(r.errorText || "").slice(0, 160)}`);
       return r.json;
     };
