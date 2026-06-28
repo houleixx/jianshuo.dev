@@ -4,9 +4,16 @@ import { SIGNUP_GRANT_UY } from "./usage.js";
 export async function ensureAccount(db, userSub, now) {
   const row = await db.prepare("SELECT balance_uy FROM account WHERE user_sub=?").bind(userSub).first();
   if (row) return row.balance_uy;
-  await db.prepare(
-    "INSERT INTO account (user_sub,balance_uy,granted_uy,spent_uy,created_at,updated_at) VALUES (?,?,?,?,?,?)"
+  // Create. INSERT OR IGNORE makes the concurrent first-touch race safe:
+  // only the caller whose insert actually creates the row (changes===1) records the signup grant.
+  const res = await db.prepare(
+    "INSERT OR IGNORE INTO account (user_sub,balance_uy,granted_uy,spent_uy,created_at,updated_at) VALUES (?,?,?,?,?,?)"
   ).bind(userSub, SIGNUP_GRANT_UY, SIGNUP_GRANT_UY, 0, now, now).run();
+  if (res && res.meta && res.meta.changes === 0) {
+    // Someone created it concurrently — return their balance, do NOT double-grant.
+    const r2 = await db.prepare("SELECT balance_uy FROM account WHERE user_sub=?").bind(userSub).first();
+    return r2 ? r2.balance_uy : SIGNUP_GRANT_UY;
+  }
   await db.prepare(
     "INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)"
   ).bind(userSub, now, "grant", SIGNUP_GRANT_UY, "signup", null, SIGNUP_GRANT_UY).run();

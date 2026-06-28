@@ -25,7 +25,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY } from "./usage.js";
-import { ensureAccount, getBalanceUY, debit, editCount, getLedger, grant, allAccounts } from "./usage_store.js";
+import { ensureAccount, debit, editCount, getLedger, grant, allAccounts } from "./usage_store.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -437,6 +437,7 @@ const r2 = (n) => Math.round(n * 100) / 100;
 
 export async function handleUsageRoute(url, request, env) {
   if (!url.pathname.startsWith("/agent/usage/")) return null;
+  try {
   const tok = bearer(request);
   const isAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
 
@@ -478,6 +479,9 @@ export async function handleUsageRoute(url, request, env) {
   }
 
   return J({ error: "not-found" }, 404);
+  } catch (_) {
+    return J({ error: "usage-unavailable", degraded: true }, 200);
+  }
 }
 
 // ---------------------------------------------------------------------------

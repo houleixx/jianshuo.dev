@@ -613,10 +613,15 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       throw e;
     }
 
-    // Debit ASR cost (best-effort; uses actual ASR duration or filename estimate)
+    // Debit ASR cost (best-effort; uses actual ASR duration or filename estimate).
+    // asrDurMs is in MILLISECONDS (Volcano ASR audio_info.duration unit).
     try {
       if (env.USAGE) {
-        const asrSec = (asrDurMs ?? (durSec ?? 0) * 1000) / 1000;
+        const rawSec = (asrDurMs ?? (durSec ?? 0) * 1000) / 1000;
+        // Sanity clamp: a malformed/huge value must not cause 1000x overcharge.
+        // Fall back to the filename-parsed durSec (or 0) for absurd values (>6h).
+        const asrSec = (Number.isFinite(rawSec) && rawSec >= 0 && rawSec <= 6 * 3600)
+          ? rawSec : (durSec ?? 0);
         await debit(env.USAGE, scope, asrCostUY(asrSec), "asr", { asr_sec: Math.round(asrSec), stem }, Date.now());
       }
     } catch (_) {}

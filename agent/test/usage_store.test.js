@@ -42,4 +42,19 @@ describe("usage_store", () => {
     await ensureAccount(db, U, 1);
     expect((await allAccounts(db)).length).toBe(1);
   });
+  it("concurrent first-touch: no double signup-grant if row exists at spend-down balance", async () => {
+    // Simulate: a concurrent caller already created the account (with some spend).
+    // ensureAccount must return the actual current balance, not SIGNUP_GRANT_UY,
+    // and must NOT insert a second signup ledger row.
+    const alreadySpent = 999;
+    const currentBal = SIGNUP_GRANT_UY - alreadySpent;
+    db.prepare("INSERT INTO account (user_sub,balance_uy,granted_uy,spent_uy,created_at,updated_at) VALUES (?,?,?,?,?,?)")
+      .bind(U, currentBal, SIGNUP_GRANT_UY, alreadySpent, 1, 1).run();
+    db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
+      .bind(U, 1, "grant", SIGNUP_GRANT_UY, "signup", null, SIGNUP_GRANT_UY).run();
+
+    const bal = await ensureAccount(db, U, 200);
+    expect(bal).toBe(currentBal);                        // existing balance, not SIGNUP_GRANT_UY
+    expect((await getLedger(db, U, 10)).length).toBe(1); // still only 1 grant row — no double-grant
+  });
 });
