@@ -15,6 +15,7 @@
 import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
+import { hmacSign } from "../../functions/lib/auth.js";
 
 export const MINE_MODEL_DEFAULT = "claude-sonnet-4-6";
 const MIN_CHARS          = 20;
@@ -493,6 +494,43 @@ async function writeBlocked(audioKey, reason, env) {
   await apiPut(`articles/${adminArticlePath(audioKey)}/blocked`, JSON.stringify({ status: "blocked", reason }), "application/json", env);
 }
 
+// ── Auto-share to VD社区 ─────────────────────────────────────────────────────────
+// When the user has turned on 「自动分享到 VD社区」 (Settings → 发布), the app writes
+// `users/<sub>/CONFIG.json` = {autoShareCommunity:true}. After a fresh article lands
+// we mirror EXACTLY what the app's POST community/share endpoint does — same shareId
+// derivation, same pointer shape — so the post is byte-identical to a manual share:
+// the app detects it as 已分享, a re-mine updates the same post in place, and 取消分享
+// still works. Best-effort: never blocks or fails mining (caller wraps in try/catch).
+export async function maybeAutoShareCommunity(srcKey, env, log = () => {}) {
+  if (!env.SESSION_SECRET) return null;            // can't derive shareId without it
+  const scope = userPrefix(srcKey);                // users/<sub>/
+  const cfgObj = await env.FILES.get(scope + "CONFIG.json");
+  if (!cfgObj) return null;
+  let cfg; try { cfg = JSON.parse(await cfgObj.text()); } catch { return null; }
+  if (cfg.autoShareCommunity !== true) return null;
+
+  const articleKey = articleKeyFor(srcKey);        // users/<sub>/articles/<stem>.json
+  // author — same source/regex as the share endpoint (CLAUDE.md「# 我的名字」), else 匿名.
+  let author = "匿名";
+  const md = await env.FILES.get(scope + "CLAUDE.md");
+  if (md) { const m = (await md.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/); if (m && m[1].trim()) author = m[1].trim(); }
+
+  const shareId = (await hmacSign("community:" + articleKey, env.SESSION_SECRET)).slice(0, 12);
+  const communityKey = `community/${shareId}.json`;
+  // Preserve firstSharedAt + replyTo when re-sharing (re-mine), exactly like the endpoint.
+  let firstSharedAt = Date.now();
+  let replyTo = null;
+  const existing = await env.FILES.get(communityKey);
+  if (existing) {
+    try { const ep = JSON.parse(await existing.text()); firstSharedAt = ep.firstSharedAt || firstSharedAt; replyTo = ep.replyTo || null; } catch {}
+  }
+  const post = { schema: 2, shareId, owner: scope, articleKey, author, firstSharedAt,
+                 ...(replyTo ? { replyTo } : {}) };
+  await env.FILES.put(communityKey, JSON.stringify(post), { httpMetadata: { contentType: "application/json" } });
+  log("自动分享到 VD社区", { shareId });
+  return shareId;
+}
+
 // ── StatusHub notification ─────────────────────────────────────────────────────
 
 async function notifyStatus(scope, stem, status, env) {
@@ -666,6 +704,7 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     await writeArticle(audioKey, doc, env);
     if (srt) await writeSrt(audioKey, srt, env);
     await notifyStatus(scope, stem, "ready", env);
+    try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
     log("写入完成", { articles: articles.length, titles: articles.map(a => a.title) });
     result = "mined";
     return "mined";
@@ -759,6 +798,7 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
     };
     await writeArticle(textKey, doc, env);
     await notifyStatus(scope, stem, "ready", env);
+    try { await maybeAutoShareCommunity(textKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
     log("写入完成", { articles: articles.length, titles: articles.map(a => a.title) });
     return (result = "mined");
 
