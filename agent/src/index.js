@@ -24,8 +24,8 @@ import { buildBroadcastMessage, createPairing, verifyPairing, completePairing, r
 import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
-import { editGate, claudeCostUY } from "./usage.js";
-import { ensureAccount, getBalanceUY, debit, editCount } from "./usage_store.js";
+import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY } from "./usage.js";
+import { ensureAccount, getBalanceUY, debit, editCount, getLedger, grant, allAccounts } from "./usage_store.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -428,6 +428,59 @@ export class LinkBroker {
 }
 
 // ---------------------------------------------------------------------------
+// Usage route helpers
+// ---------------------------------------------------------------------------
+const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
+const bearer = (req) => (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+const r1 = (n) => Math.round(n * 10) / 10;
+const r2 = (n) => Math.round(n * 100) / 100;
+
+export async function handleUsageRoute(url, request, env) {
+  if (!url.pathname.startsWith("/agent/usage/")) return null;
+  const tok = bearer(request);
+  const isAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
+
+  if (url.pathname === "/agent/usage/balance" && request.method === "GET") {
+    const scope = await resolveScope(tok, env);
+    if (!scope) return J({ error: "unauthorized" }, 401);
+    if (!env.USAGE) return J({ suanli: 0, yuan: 0, granted_suanli: 0, spent_suanli: 0, degraded: true });
+    await ensureAccount(env.USAGE, scope, Date.now());
+    const a = await env.USAGE.prepare("SELECT balance_uy,granted_uy,spent_uy FROM account WHERE user_sub=?").bind(scope).first();
+    return J({ suanli: r1(uyToSuanli(a.balance_uy)), yuan: r2(uyToYuan(a.balance_uy)),
+      granted_suanli: r1(uyToSuanli(a.granted_uy)), spent_suanli: r1(uyToSuanli(a.spent_uy)) });
+  }
+
+  if (url.pathname === "/agent/usage/ledger" && request.method === "GET") {
+    const scope = await resolveScope(tok, env);
+    if (!scope) return J({ error: "unauthorized" }, 401);
+    if (!env.USAGE) return J({ entries: [], degraded: true });
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10) || 50, 200);
+    const rows = await getLedger(env.USAGE, scope, limit);
+    return J({ entries: rows.map((e) => ({ ts: e.ts, kind: e.kind, reason: e.reason,
+      suanli: r1(uyToSuanli(e.amount_uy)), yuan: r2(uyToYuan(e.amount_uy)),
+      balance_suanli: r1(uyToSuanli(e.balance_uy)), detail: e.detail ? JSON.parse(e.detail) : null })) });
+  }
+
+  if (url.pathname === "/agent/usage/grant" && request.method === "POST") {
+    if (!isAdmin) return J({ error: "unauthorized" }, 401);
+    const b = await request.json().catch(() => ({}));
+    if (!b.user_sub || typeof b.suanli !== "number") return J({ error: "bad-request" }, 400);
+    await grant(env.USAGE, b.user_sub, suanliToUY(b.suanli), "campaign:" + (b.reason || "manual"), Date.now());
+    return J({ ok: true });
+  }
+
+  if (url.pathname === "/agent/usage/admin/accounts" && request.method === "GET") {
+    if (!isAdmin) return J({ error: "unauthorized" }, 401);
+    const rows = await allAccounts(env.USAGE);
+    return J({ accounts: rows.map((a) => ({ user_sub: a.user_sub,
+      balance_suanli: r1(uyToSuanli(a.balance_uy)), granted_suanli: r1(uyToSuanli(a.granted_uy)),
+      spent_suanli: r1(uyToSuanli(a.spent_uy)), spent_yuan: r2(uyToYuan(a.spent_uy)) })) });
+  }
+
+  return J({ error: "not-found" }, 404);
+}
+
+// ---------------------------------------------------------------------------
 // Worker entry: authenticate, then route the WS upgrade to the right DO.
 // ---------------------------------------------------------------------------
 export default {
@@ -590,6 +643,8 @@ export default {
       }));
       return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json" } });
     }
+
+    { const r = await handleUsageRoute(url, request, env); if (r) return r; }
 
     return new Response("not found", { status: 404 });
   },
