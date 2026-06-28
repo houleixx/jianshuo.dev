@@ -54,6 +54,16 @@ export function fakeD1(migrationSql) {
       };
       return api;
     },
+    batch(statements) {
+      const results = [];
+      const txn = db.transaction(() => {
+        for (const s of statements) {
+          results.push(s.run());
+        }
+      });
+      txn();
+      return results;
+    },
     exec(sql) { db.exec(sql); return { count: 0 }; },
   };
 }

@@ -22,20 +22,22 @@ export async function debit(db, userSub, amountUY, reason, detail, now) {
   if (!amountUY || amountUY <= 0) return;
   const cur = await db.prepare("SELECT balance_uy FROM account WHERE user_sub=?").bind(userSub).first();
   const bal = (cur ? cur.balance_uy : 0) - amountUY;
-  await db.prepare("UPDATE account SET balance_uy=?, spent_uy=spent_uy+?, updated_at=? WHERE user_sub=?")
-    .bind(bal, amountUY, now, userSub).run();
-  await db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
-    .bind(userSub, now, "spend", amountUY, reason, detail ? JSON.stringify(detail) : null, bal).run();
+  const updateStmt = db.prepare("UPDATE account SET balance_uy=?, spent_uy=spent_uy+?, updated_at=? WHERE user_sub=?")
+    .bind(bal, amountUY, now, userSub);
+  const insertStmt = db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
+    .bind(userSub, now, "spend", amountUY, reason, detail ? JSON.stringify(detail) : null, bal);
+  await db.batch([updateStmt, insertStmt]);
 }
 
 export async function grant(db, userSub, amountUY, reason, now) {
   await ensureAccount(db, userSub, now);
   const cur = await db.prepare("SELECT balance_uy FROM account WHERE user_sub=?").bind(userSub).first();
   const bal = cur.balance_uy + amountUY;
-  await db.prepare("UPDATE account SET balance_uy=?, granted_uy=granted_uy+?, updated_at=? WHERE user_sub=?")
-    .bind(bal, amountUY, now, userSub).run();
-  await db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
-    .bind(userSub, now, "grant", amountUY, reason, null, bal).run();
+  const updateStmt = db.prepare("UPDATE account SET balance_uy=?, granted_uy=granted_uy+?, updated_at=? WHERE user_sub=?")
+    .bind(bal, amountUY, now, userSub);
+  const insertStmt = db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
+    .bind(userSub, now, "grant", amountUY, reason, null, bal);
+  await db.batch([updateStmt, insertStmt]);
 }
 
 export async function getLedger(db, userSub, limit = 50) {
