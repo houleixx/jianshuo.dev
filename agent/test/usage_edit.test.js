@@ -30,7 +30,7 @@ describe("meteredEditGate", () => {
   it("limit at 100 edits of same stem", async () => {
     const db = fakeD1(SQL);
     await ensureAccount(db, "users/anon-c/", 1);
-    for (let i = 0; i < 100; i++) await debit(db, "users/anon-c/", 1, "edit", { stem: "s1" }, 10 + i);
+    for (let i = 0; i < 100; i++) await debit(db, "users/anon-c/", 1, "edit", { stem: "s1", turn_id: "t" + i }, 10 + i);
     expect(await meteredEditGate(db, "users/anon-c/", "s1", 200)).toBe("limit");
   });
 });

@@ -30,12 +30,18 @@ describe("usage_store", () => {
     await grant(db, U, 1000, "campaign:x", 1);
     expect(await getBalanceUY(db, U)).toBe(SIGNUP_GRANT_UY + 1000);
   });
-  it("editCount counts only edit rows for that stem", async () => {
+  it("editCount counts distinct turns (real edits), not API call rows", async () => {
     await ensureAccount(db, U, 1);
-    await debit(db, U, 1, "edit", { stem: "a" }, 2);
-    await debit(db, U, 1, "edit", { stem: "a" }, 3);
-    await debit(db, U, 1, "edit", { stem: "b" }, 4);
-    await debit(db, U, 1, "mine", { stem: "a" }, 5);
+    // One edit = 2 API calls sharing turn_id "t1" (should count as 1)
+    await debit(db, U, 1, "edit", { stem: "a", turn_id: "t1" }, 2);
+    await debit(db, U, 1, "edit", { stem: "a", turn_id: "t1" }, 3);
+    // Second distinct edit turn_id "t2" (counts as 1 more)
+    await debit(db, U, 1, "edit", { stem: "a", turn_id: "t2" }, 4);
+    // Different stem — must NOT count for stem "a"
+    await debit(db, U, 1, "edit", { stem: "b", turn_id: "t3" }, 5);
+    // Different reason — must NOT count
+    await debit(db, U, 1, "mine", { stem: "a", turn_id: "t4" }, 6);
+    // Expect 2 distinct turns for stem "a" (NOT 3 rows)
     expect(await editCount(db, U, "a")).toBe(2);
   });
   it("allAccounts returns rows", async () => {

@@ -56,7 +56,7 @@ export async function getLedger(db, userSub, limit = 50) {
 
 export async function editCount(db, userSub, stem) {
   const row = await db.prepare(
-    "SELECT COUNT(*) AS n FROM ledger WHERE user_sub=? AND reason='edit' AND json_extract(detail,'$.stem')=?"
+    "SELECT COUNT(DISTINCT json_extract(detail,'$.turn_id')) AS n FROM ledger WHERE user_sub=? AND reason='edit' AND json_extract(detail,'$.stem')=?"
   ).bind(userSub, stem).first();
   return row ? row.n : 0;
 }
