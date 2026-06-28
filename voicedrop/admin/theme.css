@@ -1,0 +1,74 @@
+/* VoiceDrop admin — shared theme, matched to the iOS app (VoiceDropApp/Theme.swift).
+   One palette for every /admin page (index · usage · mine · llm). The app look:
+   warm beige chrome, white cards, ochre-red accent (赭红 #D8593B), warm-gray ink. */
+:root{
+  color-scheme:light;
+  --bg:#FAF6EF; --panel:#ffffff; --ink:#2A2521; --muted:#8A8175;
+  --line:#ECE3D5; --line2:#F2EBDD;
+  --accent:#D8593B; --accent-bg:#F6E4DC;        /* 赭红 — buttons / links / active */
+  --warn:#C98A3C; --warn-bg:#F7EDD7;            /* amberPending */
+  --idle:#8A8175; --idle-bg:#F1ECE3;
+  --ok:#5E8A6A; --ok-bg:#EAF1EC;                /* greenDone — 已成文 / 正常 */
+  --blue:#B24A2C;                               /* the app has no blue; links read as deep ochre */
+  --shadow:0 1px 2px rgba(42,37,33,.04),0 8px 24px rgba(42,37,33,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+a{color:var(--blue);text-decoration:none}
+/* NOTE: no .wrap here — page width/layout stays per-page (index 1040, log viewers 1280).
+   theme.css is palette + shared visual components only, never layout. */
+
+/* ---- token gate ---- */
+#gate{max-width:420px;margin:14vh auto 0;background:var(--panel);
+  border:1px solid var(--line);border-radius:18px;padding:30px 26px;box-shadow:var(--shadow)}
+#gate h1{font-size:1.25rem;margin:0 0 4px;color:var(--ink)}
+#gate p{color:var(--muted);margin:0 0 18px;font-size:.92rem}
+#gate input{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;
+  font-size:.95rem;background:#fdfbf7;margin-bottom:12px;color:var(--ink)}
+#gate input:focus{outline:none;border-color:var(--accent)}
+.err{color:#c0392b;font-size:.86rem;min-height:1.2em;margin-top:2px}
+
+/* ---- buttons ---- */
+.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);border-radius:12px;padding:9px 15px;font-size:.9rem;
+  font-weight:560;box-shadow:0 1px 1px rgba(42,37,33,.03)}
+.btn:hover{background:#fbf8f2}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;
+  justify-content:center;padding:11px}
+.btn.primary:hover{filter:brightness(1.04)}
+
+/* ---- header ---- */
+header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+header.top h1{font-size:1.3rem;margin:0;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+header.top .grow{flex:1}
+.tag{font-size:.74rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);
+  padding:3px 9px;border-radius:999px}
+
+/* ---- stat cards ---- */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:22px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow)}
+.card .n{font-size:1.7rem;font-weight:740;letter-spacing:-.02em;line-height:1.1;color:var(--ink)}
+.card .l{font-size:.8rem;color:var(--muted);margin-top:2px}
+.card.ok .n{color:var(--ok)} .card.warn .n{color:var(--warn)} .card.idle .n{color:var(--idle)}
+.card.spent .n{color:var(--accent)} .card.bal .n{color:var(--ok)}
+
+/* status pills / badges — keep 已成文 green (greenDone), not the ochre accent.
+   These come AFTER each page's inline <style> (theme.css is linked last), so they
+   win the cascade and recolor the status chips to the app palette. */
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.au{background:var(--idle-bg);color:var(--idle)}
+.badge.idle{background:var(--idle-bg);color:var(--idle)}
+
+/* ---- misc ---- */
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
+  border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;color:var(--muted);padding:50px 0}

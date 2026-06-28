@@ -1,20 +1,125 @@
-<!doctype html><meta charset="utf-8"><title>VoiceDrop · 算力账本</title>
-<style>body{font:14px/1.5 -apple-system,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;color:#222}
-table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #eee;padding:6px 8px;text-align:right}
-th:first-child,td:first-child{text-align:left;font-family:ui-monospace,monospace}input{padding:6px;width:340px}</style>
-<h1>算力账本 · 全量账户</h1>
-<p><input id="t" placeholder="admin token (FILES_TOKEN)"> <button onclick="go()">加载</button></p>
-<p id="sum"></p>
-<table><thead><tr><th>账户</th><th>余额(算力)</th><th>累计获得</th><th>累计消费</th><th>消费(¥)</th></tr></thead><tbody id="b"></tbody></table>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>VoiceDrop · 算力账本</title>
+<link rel="stylesheet" href="./theme.css"/>
+<style>
+/* page-specific */
+.wrap{max-width:860px;margin:0 auto;padding:24px 18px 80px}
+.sumline{color:var(--muted);font-size:.9rem;margin:0 0 18px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+thead th{font-size:.76rem;color:var(--muted);font-weight:600;text-align:right;padding:11px 16px;
+  background:#fbf8f2;border-bottom:1px solid var(--line)}
+thead th:first-child{text-align:left}
+tbody td{padding:12px 16px;text-align:right;border-bottom:1px solid var(--line2);font-variant-numeric:tabular-nums}
+tbody td:first-child{text-align:left;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#fbf8f2}
+.spent{color:var(--accent);font-weight:600}
+.bal{color:var(--ok);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- token gate (only shown if no shared token yet) -->
+  <div id="gate" hidden>
+    <h1>算力账本</h1>
+    <p>输入 master token 查看全量账户的算力消费。token 只存在本机浏览器，不上传。</p>
+    <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+    <div class="err" id="gateErr"></div>
+    <button class="btn primary" id="enter">进入</button>
+  </div>
+
+  <!-- app -->
+  <div id="app" hidden>
+    <header class="top">
+      <h1>算力账本</h1>
+      <span class="tag" id="updated"></span>
+      <span class="grow"></span>
+      <button class="btn" id="refresh">刷新</button>
+      <a class="btn" href="./">← 控制台</a>
+      <button class="btn" id="logout">退出</button>
+    </header>
+
+    <div class="cards" id="cards"></div>
+    <p class="sumline" id="sum"></p>
+    <div id="tableWrap"></div>
+  </div>
+
+</div>
+
+<script src="/voicedrop/shared.js"></script>
 <script>
-async function go(){
-  const t=document.getElementById('t').value.trim();
-  const r=await fetch('https://jianshuo.dev/agent/usage/admin/accounts',{headers:{Authorization:'Bearer '+t}});
-  if(!r.ok){document.getElementById('b').innerHTML='<tr><td>加载失败 '+r.status+'</td></tr>';return;}
-  const {accounts}=await r.json();
-  let spent=0;
-  document.getElementById('b').innerHTML=accounts.map(a=>{spent+=a.spent_yuan;
-    return `<tr><td>${a.user_sub.replace('users/anon-','').slice(0,6).toUpperCase()}</td><td>${a.balance_suanli}</td><td>${a.granted_suanli}</td><td>${a.spent_suanli}</td><td>${a.spent_yuan}</td></tr>`}).join('');
-  document.getElementById('sum').textContent=`共 ${accounts.length} 账户 · 总消费 ¥${spent.toFixed(2)}`;
+const TKEY = 'vd_admin_token';            // shared with the rest of /admin — token carries over
+let TOKEN = localStorage.getItem(TKEY) || '';
+// $ / esc come from /voicedrop/shared.js
+const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
+
+async function load(){
+  $('#tableWrap').innerHTML = '<div class="empty-state"><span class="spin"></span> 读取中…</div>';
+  $('#cards').innerHTML=''; $('#sum').textContent='';
+  let accounts;
+  try {
+    const r = await fetch('https://jianshuo.dev/agent/usage/admin/accounts', { headers:{ Authorization:`Bearer ${TOKEN}` }});
+    if(r.status===401 || r.status===403){ logout('token 无效'); return; }
+    if(!r.ok) throw new Error('加载失败 '+r.status);
+    accounts = (await r.json()).accounts || [];
+  } catch(e){
+    $('#tableWrap').innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; return;
+  }
+
+  // biggest spenders first
+  accounts.sort((a,b)=> (b.spent_suanli||0) - (a.spent_suanli||0));
+  const totSpentY = accounts.reduce((s,a)=> s + (a.spent_yuan||0), 0);
+  const totBal    = accounts.reduce((s,a)=> s + (a.balance_suanli||0), 0);
+
+  $('#updated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+  const cards = [
+    ['', accounts.length, '账户'],
+    ['spent', '¥'+totSpentY.toFixed(2), '总消费'],
+    ['bal', Math.round(totBal).toLocaleString(), '总余额(算力)'],
+  ];
+  for(const [c,n,l] of cards)
+    $('#cards').append(el('div','card '+c, `<div class="n">${n}</div><div class="l">${l}</div>`));
+
+  if(!accounts.length){ $('#tableWrap').innerHTML='<div class="empty-state">还没有账户。</div>'; return; }
+
+  const rows = accounts.map(a=>{
+    const who = a.user_sub.replace('users/anon-','').replace(/\/$/,'').slice(0,8).toUpperCase();
+    return `<tr>
+      <td>${esc(who)}</td>
+      <td class="bal">${fmt(a.balance_suanli)}</td>
+      <td>${fmt(a.granted_suanli)}</td>
+      <td class="spent">${fmt(a.spent_suanli)}</td>
+      <td>¥${(a.spent_yuan||0).toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+  $('#tableWrap').innerHTML = `<table>
+    <thead><tr><th>账户</th><th>余额(算力)</th><th>累计获得</th><th>累计消费</th><th>消费(¥)</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+  $('#sum').textContent = `共 ${accounts.length} 账户 · 累计消费 ¥${totSpentY.toFixed(2)}`;
 }
+function fmt(n){ return (n==null?0:n).toLocaleString(undefined,{maximumFractionDigits:1}); }
+
+// ---- gate / boot (mirrors index/llm/mine) ----
+function showGate(msg){ $('#app').hidden=true; $('#gate').hidden=false; $('#gateErr').textContent=msg||''; $('#tok').focus(); }
+function logout(msg){ TOKEN=''; localStorage.removeItem(TKEY); showGate(msg); }
+function enter(){
+  const v=$('#tok').value.trim();
+  if(!v){ $('#gateErr').textContent='请输入 token'; return; }
+  TOKEN=v; localStorage.setItem(TKEY,v); $('#gate').hidden=true; $('#app').hidden=false; load();
+}
+$('#enter').onclick=enter;
+$('#tok').addEventListener('keydown',e=>{ if(e.key==='Enter')enter(); });
+$('#refresh').onclick=load;
+$('#logout').onclick=()=>logout();
+
+if(TOKEN){ $('#app').hidden=false; load(); } else { showGate(); }
 </script>
+</body>
+</html>
