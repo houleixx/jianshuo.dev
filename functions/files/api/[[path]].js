@@ -296,7 +296,12 @@ export async function onRequest(context) {
     // via the same single withTopLevelArticles/resolveArticles as everywhere else,
     // so legacy raw-download clients work without an app update. Newer builds use
     // GET /articles/<stem> and never reach this branch.
-    if (request.method === 'GET' && /\/articles\/[^/]+\.json$/.test(key)) {
+    // Only the real article doc (articles/<stem>.json) gets the schema-3→top-level
+    // compat transform. EXCLUDE sidecars that also live under articles/ and end in
+    // .json (e.g. the resumable-ASR task sidecar <stem>.asr.json) — those must be
+    // served RAW, never run through readArticleDoc/migrateToV3 (which would wrap them
+    // in a misleading {head,versions,articles} shape).
+    if (request.method === 'GET' && /\/articles\/[^/]+\.json$/.test(key) && !key.endsWith('.asr.json')) {
       const doc = await readArticleDoc(env, key);
       if (doc) return json(withTopLevelArticles(doc));
     }
