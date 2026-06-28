@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>VoiceDrop · 举报审核</title>
+<link rel="stylesheet" href="./theme.css"/>
+<style>
+.wrap{max-width:760px;margin:0 auto;padding:24px 18px 80px}
+.lead{color:var(--muted);font-size:.9rem;margin:0 0 18px}
+.rep{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;
+  margin-bottom:14px;box-shadow:var(--shadow)}
+.rep .rtitle{font-weight:680;font-size:1.05rem;color:var(--ink);margin:0 0 2px}
+.rep .rmeta{font-size:.78rem;color:var(--muted);margin-bottom:10px}
+.rep .rbody{white-space:pre-wrap;font-size:.9rem;line-height:1.7;color:var(--bodyInk,#4A443C);
+  background:#fbf8f2;border:1px solid var(--line2);border-radius:10px;padding:11px 13px;max-height:200px;overflow:auto}
+.rep .gone{color:var(--warn);font-size:.88rem}
+.rep .acts{display:flex;gap:10px;margin-top:12px}
+.btn.danger{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger:hover{filter:brightness(1.04)}
+.pill.rep{background:var(--warn-bg);color:var(--warn);font-size:.74rem;padding:2px 9px;border-radius:999px}
+.empty-state{text-align:center;color:var(--muted);padding:50px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="gate" hidden>
+    <h1>举报审核</h1>
+    <p>输入 master token 审核被举报的社区内容。token 只存在本机浏览器，不上传。</p>
+    <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+    <div class="err" id="gateErr"></div>
+    <button class="btn primary" id="enter">进入</button>
+  </div>
+
+  <div id="app" hidden>
+    <header class="top">
+      <h1>举报审核</h1>
+      <span class="tag" id="updated"></span>
+      <span class="grow"></span>
+      <button class="btn" id="refresh">刷新</button>
+      <a class="btn" href="./">← 控制台</a>
+      <button class="btn" id="logout">退出</button>
+    </header>
+    <p class="lead">被举报的内容已<b>自动从社区下架</b>，在这里等你处理。删除 = 永久移除；恢复 = 重新上架（举报无效）。建议 24 小时内处理。</p>
+    <div id="list"></div>
+  </div>
+
+</div>
+
+<script src="/voicedrop/shared.js"></script>
+<script>
+const API = '/files/api';
+const TKEY = 'vd_admin_token';
+let TOKEN = localStorage.getItem(TKEY) || '';
+const el = (t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+
+async function load(){
+  $('#list').innerHTML = '<div class="empty-state"><span class="spin"></span> 读取中…</div>';
+  let reports;
+  try {
+    const r = await fetch(`${API}/community/reports`, { headers:{ Authorization:`Bearer ${TOKEN}` }});
+    if(r.status===401||r.status===403){ logout('token 无效'); return; }
+    if(!r.ok) throw new Error('加载失败 '+r.status);
+    reports = (await r.json()).reports || [];
+  } catch(e){ $('#list').innerHTML=`<div class="empty-state">${esc(e.message)}</div>`; return; }
+
+  $('#updated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+  if(!reports.length){ $('#list').innerHTML='<div class="empty-state">没有待处理的举报 🎉</div>'; return; }
+
+  const box = $('#list'); box.innerHTML='';
+  for(const rp of reports){
+    const card = el('div','rep');
+    const when = rp.firstAt ? new Date(rp.firstAt).toLocaleString('zh-CN') : '';
+    card.innerHTML = `
+      <div class="rtitle">${esc(rp.title || (rp.gone ? '（原文已删除）' : '无题'))}</div>
+      <div class="rmeta">作者 ${esc(rp.author||'匿名')} · <span class="pill rep">${rp.reports} 次举报</span> · ${esc(when)}</div>
+      ${rp.gone ? '<div class="gone">原帖/原文已不存在，可直接清除此举报记录。</div>'
+                : `<div class="rbody">${esc(rp.body||'（无正文）')}</div>`}
+      <div class="acts">
+        <button class="btn danger" data-act="remove">删除（永久移除）</button>
+        <button class="btn" data-act="restore">恢复上架</button>
+      </div>`;
+    card.querySelector('[data-act="remove"]').onclick = ()=>resolve(rp.shareId, 'remove', card);
+    card.querySelector('[data-act="restore"]').onclick = ()=>resolve(rp.shareId, 'restore', card);
+    box.append(card);
+  }
+}
+
+async function resolve(shareId, action, card){
+  if(action==='remove' && !confirm('永久删除这条社区内容？不可恢复。')) return;
+  card.style.opacity = .5;
+  try {
+    const r = await fetch(`${API}/community/resolve/${encodeURIComponent(shareId)}`, {
+      method:'POST', headers:{ Authorization:`Bearer ${TOKEN}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    if(!r.ok) throw new Error(''+r.status);
+    card.remove();
+    if(!$('#list').children.length) $('#list').innerHTML='<div class="empty-state">没有待处理的举报 🎉</div>';
+  } catch(e){ card.style.opacity=1; alert('操作失败：'+e.message); }
+}
+
+function showGate(msg){ $('#app').hidden=true; $('#gate').hidden=false; $('#gateErr').textContent=msg||''; $('#tok').focus(); }
+function logout(msg){ TOKEN=''; localStorage.removeItem(TKEY); showGate(msg); }
+function enter(){ const v=$('#tok').value.trim(); if(!v){ $('#gateErr').textContent='请输入 token'; return; }
+  TOKEN=v; localStorage.setItem(TKEY,v); $('#gate').hidden=true; $('#app').hidden=false; load(); }
+$('#enter').onclick=enter;
+$('#tok').addEventListener('keydown',e=>{ if(e.key==='Enter')enter(); });
+$('#refresh').onclick=load;
+$('#logout').onclick=()=>logout();
+
+if(TOKEN){ $('#app').hidden=false; load(); } else { showGate(); }
+</script>
+</body>
+</html>
