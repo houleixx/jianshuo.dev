@@ -6,10 +6,11 @@
 
 import { runAgentLoop } from "./loop.js";
 import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
+import { locatorTable } from "./linenum.js";
 
 const TERMINAL = ["write_article", "write_style", "publish_wechat", "share_to_community"];
 
-export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], system, history = [], callClaude }) {
+export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, system, history = [], callClaude }) {
   const obj = await env.FILES.get(articleKey);
   if (!obj) return { ok: false, reply: "", article: null, hadError: true };
   const doc = JSON.parse(await obj.text());
@@ -43,7 +44,24 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
       "",
     );
   }
-  varLines.push("这次的语音指令：", instruction);
+  // 行号对照：number the article the user is LOOKING AT exactly the way the iOS app
+  // does, and hand the model that table so it RESOLVES「第N行 / 图M」by reading the
+  // number — never by counting lines itself (where the号 used to drift from what the
+  // user saw). The full body above stays clean for faithful rewriting.
+  const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
+  const target = articles[idx];
+  if (target) {
+    const table = locatorTable(target.body || "");
+    varLines.push(
+      "",
+      articles.length > 1
+        ? `行号对照（用户此刻在看第 ${idx + 1} 篇「${target.title || "无题"}」，他说的「第N行 / 图M」都指这一篇。这就是他屏幕上看到的行号，严格按它定位，别自己数行）：`
+        : "行号对照（这就是用户按住说话时屏幕上看到的行号，他说的「第N行 / 图M」严格按它定位，别自己数行）：",
+      table || "（正文为空）",
+      "定位用完即可——改完正文里不要写行号 / 图号，[[photo:…]] 标记原样保留。",
+    );
+  }
+  varLines.push("", "这次的语音指令：", instruction);
 
   const userContent = [
     { type: "text", text: stableText },

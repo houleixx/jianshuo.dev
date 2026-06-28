@@ -21,7 +21,8 @@ export const QUEUE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS queue (
   reply TEXT,
   error TEXT,
   created_at INTEGER,
-  updated_at INTEGER
+  updated_at INTEGER,
+  article_index INTEGER
 )`;
 
 // In-memory store — the reference implementation + the test backend.
@@ -29,9 +30,9 @@ export function makeMemStore(now = () => Date.now()) {
   const rows = new Map(); // id -> row
   let maxSeq = 0;
   return {
-    insert({ id, text, images }) {
+    insert({ id, text, images, article_index }) {
       const t = now();
-      const row = { id, seq: ++maxSeq, text, images: images ?? null, status: "pending", reply: null, error: null, created_at: t, updated_at: t };
+      const row = { id, seq: ++maxSeq, text, images: images ?? null, status: "pending", reply: null, error: null, created_at: t, updated_at: t, article_index: article_index ?? null };
       rows.set(id, row);
       return { ...row };
     },
@@ -53,11 +54,11 @@ export function makeMemStore(now = () => Date.now()) {
 // makeMemStore. `sql` must be bound to the DO (e.g. this.sql.bind(this)).
 export function makeSqlStore(sql, now = () => Date.now()) {
   return {
-    insert({ id, text, images }) {
+    insert({ id, text, images, article_index }) {
       const seq = (sql`SELECT COALESCE(MAX(seq),0) AS m FROM queue`[0]?.m || 0) + 1;
       const t = now();
-      sql`INSERT INTO queue (id, seq, text, images, status, reply, error, created_at, updated_at)
-          VALUES (${id}, ${seq}, ${text}, ${images ?? null}, 'pending', NULL, NULL, ${t}, ${t})`;
+      sql`INSERT INTO queue (id, seq, text, images, status, reply, error, created_at, updated_at, article_index)
+          VALUES (${id}, ${seq}, ${text}, ${images ?? null}, 'pending', NULL, NULL, ${t}, ${t}, ${article_index ?? null})`;
       return this.get(id);
     },
     get(id) { return sql`SELECT * FROM queue WHERE id = ${id}`[0] || null; },
@@ -83,10 +84,10 @@ export class ArticleQueue {
 
   // Idempotent enqueue. New id → inserted (caller arms a drain). Known id →
   // 'replay' with the existing row (caller re-pushes its cached result).
-  async submit({ id, text, images }) {
+  async submit({ id, text, images, article_index }) {
     const existing = this.store.get(id);
     if (existing) return { kind: "replay", row: existing };
-    this.store.insert({ id, text, images: images ? JSON.stringify(images) : null });
+    this.store.insert({ id, text, images: images ? JSON.stringify(images) : null, article_index });
     return { kind: "enqueued" };
   }
 

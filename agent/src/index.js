@@ -59,10 +59,10 @@ const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面
 - 中英文之间留一个空格（盘古之白）。
 - 正文里可能有形如 [[photo:photos/2026-…/….jpg]] 的照片标记，方括号里就是这张照片的 key，标明配图位置。改写时默认原样保留每一个标记（连同里面的 key），放在和原来意思相符的段落附近；不要新增、不要改动标记里的 key。
 
-用户会用「行号 / 图号」指位置（app 在按住说话时把这些号浮在正文左边距和图片角上）：
-- 「第N行」= 正文里第 N 个非空段落（按真实换行的段落顺序，从 1 数起）。例：「把第3行改简洁点」= 改写第 3 段。
-- 「图N」= 正文里第 N 个出现的 [[photo:…]] 照片标记（按出现顺序从 1 数起）。例：「删掉图2」= 删掉正文里第 2 个出现的那个照片标记，其余标记保持不动、不要改其它图的位置或编号。
-- 行号 / 图号都按用户看到的「改写前原文」来定位；改完不用自己标号，正常输出正文即可。
+用户会用「行号 / 图号」指位置（app 在按住说话时把这些号浮在正文左边距和图片角上）。下面的用户消息里会附一份「行号对照」，把用户此刻在看的这篇正文逐行标好了号——这就是他屏幕上看到的号，请严格按对照表定位，不要自己重新数行：
+- 「第N行」= 对照表里标着「第N行」的那一行（正文按真实换行拆出的第 N 个非空行；照片标记 [[photo:…]] 自己单独成行，也占一个行号，所以行号会跨过图片连续往后累加）。例：「把第3行改简洁点」= 改写对照表里第 3 行那段。
+- 「图N」= 第 N 个 [[photo:…]] 照片标记；同一张图在对照表里既有「第N行」也有「图N」，两种说法都指向它。例：「删掉图2」= 删掉第 2 个照片标记，其余标记和别的图号都不动。
+- 一律按用户看到的「改写前原文」（即对照表）定位；改完正文里不要写行号 / 图号，正常输出，[[photo:…]] 标记原样保留。
 
 只输出一个 JSON 对象：{"articles": [{"title": "标题", "body": "正文 markdown"}, ...]}，不要输出任何其它文字。`;
 
@@ -90,6 +90,8 @@ export class ArticleEditor extends Agent {
     )`;
     try { this.sql`ALTER TABLE history ADD COLUMN reply TEXT`; } catch (_) {}
     this.sql([QUEUE_TABLE_SQL]); // CREATE TABLE IF NOT EXISTS queue (...)
+    // Migrate queue rows created before article_index existed (locator targeting).
+    try { this.sql`ALTER TABLE queue ADD COLUMN article_index INTEGER`; } catch (_) {}
     // Recover after hibernation/eviction: reset any leftover 'running' row and
     // drain whatever is pending — even with no client connected.
     if (this._queue.recover()) this.schedule(0, "drainQueue");
@@ -163,9 +165,10 @@ export class ArticleEditor extends Agent {
     } catch (_) {}
 
     const images = row.images ? (() => { try { return JSON.parse(row.images); } catch { return []; } })() : [];
+    const articleIndex = Number.isInteger(row.article_index) ? row.article_index : 0;
     const res = await runEditTurn({
       env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev",
-      editId: row.id, instruction: row.text, images, system: SYSTEM, history, callClaude,
+      editId: row.id, instruction: row.text, images, articleIndex, system: SYSTEM, history, callClaude,
     });
 
     // Record the turn so the next edit replays it as conversation context.
@@ -185,8 +188,11 @@ export class ArticleEditor extends Agent {
     // gracefully, no dedup but never worse than before).
     const id = (typeof msg.id === "string" && msg.id) ? msg.id : `srv-${Date.now()}-${rand6()}`;
     const images = Array.isArray(msg.images) ? msg.images.filter((i) => i && i.data && i.key) : [];
+    // Which article the user is looking at — so the locator table numbers THAT one
+    // (multi-article docs renumber 第1行 per article). Old apps omit it → 0.
+    const article_index = Number.isInteger(msg.articleIndex) && msg.articleIndex >= 0 ? msg.articleIndex : 0;
 
-    const r = await this._queue.submit({ id, text: instruction, images });
+    const r = await this._queue.submit({ id, text: instruction, images, article_index });
     if (r.kind === "replay") {
       // Already known — re-push its cached result to THIS caller, never re-run.
       const row = r.row;
