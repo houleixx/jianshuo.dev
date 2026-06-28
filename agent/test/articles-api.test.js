@@ -201,17 +201,42 @@ describe("PUT /articles/<sub>/<stem>/empty", () => {
   });
 });
 
+describe("PUT /articles/<sub>/<stem>/blocked", () => {
+  it("stores the blocked marker with reason", async () => {
+    const context = ctx("PUT", "u/s1/blocked", { body: { reason: "no-credit" } });
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(200);
+    const stored = JSON.parse(context.env.FILES._store.get("users/u/articles/s1.blocked"));
+    expect(stored.status).toBe("blocked");
+    expect(stored.reason).toBe("no-credit");
+  });
+
+  it("defaults reason to no-credit when body is missing", async () => {
+    const context = ctx("PUT", "u/s1/blocked");
+    context.request = new Request("https://jianshuo.dev/files/api/articles/u/s1/blocked", {
+      method: "PUT",
+      headers: { Authorization: "Bearer admin" },
+    });
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(200);
+    const stored = JSON.parse(context.env.FILES._store.get("users/u/articles/s1.blocked"));
+    expect(stored.reason).toBe("no-credit");
+  });
+});
+
 describe("DELETE /articles/<sub>/<stem>", () => {
-  it("deletes .json + .srt + .empty", async () => {
+  it("deletes .json + .srt + .empty + .blocked", async () => {
     const context = ctx("DELETE", "u/s1");
     seedArticle(context.env, "s1");
     context.env.FILES._store.set("users/u/articles/s1.srt", "srt");
     context.env.FILES._store.set("users/u/articles/s1.empty", "{}");
+    context.env.FILES._store.set("users/u/articles/s1.blocked", "{}");
     const resp = await onRequest(context);
     expect(resp.status).toBe(200);
     expect(context.env.FILES._store.has("users/u/articles/s1.json")).toBe(false);
     expect(context.env.FILES._store.has("users/u/articles/s1.srt")).toBe(false);
     expect(context.env.FILES._store.has("users/u/articles/s1.empty")).toBe(false);
+    expect(context.env.FILES._store.has("users/u/articles/s1.blocked")).toBe(false);
   });
 });
 

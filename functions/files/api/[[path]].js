@@ -725,6 +725,14 @@ export async function onRequest(context) {
       return json({ ok: true });
     }
 
+    // PUT /articles/<stem>/blocked — mark no-credit
+    if (request.method === 'PUT' && subaction === 'blocked') {
+      const blockedKey = `${articleScope}articles/${stem}.blocked`;
+      let body; try { body = await request.json(); } catch { body = {}; }
+      await env.FILES.put(blockedKey, JSON.stringify({ status: 'blocked', reason: body.reason || 'no-credit' }), { httpMetadata: { contentType: 'application/json' } });
+      return json({ ok: true });
+    }
+
 // DELETE /articles/<stem> — delete article + all sidecars
     if (request.method === 'DELETE' && stem && !subaction) {
       const prefix = `${articleScope}articles/${stem}`;
@@ -732,6 +740,7 @@ export async function onRequest(context) {
         env.FILES.delete(`${prefix}.json`),
         env.FILES.delete(`${prefix}.srt`),
         env.FILES.delete(`${prefix}.empty`),
+        env.FILES.delete(`${prefix}.blocked`),
       ]);
       return json({ ok: true });
     }
