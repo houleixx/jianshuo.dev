@@ -21,6 +21,7 @@
 
 import { readArticleDoc, writeArticleDoc, setHead, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken } from "../../lib/auth.js";
+import { checkArticlesShareable } from "../../lib/moderation.js";
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -464,12 +465,14 @@ export async function onRequest(context) {
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return json({ error: 'bad article' }, 400); }
     const articles = resolveArticles(doc);
     if (!articles.length) return json({ error: 'empty article' }, 400);
-    // Apple 1.2 filter: content is moderated ONCE at generation (miner stamps
-    // doc.moderation). Here we only READ that verdict — a flagged article can never
-    // be published to the shared community.
+    // Apple 1.2 filter (proactive, zero-cost): scan the article for objectionable
+    // keywords at SHARE time — flagged content can never be published to the public
+    // community. (A legacy doc.moderation.flagged from the old LLM pass is also honored.)
     if (doc.moderation && doc.moderation.flagged) {
       return json({ error: 'content_flagged', categories: doc.moderation.categories || [] }, 403);
     }
+    const kw = await checkArticlesShareable(articles, env);
+    if (kw.flagged) return json({ error: 'content_flagged', term: kw.term }, 403);
     let author = '匿名';
     const md = await env.FILES.get(scope + 'CLAUDE.md');
     if (md) { const m = (await md.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/); if (m && m[1].trim()) author = m[1].trim(); }
