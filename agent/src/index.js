@@ -191,6 +191,19 @@ export class ArticleEditor extends Agent {
       editId: row.id, instruction: row.text, images, articleIndex, system: SYSTEM, history, callClaude,
     });
 
+    // Log this turn's tool executions (name + input + result) — the terminal
+    // short-circuit means a successful edit/write/publish never reaches another
+    // logged Claude call, so this is the ONLY record of what the instruction did.
+    // Same turn_id as the LLM steps so the admin shows it under the same turn.
+    if (res.toolRuns && res.toolRuns.length) {
+      await writeLlmLog(this.env, {
+        ts: Date.now(), source: "agent", user_scope: scope, model: editModel,
+        kind: "tool_runs", turn_id: turnId, step: 900,
+        ok: res.toolRuns.every((t) => t.ok), tool_runs: res.toolRuns,
+        meta: { stem, instruction: row.text },
+      });
+    }
+
     // Record the turn so the next edit replays it as conversation context.
     const replyText = res.reply || (res.hadError ? "操作没完成" : "（已处理）");
     this.sql`INSERT INTO history (instruction, reply, created_at) VALUES (${row.text}, ${replyText}, ${Date.now()})`;

@@ -96,5 +96,5 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   const didAct = (result.calledTools || []).some((n) => TERMINAL.includes(n));
   const reply = summary || (result.hadError ? "操作没完成" : (didAct ? "改好了" : ""));
 
-  return { ok: !result.hadError, reply, article: withTopLevelArticles(finalDoc), hadError: !!result.hadError };
+  return { ok: !result.hadError, reply, article: withTopLevelArticles(finalDoc), hadError: !!result.hadError, toolRuns: result.toolRuns || [] };
 }

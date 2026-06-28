@@ -69,6 +69,9 @@ select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;backgroun
 .badge.agent{background:var(--agent-bg);color:var(--agent)}
 .badge.ok{background:var(--accent-bg);color:var(--accent)}
 .badge.err{background:var(--err-bg);color:var(--err)}
+.badge.tool{background:var(--idle-bg);color:var(--idle)}
+.trow .name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem}
+.tres .role{color:var(--mine)} .tres.bad .role{color:var(--err)}
 .row .tok{font-size:.72rem;color:var(--muted);flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .row .cost{font-size:.72rem;color:var(--accent);flex:none;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-width:56px;text-align:right}
 .grphd .gcost{float:right;color:var(--accent);font-weight:700}
@@ -151,12 +154,12 @@ async function api(path){
 
 function fmtTime(ts){ const d=new Date(ts); const p=(n)=>String(n).padStart(2,'0');
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
-// REAL send time: `ts` is when the record was written (≈ when the LLM call
-// COMPLETED — callers don't pass a ts, so writeLlmLog falls back to Date.now()
-// after the response). Subtracting latency recovers when the request was
-// actually SENT. Order everything by this, never by the R2 key (which embeds the
-// completion ms + a random suffix → completion order, not send order).
-function sentAt(r){ return (r && r.ts || 0) - (r && r.latency_ms || 0); }
+// REAL send time. Both sources now stamp `ts` at the moment the request is SENT
+// (agent: before the API call; miner: tLlm before generateArticles), so order by
+// ts — NEVER by the R2 key (key embeds ts + a random suffix → equal-ms calls would
+// scramble). Legacy miner logs written before this stamped ts at completion, so
+// they're off by the call latency — a harmless few seconds for historical review.
+function sentAt(r){ return (r && r.ts) || 0; }
 function shortModel(m){ return String(m||'').replace(/^claude-/,'').replace(/-\d{8}$/,''); }
 function usageStr(u){ if(!u) return ''; const i=u.input_tokens??u.inputTokens, o=u.output_tokens??u.outputTokens;
   if(i==null&&o==null) return ''; return `${i??'?'}→${o??'?'} tok`; }
@@ -227,18 +230,30 @@ function renderList(){
     .sort((a,b)=> Math.min(...b.map(sentAt)) - Math.min(...a.map(sentAt)));
   let html='';
   for(const g of ordered){
-    const multi = g.length>1;
-    if(multi){
+    const llmSteps = g.filter((r)=>r.kind!=='tool_runs').length;  // 🔧 tool_runs rows aren't 步
+    const multi = llmSteps>1;
+    if(g.length>1){
       const turnCost = g.reduce((s,r)=> s + (costOf(r)||0), 0);
-      html += `<div class="grp"><div class="grphd">turn · ${g.length} 步 · ${esc(g[0].meta?.stem||'')}<span class="gcost">${esc(fmtUSD(turnCost))}</span></div>`;
+      html += `<div class="grp"><div class="grphd">turn · ${llmSteps} 步 · ${esc(g[0].meta?.stem||'')}<span class="gcost">${esc(fmtUSD(turnCost))}</span></div>`;
     }
     else html += `<div class="grp">`;
     for(const r of g){
       const idx = RECORDS.indexOf(r);
+      if(r.kind==='tool_runs'){
+        const runs = r.tool_runs||[];
+        const bad = runs.some((t)=>!t.ok);
+        html += `<div class="row trow" data-i="${idx}">
+          <span class="t" title="工具执行时刻">${esc(fmtTime(sentAt(r)))}</span>
+          <span class="badge tool">🔧 工具</span>
+          <span class="grow name">${esc(runs.map((t)=>t.name).join(' · ')||'(无)')}</span>
+          <span class="badge ${bad?'err':'ok'}">${bad?'有错':'ok'}</span>
+        </div>`;
+        continue;
+      }
       const okCls = r._broken?'err':(r.ok?'ok':'err');
       const okTxt = r._broken?'损坏':(r.ok?'ok':'err');
       html += `<div class="row" data-i="${idx}">
-        <span class="t" title="发送时刻（ts−latency）">${esc(fmtTime(sentAt(r)))}</span>
+        <span class="t" title="发送时刻">${esc(fmtTime(sentAt(r)))}</span>
         <span class="badge ${r.source==='mine'?'mine':'agent'}">${esc(r.source||'?')}</span>
         <span class="grow">${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
         <span class="tok">${esc(usageStr(r.response&&r.response.usage))}</span>
@@ -278,10 +293,36 @@ function msgsHtml(messages){
     <div class="role">${esc(m.role)}</div>${blocksHtml(m.content)}</div>`).join('');
 }
 
+// 🔧 a tool_runs record: the actual tools this instruction executed + their results.
+function toolRunsDetail(r){
+  const runs = r.tool_runs||[];
+  let h = `<div class="meta">
+    <span><b>🔧 工具执行</b></span>
+    ${r.meta&&r.meta.stem?`<span>${esc(r.meta.stem)}</span>`:''}
+    <span>发送 <b>${esc(new Date(sentAt(r)).toLocaleString('zh-CN'))}</b></span>
+    ${r.turn_id?`<span class="usage">turn ${esc(r.turn_id)}</span>`:''}
+  </div>`;
+  if(r.meta&&r.meta.instruction){
+    h += `<h3 class="sec">语音指令</h3><div class="msg user"><div class="tx">${esc(r.meta.instruction)}</div></div>`;
+  }
+  h += `<h3 class="sec">工具调用 · ${runs.length}</h3>`;
+  if(!runs.length) h += `<div class="empty-state">这次没有调用工具</div>`;
+  for(const t of runs){
+    h += `<div class="msg tres ${t.ok?'':'bad'}">
+      <div class="role">${esc(t.name)} ${t.ok?'✓':'✗'}${t.step!=null?` · 第${t.step}步`:''}</div>
+      <div class="blk"><div class="bt">input</div><pre class="code">${esc(JSON.stringify(t.input,null,2))}</pre></div>
+      <div class="blk"><div class="bt">result</div><pre class="code">${esc(JSON.stringify(t.result,null,2))}</pre></div>
+    </div>`;
+  }
+  h += `<details class="fold"><summary>原始 JSON（整条记录）</summary><pre class="code">${esc(JSON.stringify(r,null,2))}</pre></details>`;
+  return h;
+}
+
 function renderDetail(r){
   const d = $('#detail');
   if(!r){ d.innerHTML=`<div class="empty-state">—</div>`; return; }
   if(r._broken){ d.innerHTML=`<div class="errbox">这条日志读取失败：${esc(r._key)}</div>`; return; }
+  if(r.kind==='tool_runs'){ d.innerHTML = toolRunsDetail(r); d.scrollTop=0; return; }
   const req=r.request||{}, resp=r.response;
   const cost=costOf(r);
   let h = `<div class="meta">

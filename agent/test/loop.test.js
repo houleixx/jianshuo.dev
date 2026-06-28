@@ -72,6 +72,23 @@ describe("runAgentLoop", () => {
     expect(seen[2]).toEqual({ role: "user", content: "再简洁点" });
   });
 
+  it("captures toolRuns (input AND result) even on the terminal short-circuit", async () => {
+    // The fast path ends the turn after a successful terminal tool WITHOUT another
+    // Claude call, so the tool's result lands in no logged request — toolRuns is the
+    // only capture. This guards the admin's "what did this instruction do" view.
+    const env = fakeEnv({ "users/u/articles/cur.json": JSON.stringify({ articles: [{ title: "C", body: "c" }] }) });
+    globalThis.fetch = fakeFetch({
+      "PUT https://x/files/api/articles/cur": () => ({ ok: true, body: { ok: true, version: 2 } }),
+    });
+    const script = [asst(text("改好了"), toolUse("write_article", { articles: [{ title: "C2", body: "c2" }] }))];
+    let i = 0;
+    const r = await runAgentLoop({ callClaude: async () => script[i++], ctx: ctx(env), system: "S", userText: "go" });
+    expect(i).toBe(1); // terminal short-circuit — no second Claude call
+    expect(r.toolRuns).toEqual([
+      { step: 0, name: "write_article", input: { articles: [{ title: "C2", body: "c2" }] }, result: { ok: true, count: 1 }, ok: true },
+    ]);
+  });
+
   it("stops at maxSteps even if Claude never yields", async () => {
     const env = fakeEnv({ "users/u/articles/cur.json": JSON.stringify({ articles: [{ title: "C", body: "c" }] }) });
     const callClaude = async () => asst(toolUse("read_article", { stem: "cur" }));

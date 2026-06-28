@@ -22,6 +22,11 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
   // prepended so the model has cross-turn context; the current turn follows.
   const messages = [...history, { role: "user", content: userContent }];
   const calledTools = [];
+  // Every tool the model actually ran, with its input AND result. The terminal
+  // short-circuit (below) ends the turn WITHOUT another Claude call, so a
+  // terminal tool's result never lands in any logged request — this is the only
+  // place it's captured, so the admin can show what each instruction actually did.
+  const toolRuns = [];
   let finalText = "";
   let hadError = false;
   let steps = 0;
@@ -36,6 +41,7 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
     for (const tu of toolUses) {
       calledTools.push(tu.name);
       const result = await runTool(tu.name, tu.input, ctx);
+      toolRuns.push({ step: steps - 1, name: tu.name, input: tu.input, result, ok: !(result && result.error) });
       if (result && result.error) hadError = true;
       if (result && result.ok === true && TERMINAL_TOOLS.has(tu.name)) terminalDone = true;
       results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) });
@@ -47,5 +53,5 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
     // the failure back and can react.
     if (terminalDone && !hadError) { finalText = text; break; }
   }
-  return { calledTools, finalText, steps, hadError };
+  return { calledTools, toolRuns, finalText, steps, hadError };
 }

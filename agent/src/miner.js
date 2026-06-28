@@ -746,7 +746,7 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       log(`LLM 开始${force ? " (force)" : ""}`, { step });
       try {
         const r = await generateArticles(transcript, force ? "" : claudeMd, force ? null : (photos.length ? photos : null), force, env, modelCfg);
-        await writeLlmLog(env, { source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
         // Debit Claude cost (best-effort)
         try {
           if (env.USAGE) {
@@ -758,7 +758,7 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
         return r.articles;
       } catch (e) {
-        await writeLlmLog(env, { source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
+        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
         throw e;
       }
     };
@@ -849,7 +849,7 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
       log(`LLM 开始${force ? " (force)" : ""}`, { step });
       try {
         const r = await generateArticles(text, force ? "" : claudeMd, null, force, env, modelCfg);
-        await writeLlmLog(env, { source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
         // Debit Claude cost (best-effort)
         try {
           if (env.USAGE) {
@@ -861,7 +861,7 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
         log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
         return r.articles;
       } catch (e) {
-        await writeLlmLog(env, { source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
+        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
         throw e;
       }
     };
