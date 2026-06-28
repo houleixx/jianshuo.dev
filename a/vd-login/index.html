@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="没有密码、身份就是一串密钥——VoiceDrop 用「6 位定位 + 4 位验证 + 端到端加密」让另一台设备安全登录老账号。设备配对登录的设计与原理。">
+<title>新设备怎么登录老账号 · VoiceDrop 设备配对登录 · jianshuo.dev</title>
+<meta property="og:title" content="新设备怎么登录老账号 —— VoiceDrop 设备配对登录">
+<meta property="og:description" content="没有密码、没有中心服务器替你签发 token，身份就是一串密钥。那怎么在另一台设备上登录？答案是把密钥安全地「搬」过去。">
+<meta property="og:type" content="article">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#6C5CE7;--accent2:#ef7d54}
+  body{background:radial-gradient(ellipse 120% 80% at 50% -10%,#f1edfd,var(--bg));color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;line-height:1.7}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 28px 90px}
+
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px}
+  .brand{display:flex;align-items:center;gap:11px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.2rem;color:inherit;text-decoration:none}
+  .brand .blob{width:32px;height:32px;border-radius:42% 58% 60% 40%/45% 45% 55% 55%;background:linear-gradient(135deg,#a99bf3,var(--accent));box-shadow:0 6px 16px rgba(108,92,231,.4)}
+  header nav a{font-weight:700;font-size:.82rem;color:var(--soft);text-decoration:none;padding:8px 15px;border-radius:999px;transition:all .2s}
+  header nav a:hover{background:var(--card);color:var(--ink);box-shadow:0 4px 12px rgba(74,63,53,.08)}
+
+  .pill{display:inline-block;background:#fff;border-radius:999px;padding:7px 17px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:.78rem;color:var(--accent);box-shadow:0 6px 16px rgba(74,63,53,.06);margin-bottom:20px}
+  h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(1.9rem,5vw,2.7rem);line-height:1.12;letter-spacing:-.02em}
+  .lede{margin-top:18px;font-size:1.12rem;color:#766857;font-weight:600}
+
+  h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.45rem;letter-spacing:-.01em;margin:46px 0 14px;display:flex;align-items:center;gap:10px}
+  h2 .n{flex:none;width:30px;height:30px;border-radius:9px;background:var(--accent);color:#fff;font-size:.95rem;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 12px rgba(108,92,231,.32)}
+  p{margin:13px 0;font-size:1.02rem}
+  .soft{color:#82735f}
+  b,strong{color:#2f2820}
+  code{font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:.86em;background:#f3eee4;border:1px solid #e7ddcc;border-radius:6px;padding:1px 6px;color:#6b4f2a}
+  a.inl{color:var(--accent);text-decoration:none;border-bottom:1.5px solid #d8d1f7}
+
+  .card{background:var(--card);border:1.5px solid rgba(255,255,255,.8);border-radius:22px;padding:24px 26px;box-shadow:0 10px 30px rgba(74,63,53,.07);margin:22px 0}
+  .note{background:#f3f0fe;border:1.5px solid #e3ddfb;border-radius:18px;padding:18px 22px;margin:22px 0;font-size:.97rem;color:#4c4470}
+  .warn{background:#fdeee6;border:1.5px solid #f7d8c5;border-radius:18px;padding:18px 22px;margin:22px 0;font-size:.97rem;color:#8a5333}
+  .warn b{color:#a8421a}
+
+  /* flow diagram */
+  .flow{background:var(--card);border:1.5px solid rgba(255,255,255,.8);border-radius:22px;padding:26px 22px;box-shadow:0 10px 30px rgba(74,63,53,.07);margin:26px 0;overflow:hidden}
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center;font-family:'Quicksand',sans-serif;font-weight:700;font-size:.82rem;color:var(--soft);margin-bottom:6px}
+  .cols .me{color:var(--accent)} .cols .srv{color:#b08328} .cols .ph{color:#2e9268}
+  .step{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:center;margin:9px 0}
+  .box{border-radius:13px;padding:11px 12px;font-size:.85rem;font-weight:600;line-height:1.4}
+  .box.me{background:#ece9fc;color:#4a3f8a;border:1.4px solid #d8d1f7}
+  .box.srv{background:#fbf2dc;color:#7a5e1e;border:1.4px solid #f0e2bd}
+  .box.ph{background:#e3f6ec;color:#246b4c;border:1.4px solid #c6ebd6}
+  .box.empty{background:transparent;border:none}
+  .arrow{font-size:.78rem;color:var(--soft);font-weight:700;text-align:center;margin:-2px 0 4px;font-family:'Quicksand',sans-serif}
+  @media(max-width:560px){.flow{font-size:.92em}.box{padding:9px 9px;font-size:.78rem}}
+
+  footer{text-align:center;margin-top:54px;font-size:.78rem;color:var(--soft);font-weight:600}
+  footer a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="brand" href="/a/"><span class="blob"></span>jianshuo.dev/a</a>
+    <nav><a href="/a/">← 归档</a></nav>
+  </header>
+
+  <span class="pill">🔐 VoiceDrop · 设备配对登录</span>
+  <h1>新设备怎么登录老账号</h1>
+  <p class="lede">VoiceDrop 这个录音 app 不用注册、没有密码——你的身份，就是手机钥匙串里的一串密钥。那么换一台设备、或者想让电脑上的脚本以「你」的身份干活，要怎么登录？</p>
+
+  <h2><span class="n">1</span>先说清楚难在哪</h2>
+  <p>大多数工具的「登录」背后都有一个<b>中心服务器</b>：它认得你（浏览器里有会话），你点一下「授权」，它就<b>替你的账号签发一个 token</b> 发给新设备。Claude Code 的 <code>/login</code>、<code>gh auth login</code> 都是这套。</p>
+  <p>VoiceDrop 偏偏没有这个中心权威。它的匿名身份是这样算出来的：</p>
+  <div class="card"><code>你的空间 = users/anon-&lt;sha256(密钥)&gt;/</code><p class="soft" style="margin:10px 0 0">服务器<b>根本不存这串密钥</b>——你每次请求带上它，服务器当场哈希一下，就知道该开哪个空间。<b>持有密钥 = 就是你。</b></p></div>
+  <p>这带来一个硬约束：服务器<b>没法凭空签发</b>一个指向你账号的新 token（那等于要破解 sha256）。所以「在新设备上登录」，本质只有一条路——<b>把老设备上那串密钥，安全地搬到新设备</b>。</p>
+
+  <h2><span class="n">2</span>三段式：6 位定位 + 4 位验证 + 实时推送</h2>
+  <p>怎么「安全地搬」？用一套设备配对握手。新设备只知道一个公开的 6 位短码，剩下的全靠老设备在场证明 + 端到端加密。</p>
+
+  <div class="flow">
+    <div class="cols"><div class="me">📟 新设备</div><div class="srv">☁️ 服务器</div><div class="ph">📱 老设备（手机）</div></div>
+
+    <div class="arrow">① 输入手机上看到的 6 位短码 →</div>
+    <div class="step"><div class="box me">输入 6 位短码<br>+ 生成临时密钥对</div><div class="box srv">按前缀找到匹配账号</div><div class="box empty"></div></div>
+
+    <div class="arrow">② 服务器把一个 4 位验证码推给老设备 →</div>
+    <div class="step"><div class="box empty"></div><div class="box srv">生成 4 位码<br>经长链接推送</div><div class="box ph">弹卡：验证码 <b>1234</b></div></div>
+
+    <div class="arrow">③ 你把手机上的 4 位码，输进新设备 ←（人眼搬运）</div>
+    <div class="step"><div class="box me">输入 1234</div><div class="box srv">校验 ✓<br>通知老设备放行</div><div class="box ph">收到「放行」信号</div></div>
+
+    <div class="arrow">④ 老设备把密钥加密后交出，服务器只过密文 ←</div>
+    <div class="step"><div class="box me">解密 → 拿到密钥<br><b>登录完成 ✓</b></div><div class="box srv">中转密文<br>（看不到明文）</div><div class="box ph">用新设备的公钥<br>加密密钥</div></div>
+  </div>
+
+  <p>4 位码只会出现在<b>真主人那台已登录的设备</b>上（手机弹卡）。别人就算猜中你的 6 位短码，也看不到这 4 位——它压根不发给他。</p>
+
+  <h2><span class="n">3</span>为什么这样是安全的</h2>
+  <div class="card">
+    <p style="margin-top:0">🔢 <b>4 位码：5 次机会 / 2 分钟过期。</b>暴力破解约 5/10000，而且——真主人会在自己手机上<b>看到这次登录尝试</b>。被攻击是看得见的。</p>
+    <p>🔒 <b>密钥全程端到端加密</b>（X25519 + AES-GCM）。新设备先发一个临时公钥，老设备用它加密密钥，<b>服务器只中转密文、从不解密、不留存</b>。</p>
+    <p style="margin-bottom:0">🛂 <b>只有持有账号的设备能放行。</b>服务器强制「放行者的身份 = 被登录的账号」——别的设备替不了你点这个头。</p>
+  </div>
+
+  <h2><span class="n">4</span>顺手把终端也登录了：<code>/vd-login</code></h2>
+  <p>同一套握手，新设备那一半换成<b>命令行</b>就行——服务器<b>一行都不用改</b>。于是有了一个小工具，让电脑/脚本从手机登录你的账号：</p>
+  <div class="card" style="background:#1f1b2e;border-color:#2d2742;color:#d8d2ea;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:.86rem;line-height:1.8">
+    <span style="color:#8b80b8"># 1. 报上手机「设置 → 账户」里的 6 位短码</span><br>
+    $ vd-login <b style="color:#a99bf3">start</b> AE209A<br>
+    <span style="color:#6fae8c">→ 手机弹出验证码 9046</span><br><br>
+    <span style="color:#8b80b8"># 2. 把手机上的 4 位码输进来</span><br>
+    $ vd-login <b style="color:#a99bf3">finish</b> 9046<br>
+    <span style="color:#6fae8c">→ ✅ 登录成功，凭证存进 ~/.config/voicedrop/</span>
+  </div>
+  <p>之后别的工具读这个凭证，就能<b>以你这个具体账号</b>的身份调 API（比如把录音挖成文章），不用再共享一把「能看所有人」的管理员钥匙。</p>
+
+  <div class="warn"><b>一个诚实的代价。</b>搬过去的是账号的<b>全权密钥本体</b>，不是受限的、可单独吊销的子令牌（匿名身份签不出那种）。谁拿到那个凭证文件，就有这个账号的全部权限，而且<b>没法只把这一台机器踢下线</b>。所以——别提交、别同步到任何可读的地方。</p>
+
+  <p class="soft" style="margin-top:38px;font-size:.95rem">这套机制已经在生产环境跑通：手机弹码、命令行接住、密钥端到端搬过去、解密成功。整篇讲的就是它背后那点「没有中心权威，怎么还能安全登录」的小心思。</p>
+
+  <footer>jianshuo.dev/a · 由 Claude Code 生成 · 回到 <a href="/a/">归档</a> / <a href="/">首页</a></footer>
+</div>
+<!-- Cloudflare Web Analytics --><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "34108fa3d3204951afa585ccb3976c88"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
