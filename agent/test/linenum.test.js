@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bodySegments, numberBodyRows, locatorTable } from "../src/linenum.js";
+import { bodySegments, numberBodyRows, locatorTable, applyArticleEdits, rowsToBody } from "../src/linenum.js";
 
 // These assertions encode the SHARED numbering contract with the iOS app
 // (RecordingDetailView.bodyRows + ArticleBody.segments). If this changes, the
@@ -75,5 +75,63 @@ describe("locatorTable", () => {
     expect(line.startsWith("第1行：")).toBe(true);
     expect(line.endsWith("…")).toBe(true);
     expect(line.length).toBeLessThan(80);
+  });
+});
+
+describe("rowsToBody", () => {
+  it("round-trips numbered rows back to a blank-line-separated body", () => {
+    const body = "开头\n\n[[photo:photos/a.jpg]]\n\n结尾";
+    expect(rowsToBody(numberBodyRows(body))).toBe(body);
+  });
+});
+
+describe("applyArticleEdits", () => {
+  it("deletes a text line by 第N行", () => {
+    expect(applyArticleEdits("一\n\n二\n\n三", [{ op: "delete_lines", lines: [2] }]).body).toBe("一\n\n三");
+  });
+
+  it("deletes an image by its 第N行, leaving the text rows", () => {
+    const body = "开头\n\n[[photo:p/a.jpg]]\n\n结尾";
+    expect(applyArticleEdits(body, [{ op: "delete_lines", lines: [2] }]).body).toBe("开头\n\n结尾");
+  });
+
+  it("replaces just one text line", () => {
+    expect(applyArticleEdits("一\n\n二\n\n三", [{ op: "replace_line", line: 2, text: "新二" }]).body).toBe("一\n\n新二\n\n三");
+  });
+
+  it("refuses to replace a photo row (would drop the marker)", () => {
+    expect(applyArticleEdits("a\n\n[[photo:x.jpg]]", [{ op: "replace_line", line: 2, text: "y" }]))
+      .toEqual({ error: "cannot_replace_photo", line: 2 });
+  });
+
+  it("inserts after a line, and prepends with line 0", () => {
+    const r = applyArticleEdits("一\n\n二", [
+      { op: "insert_after", line: 1, text: "1.5" },
+      { op: "insert_after", line: 0, text: "0" },
+    ]);
+    expect(r.body).toBe("0\n\n一\n\n1.5\n\n二");
+  });
+
+  it("errors (no mutation) when a referenced line doesn't exist", () => {
+    expect(applyArticleEdits("一", [{ op: "delete_lines", lines: [9] }])).toEqual({ error: "line_not_found", line: 9 });
+  });
+
+  it("preserves a photo key verbatim across an unrelated text edit", () => {
+    const body = "开头\n\n[[photo:photos/2026/x.jpg]]\n\n结尾";
+    expect(applyArticleEdits(body, [{ op: "replace_line", line: 1, text: "新开头" }]).body)
+      .toBe("新开头\n\n[[photo:photos/2026/x.jpg]]\n\n结尾");
+  });
+
+  it("resolves a batch of ops against the ORIGINAL numbering", () => {
+    const r = applyArticleEdits("一\n\n二\n\n三", [
+      { op: "delete_lines", lines: [1] },
+      { op: "replace_line", line: 3, text: "新三" },
+    ]);
+    expect(r.body).toBe("二\n\n新三");
+  });
+
+  it("rejects unknown / malformed ops", () => {
+    expect(applyArticleEdits("一", [{ op: "frobnicate" }])).toEqual({ error: "unknown_op", op: "frobnicate" });
+    expect(applyArticleEdits("一", [null])).toEqual({ error: "bad_op" });
   });
 });

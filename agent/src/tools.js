@@ -2,6 +2,7 @@
 // Each handler takes (args, ctx) where ctx = {env, scope, articleKey, token, origin}.
 
 import { resolveArticles } from "../../functions/lib/article-store.js";
+import { applyArticleEdits } from "./linenum.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
 
@@ -93,6 +94,87 @@ register(
     });
     if (!resp.ok) return { error: `upload_failed_${resp.status}` };
     return { ok: true, count: doc.articles.length };
+  }
+);
+
+// Shared write path for the article tools: stamp the editId, PUT through the
+// versioned article API. Returns null on success or { error } on failure.
+async function putArticleDoc(doc, { articleKey, token, origin, editId }) {
+  if (editId) doc.lastEditId = editId;
+  const stem = articleKey.split("/articles/").pop().replace(/\.json$/, "");
+  const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(doc),
+  });
+  return resp.ok ? null : { error: `upload_failed_${resp.status}` };
+}
+
+register(
+  {
+    name: "edit_current_article",
+    description:
+      "定点修改当前正在编辑的这一篇——删一行 / 改一行 / 删图 / 插入一段 / 改标题。这是改当前篇的默认工具：只描述这次的改动，绝不要回传整篇正文。行号就用「行号对照」里的第N行（删图也用图所在的第N行）。一次可以带多个 ops，行号都按改之前的原始编号算。",
+    input_schema: {
+      type: "object",
+      properties: {
+        ops: {
+          type: "array",
+          description: "一组改动，按顺序应用；行号一律指「行号对照」里改之前的第N行。",
+          items: {
+            type: "object",
+            properties: {
+              op: { type: "string", enum: ["delete_lines", "replace_line", "insert_after", "set_title"] },
+              line: { type: "integer", description: "第N行的 N。replace_line / insert_after 用；insert_after 用 0 表示插到正文最前面。" },
+              lines: { type: "array", items: { type: "integer" }, description: "要删除的第N行号数组（delete_lines 用；删图也是删它所在的第N行）。" },
+              text: { type: "string", description: "新的整行文本（replace_line / insert_after 用）。只写这一行，[[photo:…]] 标记原样保留、里面的 key 一个字都不要改。" },
+              title: { type: "string", description: "新的文章标题（set_title 用）。" },
+            },
+            required: ["op"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["ops"],
+      additionalProperties: false,
+    },
+  },
+  async ({ ops }, ctx) => {
+    const { env, articleKey, articleIndex } = ctx;
+    if (!Array.isArray(ops) || !ops.length) return { error: "empty_ops" };
+    const obj = await env.FILES.get(articleKey);
+    if (!obj) return { error: "not_found" };
+    let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
+    const articles = resolveArticles(doc);
+    if (!articles.length) return { error: "no_article" };
+    const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
+    const target = articles[idx];
+
+    const titleOp = ops.find((o) => o && o.op === "set_title");
+    const bodyOps = ops.filter((o) => o && o.op !== "set_title");
+
+    let newBody = String(target.body || "");
+    if (bodyOps.length) {
+      const r = applyArticleEdits(newBody, bodyOps);
+      if (r.error) return r; // surface line_not_found / cannot_replace_photo / … back to the model
+      newBody = r.body;
+    }
+    const newTitle = (titleOp && typeof titleOp.title === "string" && titleOp.title.trim())
+      ? titleOp.title.trim()
+      : target.title;
+
+    // Rebuild the full article list, replacing only the target; preserve every
+    // other article verbatim and keep each article's wechatMediaId.
+    doc.articles = articles.map((a, i) => {
+      const next = { title: String((i === idx ? newTitle : a.title) || "(无题)"), body: String(i === idx ? newBody : (a.body || "")) };
+      if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
+      return next;
+    });
+    delete doc.title; delete doc.body; // collapse any v1 remnants
+
+    const err = await putArticleDoc(doc, ctx);
+    if (err) return err;
+    return { ok: true };
   }
 );
 

@@ -4,7 +4,7 @@ import { runTool, TOOL_DEFS } from "./tools.js";
 // reason to spend another full Claude round-trip just to fetch a one-line
 // confirmation. Read tools (list/read_article/read_style) are NOT here; they
 // gather context and the loop must continue after them.
-const TERMINAL_TOOLS = new Set(["write_article", "write_style", "publish_wechat", "share_to_community"]);
+const TERMINAL_TOOLS = new Set(["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community"]);
 
 export function parseAssistant(resp) {
   const content = (resp && resp.content) || [];

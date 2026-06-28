@@ -78,3 +78,74 @@ export function locatorTable(body, { previewChars = 60 } = {}) {
     return `第${r.n}行：${t}`;
   }).join("\n");
 }
+
+/** Re-serialize numbered rows back into a body string: one row per paragraph,
+ *  blank-line separated; photo rows become their [[photo:<token>]] marker again.
+ *  Normalizes paragraph spacing to "\n\n" — matches how miner/article bodies are
+ *  already shaped, and what numberBodyRows would re-derive identically. */
+export function rowsToBody(rows) {
+  return rows.map((r) => (r.kind === "photo" ? `[[photo:${r.token}]]` : r.text)).join("\n\n");
+}
+
+/**
+ * Apply locator-addressed edits to a body — the patch path that lets the model
+ * delete / replace / insert a line (or delete an image) WITHOUT regenerating the
+ * whole article. `ops` reference 第N行 exactly as the 行号对照 the model was shown
+ * (numbers come from numberBodyRows, the same table the user sees). Returns
+ * { body } on success, or { error, ... } so the agent loop can feed the failure
+ * back to the model.
+ *
+ * Ops (set_title is handled by the caller — it's an article field, not a body line):
+ *   { op:"delete_lines", lines:[n,...] }     delete those rows (images included — by 第N行)
+ *   { op:"replace_line", line:n, text:"…" }  replace a TEXT row's whole paragraph
+ *   { op:"insert_after", line:n, text:"…" }  insert a new paragraph after 第n行 (n=0 ⇒ prepend)
+ * All line numbers refer to the ORIGINAL numbering, so a batch of ops in one call
+ * stays consistent (we resolve every op against the pre-edit rows, then rebuild).
+ */
+export function applyArticleEdits(body, ops) {
+  const rows = numberBodyRows(body);
+  const byN = new Map(rows.map((r) => [r.n, r]));
+  const deletions = new Set();
+  const replacements = new Map(); // n -> new text
+  const insertsAfter = new Map(); // n (0 = prepend) -> [text, ...]
+
+  for (const op of ops || []) {
+    if (!op || typeof op !== "object") return { error: "bad_op" };
+    if (op.op === "delete_lines") {
+      const lines = Array.isArray(op.lines) ? op.lines : [];
+      if (!lines.length) return { error: "empty_lines" };
+      for (const ln of lines) {
+        if (!byN.has(ln)) return { error: "line_not_found", line: ln };
+        deletions.add(ln);
+      }
+    } else if (op.op === "replace_line") {
+      const r = byN.get(op.line);
+      if (!r) return { error: "line_not_found", line: op.line };
+      if (r.kind === "photo") return { error: "cannot_replace_photo", line: op.line };
+      if (typeof op.text !== "string" || !op.text.trim()) return { error: "empty_text", line: op.line };
+      replacements.set(op.line, op.text.trim());
+    } else if (op.op === "insert_after") {
+      const after = op.line === 0 ? 0 : op.line;
+      if (after !== 0 && !byN.has(after)) return { error: "line_not_found", line: op.line };
+      if (typeof op.text !== "string" || !op.text.trim()) return { error: "empty_text", line: op.line };
+      if (!insertsAfter.has(after)) insertsAfter.set(after, []);
+      insertsAfter.get(after).push(op.text.trim());
+    } else {
+      return { error: "unknown_op", op: op.op };
+    }
+  }
+
+  const out = [];
+  const emitInserts = (n) => {
+    const ins = insertsAfter.get(n);
+    if (ins) for (const t of ins) out.push({ kind: "text", text: t });
+  };
+  emitInserts(0); // prepend
+  for (const r of rows) {
+    if (deletions.has(r.n)) { /* dropped */ }
+    else if (replacements.has(r.n)) out.push({ kind: "text", text: replacements.get(r.n) });
+    else out.push(r);
+    emitInserts(r.n);
+  }
+  return { body: rowsToBody(out) };
+}

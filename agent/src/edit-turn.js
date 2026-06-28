@@ -8,7 +8,7 @@ import { runAgentLoop } from "./loop.js";
 import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { locatorTable } from "./linenum.js";
 
-const TERMINAL = ["write_article", "write_style", "publish_wechat", "share_to_community"];
+const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community"];
 
 export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, system, history = [], callClaude }) {
   const obj = await env.FILES.get(articleKey);
@@ -25,7 +25,12 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   }
   const articles = resolveArticles(doc);
 
-  const stableText = [
+  // Transcript = the stable fact base. It's identical across every edit of this
+  // recording, so it rides in `system` (a cache prefix that sits BEFORE messages)
+  // rather than in the per-turn user message — that's what lets prompt caching
+  // hit it turn after turn (the current-article + instruction below still vary
+  // and stay uncached). See systemBlocks below.
+  const transcriptText = [
     "原始口述转写（事实来源，只能用这里出现的事实，不可编造）：",
     doc.transcript || "（无）",
   ].join("\n");
@@ -64,13 +69,25 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   varLines.push("", "这次的语音指令：", instruction);
 
   const userContent = [
-    { type: "text", text: stableText },
     ...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data } })),
     { type: "text", text: varLines.join("\n") },
   ];
 
-  const ctx = { env, scope, articleKey, token, origin, editId };
-  const result = await runAgentLoop({ callClaude, ctx, system, userContent, history });
+  // Two cache breakpoints, both ephemeral:
+  //   1. the static instructions (`system`) — byte-identical for every recording
+  //      and user, so this segment is a shared cache prefix.
+  //   2. + the transcript — identical across THIS recording's edits.
+  // Everything after (history + current article + instruction) is volatile and
+  // stays out of the cache.
+  const systemBlocks = [
+    { type: "text", text: system, cache_control: { type: "ephemeral" } },
+    { type: "text", text: transcriptText, cache_control: { type: "ephemeral" } },
+  ];
+
+  // articleIndex rides in ctx so edit_current_article patches the SAME article the
+  // user is looking at (the one the 行号对照 above numbered).
+  const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx };
+  const result = await runAgentLoop({ callClaude, ctx, system: systemBlocks, userContent, history });
 
   const after = await env.FILES.get(articleKey);
   const finalDoc = after ? JSON.parse(await after.text()) : doc;

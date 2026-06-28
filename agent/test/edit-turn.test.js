@@ -75,4 +75,31 @@ describe("runEditTurn", () => {
     expect(res.reply).toBe("");
     expect(res.article.articles[0].title).toBe("已改"); // unchanged
   });
+
+  it("puts static system + transcript into cached system blocks, keeping the user message volatile-only", async () => {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "我的口述转写底稿", articles: [{ title: "T", body: "一\n\n二" }] }),
+    });
+    let seen;
+    const callClaude = async (req) => { seen = req; return { content: [{ type: "text", text: "改好了" }] }; };
+    await runEditTurn({
+      env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+      token: "t", origin: "https://jianshuo.dev", editId: "e1",
+      instruction: "把第2行删掉", images: [], system: "STATIC-SYS", history: [], callClaude,
+    });
+    // system = two ephemeral-cached blocks: [static instructions, transcript].
+    expect(Array.isArray(seen.system)).toBe(true);
+    expect(seen.system).toHaveLength(2);
+    expect(seen.system[0]).toEqual({ type: "text", text: "STATIC-SYS", cache_control: { type: "ephemeral" } });
+    expect(seen.system[1].cache_control).toEqual({ type: "ephemeral" });
+    expect(seen.system[1].text).toContain("我的口述转写底稿");
+    // The user message is volatile-only — transcript no longer rides in it.
+    // (Grab it by role: the loop mutates `messages` in place, appending the
+    // assistant reply to the same array after the call.)
+    const userMsg = seen.messages.find((m) => m.role === "user");
+    const userText = userMsg.content.map((b) => b.text || "").join("\n");
+    expect(userText).not.toContain("我的口述转写底稿");
+    expect(userText).toContain("这次的语音指令：");
+    expect(userText).toContain("把第2行删掉");
+  });
 });
