@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>VoiceDrop · 算力账本</title>
+<style>body{font:14px/1.5 -apple-system,sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;color:#222}
+table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #eee;padding:6px 8px;text-align:right}
+th:first-child,td:first-child{text-align:left;font-family:ui-monospace,monospace}input{padding:6px;width:340px}</style>
+<h1>算力账本 · 全量账户</h1>
+<p><input id="t" placeholder="admin token (FILES_TOKEN)"> <button onclick="go()">加载</button></p>
+<p id="sum"></p>
+<table><thead><tr><th>账户</th><th>余额(算力)</th><th>累计获得</th><th>累计消费</th><th>消费(¥)</th></tr></thead><tbody id="b"></tbody></table>
+<script>
+async function go(){
+  const t=document.getElementById('t').value.trim();
+  const r=await fetch('https://jianshuo.dev/agent/usage/admin/accounts',{headers:{Authorization:'Bearer '+t}});
+  if(!r.ok){document.getElementById('b').innerHTML='<tr><td>加载失败 '+r.status+'</td></tr>';return;}
+  const {accounts}=await r.json();
+  let spent=0;
+  document.getElementById('b').innerHTML=accounts.map(a=>{spent+=a.spent_yuan;
+    return `<tr><td>${a.user_sub.replace('users/anon-','').slice(0,6).toUpperCase()}</td><td>${a.balance_suanli}</td><td>${a.granted_suanli}</td><td>${a.spent_suanli}</td><td>${a.spent_yuan}</td></tr>`}).join('');
+  document.getElementById('sum').textContent=`共 ${accounts.length} 账户 · 总消费 ¥${spent.toFixed(2)}`;
+}
+</script>
