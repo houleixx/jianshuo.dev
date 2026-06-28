@@ -13,6 +13,8 @@
 //   R2_SECRET_ACCESS_KEY   R2 S3-compatible secret key
 
 import { writeLlmLog } from "./llmlog.js";
+import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
+import { ensureAccount, debit } from "./usage_store.js";
 
 export const MINE_MODEL_DEFAULT = "claude-sonnet-4-6";
 const MIN_CHARS          = 20;
@@ -163,6 +165,17 @@ function adminArticlePath(key) {
   return `${sub}/${stemOf(key)}`;
 }
 
+// Decide whether to mine this recording. too-long ignores balance; otherwise
+// lazy-create the account (first touch grants 500) then check balance.
+export async function meteredMineGate(db, scope, durationSec, now) {
+  if (durationSec > 3 * 3600) return "too-long";
+  if (!db) return "ok";                 // fail-open: no D1 binding
+  try {
+    const bal = await ensureAccount(db, scope, now);
+    return gateDecision(bal, durationSec);
+  } catch { return "ok"; }              // fail-open on D1 error
+}
+
 // Route a freshly-listed R2 key to a pipeline. The app's Share Extension tags
 // shared items with a filename prefix (VoiceDrop-mine-* / VoiceDrop-style-*);
 // in-app recordings keep their plain VoiceDrop-<date>-… name and mine as audio.
@@ -306,7 +319,7 @@ async function transcribe(audioKey, env) {
   const result = res.result || {};
   const utts   = result.utterances || [];
   const text   = (result.text || "").trim() || utts.map(u => u.text || "").join("").trim();
-  return { transcript: text, srt: buildSrt(utts) };
+  return { transcript: text, srt: buildSrt(utts), asrDurMs: res.audio_info?.duration };
 }
 
 // ── SRT builder ────────────────────────────────────────────────────────────────
@@ -476,6 +489,10 @@ async function writeEmpty(audioKey, reason, env) {
   await apiPut(`articles/${adminArticlePath(audioKey)}/empty`, JSON.stringify({ reason }), "application/json", env);
 }
 
+async function writeBlocked(audioKey, reason, env) {
+  await apiPut(`articles/${adminArticlePath(audioKey)}/blocked`, JSON.stringify({ status: "blocked", reason }), "application/json", env);
+}
+
 // ── StatusHub notification ─────────────────────────────────────────────────────
 
 async function notifyStatus(scope, stem, status, env) {
@@ -530,14 +547,22 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       return "skip";
     }
 
+    // ── Balance gate (pre-ASR) ────────────────────────────────────────────────
+    const durSec = audioDurationSeconds(audioKey);
+    const decision = await meteredMineGate(env.USAGE, scope, durSec ?? 0, Date.now());
+    if (decision === "too-long") { await writeBlocked(audioKey, "too-long", env); return; }
+    if (decision === "no-credit") { await writeBlocked(audioKey, "no-credit", env); return; }
+    // Drop stale .blocked marker before proceeding (e.g. user topped up)
+    try { await env.FILES.delete(`${userPrefix(audioKey)}articles/${stemOf(audioKey)}.blocked`); } catch (_) {}
+
     await notifyStatus(scope, stem, "asr", env);
 
     // ── ASR ────────────────────────────────────────────────────────────────────
-    let transcript, srt;
+    let transcript, srt, asrDurMs;
     try {
       log("ASR 提交中");
       const tAsr = Date.now();
-      ({ transcript, srt } = await transcribe(audioKey, env));
+      ({ transcript, srt, asrDurMs } = await transcribe(audioKey, env));
       log("ASR 完成", { chars: transcript.length, duration_ms: Date.now() - tAsr });
     } catch (e) {
       if (e instanceof AsrError) {
@@ -549,6 +574,14 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       }
       throw e;
     }
+
+    // Debit ASR cost (best-effort; uses actual ASR duration or filename estimate)
+    try {
+      if (env.USAGE) {
+        const asrSec = (asrDurMs ?? (durSec ?? 0) * 1000) / 1000;
+        await debit(env.USAGE, scope, asrCostUY(asrSec), "asr", { asr_sec: Math.round(asrSec), stem }, Date.now());
+      }
+    } catch (_) {}
 
     if (!transcript) {
       await writeEmpty(audioKey, "no-speech", env);
@@ -591,6 +624,14 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       try {
         const r = await generateArticles(transcript, force ? "" : claudeMd, force ? null : (photos.length ? photos : null), force, env, modelCfg);
         await writeLlmLog(env, { source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        // Debit Claude cost (best-effort)
+        try {
+          if (env.USAGE) {
+            const u = r.rawResp?.usage || {};
+            await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens),
+              "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId }, Date.now());
+          }
+        } catch (_) {}
         log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
         return r.articles;
       } catch (e) {
@@ -683,6 +724,14 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
       try {
         const r = await generateArticles(text, force ? "" : claudeMd, null, force, env, modelCfg);
         await writeLlmLog(env, { source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        // Debit Claude cost (best-effort)
+        try {
+          if (env.USAGE) {
+            const u = r.rawResp?.usage || {};
+            await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens),
+              "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId }, Date.now());
+          }
+        } catch (_) {}
         log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
         return r.articles;
       } catch (e) {
