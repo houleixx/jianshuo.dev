@@ -6,7 +6,7 @@
 
 import { runAgentLoop } from "./loop.js";
 import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
-import { locatorTable } from "./linenum.js";
+import { inlineNumberedBody } from "./linenum.js";
 
 const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community"];
 
@@ -35,11 +35,34 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
     doc.transcript || "（无）",
   ].join("\n");
 
-  const varLines = [
-    "当前文章（你正在编辑这一篇）：",
-    JSON.stringify({ articles: articles.map((a) => ({ title: a.title, body: a.body })) }, null, 2),
-    "",
-  ];
+  // The article the user is editing is shown with an INLINE 第N行 / 图M number on
+  // every row — that one numbered copy is BOTH the body (full text, for faithful
+  // rewriting) AND the locator the user/model share. No second clean copy and no
+  // separate 行号对照 table (that used to put the body in the prompt twice). The
+  // numbers are prompt-only: they never enter the saved body — applyArticleEdits
+  // resolves 第N行 back onto the clean rows, and the model is told not to echo them.
+  const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
+  const target = articles[idx];
+
+  const varLines = [];
+  if (articles.length <= 1) {
+    varLines.push(
+      "当前文章（你正在编辑这一篇）。正文每行开头的「第N行 / 图M」就是用户此刻在屏幕上看到的号——他说「第N行 / 图M」严格按这个号定位，别自己数行。这些号只用来定位、不属于正文，改完别写进输出：",
+      `标题：${target?.title || "（无题）"}`,
+      inlineNumberedBody(target?.body || "") || "（正文为空）",
+      "",
+    );
+  } else {
+    varLines.push(
+      `共 ${articles.length} 篇，你正在编辑第 ${idx + 1} 篇。下面这篇带「第N行 / 图M」号，用户说的「第N行 / 图M」都指它——严格按号定位、别数行；号只用来定位、不属于正文，改完别写进输出：`,
+      `【第 ${idx + 1} 篇 · 正在编辑】标题：${target?.title || "（无题）"}`,
+      inlineNumberedBody(target?.body || "") || "（正文为空）",
+      "",
+      "其余文章（仅供合并 / 参考，不用按行号定位）：",
+      JSON.stringify({ articles: articles.map((a, i) => (i === idx ? { title: a.title, body: "（见上方带号正文）" } : { title: a.title, body: a.body })) }, null, 2),
+      "",
+    );
+  }
   if (images.length > 0) {
     varLines.push(
       "本次上传的新照片（已在消息里附上缩略图，按顺序对应上方图片）。把每一张插到正文最合适的位置，用它自己的 key 作标记，原样写进正文：",
@@ -47,23 +70,6 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
       "",
       "⚠️ 必须把以上每一张照片都插入文章正文里合适的段落，使用对应的 [[photo:<key>]] 标记。一张都不能漏。",
       "",
-    );
-  }
-  // 行号对照：number the article the user is LOOKING AT exactly the way the iOS app
-  // does, and hand the model that table so it RESOLVES「第N行 / 图M」by reading the
-  // number — never by counting lines itself (where the号 used to drift from what the
-  // user saw). The full body above stays clean for faithful rewriting.
-  const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
-  const target = articles[idx];
-  if (target) {
-    const table = locatorTable(target.body || "");
-    varLines.push(
-      "",
-      articles.length > 1
-        ? `行号对照（用户此刻在看第 ${idx + 1} 篇「${target.title || "无题"}」，他说的「第N行 / 图M」都指这一篇。这就是他屏幕上看到的行号，严格按它定位，别自己数行）：`
-        : "行号对照（这就是用户按住说话时屏幕上看到的行号，他说的「第N行 / 图M」严格按它定位，别自己数行）：",
-      table || "（正文为空）",
-      "定位用完即可——改完正文里不要写行号 / 图号，[[photo:…]] 标记原样保留。",
     );
   }
   varLines.push("", "这次的语音指令：", instruction);
@@ -85,7 +91,7 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   ];
 
   // articleIndex rides in ctx so edit_current_article patches the SAME article the
-  // user is looking at (the one the 行号对照 above numbered).
+  // user is looking at (the inline-numbered article shown above).
   const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx };
   const result = await runAgentLoop({ callClaude, ctx, system: systemBlocks, userContent, history });
 

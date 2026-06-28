@@ -1,7 +1,7 @@
 // Number an article body's rows EXACTLY the way the iOS app does, so the 第N行 /
 // 图M the user sees floating in the margin while holding to talk are the SAME
-// numbers we hand the model — the model READS them off a 行号对照 table instead of
-// counting lines itself (counting is where "模型理解的行 ≠ 我标的行" came from).
+// numbers we hand the model — the model READS them off the inline-numbered body
+// instead of counting lines itself (counting is where "模型理解的行 ≠ 我标的行" came from).
 //
 // This MUST stay byte-for-byte in step with the Swift side:
 //   - segments  ← VoiceDropApp/Library.swift  ArticleBody.segments
@@ -64,19 +64,22 @@ export function numberBodyRows(body) {
 }
 
 /**
- * Render the 行号对照 table the model reads to resolve 第N行 / 图M. One line per row:
- *   第3行：正文开头预览…
+ * Render the article body with an inline 第N行 / 图M number on every row. This
+ * single numbered copy is what we hand the model: it is BOTH the body (full text,
+ * for faithful rewriting) AND the locator the user and model share — no separate
+ * clean copy, no separate 行号对照 table. One row per line:
+ *   第3行：整段正文（不截断）
  *   第4行 = 图2：[[photo:photos/…/….jpg]]
- * Text previews are capped so a long article doesn't blow up the prompt; the full
- * body is already in the message for faithful rewriting.
+ * The numbers are an addressing overlay for the prompt ONLY — never stored, never
+ * part of the saved body (applyArticleEdits resolves 第N行 back onto the clean
+ * rows, and the model is told not to echo numbers into its output).
  */
-export function locatorTable(body, { previewChars = 60 } = {}) {
-  const rows = numberBodyRows(body);
-  return rows.map((r) => {
-    if (r.kind === "photo") return `第${r.n}行 = 图${r.imgNo}：[[photo:${r.token}]]`;
-    const t = r.text.length > previewChars ? r.text.slice(0, previewChars) + "…" : r.text;
-    return `第${r.n}行：${t}`;
-  }).join("\n");
+export function inlineNumberedBody(body) {
+  return numberBodyRows(body).map((r) =>
+    r.kind === "photo"
+      ? `第${r.n}行 = 图${r.imgNo}：[[photo:${r.token}]]`
+      : `第${r.n}行：${r.text}`
+  ).join("\n");
 }
 
 /** Re-serialize numbered rows back into a body string: one row per paragraph,
@@ -90,8 +93,8 @@ export function rowsToBody(rows) {
 /**
  * Apply locator-addressed edits to a body — the patch path that lets the model
  * delete / replace / insert a line (or delete an image) WITHOUT regenerating the
- * whole article. `ops` reference 第N行 exactly as the 行号对照 the model was shown
- * (numbers come from numberBodyRows, the same table the user sees). Returns
+ * whole article. `ops` reference 第N行 exactly as the inline-numbered body the
+ * model was shown (numbers come from numberBodyRows, the same the user sees). Returns
  * { body } on success, or { error, ... } so the agent loop can feed the failure
  * back to the model.
  *

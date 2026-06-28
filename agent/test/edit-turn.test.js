@@ -102,4 +102,27 @@ describe("runEditTurn", () => {
     expect(userText).toContain("这次的语音指令：");
     expect(userText).toContain("把第2行删掉");
   });
+
+  it("shows the edited article inline-numbered as ONE copy — no duplicate clean body / 行号对照 table", async () => {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "底稿", articles: [{ title: "T", body: "甲\n\n乙\n\n丙" }] }),
+    });
+    let seen;
+    const callClaude = async (req) => { seen = req; return { content: [{ type: "text", text: "改好了" }] }; };
+    await runEditTurn({
+      env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+      token: "t", origin: "https://jianshuo.dev", editId: "e-inline",
+      instruction: "把第2行删掉", images: [], system: "SYS", history: [], callClaude,
+    });
+    const userMsg = seen.messages.find((m) => m.role === "user");
+    const userText = userMsg.content.map((b) => b.text || "").join("\n");
+    // The body is present once, inline-numbered.
+    expect(userText).toContain("第1行：甲");
+    expect(userText).toContain("第2行：乙");
+    expect(userText).toContain("第3行：丙");
+    // The old separate 行号对照 table header is gone.
+    expect(userText).not.toContain("行号对照");
+    // No second clean copy of the body: 乙 appears exactly once (only in 第2行：乙).
+    expect(userText.match(/乙/g)?.length).toBe(1);
+  });
 });

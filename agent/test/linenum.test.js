@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { bodySegments, numberBodyRows, locatorTable, applyArticleEdits, rowsToBody } from "../src/linenum.js";
+import { bodySegments, numberBodyRows, inlineNumberedBody, applyArticleEdits, rowsToBody } from "../src/linenum.js";
 
 // These assertions encode the SHARED numbering contract with the iOS app
 // (RecordingDetailView.bodyRows + ArticleBody.segments). If this changes, the
@@ -61,20 +61,17 @@ describe("bodySegments", () => {
   });
 });
 
-describe("locatorTable", () => {
-  it("renders a line for every row, marking image rows with both 第N行 and 图M", () => {
+describe("inlineNumberedBody", () => {
+  it("renders every row in full, marking image rows with both 第N行 and 图M", () => {
     const body = "开头一句\n\n[[photo:photos/a.jpg]]\n\n结尾一句";
-    expect(locatorTable(body)).toBe(
+    expect(inlineNumberedBody(body)).toBe(
       "第1行：开头一句\n第2行 = 图1：[[photo:photos/a.jpg]]\n第3行：结尾一句"
     );
   });
 
-  it("caps long previews", () => {
+  it("does NOT truncate — the numbered copy IS the body (full text, no preview cap)", () => {
     const long = "x".repeat(100);
-    const line = locatorTable(long).split("\n")[0];
-    expect(line.startsWith("第1行：")).toBe(true);
-    expect(line.endsWith("…")).toBe(true);
-    expect(line.length).toBeLessThan(80);
+    expect(inlineNumberedBody(long)).toBe("第1行：" + long);
   });
 });
 
