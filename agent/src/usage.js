@@ -3,6 +3,7 @@ export const FX = 7.3;            // USD->RMB, fixed conservative
 export const RATE = 23;           // 算力 per ¥ (23 算力 = ¥1)
 export const ASR_RMB_PER_HOUR = 0.8;
 export const PRICE = {            // USD per token
+  "claude-opus-4-8":   { in: 5 / 1e6, out: 25 / 1e6 },
   "claude-sonnet-4-6": { in: 3 / 1e6, out: 15 / 1e6 },
   "claude-haiku-4-5":  { in: 1 / 1e6, out: 5 / 1e6 },
 };

@@ -17,7 +17,7 @@ import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
 
-export const MINE_MODEL_DEFAULT = "claude-sonnet-4-6";
+export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
 const MIN_CHARS          = 20;
 const ORIGIN             = "https://jianshuo.dev";
 
@@ -71,10 +71,11 @@ export async function loadModelConfig(env) {
 
 // Voice editing runs an Anthropic tool-use loop (Claude only). It's a quick,
 // mechanical rewrite where latency matters far more than raw quality, so it uses
-// a FAST model (Haiku) by default — deliberately decoupled from the mining model
-// (which is quality-critical). An explicit Claude `editModel` in config/model.json
-// overrides; the mining provider/model is irrelevant to editing.
-export const EDIT_MODEL_DEFAULT = "claude-haiku-4-5";
+// a faster / cheaper model than the mining model by default — deliberately
+// decoupled from the mining model (which is quality-critical). An explicit Claude
+// `editModel` in config/model.json overrides; the mining provider/model is
+// irrelevant to editing.
+export const EDIT_MODEL_DEFAULT = "claude-sonnet-4-6";
 
 export function resolveEditModel(modelCfg) {
   const m = modelCfg && modelCfg.editModel;
