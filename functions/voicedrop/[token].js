@@ -44,12 +44,24 @@ export async function onRequest(context) {
 
   // Resolve the photos the body references ([[photo:<key>]] markers; legacy
   // [[photo:N]] via doc.photos) to public photo URLs. The body is the source of truth.
+  const photoRefs = photoRefsInBodies(shown.map((a) => a.body || ''), doc.photos);
   const photoURIs = buildPhotoURLs(key, shown.map((a) => a.body || ''), doc.photos);
 
   const bodyHtml = shown.map((a) =>
     `<article><h1>${esc(a.title || '无题')}</h1>${renderPhotos(mdToHtml(a.body || ''), photoURIs)}</article>`
   ).join('<hr/>');
-  const og = { description: plainExcerpt(stripPhotoMarkers(shown[0].body), 120), url: context.request.url };
+
+  // Share-card image = the FIRST photo THIS section references, as an ABSOLUTE URL
+  // (WeChat / X crawlers need a full origin, not the root-relative inline src). No
+  // photo → no og:image, so photo-less articles still render as a clean text card.
+  const origin = new URL(context.request.url).origin;
+  const image = photoRefs.length ? origin + photoURIs[photoRefs[0].token] : '';
+
+  const og = {
+    description: plainExcerpt(stripPhotoMarkers(shown[0].body), 120),
+    url: context.request.url,
+    image,
+  };
   return html(page(title, bodyHtml, og), 200, true);
 }
 
@@ -154,23 +166,43 @@ function plainExcerpt(body, max) {
 
 function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
 
-// Open Graph + Twitter Card tags. No og:image on purpose — sharing the same
-// branded banner over and over reads as spam, so links render as a plain
-// text card (title + description) instead of a large image card.
-function metaTags(title, og) {
+// Open Graph + Twitter Card + WeChat share-card tags.
+//   title       — the section-aware article title (?s=<i> selects it upstream).
+//   description — a plain-text excerpt of THIS section's body. WeChat's crawler
+//                 reads <meta name="description"> for the card summary (NOT
+//                 og:description), so it's emitted alongside the og/twitter ones.
+//   image       — set ONLY when this section references a photo; then the card
+//                 upgrades to a large-image card. Each article carries its OWN
+//                 first photo (no recycled banner — a shared static image read as
+//                 spam), and a photo-less article stays a clean text card.
+export function metaTags(title, og) {
   const t = escAttr(title);
   const d = escAttr(og.description || '把口述，变成文章');
   const u = escAttr(og.url || 'https://jianshuo.dev/voicedrop/');
-  return [
+  const img = og.image ? escAttr(og.image) : '';
+  const tags = [
     '<meta property="og:type" content="article"/>',
     '<meta property="og:site_name" content="VoiceDrop"/>',
     `<meta property="og:title" content="${t}"/>`,
     `<meta property="og:description" content="${d}"/>`,
     `<meta property="og:url" content="${u}"/>`,
-    '<meta name="twitter:card" content="summary"/>',
+    // WeChat's link-card crawler reads <meta name="description">, not og:description.
+    `<meta name="description" content="${d}"/>`,
     `<meta name="twitter:title" content="${t}"/>`,
     `<meta name="twitter:description" content="${d}"/>`,
-  ].join('\n');
+  ];
+  if (img) {
+    tags.push(
+      `<meta property="og:image" content="${img}"/>`,
+      `<meta name="twitter:image" content="${img}"/>`,
+      '<meta name="twitter:card" content="summary_large_image"/>',
+      // Older WeChat clients pick the thumbnail off <link rel="image_src">.
+      `<link rel="image_src" href="${img}"/>`,
+    );
+  } else {
+    tags.push('<meta name="twitter:card" content="summary"/>');
+  }
+  return tags.join('\n');
 }
 
 function page(title, inner, og) {
