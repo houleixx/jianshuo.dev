@@ -780,16 +780,10 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // ── Write article ──────────────────────────────────────────────────────────
     // No photos array — the model inserts [[photo:<key>]] markers into the body,
     // which is the sole source of truth for which photos appear and where.
-    // Content moderation (judged once, here): flagged articles can't be shared to 社区.
-    let moderation = null;
-    try { moderation = await moderateArticles(articles, env); if (moderation?.flagged) log("内容审核命中(不可分享社区)", { categories: moderation.categories }); }
-    catch (e) { log("内容审核出错(放行)", { error: String(e?.message ?? e).slice(0,120) }); }
-
     const doc = {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
       transcript, srt, articles, status: "ready", model: modelCfg.model,
-      ...(moderation ? { moderation } : {}),
     };
 
     await writeArticle(audioKey, doc, env);
@@ -884,15 +878,10 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
       }
     }
 
-    let moderation = null;
-    try { moderation = await moderateArticles(articles, env); if (moderation?.flagged) log("内容审核命中(不可分享社区)", { categories: moderation.categories }); }
-    catch (e) { log("内容审核出错(放行)", { error: String(e?.message ?? e).slice(0,120) }); }
-
     const doc = {
       schema: 2, id: stem, sourceText: leaf,
       createdAt: uploaded[textKey] || new Date().toISOString(),
       transcript: text, srt: "", articles, status: "ready", model: modelCfg.model,
-      ...(moderation ? { moderation } : {}),
     };
     await writeArticle(textKey, doc, env);
     await notifyStatus(scope, stem, "ready", env);
