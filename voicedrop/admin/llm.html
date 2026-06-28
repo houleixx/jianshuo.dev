@@ -151,6 +151,12 @@ async function api(path){
 
 function fmtTime(ts){ const d=new Date(ts); const p=(n)=>String(n).padStart(2,'0');
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+// REAL send time: `ts` is when the record was written (≈ when the LLM call
+// COMPLETED — callers don't pass a ts, so writeLlmLog falls back to Date.now()
+// after the response). Subtracting latency recovers when the request was
+// actually SENT. Order everything by this, never by the R2 key (which embeds the
+// completion ms + a random suffix → completion order, not send order).
+function sentAt(r){ return (r && r.ts || 0) - (r && r.latency_ms || 0); }
 function shortModel(m){ return String(m||'').replace(/^claude-/,'').replace(/-\d{8}$/,''); }
 function usageStr(u){ if(!u) return ''; const i=u.input_tokens??u.inputTokens, o=u.output_tokens??u.outputTokens;
   if(i==null&&o==null) return ''; return `${i??'?'}→${o??'?'} tok`; }
@@ -186,12 +192,12 @@ async function loadDay(date){
   do{
     const q = `llmlog/list?date=${encodeURIComponent(date)}` + (cursor?`&cursor=${encodeURIComponent(cursor)}`:'');
     const r = await api(q);
-    objects = objects.concat(r.objects||[]);   // each page already newest-first within page
+    objects = objects.concat(r.objects||[]);
     cursor = r.cursor;
   } while(cursor);
-  // globally newest first by key (key embeds epoch ms)
-  objects.sort((a,b)=> a.key<b.key?1:a.key>b.key?-1:0);
   RECORDS = await fetchRecords(objects);
+  // Order by REAL send time (ts − latency), newest first — NOT by R2 key.
+  RECORDS.sort((a,b)=> sentAt(b) - sentAt(a));
   renderList();
 }
 
@@ -215,8 +221,10 @@ function renderList(){
   $('#count').innerHTML = `${RECORDS.length} 次交互 · <span class="tag cost">今日 ${esc(fmtUSD(dayCost))}</span>`;
   const groups = new Map();
   for(const r of RECORDS){ const k=r.turn_id||r._key; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(r); }
-  const ordered = [...groups.values()].map((g)=>{ g.sort((a,b)=>(a.step??0)-(b.step??0)); return g; })
-    .sort((a,b)=> Math.max(...b.map(r=>r.ts||0)) - Math.max(...a.map(r=>r.ts||0)));
+  // within a turn: real send order = step (tie-break by send time);
+  // across turns: newest-first by when each turn STARTED (its first send).
+  const ordered = [...groups.values()].map((g)=>{ g.sort((a,b)=>(a.step??0)-(b.step??0) || sentAt(a)-sentAt(b)); return g; })
+    .sort((a,b)=> Math.min(...b.map(sentAt)) - Math.min(...a.map(sentAt)));
   let html='';
   for(const g of ordered){
     const multi = g.length>1;
@@ -230,7 +238,7 @@ function renderList(){
       const okCls = r._broken?'err':(r.ok?'ok':'err');
       const okTxt = r._broken?'损坏':(r.ok?'ok':'err');
       html += `<div class="row" data-i="${idx}">
-        <span class="t">${esc(fmtTime(r.ts||0))}</span>
+        <span class="t" title="发送时刻（ts−latency）">${esc(fmtTime(sentAt(r)))}</span>
         <span class="badge ${r.source==='mine'?'mine':'agent'}">${esc(r.source||'?')}</span>
         <span class="grow">${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
         <span class="tok">${esc(usageStr(r.response&&r.response.usage))}</span>
@@ -279,7 +287,7 @@ function renderDetail(r){
   let h = `<div class="meta">
     <span><b>${esc(r.source||'?')}</b></span>
     <span>${esc(shortModel(r.model))}</span>
-    <span>${esc(new Date(r.ts).toLocaleString('zh-CN'))}</span>
+    <span>发送 <b>${esc(new Date(sentAt(r)).toLocaleString('zh-CN'))}</b></span>
     <span>耗时 <b>${r.latency_ms!=null?(r.latency_ms/1000).toFixed(1)+'s':'—'}</b></span>
     <span>HTTP <b>${esc(r.http_status)}</b> ${r.ok?'':'· <b style="color:var(--err)">失败</b>'}</span>
     ${cost!=null?`<span>价格 <b style="color:var(--accent)">${esc(fmtUSD(cost))}</b></span>`:''}
