@@ -24,7 +24,6 @@ import { buildBroadcastMessage, createPairing, verifyPairing, completePairing, r
 import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
-import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY } from "./usage.js";
 import { ensureAccount, debit, editCount, getLedger, grant, allAccounts } from "./usage_store.js";
 
@@ -533,19 +532,6 @@ export default {
       const id = env.StatusHub.idFromName("status:" + scope);
       const stub = env.StatusHub.get(id);
       return stub.fetch(request);
-    }
-
-    // ── /agent/asr ── authenticated WebSocket proxy for Volc streaming ASR ──
-    if (url.pathname === "/agent/asr") {
-      if (request.headers.get("Upgrade") !== "websocket") {
-        return new Response("expected websocket", { status: 426 });
-      }
-      const auth = request.headers.get("Authorization") || "";
-      const token = auth.replace(/^Bearer\s+/i, "");
-      const scope = await resolveScope(token, env);
-      if (!scope) return new Response("unauthorized", { status: 401 });
-
-      return proxyVolcAsrWebSocket(request, env);
     }
 
     // ── /agent/mine/trigger ── kick the miner (any authenticated user or admin) ──
