@@ -20,6 +20,15 @@
 
 export const STYLE_MAX_VERSIONS = 10;
 
+// ── Per-version body comment protocol: `<!-- key: value -->`, extensible. ─────────
+// First key: `style`. The article reader shows meta.style on a chip and strips the
+// comment from every rendered surface. These are the SINGLE source of the format, so
+// generation (miner / restyle) and the reader's match never drift. Future per-version
+// UI just adds another key (`<!-- model: opus -->` …).
+export function styleLabel(v) { return `风格 v${v}`; }                          // "风格 v8"
+export function styleComment(v) { return `<!-- style: ${styleLabel(v)} -->`; }  // "<!-- style: 风格 v8 -->"
+export function prependStyleComment(body, v) { return `${styleComment(v)}\n\n${body}`; }
+
 // Read the versioned CLAUDE.json doc (schema-3). Returns null if absent/corrupt.
 export async function readStyleDoc(env, styleKey) {
   const obj = await env.FILES.get(styleKey);

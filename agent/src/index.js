@@ -16,7 +16,7 @@
 
 import { Agent, getAgentByName } from "agents";
 import { TOOL_DEFS } from "./tools.js";
-import { runMine, loadModelConfig, resolveEditModel, MINE_RESUME_MS } from "./miner.js";
+import { runMine, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
@@ -570,6 +570,25 @@ export default {
       if (!scope) return new Response("unauthorized", { status: 401 });
       const stub = env.Miner.get(env.Miner.idFromName("miner"));
       return stub.fetch(request);
+    }
+
+    // ── /agent/restyle ── re-mine ONE article with a chosen 文风 version ──────
+    // Body {stem, styleV}. Produces a new article version tagged <!-- style: 风格 vN -->,
+    // head moves to it. The app calls this only when that style variant isn't already in
+    // the article's versions[] (otherwise it just patchHead's — free). User token scoped.
+    if (url.pathname === "/agent/restyle") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const scope = await resolveScope(tok, env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
+      const body = await request.json().catch(() => ({}));
+      const stem = typeof body.stem === "string" ? body.stem : "";
+      const styleV = Number.isInteger(body.styleV) ? body.styleV : null;
+      if (!stem || stem.includes("/") || stem.includes("..") || styleV === null) {
+        return new Response(JSON.stringify({ ok: false, error: "bad-request" }), { status: 400, headers: { "content-type": "application/json" } });
+      }
+      const r = await restyleArticle(env, scope, stem, styleV);
+      return new Response(JSON.stringify(r), { status: r.ok ? 200 : 422, headers: { "content-type": "application/json" } });
     }
 
     // ── /agent/notify ── mine.py notifies about processing state ───────────

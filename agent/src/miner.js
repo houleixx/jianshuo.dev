@@ -16,7 +16,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { readStyleText, readProfileName, readStyleDoc, resolveStyle } from "../../functions/lib/style-store.js";
+import { readStyleText, readProfileName, readStyleDoc, resolveStyle, prependStyleComment } from "../../functions/lib/style-store.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
 const MIN_CHARS          = 20;
@@ -642,6 +642,70 @@ async function notifyStatus(scope, stem, status, env) {
   } catch (_) {}
 }
 
+// ── On-demand restyle ─────────────────────────────────────────────────────────
+// Re-mine ONE existing article with a chosen 文风 version → a new article version
+// tagged `<!-- style: 风格 vN -->`, head moves to it. Reuses the mining LLM path so the
+// rewrite reads exactly like a first-time mine; re-feeds session photos so [[photo:…]]
+// markers are re-placed. The app already handles "switch to an existing variant" via
+// patchHead — this is only the generate path. Returns {ok, head?} / {ok:false, reason}.
+export async function restyleArticle(env, scope, stem, styleV) {
+  const articleKey = `${scope}articles/${stem}.json`;
+  const obj = await env.FILES.get(articleKey);
+  if (!obj) return { ok: false, reason: "not-found" };
+  let doc; try { doc = JSON.parse(await obj.text()); } catch { return { ok: false, reason: "corrupt" }; }
+  const transcript = (doc.transcript || "").trim();
+  if (!transcript) return { ok: false, reason: "no-transcript" };
+
+  const styleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
+  const entry = styleDoc && Array.isArray(styleDoc.versions) ? styleDoc.versions.find((e) => e.v === styleV) : null;
+  const styleText = entry && typeof entry.style === "string" ? entry.style.trim() : "";
+  if (!styleText) return { ok: false, reason: "no-style" };
+
+  // Re-feed this session's photos so the model can re-place [[photo:…]] markers.
+  const audioKey = `${scope}${stem}.m4a`;
+  const ts = sessionTs(audioKey);
+  const photos = [];
+  if (ts) {
+    const listed = await env.FILES.list({ prefix: `${scope}photos/${ts}/` });
+    const keys = (listed.objects || []).map((o) => o.key).filter((k) => /\.jpe?g$/i.test(k)).sort();
+    for (const pk of keys) { try { const p = await loadPhoto(pk, env); if (p) photos.push(p); } catch (_) {} }
+  }
+
+  const modelCfg = await loadModelConfig(env);
+  const turnId = `${Date.now()}-${stem.slice(-8)}`;
+  const meta = { user_scope: scope, stem, restyle: styleV };
+  const tLlm = Date.now();
+  let articles;
+  try {
+    const r = await generateArticles(transcript, styleText, photos.length ? photos : null, false, env, modelCfg);
+    await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step: 0, turn_id: turnId, meta, response: r.rawResp });
+    try {
+      if (env.USAGE) {
+        const u = r.rawResp?.usage || {};
+        await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens),
+          "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId, restyle: styleV }, Date.now());
+      }
+    } catch (_) {}
+    articles = r.articles;
+  } catch (e) {
+    await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now() - tLlm, step: 0, turn_id: turnId, meta, error: String(e) });
+    return { ok: false, reason: "llm-error" };
+  }
+  if (!articles.length) return { ok: false, reason: "no-article" };
+
+  const tagged = articles.map((a) => ({ ...a, body: prependStyleComment(a.body, styleV) }));
+  const newDoc = {
+    schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
+    createdAt: doc.createdAt || new Date().toISOString(),
+    transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: modelCfg.model,
+  };
+  await writeArticle(audioKey, newDoc, env);          // appends a new version, head moves to it
+  await notifyStatus(scope, stem, "ready", env);
+  let head = 0;
+  try { head = JSON.parse(await (await env.FILES.get(articleKey)).text()).head || 0; } catch (_) {}
+  return { ok: true, head };
+}
+
 // writeLlmLog is imported from ./llmlog.js (shared with index.js). Mine calls
 // pass source:"mine" in the record.
 
@@ -752,16 +816,19 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
 
     // ── Style(s) + photos ───────────────────────────────────────────────────────
     // 文风走 CLAUDE.json（schema-3），回退老 CLAUDE.md 的「# 我的文风」段。
-    // 多风格对比：profile.styles 选了 ≥2 个已存文风版本时，每个风格各挖一篇，分别作为
-    // 一个标准 article version 写入（head = 最后一个；其余靠 undo/redo 翻）。每篇 body
-    // 顶加 `<!--风格vN-->` 注释作为版本来源标签（展示时剥离）。
+    // profile.styles 非空就覆盖 head（含单选）：1 个=单篇用那个风格；≥2 个=每个风格各挖
+    // 一篇；空=用 head 默认文风。每篇都作为一个标准 article version 写入（head=最后一个），
+    // 且只要风格版本号已知就在 body 顶加 `<!-- style: 风格 vN -->` 标签（展示时剥离、阅读页 chip 显示）。
     const styleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
     const claudeMd  = (styleDoc ? resolveStyle(styleDoc) : await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
-    const stylePicks = (styleDoc && styleDoc.profile && Array.isArray(styleDoc.profile.styles) ? styleDoc.profile.styles : [])
+    const headV     = (styleDoc && styleDoc.head) ? styleDoc.head : null;
+    const picks = (styleDoc && styleDoc.profile && Array.isArray(styleDoc.profile.styles) ? styleDoc.profile.styles : [])
       .map((v) => ({ v, style: ((styleDoc.versions || []).find((e) => e.v === v) || {}).style }))
       .filter((p) => typeof p.style === "string" && p.style.trim());
-    const multi = stylePicks.length >= 2;
-    if (claudeMd) log("文风", { chars: claudeMd.length, multi: multi ? stylePicks.map((p) => `v${p.v}`).join(",") : false });
+    // The style(s) to mine: picks if any (1 overrides head too), else the head style
+    // (tagged with headV). No CLAUDE.json → one untagged mine with empty style.
+    const toMine = picks.length ? picks : [{ v: headV, style: claudeMd }];
+    if (claudeMd || picks.length) log("文风", { chars: claudeMd.length, use: picks.length ? picks.map((p) => `v${p.v}`).join(",") : (headV ? `v${headV}(head)` : "none") });
 
     const photoKeys = findSessionPhotos(audioKey, allKeys);
     const photos    = [];
@@ -801,16 +868,11 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       return arts;
     };
 
-    // Build the variant(s) to write. Multi → one tagged variant per picked style.
+    // Build the variant(s): one per style to mine, each tagged when its version is known.
     const variants = [];
-    if (multi) {
-      for (const p of stylePicks) {
-        const arts = await mineOnce(p.style, `风格v${p.v}`);
-        if (arts.length) variants.push(arts.map((a) => ({ ...a, body: `<!--风格v${p.v}-->\n\n${a.body}` })));
-      }
-    } else {
-      const arts = await mineOnce(claudeMd, "");
-      if (arts.length) variants.push(arts);
+    for (const p of toMine) {
+      const arts = await mineOnce(p.style, p.v ? `风格v${p.v}` : "");
+      if (arts.length) variants.push(p.v ? arts.map((a) => ({ ...a, body: prependStyleComment(a.body, p.v) })) : arts);
     }
 
     if (!variants.length) {
@@ -835,7 +897,7 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     if (srt) await writeSrt(audioKey, srt, env);
     await notifyStatus(scope, stem, "ready", env);
     try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
-    log("写入完成", { variants: variants.length, multi });
+    log("写入完成", { variants: variants.length });
     result = "mined";
     return "mined";
 

@@ -4,6 +4,7 @@ import {
   readStyleDoc, resolveStyle, parseStyleMarkdown, readStyleText,
   writeStyleDoc, setStyleHead, STYLE_MAX_VERSIONS,
   readProfileName, mergeProfile,
+  styleLabel, styleComment, prependStyleComment,
 } from "../../functions/lib/style-store.js";
 
 const KEY = "users/u/CLAUDE.json";
@@ -185,5 +186,18 @@ describe("profile — non-versioned name (changing it must NOT mint a style vers
 
   it("readProfileName: '' when neither exists", async () => {
     expect(await readProfileName(fakeEnv({}), KEY, LEGACY)).toBe("");
+  });
+});
+
+describe("style comment protocol — <!-- style: 风格 vN --> (canonical format)", () => {
+  it("styleLabel / styleComment are the single source of the format", () => {
+    expect(styleLabel(8)).toBe("风格 v8");
+    expect(styleComment(8)).toBe("<!-- style: 风格 v8 -->");
+  });
+  it("prependStyleComment tags the body so the reader's chip + reuse-match can read it", () => {
+    const body = prependStyleComment("正文第一段", 7);
+    expect(body.startsWith("<!-- style: 风格 v7 -->")).toBe(true);
+    // The version number is recoverable for the app's reuse-if-present matcher.
+    expect(body.match(/<!--\s*style:\s*风格 v(\d+)\s*-->/)[1]).toBe("7");
   });
 });
