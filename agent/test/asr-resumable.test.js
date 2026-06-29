@@ -80,12 +80,24 @@ describe("transcribeResumable", () => {
     expect(f.calls.some((u) => u.endsWith("/submit"))).toBe(false); // 没有重新提交
   });
 
-  it("deterministic Volcano error code → throws AsrError (caller marks empty)", async () => {
+  it("deterministic Volcano error code (45xxxxxx client error) → throws AsrError (caller marks empty)", async () => {
     const env = asrEnv({
       [asrTaskKeyFor(AUDIO)]: JSON.stringify({ taskId: "tid", logId: "logid-1", submittedAt: Date.now() }),
     });
     vi.stubGlobal("fetch", asrFetch([{ code: "45000001" }])); // 非处理中、非成功
     await expect(transcribeResumable(AUDIO, env, () => {})).rejects.toBeInstanceOf(AsrError);
+  });
+
+  it("transient server error (55xxxxxx) → NOT AsrError; returns pending and keeps sidecar (retry next pass)", async () => {
+    // 55001010 是火山服务端内部错误(5xx 类,SLA 定义为 service failure),临时、可重试。
+    // 绝不能当成确定性错误把一条有声音的真录音永久标「无语音」。
+    const env = asrEnv({
+      [asrTaskKeyFor(AUDIO)]: JSON.stringify({ taskId: "tid", logId: "logid-1", submittedAt: Date.now() }),
+    });
+    vi.stubGlobal("fetch", asrFetch([{ code: "55001010" }]));
+    const r = await transcribeResumable(AUDIO, env, () => {});
+    expect(r.status).toBe("pending");
+    expect(env.FILES._store.has(asrTaskKeyFor(AUDIO))).toBe(true); // sidecar 保留 → 下趟续查
   });
 
   it("stale task still processing past ASR_MAX_AGE_MS → AsrError('timeout') so it stops looping", async () => {
