@@ -120,7 +120,7 @@
 
   <h2>常用例子</h2>
   <p>登录后直接对 Claude 说人话即可；下面是它背后实际跑的命令，供你心里有数。先取 token：</p>
-  <pre><code># 优先用 6+4 登录的凭证；没有则回落到管理员 FILES_TOKEN
+  <pre><code># 用 6+4 登录存下的凭证
 CRED=~/.config/voicedrop/credentials
 TOKEN=$(python3 -c "import json;print(json.load(open('$CRED'))['token'])")</code></pre>
 
@@ -145,14 +145,13 @@ recs.sort(key=lambda f:f.get('uploaded',''), reverse=True)
   <pre><code>curl -s -H "Authorization: Bearer $TOKEN" https://jianshuo.dev/agent/usage/balance
 curl -s -H "Authorization: Bearer $TOKEN" "https://jianshuo.dev/agent/usage/ledger?limit=50"</code></pre>
 
-  <h2>三种认证</h2>
+  <h2>两种认证</h2>
   <table>
     <tr><th>方式</th><th>能看谁</th><th>怎么拿</th></tr>
     <tr><td><strong>6+4 设备配对</strong></td><td>该用户自己</td><td>上面的自助登录（推荐）</td></tr>
-    <tr><td><strong>管理员</strong></td><td>全部用户</td><td><code>~/code/.env</code> 的 <code>FILES_TOKEN</code></td></tr>
     <tr><td><strong>App 临时 token</strong></td><td>该用户自己</td><td>App 设置 → 账户 → 复制</td></tr>
   </table>
-  <p class="muted">管理员 token 看得到所有用户，调文章接口要多带一段 <code>&lt;sub&gt;</code>（如 <code>/articles/&lt;sub&gt;/&lt;stem&gt;</code>）；细节见 <a href="/voicedrop/developer/api.html">API 参考</a>。</p>
+  <p class="muted">两种都解析到同一个用户、只能访问自己的数据；细节见 <a href="/voicedrop/developer/api.html">API 参考</a>。</p>
 
 </main>
 

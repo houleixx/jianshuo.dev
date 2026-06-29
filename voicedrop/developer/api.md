@@ -16,19 +16,18 @@ VoiceDrop 后端由 **三个独立的 HTTP 服务** 组成，都跑在 Cloudflar
 
 ## 1. 认证
 
-所有请求用 `Authorization: Bearer <token>`（Files API 也接受 `?token=<token>` 查询参数）。共三档凭证：
+所有请求用 `Authorization: Bearer <token>`（Files API 也接受 `?token=<token>` 查询参数）。共两档凭证：
 
 | 凭证 | 形态 | 怎么拿 | scope（数据隔离） |
 |---|---|---|---|
 | **anon token** | `anon_` 开头、≥20 位的高熵字符串 | 客户端自己生成一次，存好（同一个用户始终用同一个 token） | `users/anon-<sha256(token)[:32]>/` |
 | **session JWT** | `h.p.sig`（HS256） | `POST auth/apple` 用 Apple identityToken 换 | JWT 内的 `scope` |
-| **admin** | = 服务端 `FILES_TOKEN` | 仅运维持有 | `''`（整个 bucket，看得到所有用户） |
 
 **关键点：**
 - **scope 决定你能看到谁的数据。** 你的所有相对 key 都会被自动拼到 `scope` 前缀下，无法越界（`..`、绝对路径一律拒）。
 - **anon 与 session 解析到同一个用户。** Apple 登录只是把 Apple ID *绑定* 到你当前那个 anon 数据盒上——session 的 scope 本身就是 `users/anon-<hash>/`。所以一个用户用 anon 还是 session 调，落到同一份数据。
 - **多数接口任意有效 token 都能调。** 只有 **写社区（share / unshare）** 要求 Apple 验证过的 session JWT，否则 `403 needs_apple_signin`。
-- 另有一种 24h **只读 temp token**（`GET token/articles` 签发），只能 `list` / `download`。Reco 与 Agent **不接受** temp / admin token。
+- 另有一种 24h **只读 temp token**（`GET token/articles` 签发），只能 `list` / `download`。Reco 与 Agent **不接受** temp token。
 
 ### 换 session JWT
 
@@ -141,7 +140,7 @@ Content-Type: application/json
 
 ## 4. Agent Worker
 
-Base：`https://jianshuo.dev/agent/`。鉴权同 Files API（anon 或 session，**编辑需可写 token**，admin 在此无单一 scope 故被拒）。
+Base：`https://jianshuo.dev/agent/`。鉴权同 Files API（anon 或 session，**编辑需可写 token**）。
 
 ### 触发挖矿
 
@@ -197,7 +196,7 @@ Authorization: Bearer <any valid user token>
 
 ## 5. Reco Worker
 
-Base：`https://jianshuo.dev/reco/`。鉴权：anon 或 session token（**不接受** temp / admin）。可拔掉——**客户端应自带 2s 超时，reco 挂 / 超时就回退按时间倒序**，feed 照常。
+Base：`https://jianshuo.dev/reco/`。鉴权：anon 或 session token（**不接受** temp token）。可拔掉——**客户端应自带 2s 超时，reco 挂 / 超时就回退按时间倒序**，feed 照常。
 
 ### `POST /reco/rank` — feed 排序
 

@@ -181,7 +181,7 @@
 
 <h2>1. 认证</h2>
 
-<p>所有请求用 <code>Authorization: Bearer &lt;token&gt;</code>（Files API 也接受 <code>?token=&lt;token&gt;</code> 查询参数）。共三档凭证：</p>
+<p>所有请求用 <code>Authorization: Bearer &lt;token&gt;</code>（Files API 也接受 <code>?token=&lt;token&gt;</code> 查询参数）。共两档凭证：</p>
 
 <div class="table-wrap">
 <table>
@@ -189,7 +189,6 @@
   <tbody>
     <tr><td><strong>anon token</strong></td><td><code>anon_</code> 开头、≥20 位的高熵字符串</td><td>客户端自己生成一次，存好（同一个用户始终用同一个 token）</td><td><code>users/anon-&lt;sha256(token)[:32]&gt;/</code></td></tr>
     <tr><td><strong>session JWT</strong></td><td><code>h.p.sig</code>（HS256）</td><td><code>POST auth/apple</code> 用 Apple identityToken 换</td><td>JWT 内的 <code>scope</code></td></tr>
-    <tr><td><strong>admin</strong></td><td>= 服务端 <code>FILES_TOKEN</code></td><td>仅运维持有</td><td><code>''</code>（整个 bucket，看得到所有用户）</td></tr>
   </tbody>
 </table>
 </div>
@@ -199,7 +198,7 @@
   <li><strong>scope 决定你能看到谁的数据。</strong> 你的所有相对 key 都会被自动拼到 <code>scope</code> 前缀下，无法越界（<code>..</code>、绝对路径一律拒）。</li>
   <li><strong>anon 与 session 解析到同一个用户。</strong> Apple 登录只是把 Apple ID <em>绑定</em> 到你当前那个 anon 数据盒上——session 的 scope 本身就是 <code>users/anon-&lt;hash&gt;/</code>。所以一个用户用 anon 还是 session 调，落到同一份数据。</li>
   <li><strong>多数接口任意有效 token 都能调。</strong> 只有 <strong>写社区（share / unshare）</strong> 要求 Apple 验证过的 session JWT，否则 <code>403 needs_apple_signin</code>。</li>
-  <li>另有一种 24h <strong>只读 temp token</strong>（<code>GET token/articles</code> 签发），只能 <code>list</code> / <code>download</code>。Reco 与 Agent <strong>不接受</strong> temp / admin token。</li>
+  <li>另有一种 24h <strong>只读 temp token</strong>（<code>GET token/articles</code> 签发），只能 <code>list</code> / <code>download</code>。Reco 与 Agent <strong>不接受</strong> temp token。</li>
 </ul>
 
 <h3>换 session JWT</h3>
@@ -353,7 +352,7 @@ Content-Type: application/json
 
 <h2>4. Agent Worker</h2>
 
-<p>Base：<code>https://jianshuo.dev/agent/</code>。鉴权同 Files API（anon 或 session，<strong>编辑需可写 token</strong>，admin 在此无单一 scope 故被拒）。</p>
+<p>Base：<code>https://jianshuo.dev/agent/</code>。鉴权同 Files API（anon 或 session，<strong>编辑需可写 token</strong>）。</p>
 
 <h3>触发挖矿</h3>
 
@@ -406,7 +405,7 @@ Authorization: Bearer &lt;any valid user token&gt;</code></pre>
 
 <h2>5. Reco Worker</h2>
 
-<p>Base：<code>https://jianshuo.dev/reco/</code>。鉴权：anon 或 session token（<strong>不接受</strong> temp / admin）。可拔掉——<strong>客户端应自带 2s 超时，reco 挂 / 超时就回退按时间倒序</strong>，feed 照常。</p>
+<p>Base：<code>https://jianshuo.dev/reco/</code>。鉴权：anon 或 session token（<strong>不接受</strong> temp token）。可拔掉——<strong>客户端应自带 2s 超时，reco 挂 / 超时就回退按时间倒序</strong>，feed 照常。</p>
 
 <h3><code>POST /reco/rank</code> — feed 排序</h3>
 
