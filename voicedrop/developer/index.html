@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>VoiceDrop 开发者</title>
+<style>
+  :root{
+    --ink:#1d1d1f; --sub:#6e6e73; --line:#e5e5e7; --bg:#ffffff;
+    --accent:#c0563f; --accent-soft:#f2ddd6; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:16px;line-height:1.7}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header.site{border-bottom:1px solid var(--line);background:var(--bg)}
+  header.site .inner{max-width:880px;margin:0 auto;padding:18px 24px;display:flex;align-items:center;gap:11px}
+  header.site .bars{display:inline-flex;align-items:flex-end;gap:2.5px;height:20px}
+  header.site .bars span{width:3px;border-radius:2px;background:var(--accent)}
+  header.site .title{font-weight:600;font-size:18px;letter-spacing:-.01em}
+  .wrap{max-width:880px;margin:0 auto;padding:8px 24px 90px}
+  .hero{padding:40px 0 8px}
+  .eyebrow{font-size:12px;letter-spacing:.16em;color:#a79f93;text-transform:uppercase;font-weight:600}
+  h1{font-size:34px;line-height:1.2;letter-spacing:-.02em;margin:12px 0 0}
+  .lede{font-size:17px;line-height:1.75;color:var(--sub);margin:14px 0 0;max-width:34em}
+  h2{font-size:14px;letter-spacing:.12em;color:#a79f93;text-transform:uppercase;font-weight:600;margin:48px 0 16px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .card{display:block;border:1px solid var(--line);border-radius:var(--radius);padding:22px 22px 20px;background:#fff;
+    box-shadow:0 6px 22px -16px rgba(140,100,60,.35);transition:transform .12s,box-shadow .12s,border-color .12s}
+  .card:hover{transform:translateY(-2px);box-shadow:0 12px 28px -16px rgba(140,100,60,.45);border-color:#e0cabf;text-decoration:none}
+  .card .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--accent);
+    background:var(--accent-soft);border-radius:999px;padding:4px 10px}
+  .card h3{font-size:19px;margin:13px 0 6px;color:var(--ink)}
+  .card p{font-size:14px;line-height:1.65;color:var(--sub);margin:0}
+  .card .go{margin-top:14px;font-size:13.5px;font-weight:600;color:var(--accent)}
+  .svc{border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .svc table{width:100%;border-collapse:collapse;font-size:14px}
+  .svc th,.svc td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+  .svc tr:last-child td{border-bottom:none}
+  .svc th{background:#faf7f4;font-weight:600;color:#8a8175;font-size:12.5px;letter-spacing:.02em}
+  .svc code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em;
+    background:#f0f0f2;color:#37373a;padding:.1em .42em;border-radius:6px}
+  .muted{color:var(--sub)}
+  footer{border-top:1px solid var(--line);margin-top:60px}
+  footer .inner{max-width:880px;margin:0 auto;padding:26px 24px;display:flex;flex-wrap:wrap;gap:18px;
+    align-items:center;justify-content:space-between;font-size:13px;color:var(--sub)}
+  footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="inner">
+    <span class="bars" aria-hidden="true"><span style="height:8px"></span><span style="height:14px"></span><span style="height:20px"></span><span style="height:12px"></span><span style="height:7px"></span></span>
+    <span class="title">VoiceDrop</span>
+    <a href="/voicedrop/" style="margin-left:auto;font-size:13.5px;color:var(--sub)">← 回首页</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <div class="eyebrow">Developer</div>
+    <h1>VoiceDrop 开发者</h1>
+    <p class="lede">VoiceDrop 的后端是一组跑在 Cloudflare 上的开放 HTTP 接口——你的录音、文章、照片、文风都能用一个凭证读写。下面是上手要看的文档。</p>
+  </section>
+
+  <h2>文档</h2>
+  <div class="cards">
+    <a class="card" href="/voicedrop/developer/wjs-voicedrop.html">
+      <span class="tag">Claude Code skill</span>
+      <h3>如何使用 wjs-voicedrop</h3>
+      <p>在终端里用一句话读写你的 VoiceDrop 文章 / 录音 / 照片 / 文风、触发挖矿、查算力。自带 6+4 手机配对登录，无需手抄 token。</p>
+      <div class="go">阅读指南 →</div>
+    </a>
+    <a class="card" href="/voicedrop/developer/api.html">
+      <span class="tag">HTTP API</span>
+      <h3>API 参考</h3>
+      <p>三个服务的完整接口：认证、文件 / 文章 CRUD、分享、公众号、社区、挖矿触发、实时状态、算力计费。给自己写客户端时看这个。</p>
+      <div class="go">查看接口 →</div>
+    </a>
+  </div>
+
+  <h2>三个服务</h2>
+  <div class="svc">
+    <table>
+      <tr><th>服务</th><th>Base URL</th><th>用途</th></tr>
+      <tr><td><strong>Files API</strong></td><td><code>jianshuo.dev/files/api/</code></td><td>账户、录音 / 文章文件、照片、分享、公众号、社区。绝大多数调用在这里。</td></tr>
+      <tr><td><strong>Agent Worker</strong></td><td><code>jianshuo.dev/agent/</code></td><td>触发挖矿、实时状态推送（WS）、语音改稿、算力余额、6+4 设备配对。</td></tr>
+      <tr><td><strong>Reco Worker</strong></td><td><code>jianshuo.dev/reco/</code></td><td>社区 feed 排序 + 互动上报。可随时拔掉，挂了不影响主流程。</td></tr>
+    </table>
+  </div>
+  <p class="muted" style="font-size:13.5px;margin-top:14px">数据流一句话：上传 <code style="font-size:.86em">.m4a</code> → 服务端挖矿（ASR + Claude）写出 <code style="font-size:.86em">articles/&lt;stem&gt;.json</code> → 客户端读文章、分享、发公众号 / 发社区。</p>
+
+</main>
+
+<footer>
+  <div class="inner">
+    <span>VoiceDrop · 开发者文档</span>
+    <span><a href="/voicedrop/">产品首页</a> · <a href="/voicedrop/privacy/">隐私政策</a> · <a href="mailto:jianshuo@hotmail.com">联系作者</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

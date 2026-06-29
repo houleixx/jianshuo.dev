@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoiceDrop API</title>
+<style>
+  :root{
+    --ink:#1d1d1f;
+    --sub:#6e6e73;
+    --line:#e5e5e7;
+    --bg:#ffffff;
+    --accent:#c0563f;
+    --accent-soft:#f2ddd6;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-size:16px;
+    line-height:1.75;
+  }
+  header.site{
+    border-bottom:1px solid var(--line);
+    background:var(--bg);
+  }
+  header.site .inner{
+    max-width:820px;
+    margin:0 auto;
+    padding:18px 24px;
+    display:flex;
+    align-items:center;
+    gap:11px;
+  }
+  header.site .bars{
+    display:inline-flex;
+    align-items:flex-end;
+    gap:2.5px;
+    height:20px;
+  }
+  header.site .bars span{width:3px;border-radius:2px;background:var(--accent)}
+  header.site .title{font-weight:600;font-size:18px;letter-spacing:-.01em}
+  .wrap{max-width:820px;margin:0 auto;padding:8px 24px 90px}
+  h1{font-size:30px;line-height:1.25;letter-spacing:-.02em;margin:30px 0 12px}
+  h2{
+    font-size:23px;
+    line-height:1.3;
+    letter-spacing:-.01em;
+    margin:50px 0 14px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+    color:var(--accent);
+  }
+  h3{font-size:18px;line-height:1.45;margin:34px 0 10px}
+  h3 code{font-size:.84em}
+  p{margin:14px 0}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  strong{font-weight:600;color:var(--ink)}
+  em{font-style:italic}
+  hr{border:none;border-top:1px solid var(--line);margin:42px 0}
+  ul{margin:14px 0;padding-left:22px}
+  li{margin:9px 0}
+  li > .table-wrap{margin-top:12px}
+  blockquote{
+    margin:18px 0;
+    padding:12px 18px;
+    background:var(--accent-soft);
+    border-left:3px solid var(--accent);
+    border-radius:0 10px 10px 0;
+    color:#5b3a30;
+  }
+  blockquote p{margin:0}
+  blockquote code{background:rgba(192,86,63,.12);color:#7a3322}
+  code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    font-size:.86em;
+    background:#f0f0f2;
+    color:#37373a;
+    padding:.1em .42em;
+    border-radius:6px;
+    overflow-wrap:anywhere;
+  }
+  pre{
+    margin:16px 0;
+    background:#f6f6f7;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px 16px;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  pre code{
+    display:block;
+    background:none;
+    color:#1d1d1f;
+    padding:0;
+    font-size:13.5px;
+    line-height:1.7;
+    white-space:pre;
+    overflow-wrap:normal;
+  }
+  .table-wrap{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    margin:16px 0;
+    border:1px solid var(--line);
+    border-radius:12px;
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    font-size:14.5px;
+  }
+  th,td{
+    text-align:left;
+    padding:10px 14px;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+  }
+  th{
+    background:#fafafa;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  table tr:last-child td{border-bottom:none}
+  td code,th code{white-space:normal}
+  @media (max-width:520px){
+    body{font-size:15px}
+    .wrap{padding:4px 16px 70px}
+    header.site .inner{padding:16px}
+    h1{font-size:25px}
+    h2{font-size:20px}
+    h3{font-size:17px}
+    pre code{font-size:12.5px}
+    table{font-size:13.5px}
+    th,td{padding:9px 11px}
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="inner">
+    <span class="bars" aria-hidden="true">
+      <span style="height:8px"></span><span style="height:14px"></span><span style="height:20px"></span><span style="height:12px"></span><span style="height:7px"></span>
+    </span>
+    <span class="title">VoiceDrop API</span>
+    <a href="/voicedrop/developer/" style="margin-left:auto;font-size:13.5px;color:var(--sub)">← 开发者</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+<h1>VoiceDrop API</h1>
+
+<p>VoiceDrop 后端由 <strong>三个独立的 HTTP 服务</strong> 组成，都跑在 Cloudflare 上、同挂 <code>jianshuo.dev</code> 这个 zone。一个客户端通常只跟前两个打交道。</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>服务</th><th>Base URL</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Files API</strong></td><td><code>https://jianshuo.dev/files/api/</code></td><td>账户、录音/文章文件、分享、公众号、社区。绝大多数调用在这里。</td></tr>
+    <tr><td><strong>Agent Worker</strong></td><td><code>https://jianshuo.dev/agent/</code>（WS：<code>wss://jianshuo.dev/agent/</code>）</td><td>触发挖矿、实时状态推送、语音改稿。</td></tr>
+    <tr><td><strong>Reco Worker</strong></td><td><code>https://jianshuo.dev/reco/</code></td><td>社区 feed 排序 + 互动上报。可随时拔掉，挂了不影响主流程。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<blockquote><p>每个服务都另有一个 <code>*.jianshuo.workers.dev</code> 镜像（<code>voicedrop-agent.jianshuo.workers.dev</code>、<code>voicedrop-reco.jianshuo.workers.dev</code>），行为一致。同 zone 内服务端互调用镜像绕过 Pages 路由；客户端用上面的 <code>jianshuo.dev/...</code> 即可。</p></blockquote>
+
+<p><strong>数据流一句话</strong>：上传 <code>.m4a</code> → 服务端挖矿（ASR + Claude）写出 <code>articles/&lt;stem&gt;.json</code> → 客户端读文章、分享、发公众号 / 发社区。</p>
+
+<hr>
+
+<h2>1. 认证</h2>
+
+<p>所有请求用 <code>Authorization: Bearer &lt;token&gt;</code>（Files API 也接受 <code>?token=&lt;token&gt;</code> 查询参数）。共三档凭证：</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>凭证</th><th>形态</th><th>怎么拿</th><th>scope（数据隔离）</th></tr></thead>
+  <tbody>
+    <tr><td><strong>anon token</strong></td><td><code>anon_</code> 开头、≥20 位的高熵字符串</td><td>客户端自己生成一次，存好（同一个用户始终用同一个 token）</td><td><code>users/anon-&lt;sha256(token)[:32]&gt;/</code></td></tr>
+    <tr><td><strong>session JWT</strong></td><td><code>h.p.sig</code>（HS256）</td><td><code>POST auth/apple</code> 用 Apple identityToken 换</td><td>JWT 内的 <code>scope</code></td></tr>
+    <tr><td><strong>admin</strong></td><td>= 服务端 <code>FILES_TOKEN</code></td><td>仅运维持有</td><td><code>''</code>（整个 bucket，看得到所有用户）</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>关键点：</strong></p>
+<ul>
+  <li><strong>scope 决定你能看到谁的数据。</strong> 你的所有相对 key 都会被自动拼到 <code>scope</code> 前缀下，无法越界（<code>..</code>、绝对路径一律拒）。</li>
+  <li><strong>anon 与 session 解析到同一个用户。</strong> Apple 登录只是把 Apple ID <em>绑定</em> 到你当前那个 anon 数据盒上——session 的 scope 本身就是 <code>users/anon-&lt;hash&gt;/</code>。所以一个用户用 anon 还是 session 调，落到同一份数据。</li>
+  <li><strong>多数接口任意有效 token 都能调。</strong> 只有 <strong>写社区（share / unshare）</strong> 要求 Apple 验证过的 session JWT，否则 <code>403 needs_apple_signin</code>。</li>
+  <li>另有一种 24h <strong>只读 temp token</strong>（<code>GET token/articles</code> 签发），只能 <code>list</code> / <code>download</code>。Reco 与 Agent <strong>不接受</strong> temp / admin token。</li>
+</ul>
+
+<h3>换 session JWT</h3>
+
+<pre><code>POST /files/api/auth/apple
+Content-Type: application/json
+
+{ "identityToken": "&lt;Apple identity token&gt;", "fullName": "张三", "email": "..." }</code></pre>
+
+<p><code>fullName</code> / <code>email</code> 仅首次授权时由 Apple 下发，可选。带上当前的 anon token（<code>Authorization</code> 头）则把这个 Apple ID 绑到该 anon 盒，数据不搬家。</p>
+
+<p>返回：<code>{ "session": "&lt;JWT, 有效期 365 天&gt;", "scope": "users/&lt;sub&gt;/" }</code></p>
+
+<hr>
+
+<h2>2. 通用约定</h2>
+
+<ul>
+  <li><strong>请求 / 响应体都是 JSON</strong>（文件上传 / 下载除外）。</li>
+  <li><strong>错误</strong>：非 2xx 一律返回 <code>{ "error": "&lt;code&gt;", ... }</code>。常见状态码：
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>码</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>400</td><td>参数 / key 非法</td></tr>
+        <tr><td>401</td><td>token 缺失或无效</td></tr>
+        <tr><td>403</td><td>权限不足（只读 token 越权、非 owner、社区写未登录 Apple）</td></tr>
+        <tr><td>404</td><td>资源不存在</td></tr>
+        <tr><td>409</td><td>未配置（如公众号未填 AppID/Secret → <code>wechat_not_configured</code>）</td></tr>
+        <tr><td>502</td><td>上游失败（公众号 relay / 真实 WeChat errcode 透传）</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </li>
+  <li><strong>路径约定</strong>（容易混，重点看）：
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>接口家族</th><th>你传的标识符</th><th>例子</th></tr></thead>
+      <tbody>
+        <tr><td>文件类（<code>list</code>/<code>download</code>/<code>upload</code>/<code>file</code>）</td><td><strong>scope 内相对路径</strong></td><td><code>VoiceDrop-xxx.m4a</code>、<code>articles/xxx.json</code></td></tr>
+        <tr><td><code>share</code> / <code>wechat</code> / <code>community/*</code></td><td><strong>相对文章 key</strong></td><td><code>articles/&lt;stem&gt;.json</code></td></tr>
+        <tr><td>Articles API（<code>/articles/...</code>）</td><td><strong>stem</strong>（纯文件名，不带 <code>articles/</code> 前缀、不带 <code>.json</code>）</td><td><code>VoiceDrop-xxx</code></td></tr>
+        <tr><td><code>photo</code> / <code>asset</code>（公开）</td><td><strong>完整 R2 key</strong></td><td><code>users/&lt;sub&gt;/photos/.../x.jpg</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </li>
+</ul>
+
+<hr>
+
+<h2>3. Files API</h2>
+
+<blockquote><p>除 <code>auth/apple</code>、<code>photo/*</code>、<code>asset/wechat-covers/*</code> 外，全部需要 token。</p></blockquote>
+
+<h3>账户</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>方法 / 路径</th><th>说明</th><th>返回</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST auth/apple</code></td><td>见上</td><td><code>{session, scope}</code></td></tr>
+    <tr><td><code>GET whoami</code></td><td>当前 token 解析出的 scope</td><td><code>{scope:"users/&lt;sub&gt;/"}</code></td></tr>
+    <tr><td><code>GET token/articles</code></td><td>签发 24h 只读文章链接</td><td><code>{token, url, expires_in:86400}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>文件（裸 R2 读写）</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>方法 / 路径</th><th>说明</th><th>返回</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET list</code></td><td>列出 scope 内全部对象（已分页聚合，不截断）</td><td><code>{files:[{name,size,uploaded}]}</code></td></tr>
+    <tr><td><code>PUT upload/&lt;name&gt;</code></td><td>上传（请求体即文件原始字节，<code>Content-Type</code> 透传）。<strong><code>name</code> 形如 <code>VoiceDrop-*.m4a</code> 时自动触发挖矿。</strong></td><td><code>{ok:true, name}</code></td></tr>
+    <tr><td><code>GET download/&lt;name&gt;</code></td><td>下载原始字节。<code>HEAD</code> 同路径只取元信息。</td><td>文件字节</td></tr>
+    <tr><td><code>DELETE file/&lt;name&gt;</code></td><td>删除单个对象</td><td><code>{ok:true}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>录音文件名约定</strong>：<code>VoiceDrop-&lt;ts&gt;-&lt;dur&gt;-&lt;weekday&gt;-&lt;period&gt;[-&lt;city&gt;-&lt;district&gt;].m4a</code>（纯 ASCII）。只有这个前缀+后缀会触发自动挖矿。</p>
+
+<h3>文章（高层 CRUD，自带版本控制）</h3>
+
+<p><code>&lt;stem&gt;</code> = 录音文件去掉后缀的主名。<strong>优先用这组接口而不是裸 <code>download/articles/&lt;stem&gt;.json</code></strong>——它会把内部版本结构（<code>versions[head]</code>）拍平成顶层 <code>articles</code>。</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>方法 / 路径</th><th>说明</th><th>返回</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET articles</code></td><td>列出全部文章</td><td><code>{articles:[{stem,title,head,createdAt,updatedAt,count}]}</code></td></tr>
+    <tr><td><code>GET articles/&lt;stem&gt;</code></td><td>读一篇(当前 head 版本)</td><td>文章文档（见 §6）</td></tr>
+    <tr><td><code>PUT articles/&lt;stem&gt;</code></td><td>写入（自动存为新版本）</td><td><code>{ok, head}</code></td></tr>
+    <tr><td><code>DELETE articles/&lt;stem&gt;</code></td><td>删文章 + <code>.srt</code> + <code>.empty</code> 边车</td><td><code>{ok}</code></td></tr>
+    <tr><td><code>GET articles/&lt;stem&gt;/history</code></td><td>版本历史</td><td><code>{head, versions:[...]}</code></td></tr>
+    <tr><td><code>PATCH articles/&lt;stem&gt;/head</code></td><td>只移动 head 指针（撤销 / 重做，不产生新版本），body <code>{head:&lt;n&gt;}</code></td><td><code>{ok, head}</code></td></tr>
+    <tr><td><code>PUT articles/&lt;stem&gt;/srt</code></td><td>写字幕边车（请求体为 SRT 文本）</td><td><code>{ok}</code></td></tr>
+    <tr><td><code>PUT articles/&lt;stem&gt;/empty</code></td><td>标记无语音，body <code>{reason?}</code></td><td><code>{ok}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>分享 &amp; 公众号</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>方法 / 路径</th><th>说明</th><th>返回</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET share/articles/&lt;stem&gt;.json</code></td><td>生成 / 取该文章的公开短链</td><td><code>{url:"https://jianshuo.dev/voicedrop/&lt;id&gt;"}</code></td></tr>
+    <tr><td><code>POST wechat/articles/&lt;stem&gt;.json</code></td><td><strong>同步</strong>把文章发成公众号草稿（已发过则原地更新）。需先配好 <code>WECHAT.json</code>。</td><td><code>{ok,created,updated}</code>；<code>409 wechat_not_configured</code>；<code>502 {errcode,errmsg}</code> 透传真实微信错误</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>社区（跨用户公共空间）</h3>
+
+<p>帖子是 <strong>指向某篇文章的活指针</strong>（schema-2，无内容拷贝）——源文章一改，社区里立即同步。</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>方法 / 路径</th><th>说明</th><th>返回</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST community/share/articles/&lt;stem&gt;.json</code></td><td>分享 / 重新分享自己的一篇。body 可带 <code>{replyTo:&lt;shareId&gt;}</code> 表示回复。<strong>需 Apple session</strong>，否则 <code>403 needs_apple_signin</code>。</td><td><code>{ok, shareId}</code></td></tr>
+    <tr><td><code>GET community/list</code></td><td>全部帖子，按首次分享时间倒序</td><td><code>{posts:[{shareId,author,title,firstSharedAt,count,mine,replyTo?}]}</code></td></tr>
+    <tr><td><code>GET community/get/&lt;shareId&gt;</code></td><td>读一帖（含活文章内容）</td><td><code>{shareId,author,title,articles:[{title,body}],owner,firstSharedAt,replyTo?}</code></td></tr>
+    <tr><td><code>GET community/replies/&lt;shareId&gt;</code></td><td>某帖的回复，按时间正序</td><td><code>{posts:[...]}</code></td></tr>
+    <tr><td><code>GET community/shared/articles/&lt;stem&gt;.json</code></td><td>我这篇是否已分享（驱动「分享 / 更新」按钮）</td><td><code>{shared:bool, shareId?}</code></td></tr>
+    <tr><td><code>POST community/unshare/&lt;shareId&gt;</code></td><td>撤下自己的帖（<strong>owner only</strong>）</td><td><code>{ok}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<blockquote><p>渲染社区帖里的照片：用返回的 <code>owner</code> 拼上正文里 <code>[[photo:&lt;relkey&gt;]]</code> 标记的 key，得到完整 key，再走下面的公开 <code>photo/&lt;key&gt;</code> 取图。</p></blockquote>
+
+<h3>公开资源（无需 token）</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>方法 / 路径</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET photo/&lt;完整 R2 key&gt;</code></td><td>取一张会话照片。只接受 <code>users/*/photos/*.(jpg|jpeg|png)</code>，CORS <code>*</code>、公开缓存。<strong>所有照片展示都走这个唯一端点。</strong></td></tr>
+    <tr><td><code>GET asset/wechat-covers</code></td><td>列出公众号封面图名 → <code>{covers:[...]}</code></td></tr>
+    <tr><td><code>GET asset/wechat-covers/&lt;name&gt;</code></td><td>取一张封面图字节</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr>
+
+<h2>4. Agent Worker</h2>
+
+<p>Base：<code>https://jianshuo.dev/agent/</code>。鉴权同 Files API（anon 或 session，<strong>编辑需可写 token</strong>，admin 在此无单一 scope 故被拒）。</p>
+
+<h3>触发挖矿</h3>
+
+<pre><code>POST /agent/mine/trigger
+Authorization: Bearer &lt;any valid user token&gt;</code></pre>
+
+<p>唤醒服务端 miner 处理所有待处理录音。幂等，已处理的会跳过。返回 <code>202 queued</code>。上传 <code>.m4a</code> 时服务端已自动调，一般无需手动。</p>
+
+<h3><code>wss://…/agent/edit?stem=&lt;stem&gt;</code> — 语音改稿</h3>
+
+<p>打开后是一条长连接，可多轮往返；服务端按文章持久化历史，跨轮有上下文。</p>
+
+<p><strong>客户端 → 服务端</strong>（发改稿指令）：</p>
+<pre><code>{
+  "type": "instruct",
+  "text": "把第3行改简洁点，删掉图2",
+  "images": [
+    { "data": "&lt;base64&gt;", "key": "photos/&lt;sessionTs&gt;/&lt;offset&gt;-&lt;rand&gt;.jpg", "mediaType": "image/jpeg" }
+  ]
+}</code></pre>
+<p>（<code>images</code> 可选，附带新照片。）</p>
+
+<p><strong>服务端 → 客户端</strong>（每条指令依次推这些）：</p>
+<pre><code>{ "type": "status",  "state": "working" }
+{ "type": "updated", "article": { ... 顶层 articles 的完整文档 } }
+{ "type": "reply",   "text": "改好了", "ok": true }
+{ "type": "error",   "message": "&lt;原因&gt;" }</code></pre>
+<ul>
+  <li><code>status</code>：开始处理。</li>
+  <li><code>updated</code>：已写回 R2，请用它原地刷新。</li>
+  <li><code>reply</code>：口头确认（<code>text</code> 可能为空）。</li>
+  <li><code>error</code>：失败；本条指令未生效。</li>
+</ul>
+
+<p><strong>协议规则（客户端必须遵守）：</strong></p>
+<ul>
+  <li><strong>严格串行</strong>：上一条 <code>instruct</code> 收到 <code>updated</code> 之前，不要发下一条。服务端正忙时会回 <code>{"type":"error","message":"正在修改，请稍候"}</code>。</li>
+  <li>一次成功的指令固定先 <code>status</code> → 再 <code>updated</code> →（多数情况）<code>reply</code>。拿到 <code>updated</code> 即可认为本轮文章已落库。</li>
+  <li>正文里 <code>[[photo:&lt;key&gt;]]</code> 标记 = 配图位置，key 就是照片的相对 R2 key。改稿时这些标记会被原样保留。</li>
+  <li>用户可用「第N行 / 图N」指代位置：第N行 = 正文按真实换行拆开后第 N 个非空行（图片标记自己占一行）；图N = 正文里第 N 个出现的照片标记。</li>
+</ul>
+
+<h3><code>wss://…/agent/status</code> — 实时状态推送</h3>
+
+<p>只读订阅，<strong>客户端不发消息</strong>。每当某条录音状态变化，服务端推：</p>
+<pre><code>{ "type": "status_update", "stem": "VoiceDrop-xxx", "status": "asr" }</code></pre>
+<p><code>status</code> 取值：<code>asr</code>（听录音）· <code>mining</code>（挖文章）· <code>ready</code>（已成文）· <code>empty</code>（无语音）。据此把列表行的徽章原地翻状态，免轮询。</p>
+
+<hr>
+
+<h2>5. Reco Worker</h2>
+
+<p>Base：<code>https://jianshuo.dev/reco/</code>。鉴权：anon 或 session token（<strong>不接受</strong> temp / admin）。可拔掉——<strong>客户端应自带 2s 超时，reco 挂 / 超时就回退按时间倒序</strong>，feed 照常。</p>
+
+<h3><code>POST /reco/rank</code> — feed 排序</h3>
+
+<p>把 <code>GET community/list</code> 拿到的帖子交给 reco 排序。请求：</p>
+<pre><code>{ "posts": [ { "shareId":"abc", "firstSharedAt":1700000000000, "replyCount":2, "author":"张三" } ] }</code></pre>
+<p>返回：</p>
+<pre><code>{ "order": ["&lt;shareId&gt;", "..."],
+  "liked": ["&lt;shareId&gt;", "..."] }</code></pre>
+<p><code>order</code> = 排好序的 shareId；<code>liked</code> = 当前用户点过 ❤️ 的。评分 = <code>(1 + view·1 + finish·4 + like·3 + reply·5 + report·(-9)) / (ageHours+2)^1.5</code>，再按作者打散。</p>
+
+<h3><code>POST /reco/engage/&lt;shareId&gt;</code> — 互动上报（fire-and-forget）</h3>
+
+<pre><code>{ "action": "view" }</code></pre>
+<p><code>action</code> ∈ <code>view</code>（进帖）· <code>finish</code>（读到底）· <code>like</code>（❤️）· <code>report</code>（举报）。</p>
+<ul>
+  <li>每用户每动作去重；<code>view</code> / <code>finish</code> / <code>report</code> 一次性、不累计。</li>
+  <li><strong><code>like</code></strong> 带 <code>{"action":"like","on":false}</code> 表示取消赞；返回 <code>{ok, liked:&lt;bool&gt;}</code>。其它返回 <code>{ok}</code>。</li>
+  <li><strong><code>report</code></strong> 不可撤销、负权重，一个举报即可把冷启动帖压到沉底。</li>
+  <li>D1 不可用时整体降级为 no-op，永不报错。</li>
+</ul>
+
+<hr>
+
+<h2>6. 数据模型</h2>
+
+<h3>文章文档（<code>GET articles/&lt;stem&gt;</code> 返回）</h3>
+
+<pre><code>{
+  "schema": 3,
+  "id": "VoiceDrop-xxx",
+  "sourceAudio": "VoiceDrop-xxx.m4a",
+  "createdAt": 1700000000000,
+  "updatedAt": 1700000000000,
+  "transcript": "原始口述转写……",
+  "srt": "1\n00:00:00,000 --&gt; ...",
+  "status": "ready",
+  "model": "claude-sonnet-4-6",
+  "articles": [ { "title": "标题", "body": "正文 markdown，含 [[photo:&lt;relkey&gt;]] 标记" } ]
+}</code></pre>
+<ul>
+  <li><strong><code>articles</code> 是当前 head 版本拍平的结果</strong>；内部 <code>versions</code> / <code>head</code> 不在此返回（用 <code>/history</code> 查）。</li>
+  <li>文章<strong>存在</strong> = <code>articles/&lt;stem&gt;.json</code> 存在 = 已成文。</li>
+  <li>文章处理后<strong>无语音</strong> = 同目录有 <code>articles/&lt;stem&gt;.empty</code>（<code>{status:"empty",reason:"..."}</code>）。</li>
+  <li><strong>照片</strong>只靠正文里的 <code>[[photo:&lt;relkey&gt;]]</code> 标记引用，没有单独的 photos 数组。<code>&lt;relkey&gt;</code> 是 scope 内相对 key，拼上 <code>whoami</code> / <code>owner</code> 的 <code>users/&lt;sub&gt;/</code> 前缀即得完整 key，走公开 <code>photo/&lt;key&gt;</code> 取图。</li>
+</ul>
+
+<h3>R2 key 速查（均在 <code>users/&lt;sub&gt;/</code> 下）</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>key</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td><code>VoiceDrop-&lt;ts&gt;-….m4a</code></td><td>录音（上传它触发挖矿）</td></tr>
+    <tr><td><code>articles/&lt;stem&gt;.json</code></td><td>文章（存在 = 已成文）</td></tr>
+    <tr><td><code>articles/&lt;stem&gt;.empty</code></td><td>无语音标记</td></tr>
+    <tr><td><code>articles/&lt;stem&gt;.srt</code></td><td>字幕边车</td></tr>
+    <tr><td><code>photos/&lt;sessionTs&gt;/&lt;offset&gt;-&lt;rand&gt;.jpg</code></td><td>会话照片（<code>&lt;offset&gt;</code> = 距录音起点的整数秒）</td></tr>
+    <tr><td><code>CLAUDE.md</code></td><td>用户名字 + 文风（喂给挖矿/改稿 prompt）</td></tr>
+    <tr><td><code>WECHAT.json</code></td><td>公众号配置 <code>{appid,secret,enabled,coverMediaIds}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr>
+
+<h2>7. 端到端示例（cURL）</h2>
+
+<pre><code>TOKEN="anon_xxxxxxxxxxxxxxxxxxxx"
+BASE="https://jianshuo.dev/files/api"
+
+# 1) 上传录音（自动触发挖矿）
+curl -X PUT "$BASE/upload/VoiceDrop-20260627-093012-Sat-morning.m4a" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: audio/m4a" \
+  --data-binary @rec.m4a
+
+# 2)（可选）手动催一把挖矿
+curl -X POST "https://jianshuo.dev/agent/mine/trigger" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3) 列文章，读一篇
+curl "$BASE/articles" -H "Authorization: Bearer $TOKEN"
+curl "$BASE/articles/VoiceDrop-20260627-093012-Sat-morning" -H "Authorization: Bearer $TOKEN"
+
+# 4) 生成公开分享短链
+curl "$BASE/share/articles/VoiceDrop-20260627-093012-Sat-morning.json" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5) 发成公众号草稿（需先配 WECHAT.json）
+curl -X POST "$BASE/wechat/articles/VoiceDrop-20260627-093012-Sat-morning.json" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+<p>实时进度可订阅 <code>wss://jianshuo.dev/agent/status</code>（带同一个 <code>Authorization</code>），看着这条录音的徽章从 <code>asr</code> → <code>mining</code> → <code>ready</code> 翻过去。</p>
+
+</main>
+
+</body>
+</html>

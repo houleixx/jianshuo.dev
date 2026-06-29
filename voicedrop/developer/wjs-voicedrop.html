@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>如何使用 wjs-voicedrop · VoiceDrop 开发者</title>
+<style>
+  :root{
+    --ink:#1d1d1f; --sub:#6e6e73; --line:#e5e5e7; --bg:#ffffff;
+    --accent:#c0563f; --accent-soft:#f2ddd6; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:16px;line-height:1.75}
+  header.site{border-bottom:1px solid var(--line);background:var(--bg)}
+  header.site .inner{max-width:820px;margin:0 auto;padding:18px 24px;display:flex;align-items:center;gap:11px}
+  header.site .bars{display:inline-flex;align-items:flex-end;gap:2.5px;height:20px}
+  header.site .bars span{width:3px;border-radius:2px;background:var(--accent)}
+  header.site .title{font-weight:600;font-size:18px;letter-spacing:-.01em}
+  .wrap{max-width:820px;margin:0 auto;padding:8px 24px 90px}
+  h1{font-size:31px;line-height:1.22;letter-spacing:-.02em;margin:30px 0 6px}
+  .sub{font-size:16px;color:var(--sub);margin:0 0 8px}
+  h2{font-size:22px;line-height:1.3;letter-spacing:-.01em;margin:50px 0 14px;padding-top:18px;border-top:1px solid var(--line);color:var(--accent)}
+  h3{font-size:17px;line-height:1.45;margin:30px 0 8px}
+  p{margin:14px 0}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  strong{font-weight:600;color:var(--ink)}
+  ul,ol{margin:14px 0;padding-left:22px}
+  li{margin:8px 0}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.86em;
+    background:#f0f0f2;color:#37373a;padding:.1em .42em;border-radius:6px;overflow-wrap:anywhere}
+  pre{background:#f7f6f4;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;
+    padding:14px 16px;overflow-x:auto;margin:16px 0;line-height:1.6}
+  pre code{background:none;color:#2a2521;padding:0;font-size:13px}
+  blockquote{margin:18px 0;padding:12px 18px;background:var(--accent-soft);border-left:3px solid var(--accent);
+    border-radius:0 10px 10px 0;color:#5b3a30}
+  blockquote p{margin:0}
+  blockquote code{background:rgba(192,86,63,.12);color:#7a3322}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:16px 0}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#faf7f4;font-weight:600;color:#8a8175;font-size:12.5px;letter-spacing:.02em}
+  td code{font-size:.82em}
+  .step{display:flex;gap:13px;align-items:flex-start;margin:18px 0}
+  .step .n{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--accent-soft);color:var(--accent);
+    font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .step .body{flex:1;min-width:0}
+  .step .body p:first-child{margin-top:0}
+  .muted{color:var(--sub)}
+  .crumb{font-size:13.5px;color:var(--sub)}
+  footer{border-top:1px solid var(--line);margin-top:56px}
+  footer .inner{max-width:820px;margin:0 auto;padding:26px 24px;display:flex;flex-wrap:wrap;gap:16px;
+    align-items:center;justify-content:space-between;font-size:13px;color:var(--sub)}
+  footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="inner">
+    <span class="bars" aria-hidden="true"><span style="height:8px"></span><span style="height:14px"></span><span style="height:20px"></span><span style="height:12px"></span><span style="height:7px"></span></span>
+    <span class="title">VoiceDrop</span>
+    <a href="/voicedrop/developer/" style="margin-left:auto;font-size:13.5px;color:var(--sub)">← 开发者</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <h1>如何使用 wjs-voicedrop</h1>
+  <p class="sub">一个 Claude Code skill：在终端里用一句话读写你的 VoiceDrop 账号。</p>
+
+  <p><strong>wjs-voicedrop</strong> 把 VoiceDrop 的全部后端接口包成一个 Claude Code skill。装好之后，你直接对 Claude 说「列出我的 VoiceDrop 文章」「把这几篇蒸馏成文风上传」「触发挖矿」「查算力余额」，它就替你认证、调接口、整理结果——不用记 URL、不用手抄 token。</p>
+
+  <blockquote><p>它能做的事 = VoiceDrop 后端能做的事：<strong>文章</strong>（列 / 读 / 写 / 版本）、<strong>文风 CLAUDE.md</strong>（读 / 写）、<strong>照片</strong>（列 / 传 / 下）、<strong>录音</strong>（列 / 传 / 下）、<strong>触发挖矿</strong>、<strong>算力余额与账单</strong>、<strong>分享链接</strong>、<strong>发公众号草稿</strong>。要直接用 HTTP 调，看 <a href="/voicedrop/developer/api.html">API 参考</a>。</p></blockquote>
+
+  <h2>前置</h2>
+  <ul>
+    <li><a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a> 已安装，且 skill 放在 <code>~/.claude/skills/wjs-voicedrop/</code>。</li>
+    <li><strong>Node ≥ 20</strong>（登录脚本用，零依赖，仅用内置模块）。</li>
+    <li>触发词：直接说「列出 voicedrop 文章」「蒸馏文风」「触发挖矿」「登录 voicedrop」，或敲 <code>/wjs-voicedrop</code>。</li>
+  </ul>
+
+  <h2>第一步：登录（6+4 手机配对）</h2>
+  <p>skill 自带一个登录脚本 <code>vd-login.mjs</code>，扮演「新设备」和你的手机（老设备）配一次对，把账号凭证<strong>端到端加密</strong>取到本机，存进 <code>~/.config/voicedrop/credentials</code>（<code>chmod 600</code>）。之后所有调用自动读它。</p>
+  <p class="muted">前提：手机在线、app 在前台、已登录目标账号，且是支持设备配对的版本。</p>
+
+  <h3>先查是否已登录</h3>
+  <pre><code>node ~/.claude/skills/wjs-voicedrop/vd-login.mjs status
+# 已登录 → {"ok":true,"scope":"users/anon-…/","live":true}
+# 未登录 → {"ok":false,…}  → 走下面两步</code></pre>
+
+  <h3>两步握手</h3>
+  <div class="step"><div class="n">1</div><div class="body">
+    <p>在手机 app <strong>设置 → 账户</strong> 看那串 <strong>6 位十六进制</strong>短码，跑：</p>
+    <pre><code>node ~/.claude/skills/wjs-voicedrop/vd-login.mjs start &lt;6位码&gt;</code></pre>
+    <p><code>{"ok":true,"pairingId":…}</code> → 手机这会儿会弹一个 <strong>4 位数字码</strong>。<br>
+       <code>{"ok":false,"error":"no_match"}</code> → 6 位码错，或手机离线 / 后台 / 旧版本。</p>
+  </div></div>
+  <div class="step"><div class="n">2</div><div class="body">
+    <p>把手机弹出的 <strong>4 位数字码</strong> 输入：</p>
+    <pre><code>node ~/.claude/skills/wjs-voicedrop/vd-login.mjs finish &lt;4位码&gt;</code></pre>
+    <p><code>{"ok":true,"scope":"users/anon-…/"}</code> → 登录成功，凭证已落地。<br>
+       <code>wrong_code</code> + <code>remaining</code> → 输错了，用对的再跑一次 <code>finish</code>（共 5 次 / 2 分钟）。</p>
+  </div></div>
+
+  <blockquote><p><strong>安全：</strong>这是把账号的<strong>完整密钥</strong>拷到磁盘，不是可吊销的子 token。谁拿到 <code>~/.config/voicedrop/credentials</code> 就有该账号全部权限，且无法单独吊销这台机器。保持文件私有，绝不提交或同步到任何可读处。退出登录：<code>vd-login.mjs logout</code>。</p></blockquote>
+
+  <h2>它能做什么</h2>
+  <table>
+    <tr><th>资源</th><th>操作</th></tr>
+    <tr><td><strong>文章</strong></td><td>列出（最新在前）· 读全文 · 写（自动版本化）· 版本历史 / 撤销重做 · 删除</td></tr>
+    <tr><td><strong>文风</strong></td><td>读 / 写 <code>CLAUDE.md</code>——挖文章时自动叠加进 prompt</td></tr>
+    <tr><td><strong>照片</strong></td><td>列出 · 上传 · 下载（公开 / 私有）</td></tr>
+    <tr><td><strong>录音</strong></td><td>列出 · 上传（自动触发挖矿）· 下载</td></tr>
+    <tr><td><strong>操作</strong></td><td>触发挖矿 · 查算力余额与账单 · 生成公开分享链接 · 发公众号草稿</td></tr>
+  </table>
+
+  <h2>常用例子</h2>
+  <p>登录后直接对 Claude 说人话即可；下面是它背后实际跑的命令，供你心里有数。先取 token：</p>
+  <pre><code># 优先用 6+4 登录的凭证；没有则回落到管理员 FILES_TOKEN
+CRED=~/.config/voicedrop/credentials
+TOKEN=$(python3 -c "import json;print(json.load(open('$CRED'))['token'])")</code></pre>
+
+  <h3>列出我的文章（最新在前）</h3>
+  <pre><code>curl -s -H "Authorization: Bearer $TOKEN" https://jianshuo.dev/files/api/articles</code></pre>
+
+  <h3>蒸馏文风并上传</h3>
+  <p>挑 3–6 篇成文文章 → Claude 提炼出可执行的「文风规则」→ 预览确认后写进 <code>CLAUDE.md</code>，下次挖文章自动带上。直接说「<strong>蒸馏我的 VoiceDrop 文风</strong>」即可。</p>
+
+  <h3>列出录音（按真实上传时间倒序）</h3>
+  <pre><code>curl -s -H "Authorization: Bearer $TOKEN" https://jianshuo.dev/files/api/list \
+  | python3 -c "import json,sys
+recs=[f for f in json.load(sys.stdin)['files'] if f['name'].endswith('.m4a')]
+recs.sort(key=lambda f:f.get('uploaded',''), reverse=True)
+[print(f.get('uploaded',''),f['name']) for f in recs]"</code></pre>
+  <p class="muted">用 <code>uploaded</code>（R2 上传时间）排序，不靠文件名——名字里的时间戳不一定是可靠时钟。</p>
+
+  <h3>立即触发挖矿</h3>
+  <pre><code>curl -s -X POST -H "Authorization: Bearer $TOKEN" https://jianshuo.dev/agent/mine/trigger</code></pre>
+
+  <h3>查算力余额 / 账单</h3>
+  <pre><code>curl -s -H "Authorization: Bearer $TOKEN" https://jianshuo.dev/agent/usage/balance
+curl -s -H "Authorization: Bearer $TOKEN" "https://jianshuo.dev/agent/usage/ledger?limit=50"</code></pre>
+
+  <h2>三种认证</h2>
+  <table>
+    <tr><th>方式</th><th>能看谁</th><th>怎么拿</th></tr>
+    <tr><td><strong>6+4 设备配对</strong></td><td>该用户自己</td><td>上面的自助登录（推荐）</td></tr>
+    <tr><td><strong>管理员</strong></td><td>全部用户</td><td><code>~/code/.env</code> 的 <code>FILES_TOKEN</code></td></tr>
+    <tr><td><strong>App 临时 token</strong></td><td>该用户自己</td><td>App 设置 → 账户 → 复制</td></tr>
+  </table>
+  <p class="muted">管理员 token 看得到所有用户，调文章接口要多带一段 <code>&lt;sub&gt;</code>（如 <code>/articles/&lt;sub&gt;/&lt;stem&gt;</code>）；细节见 <a href="/voicedrop/developer/api.html">API 参考</a>。</p>
+
+</main>
+
+<footer>
+  <div class="inner">
+    <span>VoiceDrop · 开发者文档</span>
+    <span><a href="/voicedrop/developer/">开发者首页</a> · <a href="/voicedrop/developer/api.html">API 参考</a> · <a href="mailto:jianshuo@hotmail.com">联系作者</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
