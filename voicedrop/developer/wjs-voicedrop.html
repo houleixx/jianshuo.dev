@@ -78,10 +78,14 @@
 
   <h2>前置</h2>
   <ul>
-    <li><a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a> 已安装，且 skill 放在 <code>~/.claude/skills/wjs-voicedrop/</code>。</li>
+    <li><a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a> 已安装（<code>npm i -g @anthropic-ai/claude-code</code>，或 <code>curl -fsSL https://claude.ai/install.sh | bash</code>）。</li>
     <li><strong>Node ≥ 20</strong>（登录脚本用，零依赖，仅用内置模块）。</li>
-    <li>触发词：直接说「列出 voicedrop 文章」「蒸馏文风」「触发挖矿」「登录 voicedrop」，或敲 <code>/wjs-voicedrop</code>。</li>
   </ul>
+
+  <h2>安装 skill</h2>
+  <p>在 Claude Code 里说一句即可：</p>
+  <blockquote><p>安装 <code>https://github.com/jianshuo/claude-skills/tree/main/wjs-voicedrop</code></p></blockquote>
+  <p>Claude 会 clone 仓库、把 <code>wjs-voicedrop/</code> 放进 <code>~/.claude/skills/wjs-voicedrop/</code>（本页后面写死的路径都基于此）。装好后直接说人话——「<strong>列出 voicedrop 文章</strong>」「<strong>蒸馏文风</strong>」「<strong>触发挖矿</strong>」「<strong>登录 voicedrop</strong>」，或敲 <code>/wjs-voicedrop</code>。下面先把登录走通。</p>
 
   <h2>第一步：登录（6+4 手机配对）</h2>
   <p>skill 自带一个登录脚本 <code>vd-login.mjs</code>，扮演「新设备」和你的手机（老设备）配一次对，把账号凭证<strong>端到端加密</strong>取到本机，存进 <code>~/.config/voicedrop/credentials</code>（<code>chmod 600</code>）。之后所有调用自动读它。</p>
