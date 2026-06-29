@@ -106,6 +106,17 @@ Content-Type: application/json
 | `PUT articles/<stem>/srt` | 写字幕边车（请求体为 SRT 文本） | `{ok}` |
 | `PUT articles/<stem>/empty` | 标记无语音，body `{reason?}` | `{ok}` |
 
+### 文风（版本化）
+
+挖矿 / 改稿 prompt 会叠加用户的文风。存储是版本化的 `CLAUDE.json`（schema-3，和文章同一套 `versions[head]` 结构）。**文风是唯一版本化的字段**；**名字等身份字段放非版本化的 `doc.profile`**（改名字不会产生新文风版本），读取时回退老 `CLAUDE.md`「# 我的名字」。
+
+| 方法 / 路径 | 说明 | 返回 |
+|---|---|---|
+| `GET style` | 读当前文风 + 名字 | `{style, name, head, createdAt, updatedAt}`；只有旧 `CLAUDE.md` 时 `{style, name, head:0, legacy:true}`；都没有 → `404` |
+| `PUT style` | 写入。body `{style?, name?, source?}`：传 `style` 存为新版本；传 `name` 只更新 `profile.name`（**不产生版本**）；可同时传 | `{ok, head}`；`style`、`name` 全空 → `400 empty_content` |
+| `GET style/history` | 版本历史 | `{head, versions:[{v,savedAt,source,style}]}`（oldest-first，最多 10 版） |
+| `PATCH style/head` | 只移动 head 指针（撤销 / 重做，不产生新版本），body `{head:<n>}` | `{ok, head}`；版本不存在 → `404` |
+
 ### 分享 & 公众号
 
 | 方法 / 路径 | 说明 | 返回 |
@@ -256,7 +267,8 @@ Base：`https://jianshuo.dev/reco/`。鉴权：anon 或 session token（**不接
 | `articles/<stem>.empty` | 无语音标记 |
 | `articles/<stem>.srt` | 字幕边车 |
 | `photos/<sessionTs>/<offset>-<rand>.jpg` | 会话照片（`<offset>` = 距录音起点的整数秒） |
-| `CLAUDE.md` | 用户名字 + 文风（喂给挖矿/改稿 prompt） |
+| `CLAUDE.json` | 文风（版本化 schema-3，喂给挖矿/改稿 prompt）——见上「文风」接口 |
+| `CLAUDE.md` | 仅存用户名字（旧文风回退源；写入只往 `CLAUDE.json`） |
 | `WECHAT.json` | 公众号配置 `{appid,secret,enabled,coverMediaIds}` |
 
 ---

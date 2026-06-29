@@ -117,3 +117,63 @@ describe("GET /style/history + PATCH /style/head", () => {
     expect((await onRequest(patchReq)).status).toBe(404);
   });
 });
+
+describe("profile name via /style — additive, name change mints NO version", () => {
+  it("GET /style additively returns name from profile", async () => {
+    const ctx = reqCtx("GET", ["style"]);
+    const scope = await anonScope(TOKEN);
+    ctx.env.FILES._store.set(`${scope}CLAUDE.json`, JSON.stringify({
+      schema: 3, head: 1, createdAt: 1, updatedAt: 2,
+      versions: [{ v: 1, savedAt: 1, source: "app", style: "文风" }],
+      profile: { name: "王建硕" },
+    }));
+    const body = await (await onRequest(ctx)).json();
+    expect(body.style).toBe("文风");
+    expect(body.name).toBe("王建硕");
+  });
+
+  it("GET /style legacy path parses name from CLAUDE.md", async () => {
+    const ctx = reqCtx("GET", ["style"]);
+    const scope = await anonScope(TOKEN);
+    ctx.env.FILES._store.set(`${scope}CLAUDE.md`, "# 我的名字\n王建硕\n\n# 我的文风\n回退");
+    const body = await (await onRequest(ctx)).json();
+    expect(body.name).toBe("王建硕");
+    expect(body.legacy).toBe(true);
+  });
+
+  it("PUT /style {name} only → sets profile.name, NO new version", async () => {
+    const scope = await anonScope(TOKEN);
+    const env = { ...fakeEnv(), FILES_TOKEN: "admin", SESSION_SECRET: "secret" };
+    env.FILES._store.set(`${scope}CLAUDE.json`, JSON.stringify({
+      schema: 3, head: 1, createdAt: 1, updatedAt: 1,
+      versions: [{ v: 1, savedAt: 1, source: "app", style: "文风v1" }],
+    }));
+    const putReq = { request: new Request(`https://jianshuo.dev/files/api/style`, { method: "PUT", headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "王建硕" }) }), env, params: { path: ["style"] } };
+    const body = await (await onRequest(putReq)).json();
+    expect(body.ok).toBe(true);
+    const stored = JSON.parse(env.FILES._store.get(`${scope}CLAUDE.json`));
+    expect(stored.profile.name).toBe("王建硕");
+    expect(stored.head).toBe(1);              // unchanged
+    expect(stored.versions).toHaveLength(1);  // no new version
+  });
+
+  it("PUT /style {style, name} → one version + the name", async () => {
+    const scope = await anonScope(TOKEN);
+    const ctx = reqCtx("PUT", ["style"], { body: { style: "新文风", name: "王建硕" } });
+    const body = await (await onRequest(ctx)).json();
+    expect(body.ok).toBe(true);
+    expect(body.head).toBe(1);
+    const stored = JSON.parse(ctx.env.FILES._store.get(`${scope}CLAUDE.json`));
+    expect(stored.versions[0].style).toBe("新文风");
+    expect(stored.profile.name).toBe("王建硕");
+  });
+
+  it("PUT /style {style} (old client) unchanged — no profile key written", async () => {
+    const scope = await anonScope(TOKEN);
+    const ctx = reqCtx("PUT", ["style"], { body: { style: "只有文风" } });
+    await onRequest(ctx);
+    const stored = JSON.parse(ctx.env.FILES._store.get(`${scope}CLAUDE.json`));
+    expect(stored.versions[0].style).toBe("只有文风");
+    expect(stored.profile).toBeUndefined();
+  });
+});

@@ -303,6 +303,22 @@ Content-Type: application/json
 </table>
 </div>
 
+<h3>文风（版本化）</h3>
+
+<p>挖矿 / 改稿 prompt 会叠加用户的文风。存储是版本化的 <code>CLAUDE.json</code>（schema-3，和文章同一套 <code>versions[head]</code> 结构）。<strong>文风是唯一版本化的字段</strong>；<strong>名字等身份字段放非版本化的 <code>doc.profile</code></strong>（改名字不会产生新文风版本），读取时回退老 <code>CLAUDE.md</code>「# 我的名字」。</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>方法 / 路径</th><th>说明</th><th>返回</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET style</code></td><td>读当前文风 + 名字</td><td><code>{style, name, head, createdAt, updatedAt}</code>；只有旧 <code>CLAUDE.md</code> 时 <code>{style, name, head:0, legacy:true}</code>；都没有 → <code>404</code></td></tr>
+    <tr><td><code>PUT style</code></td><td>写入。body <code>{style?, name?, source?}</code>：传 <code>style</code> 存为新版本；传 <code>name</code> 只更新 <code>profile.name</code>（<strong>不产生版本</strong>）；可同时传</td><td><code>{ok, head}</code>；<code>style</code>、<code>name</code> 全空 → <code>400 empty_content</code></td></tr>
+    <tr><td><code>GET style/history</code></td><td>版本历史</td><td><code>{head, versions:[{v,savedAt,source,style}]}</code>（oldest-first，最多 10 版）</td></tr>
+    <tr><td><code>PATCH style/head</code></td><td>只移动 head 指针（撤销 / 重做，不产生新版本），body <code>{head:&lt;n&gt;}</code></td><td><code>{ok, head}</code>；版本不存在 → <code>404</code></td></tr>
+  </tbody>
+</table>
+</div>
+
 <h3>分享 &amp; 公众号</h3>
 
 <div class="table-wrap">
@@ -463,7 +479,8 @@ Authorization: Bearer &lt;any valid user token&gt;</code></pre>
     <tr><td><code>articles/&lt;stem&gt;.empty</code></td><td>无语音标记</td></tr>
     <tr><td><code>articles/&lt;stem&gt;.srt</code></td><td>字幕边车</td></tr>
     <tr><td><code>photos/&lt;sessionTs&gt;/&lt;offset&gt;-&lt;rand&gt;.jpg</code></td><td>会话照片（<code>&lt;offset&gt;</code> = 距录音起点的整数秒）</td></tr>
-    <tr><td><code>CLAUDE.md</code></td><td>用户名字 + 文风（喂给挖矿/改稿 prompt）</td></tr>
+    <tr><td><code>CLAUDE.json</code></td><td>文风（版本化 schema-3，喂给挖矿/改稿 prompt）——见上「文风」接口</td></tr>
+    <tr><td><code>CLAUDE.md</code></td><td>仅存用户名字（旧文风回退源；写入只往 <code>CLAUDE.json</code>）</td></tr>
     <tr><td><code>WECHAT.json</code></td><td>公众号配置 <code>{appid,secret,enabled,coverMediaIds}</code></td></tr>
   </tbody>
 </table>

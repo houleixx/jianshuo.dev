@@ -16,7 +16,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { readStyleText } from "../../functions/lib/style-store.js";
+import { readStyleText, readProfileName } from "../../functions/lib/style-store.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
 const MIN_CHARS          = 20;
@@ -583,10 +583,9 @@ export async function maybeAutoShareCommunity(srcKey, env, log = () => {}) {
   if (cfg.autoShareCommunity !== true) return null;
 
   const articleKey = articleKeyFor(srcKey);        // users/<sub>/articles/<stem>.json
-  // author — same source/regex as the share endpoint (CLAUDE.md「# 我的名字」), else 匿名.
-  let author = "匿名";
-  const md = await env.FILES.get(scope + "CLAUDE.md");
-  if (md) { const m = (await md.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/); if (m && m[1].trim()) author = m[1].trim(); }
+  // author — profile.name (CLAUDE.json) → legacy CLAUDE.md「# 我的名字」→ 匿名.
+  // Same single source as the share endpoint (readProfileName).
+  const author = (await readProfileName(env, scope + "CLAUDE.json", scope + "CLAUDE.md")) || "匿名";
 
   const shareId = (await hmacSign("community:" + articleKey, env.SESSION_SECRET)).slice(0, 12);
   const communityKey = `community/${shareId}.json`;

@@ -3,6 +3,7 @@ import { fakeEnv } from "./fakes.js";
 import {
   readStyleDoc, resolveStyle, parseStyleMarkdown, readStyleText,
   writeStyleDoc, setStyleHead, STYLE_MAX_VERSIONS,
+  readProfileName, mergeProfile,
 } from "../../functions/lib/style-store.js";
 
 const KEY = "users/u/CLAUDE.json";
@@ -133,5 +134,56 @@ describe("setStyleHead — undo/redo pointer move", () => {
   });
   it("returns null when the doc is missing", async () => {
     expect(await setStyleHead(fakeEnv({}), KEY, 1)).toBeNull();
+  });
+});
+
+describe("profile — non-versioned name (changing it must NOT mint a style version)", () => {
+  it("mergeProfile sets name without touching versions/head", async () => {
+    const env = fakeEnv({});
+    await writeStyleDoc(env, KEY, "文风v1", "app");          // head 1
+    const doc = await mergeProfile(env, KEY, { name: "王建硕" });
+    expect(doc.profile).toEqual({ name: "王建硕" });
+    expect(doc.head).toBe(1);                                // no new version
+    expect(doc.versions).toHaveLength(1);
+    expect(resolveStyle(doc)).toBe("文风v1");
+  });
+
+  it("mergeProfile lazily creates a minimal doc when none exists", async () => {
+    const env = fakeEnv({});
+    const doc = await mergeProfile(env, KEY, { name: "小明" });
+    expect(doc.profile.name).toBe("小明");
+    expect(doc.versions).toEqual([]);
+    expect(doc.head).toBe(0);
+  });
+
+  it("writeStyleDoc PRESERVES an existing profile across a style write", async () => {
+    const env = fakeEnv({});
+    await mergeProfile(env, KEY, { name: "王建硕" });          // profile only, no version
+    const doc = await writeStyleDoc(env, KEY, "新文风", "app");
+    expect(doc.profile).toEqual({ name: "王建硕" });          // survived the style write
+    expect(resolveStyle(doc)).toBe("新文风");
+  });
+
+  it("setStyleHead preserves the profile", async () => {
+    const env = fakeEnv({});
+    await writeStyleDoc(env, KEY, "v1", "app");
+    await writeStyleDoc(env, KEY, "v2", "app");
+    await mergeProfile(env, KEY, { name: "阿王" });
+    const doc = await setStyleHead(env, KEY, 1);
+    expect(doc.profile.name).toBe("阿王");
+  });
+
+  it("readProfileName: profile.name (CLAUDE.json) wins", async () => {
+    const env = fakeEnv({ [KEY]: JSON.stringify(seedDoc([{ v: 1, savedAt: 1, source: "app", style: "x" }], 1, { profile: { name: "JSON名" } })) });
+    expect(await readProfileName(env, KEY, LEGACY)).toBe("JSON名");
+  });
+
+  it("readProfileName: falls back to the legacy CLAUDE.md「# 我的名字」", async () => {
+    const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\nx" });
+    expect(await readProfileName(env, KEY, LEGACY)).toBe("王建硕");
+  });
+
+  it("readProfileName: '' when neither exists", async () => {
+    expect(await readProfileName(fakeEnv({}), KEY, LEGACY)).toBe("");
   });
 });

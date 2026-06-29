@@ -20,7 +20,7 @@
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
 import { readArticleDoc, writeArticleDoc, setHead, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
-import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown } from "../../lib/style-store.js";
+import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
 
@@ -474,9 +474,8 @@ export async function onRequest(context) {
     }
     const kw = await checkArticlesShareable(articles, env);
     if (kw.flagged) return json({ error: 'content_flagged', term: kw.term }, 403);
-    let author = '匿名';
-    const md = await env.FILES.get(scope + 'CLAUDE.md');
-    if (md) { const m = (await md.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/); if (m && m[1].trim()) author = m[1].trim(); }
+    // Author = profile.name (CLAUDE.json) → legacy CLAUDE.md「# 我的名字」→ 匿名.
+    const author = (await readProfileName(env, scope + 'CLAUDE.json', scope + 'CLAUDE.md')) || '匿名';
     const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
     const communityKey = `community/${shareId}.json`;
     let replyTo = null;
@@ -721,10 +720,15 @@ export async function onRequest(context) {
     const legacyKey = `${styleScope}CLAUDE.md`;
 
     if (request.method === 'GET' && !subaction) {
+      // `name` is additive (from doc.profile) — old clients decode only `style` and ignore it.
       const doc = await readStyleDoc(env, styleKey);
-      if (doc) return json({ style: resolveStyle(doc), head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0 });
+      if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0 });
       const legacy = await env.FILES.get(legacyKey);
-      if (legacy) return json({ style: parseStyleMarkdown(await legacy.text()), head: 0, legacy: true });
+      if (legacy) {
+        const md = await legacy.text();
+        const m = md.match(/#\s*我的名字\s*\n+([^\n#]+)/);
+        return json({ style: parseStyleMarkdown(md), name: (m && m[1].trim()) || '', head: 0, legacy: true });
+      }
       return json({ error: 'not found' }, 404);
     }
 
@@ -737,10 +741,15 @@ export async function onRequest(context) {
     if (request.method === 'PUT' && !subaction) {
       let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
       const style = typeof body.style === 'string' ? body.style : '';
-      if (!style.trim()) return json({ error: 'empty_content' }, 400);
+      const hasName = typeof body.name === 'string';
+      if (!style.trim() && !hasName) return json({ error: 'empty_content' }, 400);
       const source = body.source === 'agent' ? 'agent' : (scope ? 'app' : 'mine');
-      const doc = await writeStyleDoc(env, styleKey, style, source);
-      return json({ ok: true, head: doc.head });
+      // name → profile (no version); style → a new version. profile survives the
+      // style write (writeStyleDoc carries it forward), so order is safe.
+      let head;
+      if (hasName) { head = (await mergeProfile(env, styleKey, { name: body.name.trim() })).head; }
+      if (style.trim()) { head = (await writeStyleDoc(env, styleKey, style, source)).head; }
+      return json({ ok: true, head: head ?? 0 });
     }
 
     if (request.method === 'PATCH' && subaction === 'head') {

@@ -3,11 +3,15 @@
 // 文风 doc gets the same history/undo as articles. Shared by the Files API
 // (functions/files/api/[[path]].js), the agent worker (agent/src/*), and tests.
 //
-// Schema 3: { schema:3, head, versions:[{v, savedAt, source, style}], createdAt, updatedAt }
+// Schema 3: { schema:3, head, versions:[{v, savedAt, source, style}], createdAt, updatedAt, profile? }
 //   head    = v-number of the currently active version (git HEAD analogy)
 //   versions are oldest-first, contiguous v numbers; the array may start at v>1
 //             once the MAX_VERSIONS oldest entries are pruned.
-//   style   = the 文风 text (the name lives elsewhere — legacy CLAUDE.md for now).
+//   style   = the 文风 text — the ONLY versioned field (you iterate/undo it).
+//   profile = { name, … } — non-versioned identity fields. Editing the name does
+//             NOT mint a style version; it lives outside `versions` on purpose.
+//             Future stable/identity fields (bio, facts, glossary…) go here too;
+//             only fields you actually tune-and-undo belong in `versions`.
 //
 // Backward compat: the canonical store is CLAUDE.json. The old CLAUDE.md (which
 // held「# 我的名字…# 我的文风…」) is still READ as a fallback by readStyleText —
@@ -76,6 +80,39 @@ export async function writeStyleDoc(env, styleKey, style, source = "unknown") {
   }
 
   const doc = { schema: 3, head, versions, createdAt, updatedAt: Date.now() };
+  // Carry forward non-versioned top-level fields (profile = name + future identity
+  // fields). Writing a new STYLE version must never drop the profile.
+  if (current && current.profile) doc.profile = current.profile;
+  await env.FILES.put(styleKey, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  return doc;
+}
+
+// ── Profile (non-versioned identity fields: name, + future) ──────────────────
+// Lives at doc.profile, OUTSIDE the version history: changing the name should NOT
+// mint a new style version. Only the 文风 (style) is versioned.
+
+// The current profile name, "" if none. SINGLE SOURCE OF TRUTH for "who is the
+// author" — both the share endpoint and the miner import this (was duplicated
+// inline regex). CLAUDE.json's profile.name wins; falls back to the legacy
+// CLAUDE.md「# 我的名字」section so existing users keep their name.
+export async function readProfileName(env, styleKey, legacyKey) {
+  const doc = await readStyleDoc(env, styleKey);
+  const n = doc && doc.profile && doc.profile.name;
+  if (typeof n === "string" && n.trim()) return n.trim();
+  const legacy = await env.FILES.get(legacyKey);
+  if (legacy) {
+    const m = (await legacy.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/);
+    if (m && m[1].trim()) return m[1].trim();
+  }
+  return "";
+}
+
+// Shallow-merge `patch` into doc.profile WITHOUT touching versions/head (so a name
+// change creates no style version). Lazily creates a minimal doc if none exists.
+export async function mergeProfile(env, styleKey, patch) {
+  const base = (await readStyleDoc(env, styleKey)) ||
+    { schema: 3, head: 0, versions: [], createdAt: Date.now() };
+  const doc = { ...base, profile: { ...(base.profile || {}), ...patch }, updatedAt: Date.now() };
   await env.FILES.put(styleKey, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
   return doc;
 }
