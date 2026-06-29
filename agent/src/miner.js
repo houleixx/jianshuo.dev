@@ -269,6 +269,22 @@ export class AsrError extends Error {
   constructor(code) { super(`ASR deterministic error ${code}`); this.code = String(code); }
 }
 
+// Volcano status codes follow an HTTP-like convention:
+//   2000000x  success / in-progress
+//   45xxxxxx  client/request error — bad audio, wrong format, empty clip, bad params.
+//             DETERMINISTIC: re-running gets the same code, so mark the recording
+//             empty and stop retrying (an AsrError).
+//   55xxxxxx  server internal error — busy / transient fault. Volcano's own SLA
+//             defines a 5xx as a "service failure" (their side), i.e. TRANSIENT.
+//             Re-running may succeed, so it must NOT permanently mark a recording
+//             that has speech as 无语音. Treated as retryable (not an AsrError).
+// Only the 45xxxxxx client class is deterministic. Everything else non-success /
+// non-in-progress (55xxxxxx, or any unknown code) is treated as retryable — we bias
+// toward never losing a real recording; the ASR_MAX_AGE_MS guard stops a wedged task.
+function isDeterministicAsrCode(code) {
+  return /^45\d{6}$/.test(String(code));
+}
+
 async function asrSubmit(audioUrl, env) {
   const taskId = crypto.randomUUID();
   const resp = await fetch("https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit", {
@@ -289,7 +305,12 @@ async function asrSubmit(audioUrl, env) {
   });
   await resp.text();
   const code = resp.headers.get("X-Api-Status-Code") || "";
-  if (code !== "20000000") throw new AsrError(code || `submit-http-${resp.status}`);
+  if (code !== "20000000") {
+    // Deterministic client error → give up (mark empty). Transient server error /
+    // unknown / HTTP failure → throw a plain Error so the caller retries next pass.
+    if (isDeterministicAsrCode(code)) throw new AsrError(code);
+    throw new Error(`ASR submit failed (transient) ${code || `http-${resp.status}`}`);
+  }
   return { taskId, logId: resp.headers.get("X-Tt-Logid") || "" };
 }
 
@@ -313,10 +334,15 @@ async function asrPollBounded({ taskId, logId }, env, maxPolls) {
     const code = resp.headers.get("X-Api-Status-Code") || "";
     const text = await resp.text();
     let res;
+    // Malformed body is a transient server hiccup, not a verdict about the audio —
+    // throw a plain Error (retry next pass), never an AsrError (which would lose it).
     try { res = text.trim() ? JSON.parse(text) : {}; }
-    catch { throw new AsrError(`bad-json:${code || resp.status}`); }
+    catch { throw new Error(`ASR query bad-json (transient) ${code || resp.status}`); }
     if (code === "20000000" || res.audio_info?.duration || res.result?.text?.trim()) return { status: "done", data: res };
-    if (code && code !== "20000001" && code !== "20000002") throw new AsrError(code);
+    // Deterministic client error (45xxxxxx) → give up, caller marks empty.
+    if (isDeterministicAsrCode(code)) throw new AsrError(code);
+    // Otherwise — in-progress (2000000x), transient server error (55xxxxxx), or any
+    // unknown code — keep polling and resume next pass; ASR_MAX_AGE_MS bounds a wedged task.
     if (i < maxPolls - 1) await new Promise(r => setTimeout(r, ASR_POLL_INTERVAL_MS));
   }
   return { status: "pending" };
