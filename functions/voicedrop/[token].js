@@ -85,7 +85,7 @@ export async function onRequest(context) {
 // Strip [[photo:<token>]] markers from text (for excerpts / fallback). Token is a
 // relative key (new) or a legacy digit index — both match.
 export function stripPhotoMarkers(s) {
-  return String(s).replace(/\[\[photo:[^\]]+\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  return String(s).replace(/<!--[\s\S]*?-->/g, '').replace(/\[\[photo:[^\]]+\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 // Replace [[photo:<token>]] markers in rendered HTML with inline <figure><img>. A
@@ -143,7 +143,7 @@ function buildPhotoURLs(articleKey, bodies, legacyPhotos) {
 
 // --- minimal, safe markdown -> HTML (escape first, then a few block rules) ---
 function mdToHtml(src) {
-  const blocks = String(src).replace(/\r\n/g, '\n').split(/\n{2,}/);
+  const blocks = String(src).replace(/<!--[\s\S]*?-->/g, '').replace(/\r\n/g, '\n').split(/\n{2,}/);
   return blocks.map((b) => {
     const t = b.trim();
     if (!t) return '';
