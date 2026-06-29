@@ -7,7 +7,8 @@
  * itself only listens on localhost and trusts Caddy.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat, unlink } from "node:fs/promises";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -20,6 +21,10 @@ const WORKSPACE = process.env.WORKSPACE ?? join(__dirname, "..", "workspace");
 const MODEL = process.env.MODEL ?? "claude-opus-4-8";
 const MAX_TURNS = Number(process.env.MAX_TURNS ?? 30);
 const MAX_RESULT_CHARS = 8000;
+
+// The SDK persists each conversation as <session_id>.jsonl under HOME/.claude/projects/<cwd-slug>/.
+const PROJECTS_DIR = join(process.env.HOME ?? homedir(), ".claude", "projects");
+const SESSION_ID_RE = /^[a-f0-9-]{36}$/;
 
 const INDEX_HTML = await readFile(join(__dirname, "..", "public", "index.html"), "utf8");
 
@@ -44,6 +49,139 @@ function renderToolResult(content: any): string {
       .join("\n");
   else out = content == null ? "" : JSON.stringify(content);
   return out.length > MAX_RESULT_CHARS ? out.slice(0, MAX_RESULT_CHARS) + "\n…[truncated]" : out;
+}
+
+// --- session history (read the SDK's on-disk transcripts) ---
+
+function textOf(content: any): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content))
+    return content.filter((b) => b?.type === "text").map((b) => b.text).join("");
+  return "";
+}
+
+function isToolResult(content: any): boolean {
+  return Array.isArray(content) && content.some((b) => b?.type === "tool_result");
+}
+
+async function findTranscript(id: string): Promise<string | null> {
+  let dirs: string[];
+  try {
+    dirs = await readdir(PROJECTS_DIR);
+  } catch {
+    return null;
+  }
+  for (const d of dirs) {
+    const p = join(PROJECTS_DIR, d, id + ".jsonl");
+    try {
+      await stat(p);
+      return p;
+    } catch {
+      /* keep looking */
+    }
+  }
+  return null;
+}
+
+async function summarize(path: string, id: string) {
+  const raw = await readFile(path, "utf8");
+  let title = "";
+  let turns = 0;
+  for (const ln of raw.split("\n")) {
+    if (!ln.trim()) continue;
+    let o: any;
+    try {
+      o = JSON.parse(ln);
+    } catch {
+      continue;
+    }
+    if (o.type === "user" && !isToolResult(o.message?.content)) {
+      const t = textOf(o.message?.content).trim();
+      if (t) {
+        turns++;
+        if (!title) title = t;
+      }
+    }
+  }
+  const st = await stat(path);
+  return { id, title: title.slice(0, 80) || "(无标题)", updatedAt: st.mtimeMs, turns };
+}
+
+async function listSessions() {
+  let dirs: string[];
+  try {
+    dirs = await readdir(PROJECTS_DIR);
+  } catch {
+    return [];
+  }
+  const out: any[] = [];
+  for (const d of dirs) {
+    let entries: string[];
+    try {
+      entries = await readdir(join(PROJECTS_DIR, d));
+    } catch {
+      continue;
+    }
+    for (const f of entries) {
+      if (!f.endsWith(".jsonl")) continue;
+      try {
+        out.push(await summarize(join(PROJECTS_DIR, d, f), f.slice(0, -6)));
+      } catch {
+        /* skip unreadable */
+      }
+    }
+  }
+  return out.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 200);
+}
+
+// Replay a transcript into the same shape the live UI renders: one assistant
+// bubble per human turn, with text + tool cards (results attached) interleaved.
+async function getSessionMessages(id: string) {
+  const path = await findTranscript(id);
+  if (!path) return null;
+  const raw = await readFile(path, "utf8");
+  const msgs: any[] = [];
+  let cur: any = null;
+  const toolIndex: Record<string, any> = {};
+  for (const ln of raw.split("\n")) {
+    if (!ln.trim()) continue;
+    let o: any;
+    try {
+      o = JSON.parse(ln);
+    } catch {
+      continue;
+    }
+    if (o.type === "user") {
+      const c = o.message?.content;
+      if (isToolResult(c)) {
+        for (const b of c)
+          if (b.type === "tool_result" && toolIndex[b.tool_use_id]) {
+            toolIndex[b.tool_use_id].result = renderToolResult(b.content);
+            toolIndex[b.tool_use_id].isError = !!b.is_error;
+          }
+      } else {
+        const t = textOf(c).trim();
+        if (t) {
+          msgs.push({ role: "user", text: t });
+          cur = null;
+        }
+      }
+    } else if (o.type === "assistant") {
+      if (!cur) {
+        cur = { role: "assistant", items: [] };
+        msgs.push(cur);
+      }
+      for (const b of o.message?.content ?? []) {
+        if (b.type === "text") cur.items.push({ type: "text", text: b.text });
+        else if (b.type === "tool_use") {
+          const item = { type: "tool", id: b.id, name: b.name, input: b.input, result: null, isError: false };
+          cur.items.push(item);
+          toolIndex[b.id] = item;
+        }
+      }
+    }
+  }
+  return msgs;
 }
 
 async function handleChat(req: IncomingMessage, res: ServerResponse, payload: any) {
@@ -162,6 +300,49 @@ const server = createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("ok");
     return;
+  }
+  if (req.method === "GET" && req.url === "/api/sessions") {
+    listSessions()
+      .then((list) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(list));
+      })
+      .catch((err) => res.writeHead(500).end(String(err?.message ?? err)));
+    return;
+  }
+  const sm = req.url?.match(/^\/api\/sessions\/([^/?]+)$/);
+  if (sm) {
+    const id = decodeURIComponent(sm[1]);
+    if (!SESSION_ID_RE.test(id)) {
+      res.writeHead(400).end("bad id");
+      return;
+    }
+    if (req.method === "GET") {
+      getSessionMessages(id)
+        .then((msgs) => {
+          if (!msgs) {
+            res.writeHead(404).end("not found");
+            return;
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(msgs));
+        })
+        .catch((err) => res.writeHead(500).end(String(err?.message ?? err)));
+      return;
+    }
+    if (req.method === "DELETE") {
+      findTranscript(id)
+        .then(async (p) => {
+          if (!p) {
+            res.writeHead(404).end("not found");
+            return;
+          }
+          await unlink(p);
+          res.writeHead(200).end("ok");
+        })
+        .catch((err) => res.writeHead(500).end(String(err?.message ?? err)));
+      return;
+    }
   }
   if (req.method === "POST" && req.url === "/api/chat") {
     let body = "";

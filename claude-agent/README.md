@@ -14,8 +14,11 @@ browser ──HTTPS+password──▶ Caddy ──▶ Node (this) ──query()�
                                             └─ tools confined to /opt/claude-agent/workspace
 ```
 
-- `src/server.ts` — localhost HTTP server, `POST /api/chat` runs `query()` and streams SSE.
-- `public/index.html` — single-file light-theme chat UI; tool calls render as expandable cards.
+- `src/server.ts` — localhost HTTP server. `POST /api/chat` runs `query()` and streams SSE;
+  `GET /api/sessions` lists past conversations and `GET|DELETE /api/sessions/:id` reads/removes
+  one (parsed from the SDK's on-disk transcripts under `$HOME/.claude/projects/`).
+- `public/index.html` — single-file light-theme chat UI; tool calls render as expandable cards;
+  left sidebar lists past sessions (click to reopen + resume, persists server-side across devices).
 - `deploy/` — `provision.sh` (one-time), `claude-agent.service` (systemd), `Caddyfile`.
 - `deploy.sh` — build + rsync + restart.
 
