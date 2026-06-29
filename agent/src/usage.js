@@ -17,10 +17,20 @@ export const uyToYuan = (uy) => uy / 1e6;                   // 微元 -> 元
 
 export const SIGNUP_GRANT_UY = suanliToUY(500);            // 一次性 500 算力
 
-export function claudeCostUY(model, inTok, outTok) {
+// Prompt-caching pricing multipliers (Anthropic): a cache WRITE (5-min ephemeral)
+// bills at 1.25x base input, a cache READ at 0.1x. `input_tokens` from the API is
+// already the UNcached remainder, so total input = inTok·1 + cacheWrite·1.25 +
+// cacheRead·0.1. cacheWrite/cacheRead default to 0 → old two/three-arg callers and
+// non-cached models are unchanged.
+export const CACHE_WRITE_MULT = 1.25;
+export const CACHE_READ_MULT  = 0.1;
+export function claudeCostUY(model, inTok, outTok, cacheWriteTok = 0, cacheReadTok = 0) {
   const p = PRICE[model];
   if (!p) return 0;
-  const usd = (inTok || 0) * p.in + (outTok || 0) * p.out;
+  const usd = (inTok || 0) * p.in
+            + (cacheWriteTok || 0) * p.in * CACHE_WRITE_MULT
+            + (cacheReadTok || 0) * p.in * CACHE_READ_MULT
+            + (outTok || 0) * p.out;
   return Math.ceil(usd * FX * 1e6);
 }
 export function asrCostUY(seconds) {

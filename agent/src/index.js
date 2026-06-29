@@ -290,8 +290,8 @@ export class ArticleEditor extends Agent {
       try {
         if (this.env.USAGE) {
           const u = r.json?.usage || {};
-          await debit(this.env.USAGE, scope, claudeCostUY(model, u.input_tokens, u.output_tokens),
-            "edit", { model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId }, Date.now());
+          await debit(this.env.USAGE, scope, claudeCostUY(model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
+            "edit", { model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId }, Date.now());
         }
       } catch {}
       if (!r.ok) throw new Error(`Claude HTTP ${r.status}: ${(r.errorText || "").slice(0, 160)}`);

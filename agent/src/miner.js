@@ -517,8 +517,15 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
         content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } });
       }
     }
+    // Cache the whole system prompt (static SYSTEM + this user's 文风 + suffix). It's
+    // byte-identical across every recording of the same user in one runMine pass, so
+    // recordings 2..N within the 5-min TTL read it from cache (0.1x) instead of re-
+    // billing full input (1x). The transcript stays in the user message (volatile per
+    // recording → correctly uncached). force retries use a tiny SYSTEM_FORCE that falls
+    // under the cacheable minimum — cache_control is simply ignored there, no error.
     const payload = {
-      model: modelCfg.model, max_tokens: force ? 2000 : 8000, system,
+      model: modelCfg.model, max_tokens: force ? 2000 : 8000,
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content }],
     };
     if (!force) payload.output_config = { format: { type: "json_schema", schema: ARTICLES_SCHEMA } };
@@ -682,8 +689,8 @@ export async function restyleArticle(env, scope, stem, styleV) {
     try {
       if (env.USAGE) {
         const u = r.rawResp?.usage || {};
-        await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens),
-          "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId, restyle: styleV }, Date.now());
+        await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
+          "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId, restyle: styleV }, Date.now());
       }
     } catch (_) {}
     articles = r.articles;
@@ -852,8 +859,8 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
           try {
             if (env.USAGE) {
               const u = r.rawResp?.usage || {};
-              await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens),
-                "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId }, Date.now());
+              await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
+                "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId }, Date.now());
             }
           } catch (_) {}
           log(`LLM 完成${tag ? " " + tag : ""}${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
@@ -961,8 +968,8 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
         try {
           if (env.USAGE) {
             const u = r.rawResp?.usage || {};
-            await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens),
-              "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId }, Date.now());
+            await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
+              "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId }, Date.now());
           }
         } catch (_) {}
         log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });

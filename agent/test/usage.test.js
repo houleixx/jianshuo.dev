@@ -11,6 +11,14 @@ describe("usage pricing", () => {
   it("claudeCostUY: unknown model = 0", () => {
     expect(claudeCostUY("gpt-x", 1000, 100)).toBe(0);
   });
+  it("claudeCostUY: cache read = 0.1x base input (opus 1000 read = 3650)", () => {
+    // plain 1000 opus input = 36500 微元; a cache read is 1/10 of that.
+    expect(claudeCostUY("claude-opus-4-8", 1000, 0)).toBe(36500);
+    expect(claudeCostUY("claude-opus-4-8", 0, 0, 0, 1000)).toBe(3650);
+  });
+  it("claudeCostUY: cache write = 1.25x base input (opus 1000 write = 45625)", () => {
+    expect(claudeCostUY("claude-opus-4-8", 0, 0, 1000, 0)).toBe(45625);
+  });
   it("asrCostUY: 1 hour = 800000 微元 = 18.4 算力", () => {
     expect(asrCostUY(3600)).toBe(800000);
     expect(uyToSuanli(800000)).toBeCloseTo(18.4, 5);
