@@ -1,7 +1,7 @@
 # claude-agent
 
 A persistent web chat backed by the **Anthropic Claude Agent SDK**, running on the
-Tokyo VPS and exposed at **https://claude-agent.jianshuo.dev**. It runs the full
+Tokyo VPS and exposed at **https://lab.jianshuo.dev**. It runs the full
 Claude Code agent loop (tools, bash, web) confined to a sandbox workspace, and
 streams every tool call live to the browser.
 
@@ -38,7 +38,7 @@ claude setup-token            # → paste into /opt/claude-agent/.env on the VPS
 # 3. password gate
 ssh root@66.42.45.128 'caddy hash-password --plaintext "YOUR_PASSWORD"'   # → put hash in /etc/caddy/Caddyfile
 
-# 4. DNS: claude-agent.jianshuo.dev  A  66.42.45.128  (Cloudflare, DNS-only)
+# 4. DNS: lab.jianshuo.dev  A  66.42.45.128  (Cloudflare, DNS-only)
 
 # 5. ship code + start
 ./deploy.sh

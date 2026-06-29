@@ -44,7 +44,7 @@ Node 服务（TypeScript, @anthropic-ai/claude-agent-sdk）
 
 - **常驻**：systemd 服务 `claude-agent.service`，`Restart=always`，开机自启。
 - **隔离**：以非特权用户 `claude-agent` 运行；systemd 硬化：`ProtectSystem=strict`、`ReadWritePaths=/opt/claude-agent`、`NoNewPrivileges=yes`、`PrivateTmp=yes`。bash 破坏半径限制在工作目录 + 该用户。
-- **域名**：`claude-agent.jianshuo.dev` A 记录（Cloudflare 灰云/仅 DNS）→ `66.42.45.128`，Caddy 直接签 Let's Encrypt 证书。
+- **域名**：`lab.jianshuo.dev` A 记录（Cloudflare 灰云/仅 DNS）→ `66.42.45.128`，Caddy 直接签 Let's Encrypt 证书。
 
 ## 4. 组件
 
@@ -66,7 +66,7 @@ Node 服务（TypeScript, @anthropic-ai/claude-agent-sdk）
 
 ### 4.3 部署产物
 - `claude-agent.service`（systemd unit）。
-- `Caddyfile`（`claude-agent.jianshuo.dev` 反代 + basic_auth）。
+- `Caddyfile`（`lab.jianshuo.dev` 反代 + basic_auth）。
 - `.env`（`EnvironmentFile`，600 权限）：`CLAUDE_CODE_OAUTH_TOKEN`、`PORT=8787`、`MODEL=claude-opus-4-8`、`WORKSPACE=/opt/claude-agent/workspace`、`MAX_TURNS=30`。
 - `deploy.sh`：本地 `tsc` → `rsync` 到 `/opt/claude-agent` → `npm ci --omit=dev` → 重启服务。
 
@@ -88,7 +88,7 @@ Node 服务（TypeScript, @anthropic-ai/claude-agent-sdk）
 - `claude-agent/node_modules`、`claude-agent/dist`、`claude-agent/.env` 进 `.gitignore`。
 
 ## 8. 验收
-1. 浏览器开 `https://claude-agent.jianshuo.dev` → 弹密码 → 进聊天页（HTTPS 有效证书）。
+1. 浏览器开 `https://lab.jianshuo.dev` → 弹密码 → 进聊天页（HTTPS 有效证书）。
 2. 发「列出当前目录文件并新建一个 hello.txt」→ 实时看到 Bash/Write 工具卡片流式出现 → 文件确在 workspace 生成。
 3. 追问一句 → 上下文连贯（resume 生效）。
 4. `systemctl restart claude-agent` 后服务自动恢复、页面仍可用、旧会话可 resume。

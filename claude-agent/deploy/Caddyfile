@@ -2,7 +2,7 @@
 # Replace the bcrypt hash below with output of: caddy hash-password
 # (provisioning script does this automatically).
 
-claude-agent.jianshuo.dev {
+lab.jianshuo.dev {
 	encode gzip
 
 	basic_auth {
