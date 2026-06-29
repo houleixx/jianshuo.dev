@@ -462,26 +462,37 @@ function findSessionPhotos(audioKey, allKeys) {
 
 // ── Claude (article generation) ───────────────────────────────────────────────
 
-async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg) {
-  let system;
-  if (force) {
-    system = SYSTEM_FORCE;
-  } else if (claudeMd) {
-    system = `${SYSTEM}${photos?.length ? _PHOTO_INSTR : ""}\n\n---\n\n${claudeMd}${_FORCE_SUFFIX}`;
-  } else {
-    system = SYSTEM + (photos?.length ? _PHOTO_INSTR : "");
-  }
+// cacheMode picks the prompt-cache layout (Anthropic only; ignored for openai-compat):
+//   "system"     (default) — 文风 rides in the cached system block. Best when the SAME
+//                文风 is reused across DIFFERENT recordings (normal mining): system
+//                (SYSTEM+文风) is the stable prefix, the transcript varies per recording.
+//   "transcript" — 文风 rides at the END of the user message, after the (large, stable)
+//                transcript+photos, which become the cached prefix. Best when the SAME
+//                recording is re-run with DIFFERENT 文风 (restyle / 单篇多文风): the bulky
+//                transcript+photos (often 10k+ tokens) are read from cache and only the
+//                文风 tail varies. Images can't sit in a system block, so caching photos
+//                across 文风 variants REQUIRES this layout.
+async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system") {
+  const hasPhotos = !!(photos?.length) && !force;
+  // Static, cache-friendly instructions: identical for everyone, stable across re-mines
+  // of the SAME recording. The per-user 文风 is kept OUT so cacheMode can position it.
+  const staticSystem = force ? SYSTEM_FORCE : (SYSTEM + (hasPhotos ? _PHOTO_INSTR : ""));
+  // 文风 + 成文底线. Volatile across styles (restyle / 多文风), stable across recordings.
+  const styleTail = (!force && claudeMd) ? `\n\n---\n\n${claudeMd}${_FORCE_SUFFIX}` : "";
+  const transcriptText = `口述转写：\n\n${transcript}`;
+  const transcriptCache = cacheMode === "transcript" && !force;
 
   const t0 = Date.now();
   let text, latencyMs, rawResp;
 
   if (modelCfg.provider === "openai-compat") {
-    // ── OpenAI-compatible (DeepSeek / Kimi / Qwen / etc.) ────────────────────
+    // ── OpenAI-compatible (DeepSeek / Kimi / Qwen / etc.) — no prompt caching ─────
+    const system = staticSystem + styleTail;
     let userContent;
-    if (!photos?.length || force) {
-      userContent = `口述转写：\n\n${transcript}`;
+    if (!hasPhotos) {
+      userContent = transcriptText;
     } else {
-      userContent = [{ type: "text", text: `口述转写：\n\n${transcript}` }];
+      userContent = [{ type: "text", text: transcriptText }];
       for (let i = 0; i < photos.length; i++) {
         userContent.push({ type: "text", text: `\n[照片 key:${photos[i].relKey}，拍摄于 ${photos[i].label}]` });
         userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${photos[i].b64}`, detail: "low" } });
@@ -506,26 +517,35 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
     rawResp = await resp.json();
     text = rawResp.choices?.[0]?.message?.content || "";
   } else {
-    // ── Anthropic ─────────────────────────────────────────────────────────────
+    // ── Anthropic — prompt caching via cache_control breakpoints ──────────────────
+    const systemText = transcriptCache ? staticSystem : (staticSystem + styleTail);
+    const systemBlocks = [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }];
+
     let content;
-    if (!photos?.length || force) {
-      content = `口述转写：\n\n${transcript}`;
+    if (!hasPhotos) {
+      if (transcriptCache) {
+        // Cache SYSTEM+transcript; 文风 tail after it varies and stays uncached.
+        content = [{ type: "text", text: transcriptText, cache_control: { type: "ephemeral" } }];
+        if (styleTail) content.push({ type: "text", text: styleTail });
+      } else {
+        content = transcriptText;
+      }
     } else {
-      content = [{ type: "text", text: `口述转写：\n\n${transcript}` }];
+      content = [{ type: "text", text: transcriptText }];
       for (let i = 0; i < photos.length; i++) {
         content.push({ type: "text", text: `\n[照片 key:${photos[i].relKey}，拍摄于 ${photos[i].label}]` });
-        content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } });
+        const img = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } };
+        // transcript mode: break after the LAST photo so SYSTEM+transcript+photos cache
+        // together and get reused across 文风 variants of this recording.
+        if (transcriptCache && i === photos.length - 1) img.cache_control = { type: "ephemeral" };
+        content.push(img);
       }
+      if (transcriptCache && styleTail) content.push({ type: "text", text: styleTail });
     }
-    // Cache the whole system prompt (static SYSTEM + this user's 文风 + suffix). It's
-    // byte-identical across every recording of the same user in one runMine pass, so
-    // recordings 2..N within the 5-min TTL read it from cache (0.1x) instead of re-
-    // billing full input (1x). The transcript stays in the user message (volatile per
-    // recording → correctly uncached). force retries use a tiny SYSTEM_FORCE that falls
-    // under the cacheable minimum — cache_control is simply ignored there, no error.
+
     const payload = {
       model: modelCfg.model, max_tokens: force ? 2000 : 8000,
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      system: systemBlocks,
       messages: [{ role: "user", content }],
     };
     if (!force) payload.output_config = { format: { type: "json_schema", schema: ARTICLES_SCHEMA } };
@@ -684,7 +704,7 @@ export async function restyleArticle(env, scope, stem, styleV) {
   const tLlm = Date.now();
   let articles;
   try {
-    const r = await generateArticles(transcript, styleText, photos.length ? photos : null, false, env, modelCfg);
+    const r = await generateArticles(transcript, styleText, photos.length ? photos : null, false, env, modelCfg, "transcript");
     await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step: 0, turn_id: turnId, meta, response: r.rawResp });
     try {
       if (env.USAGE) {
@@ -835,6 +855,10 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // The style(s) to mine: picks if any (1 overrides head too), else the head style
     // (tagged with headV). No CLAUDE.json → one untagged mine with empty style.
     const toMine = picks.length ? picks : [{ v: headV, style: claudeMd }];
+    // ≥2 styles mine the SAME recording (same transcript+photos) → cache those across the
+    // 文风 variants (transcript mode). A single style varies the transcript across different
+    // recordings, so keep 文风 in the cached system block (system mode) for cross-recording hits.
+    const cacheMode = toMine.length >= 2 ? "transcript" : "system";
     if (claudeMd || picks.length) log("文风", { chars: claudeMd.length, use: picks.length ? picks.map((p) => `v${p.v}`).join(",") : (headV ? `v${headV}(head)` : "none") });
 
     const photoKeys = findSessionPhotos(audioKey, allKeys);
@@ -854,7 +878,7 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         const tLlm = Date.now();
         log(`LLM 开始${tag ? " " + tag : ""}${force ? " (force)" : ""}`, { step });
         try {
-          const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos.length ? photos : null), force, env, modelCfg);
+          const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos.length ? photos : null), force, env, modelCfg, cacheMode);
           await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
           try {
             if (env.USAGE) {
