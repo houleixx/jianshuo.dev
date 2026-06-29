@@ -16,7 +16,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { readStyleText, readProfileName } from "../../functions/lib/style-store.js";
+import { readStyleText, readProfileName, readStyleDoc, resolveStyle } from "../../functions/lib/style-store.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
 const MIN_CHARS          = 20;
@@ -750,10 +750,18 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
 
     await notifyStatus(scope, stem, "mining", env);
 
-    // ── Style card + photos ───────────────────────────────────────────────────
-    // 文风走 CLAUDE.json（schema-3），回退老 CLAUDE.md 的「# 我的文风」段。名字不在此卡片里。
-    const claudeMd = (await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
-    if (claudeMd) log("文风", { chars: claudeMd.length });
+    // ── Style(s) + photos ───────────────────────────────────────────────────────
+    // 文风走 CLAUDE.json（schema-3），回退老 CLAUDE.md 的「# 我的文风」段。
+    // 多风格对比：profile.styles 选了 ≥2 个已存文风版本时，每个风格各挖一篇，分别作为
+    // 一个标准 article version 写入（head = 最后一个；其余靠 undo/redo 翻）。每篇 body
+    // 顶加 `<!--风格vN-->` 注释作为版本来源标签（展示时剥离）。
+    const styleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
+    const claudeMd  = (styleDoc ? resolveStyle(styleDoc) : await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+    const stylePicks = (styleDoc && styleDoc.profile && Array.isArray(styleDoc.profile.styles) ? styleDoc.profile.styles : [])
+      .map((v) => ({ v, style: ((styleDoc.versions || []).find((e) => e.v === v) || {}).style }))
+      .filter((p) => typeof p.style === "string" && p.style.trim());
+    const multi = stylePicks.length >= 2;
+    if (claudeMd) log("文风", { chars: claudeMd.length, multi: multi ? stylePicks.map((p) => `v${p.v}`).join(",") : false });
 
     const photoKeys = findSessionPhotos(audioKey, allKeys);
     const photos    = [];
@@ -763,61 +771,71 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     }
     if (photos.length) log("照片", { count: photos.length });
 
-    // ── LLM (first pass, then force retry) ────────────────────────────────────
     const turnId = `${Date.now()}-${stem.slice(-8)}`;
     const meta   = { user_scope: scope, stem };
-    let articles;
 
-    const runLlm = async (force, step) => {
-      const tLlm = Date.now();
-      log(`LLM 开始${force ? " (force)" : ""}`, { step });
-      try {
-        const r = await generateArticles(transcript, force ? "" : claudeMd, force ? null : (photos.length ? photos : null), force, env, modelCfg);
-        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
-        // Debit Claude cost (best-effort)
+    // Mine once for one style text: first pass, then a force retry if empty. → articles ([] if none).
+    const mineOnce = async (styleText, tag) => {
+      const runLlm = async (force, step) => {
+        const tLlm = Date.now();
+        log(`LLM 开始${tag ? " " + tag : ""}${force ? " (force)" : ""}`, { step });
         try {
-          if (env.USAGE) {
-            const u = r.rawResp?.usage || {};
-            await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens),
-              "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId }, Date.now());
-          }
-        } catch (_) {}
-        log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
-        return r.articles;
-      } catch (e) {
-        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
-        throw e;
-      }
+          const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos.length ? photos : null), force, env, modelCfg);
+          await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+          try {
+            if (env.USAGE) {
+              const u = r.rawResp?.usage || {};
+              await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens),
+                "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, stem, turn_id: turnId }, Date.now());
+            }
+          } catch (_) {}
+          log(`LLM 完成${tag ? " " + tag : ""}${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
+          return r.articles;
+        } catch (e) {
+          await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
+          throw e;
+        }
+      };
+      let arts = await runLlm(false, 0);
+      if (!arts.length) { log("LLM 无文章，重试 (force)"); try { arts = await runLlm(true, 1); } catch (_) { arts = []; } }
+      return arts;
     };
 
-    articles = await runLlm(false, 0);
-
-    if (!articles.length) {
-      log("LLM 无文章，重试 (force)");
-      try { articles = await runLlm(true, 1); } catch (_) { articles = []; }
-      if (!articles.length) {
-        await writeEmpty(audioKey, "no-article", env);
-        await notifyStatus(scope, stem, "empty", env);
-        log("无文章 (两次均空)");
-        result = "empty";
-        return "empty";
+    // Build the variant(s) to write. Multi → one tagged variant per picked style.
+    const variants = [];
+    if (multi) {
+      for (const p of stylePicks) {
+        const arts = await mineOnce(p.style, `风格v${p.v}`);
+        if (arts.length) variants.push(arts.map((a) => ({ ...a, body: `<!--风格v${p.v}-->\n\n${a.body}` })));
       }
+    } else {
+      const arts = await mineOnce(claudeMd, "");
+      if (arts.length) variants.push(arts);
     }
 
-    // ── Write article ──────────────────────────────────────────────────────────
-    // No photos array — the model inserts [[photo:<key>]] markers into the body,
-    // which is the sole source of truth for which photos appear and where.
-    const doc = {
+    if (!variants.length) {
+      await writeEmpty(audioKey, "no-article", env);
+      await notifyStatus(scope, stem, "empty", env);
+      log("无文章");
+      result = "empty";
+      return "empty";
+    }
+
+    // ── Write article(s) ─────────────────────────────────────────────────────────
+    // Each variant is PUT separately → the Files API article store appends it as a new
+    // version and moves head, so after the loop head = the LAST variant (newest), and
+    // undo/redo walks the others. No photos array — [[photo:<key>]] markers in the body
+    // are the sole source of truth for which photos appear and where.
+    const baseDoc = {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
-      transcript, srt, articles, status: "ready", model: modelCfg.model,
+      transcript, srt, status: "ready", model: modelCfg.model,
     };
-
-    await writeArticle(audioKey, doc, env);
+    for (const arts of variants) await writeArticle(audioKey, { ...baseDoc, articles: arts }, env);
     if (srt) await writeSrt(audioKey, srt, env);
     await notifyStatus(scope, stem, "ready", env);
     try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
-    log("写入完成", { articles: articles.length, titles: articles.map(a => a.title) });
+    log("写入完成", { variants: variants.length, multi });
     result = "mined";
     return "mined";
 

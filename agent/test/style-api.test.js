@@ -176,4 +176,26 @@ describe("profile name via /style — additive, name change mints NO version", (
     expect(stored.versions[0].style).toBe("只有文风");
     expect(stored.profile).toBeUndefined();
   });
+
+  it("PUT /style {styles} writes profile.styles (ints only, capped 3), no version", async () => {
+    const scope = await anonScope(TOKEN);
+    const ctx = reqCtx("PUT", ["style"], { body: { styles: [7, 3, 9, 5, "x"] } });
+    const body = await (await onRequest(ctx)).json();
+    expect(body.ok).toBe(true);
+    const stored = JSON.parse(ctx.env.FILES._store.get(`${scope}CLAUDE.json`));
+    expect(stored.profile.styles).toEqual([7, 3, 9]);
+    expect(stored.versions || []).toHaveLength(0);   // selection is not a文风 version
+  });
+
+  it("GET /style additively returns profile.styles", async () => {
+    const ctx = reqCtx("GET", ["style"]);
+    const scope = await anonScope(TOKEN);
+    ctx.env.FILES._store.set(`${scope}CLAUDE.json`, JSON.stringify({
+      schema: 3, head: 1, createdAt: 1, updatedAt: 2,
+      versions: [{ v: 1, savedAt: 1, source: "app", style: "x" }],
+      profile: { styles: [7, 3] },
+    }));
+    const body = await (await onRequest(ctx)).json();
+    expect(body.styles).toEqual([7, 3]);
+  });
 });

@@ -722,7 +722,7 @@ export async function onRequest(context) {
     if (request.method === 'GET' && !subaction) {
       // `name` is additive (from doc.profile) — old clients decode only `style` and ignore it.
       const doc = await readStyleDoc(env, styleKey);
-      if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0 });
+      if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', styles: (doc.profile && doc.profile.styles) || [], head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0 });
       const legacy = await env.FILES.get(legacyKey);
       if (legacy) {
         const md = await legacy.text();
@@ -741,13 +741,19 @@ export async function onRequest(context) {
     if (request.method === 'PUT' && !subaction) {
       let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
       const style = typeof body.style === 'string' ? body.style : '';
-      const hasName = typeof body.name === 'string';
-      if (!style.trim() && !hasName) return json({ error: 'empty_content' }, 400);
+      // Non-versioned profile fields, merged in one patch (extensible: name, styles, …).
+      const profilePatch = {};
+      if (typeof body.name === 'string') profilePatch.name = body.name.trim();
+      if (Array.isArray(body.styles)) {
+        profilePatch.styles = body.styles.filter((n) => Number.isInteger(n)).slice(0, 3);  // 多风格对比：选中的文风版本号
+      }
+      const hasProfile = Object.keys(profilePatch).length > 0;
+      if (!style.trim() && !hasProfile) return json({ error: 'empty_content' }, 400);
       const source = body.source === 'agent' ? 'agent' : (scope ? 'app' : 'mine');
-      // name → profile (no version); style → a new version. profile survives the
-      // style write (writeStyleDoc carries it forward), so order is safe.
+      // profile fields → no version; style → a new version. profile survives the style
+      // write (writeStyleDoc carries it forward), so doing profile first is safe.
       let head;
-      if (hasName) { head = (await mergeProfile(env, styleKey, { name: body.name.trim() })).head; }
+      if (hasProfile) { head = (await mergeProfile(env, styleKey, profilePatch)).head; }
       if (style.trim()) { head = (await writeStyleDoc(env, styleKey, style, source)).head; }
       return json({ ok: true, head: head ?? 0 });
     }
