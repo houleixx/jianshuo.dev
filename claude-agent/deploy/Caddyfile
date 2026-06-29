@@ -1,0 +1,15 @@
+# Caddy reverse proxy: HTTPS (auto Let's Encrypt) + single-password gate.
+# Replace the bcrypt hash below with output of: caddy hash-password
+# (provisioning script does this automatically).
+
+claude-agent.jianshuo.dev {
+	encode gzip
+
+	basic_auth {
+		wjs REPLACE_WITH_BCRYPT_HASH
+	}
+
+	reverse_proxy 127.0.0.1:8787 {
+		flush_interval -1
+	}
+}

@@ -2,3 +2,5 @@
 # Keep its source + 200MB node_modules out of the Pages asset upload.
 reco/
 node_modules
+# claude-agent is a standalone Node service on the Tokyo VPS, not Pages.
+claude-agent/

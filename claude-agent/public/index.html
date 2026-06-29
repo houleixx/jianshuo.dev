@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Claude Agent</title>
+    <style>
+      :root {
+        --bg: #f7f7f5;
+        --panel: #ffffff;
+        --ink: #1f2328;
+        --muted: #6b7280;
+        --line: #e6e6e3;
+        --accent: #c2410c;
+        --tool: #f3f4f6;
+        --tool-line: #e0e2e6;
+        --err: #b91c1c;
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+      header h1 { font-size: 15px; font-weight: 600; margin: 0; flex: 1; }
+      header .dot { width: 9px; height: 9px; border-radius: 50%; background: #16a34a; }
+      header .meta { font-size: 12px; color: var(--muted); }
+      header button {
+        font: inherit; font-size: 13px; cursor: pointer;
+        border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+        padding: 5px 12px; border-radius: 8px;
+      }
+      header button:hover { background: #f0f0ee; }
+      main {
+        flex: 1; overflow-y: auto; padding: 22px 0;
+      }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 0 18px; }
+      .msg { margin: 0 0 20px; }
+      .msg .role { font-size: 12px; color: var(--muted); margin-bottom: 5px; font-weight: 600; }
+      .msg.user .bubble {
+        background: var(--accent); color: #fff; padding: 10px 14px;
+        border-radius: var(--radius); display: inline-block; white-space: pre-wrap;
+        max-width: 100%;
+      }
+      .msg.assistant .bubble { white-space: pre-wrap; word-wrap: break-word; }
+      .tool {
+        border: 1px solid var(--tool-line); background: var(--tool);
+        border-radius: 10px; margin: 8px 0; overflow: hidden; font-size: 13.5px;
+      }
+      .tool summary {
+        cursor: pointer; padding: 8px 12px; list-style: none;
+        display: flex; align-items: center; gap: 8px; user-select: none;
+      }
+      .tool summary::-webkit-details-marker { display: none; }
+      .tool .tname { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .tool .targ {
+        color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+      }
+      .tool .spin { width: 12px; height: 12px; border: 2px solid var(--tool-line);
+        border-top-color: var(--accent); border-radius: 50%; animation: sp .7s linear infinite; }
+      @keyframes sp { to { transform: rotate(360deg); } }
+      .tool .ok { color: #16a34a; } .tool .bad { color: var(--err); }
+      .tool pre {
+        margin: 0; padding: 10px 12px; border-top: 1px solid var(--tool-line);
+        background: #fbfbfa; overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+        white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow-y: auto;
+      }
+      .tool pre .lbl { color: var(--muted); }
+      .err { color: var(--err); font-size: 13.5px; padding: 8px 0; }
+      footer { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 0; }
+      .composer { max-width: 760px; margin: 0 auto; padding: 0 18px; display: flex; gap: 10px; }
+      textarea {
+        flex: 1; resize: none; font: inherit; padding: 10px 12px;
+        border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink);
+        max-height: 180px; min-height: 44px;
+      }
+      textarea:focus { outline: none; border-color: var(--accent); }
+      .send {
+        font: inherit; font-weight: 600; cursor: pointer; border: none;
+        background: var(--accent); color: #fff; padding: 0 18px; border-radius: 10px;
+      }
+      .send:disabled { opacity: .45; cursor: default; }
+      .hint { max-width: 760px; margin: 6px auto 0; padding: 0 18px; font-size: 11.5px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="dot"></span>
+      <h1>Claude Agent</h1>
+      <span class="meta" id="meta"></span>
+      <button id="reset">新对话</button>
+    </header>
+    <main id="main"><div class="wrap" id="thread"></div></main>
+    <footer>
+      <div class="composer">
+        <textarea id="input" placeholder="让 agent 干点活…（Enter 发送，Shift+Enter 换行）" rows="1"></textarea>
+        <button class="send" id="send">发送</button>
+      </div>
+      <div class="hint">工具在 VPS 沙箱目录里运行，能读写文件 / 跑 bash / 联网。点工具卡片可展开看输入与结果。</div>
+    </footer>
+
+    <script>
+      const $ = (s) => document.querySelector(s);
+      const thread = $("#thread"), main = $("#main"), input = $("#input");
+      const sendBtn = $("#send"), meta = $("#meta");
+      let sessionId = localStorage.getItem("agentSession") || null;
+      let busy = false;
+
+      const scroll = () => (main.scrollTop = main.scrollHeight);
+      const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+      function addMsg(role) {
+        const el = document.createElement("div");
+        el.className = "msg " + role;
+        el.innerHTML = `<div class="role">${role === "user" ? "你" : "Claude"}</div><div class="bubble"></div>`;
+        thread.appendChild(el);
+        scroll();
+        return el.querySelector(".bubble");
+      }
+
+      function shortArg(name, input) {
+        if (!input) return "";
+        if (input.command) return input.command;
+        if (input.file_path) return input.file_path;
+        if (input.path) return input.path;
+        if (input.pattern) return input.pattern;
+        if (input.query) return input.query;
+        if (input.url) return input.url;
+        const k = Object.keys(input)[0];
+        return k ? String(input[k]).slice(0, 120) : "";
+      }
+
+      function addTool(bubble, t) {
+        const d = document.createElement("details");
+        d.className = "tool";
+        d.dataset.id = t.id;
+        d.innerHTML =
+          `<summary><span class="spin"></span><span class="tname">${esc(t.name)}</span>` +
+          `<span class="targ">${esc(shortArg(t.name, t.input))}</span></summary>` +
+          `<pre><span class="lbl">input</span>\n${esc(JSON.stringify(t.input, null, 2))}</pre>`;
+        bubble.appendChild(d);
+        scroll();
+      }
+
+      function fillTool(t) {
+        const d = thread.querySelector(`details.tool[data-id="${CSS.escape(t.id)}"]`);
+        if (!d) return;
+        const spin = d.querySelector(".spin");
+        if (spin) {
+          spin.classList.remove("spin");
+          spin.textContent = t.isError ? "✕" : "✓";
+          spin.className = t.isError ? "bad" : "ok";
+        }
+        const pre = document.createElement("pre");
+        pre.innerHTML = `<span class="lbl">${t.isError ? "error" : "result"}</span>\n${esc(t.content || "")}`;
+        d.appendChild(pre);
+        scroll();
+      }
+
+      async function send() {
+        const text = input.value.trim();
+        if (!text || busy) return;
+        busy = true; sendBtn.disabled = true;
+        addMsg("user").textContent = text;
+        input.value = ""; input.style.height = "auto";
+        const bubble = addMsg("assistant");
+        let textNode = null;
+
+        try {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: text, sessionId }),
+          });
+          if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
+
+          const reader = res.body.getReader();
+          const dec = new TextDecoder();
+          let buf = "";
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const frames = buf.split("\n\n");
+            buf = frames.pop();
+            for (const f of frames) {
+              const ev = (f.match(/^event: (.*)$/m) || [])[1];
+              const dataLine = (f.match(/^data: (.*)$/m) || [])[1];
+              if (!ev || dataLine === undefined) continue;
+              const d = JSON.parse(dataLine);
+              if (ev === "session") {
+                sessionId = d.sessionId;
+                localStorage.setItem("agentSession", sessionId);
+              } else if (ev === "text") {
+                if (!textNode) { textNode = document.createElement("span"); bubble.appendChild(textNode); }
+                textNode.textContent += d.delta; scroll();
+              } else if (ev === "tool_use") {
+                addTool(bubble, d); textNode = null;
+              } else if (ev === "tool_result") {
+                fillTool(d);
+              } else if (ev === "result") {
+                meta.textContent = `${d.numTurns} 步 · ${(d.durationMs/1000).toFixed(1)}s` +
+                  (d.costUsd ? ` · $${d.costUsd.toFixed(4)}` : "");
+              } else if (ev === "error") {
+                const e = document.createElement("div");
+                e.className = "err"; e.textContent = "出错：" + d.message;
+                bubble.appendChild(e); scroll();
+              }
+            }
+          }
+        } catch (err) {
+          const e = document.createElement("div");
+          e.className = "err"; e.textContent = "连接出错：" + err.message;
+          bubble.appendChild(e);
+        } finally {
+          busy = false; sendBtn.disabled = false; input.focus();
+        }
+      }
+
+      sendBtn.addEventListener("click", send);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+      });
+      input.addEventListener("input", () => {
+        input.style.height = "auto";
+        input.style.height = Math.min(input.scrollHeight, 180) + "px";
+      });
+      $("#reset").addEventListener("click", () => {
+        sessionId = null; localStorage.removeItem("agentSession");
+        thread.innerHTML = ""; meta.textContent = ""; input.focus();
+      });
+      input.focus();
+    </script>
+  </body>
+</html>
