@@ -2,6 +2,7 @@
 // Each handler takes (args, ctx) where ctx = {env, scope, articleKey, token, origin}.
 
 import { resolveArticles } from "../../functions/lib/article-store.js";
+import { resolveStyle, parseStyleMarkdown } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
@@ -179,19 +180,28 @@ register(
 );
 
 register(
-  { name: "read_style", description: "读取用户的写作文风（CLAUDE.md 的内容）。调整文风前先读出来。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
+  // 文风现在存 CLAUDE.json（schema-3 版本化，与文章同格式）；老 CLAUDE.md 的「# 我的文风」
+  // 段仅作读回退。返回的是文风正文（不含名字——名字暂留老 CLAUDE.md，另行管理）。
+  { name: "read_style", description: "读取用户的写作文风（文风正文）。调整文风前先读出来。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   async (_args, { env, scope }) => {
-    const obj = await env.FILES.get(scope + "CLAUDE.md");
-    return { style: obj ? (await obj.text()) : "" };
+    const obj = await env.FILES.get(scope + "CLAUDE.json");
+    if (obj) { try { return { style: resolveStyle(JSON.parse(await obj.text())) }; } catch {} }
+    const legacy = await env.FILES.get(scope + "CLAUDE.md");
+    return { style: legacy ? parseStyleMarkdown(await legacy.text()) : "" };
   }
 );
 
 register(
-  { name: "write_style", description: "整体覆盖写用户的写作文风（CLAUDE.md）。先 read_style 读出当前内容，改完再整体写回。影响以后所有挖矿和编辑。", input_schema: { type: "object", properties: { content: { type: "string" } }, required: ["content"], additionalProperties: false } },
-  async ({ content }, { env, scope }) => {
+  // 走 /files/api/style 端点做服务端版本化写（版本逻辑单一真源在 style-store.js）。
+  { name: "write_style", description: "整体覆盖写用户的写作文风（版本化写回 CLAUDE.json）。先 read_style 读出当前内容，改完再整体写回。影响以后所有挖矿和编辑。", input_schema: { type: "object", properties: { content: { type: "string" } }, required: ["content"], additionalProperties: false } },
+  async ({ content }, { token, origin }) => {
     if (!content || !String(content).trim()) return { error: "empty_content" };
-    await env.FILES.put(scope + "CLAUDE.md", String(content), { httpMetadata: { contentType: "text/markdown" } });
-    return { ok: true };
+    const resp = await globalThis.fetch(`${origin}/files/api/style`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ style: String(content), source: "agent" }),
+    });
+    return resp.ok ? { ok: true } : { error: `upload_failed_${resp.status}` };
   }
 );
 

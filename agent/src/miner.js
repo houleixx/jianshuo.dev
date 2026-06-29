@@ -16,6 +16,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
+import { readStyleText } from "../../functions/lib/style-store.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
 const MIN_CHARS          = 20;
@@ -725,9 +726,9 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     await notifyStatus(scope, stem, "mining", env);
 
     // ── Style card + photos ───────────────────────────────────────────────────
-    const claudeMdObj = await env.FILES.get(scope + "CLAUDE.md");
-    const claudeMd    = claudeMdObj ? (await claudeMdObj.text()).trim() : "";
-    if (claudeMd) log("CLAUDE.md", { chars: claudeMd.length });
+    // 文风走 CLAUDE.json（schema-3），回退老 CLAUDE.md 的「# 我的文风」段。名字不在此卡片里。
+    const claudeMd = (await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+    if (claudeMd) log("文风", { chars: claudeMd.length });
 
     const photoKeys = findSessionPhotos(audioKey, allKeys);
     const photos    = [];
@@ -838,9 +839,9 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
 
     await notifyStatus(scope, stem, "mining", env);
 
-    const claudeMdObj = await env.FILES.get(scope + "CLAUDE.md");
-    const claudeMd    = claudeMdObj ? (await claudeMdObj.text()).trim() : "";
-    if (claudeMd) log("CLAUDE.md", { chars: claudeMd.length });
+    // 文风走 CLAUDE.json（schema-3），回退老 CLAUDE.md 的「# 我的文风」段。
+    const claudeMd = (await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+    if (claudeMd) log("文风", { chars: claudeMd.length });
 
     const turnId = `${Date.now()}-${stem.slice(-8)}`;
     const meta   = { user_scope: scope, stem, source: "text" };

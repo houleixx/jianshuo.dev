@@ -20,6 +20,7 @@
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
 import { readArticleDoc, writeArticleDoc, setHead, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
+import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
 
@@ -693,6 +694,66 @@ export async function onRequest(context) {
   //   PUT    /articles/<stem>/empty mark as no-speech
   //   GET    /articles/<stem>/history       version history
   //   PATCH  /articles/<stem>/head          move head pointer (undo/redo, no new version)
+
+  // ── Style API (文风) ─────────────────────────────────────────────────────
+  // Versioned read/write for the user's 文风 — users/<sub>/CLAUDE.json (schema-3,
+  // mirrors the article store). The name is NOT here; it stays in the legacy
+  // CLAUDE.md for now (read by the author-extraction paths). On read, CLAUDE.json
+  // wins; if absent, the legacy CLAUDE.md's 文风 section is parsed as a fallback.
+  // Writers only ever write CLAUDE.json.
+  //   GET   /style            read current 文风  → {style, head, createdAt, updatedAt}
+  //   PUT   /style            write (versioned), body {style, source?} → {ok, head}
+  //   GET   /style/history    {head, versions}
+  //   PATCH /style/head       move head pointer (undo/redo), body {head} → {ok, head}
+  // Admin token may target a user with /style/<sub>[/...].
+  if (action === 'style') {
+    let styleScope, subaction;
+    if (!scope) {
+      const adminSub = sub2;
+      if (!adminSub) return json({ error: 'admin must supply <sub>' }, 400);
+      styleScope = `users/${adminSub}/`;
+      subaction = segments[2] || '';
+    } else {
+      styleScope = scope;
+      subaction = sub2;
+    }
+    const styleKey = `${styleScope}CLAUDE.json`;
+    const legacyKey = `${styleScope}CLAUDE.md`;
+
+    if (request.method === 'GET' && !subaction) {
+      const doc = await readStyleDoc(env, styleKey);
+      if (doc) return json({ style: resolveStyle(doc), head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0 });
+      const legacy = await env.FILES.get(legacyKey);
+      if (legacy) return json({ style: parseStyleMarkdown(await legacy.text()), head: 0, legacy: true });
+      return json({ error: 'not found' }, 404);
+    }
+
+    if (request.method === 'GET' && subaction === 'history') {
+      const doc = await readStyleDoc(env, styleKey);
+      if (!doc) return json({ error: 'not found' }, 404);
+      return json({ head: doc.head, versions: doc.versions || [] });
+    }
+
+    if (request.method === 'PUT' && !subaction) {
+      let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+      const style = typeof body.style === 'string' ? body.style : '';
+      if (!style.trim()) return json({ error: 'empty_content' }, 400);
+      const source = body.source === 'agent' ? 'agent' : (scope ? 'app' : 'mine');
+      const doc = await writeStyleDoc(env, styleKey, style, source);
+      return json({ ok: true, head: doc.head });
+    }
+
+    if (request.method === 'PATCH' && subaction === 'head') {
+      let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+      const newHead = typeof body.head === 'number' ? body.head : null;
+      if (!newHead) return json({ error: 'head required' }, 400);
+      const doc = await setStyleHead(env, styleKey, newHead);
+      if (!doc) return json({ error: 'version not found' }, 404);
+      return json({ ok: true, head: doc.head });
+    }
+
+    return json({ error: 'method not allowed' }, 405);
+  }
 
   if (action === 'articles') {
     // Parse stem and optional sub-action from URL segments.

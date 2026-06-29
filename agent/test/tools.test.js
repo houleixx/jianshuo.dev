@@ -105,20 +105,37 @@ describe("write_article", () => {
 });
 
 describe("style tools", () => {
-  it("read_style returns the CLAUDE.md text, empty when absent", async () => {
-    const env = fakeEnv({ "users/u/CLAUDE.md": "# 我的名字\n王建硕\n\n口语一点" });
-    expect(await rt("read_style", {}, CTX(env))).toEqual({ style: "# 我的名字\n王建硕\n\n口语一点" });
-    const env2 = fakeEnv({});
-    expect(await rt("read_style", {}, CTX(env2))).toEqual({ style: "" });
+  it("read_style returns the resolved 文风 from CLAUDE.json (head version)", async () => {
+    const env = fakeEnv({ "users/u/CLAUDE.json": JSON.stringify({
+      schema: 3, head: 2, versions: [
+        { v: 1, savedAt: 1, source: "app", style: "老" },
+        { v: 2, savedAt: 2, source: "agent", style: "口语一点" },
+      ],
+    }) });
+    expect(await rt("read_style", {}, CTX(env))).toEqual({ style: "口语一点" });
   });
-  it("write_style overwrites CLAUDE.md", async () => {
-    const env = fakeEnv({ "users/u/CLAUDE.md": "old" });
-    expect(await rt("write_style", { content: "new style" }, CTX(env))).toEqual({ ok: true });
-    expect(env.FILES._store.get("users/u/CLAUDE.md")).toBe("new style");
+  it("read_style falls back to the legacy CLAUDE.md 文风 section", async () => {
+    const env = fakeEnv({ "users/u/CLAUDE.md": "# 我的名字\n王建硕\n\n# 我的文风\n回退" });
+    expect(await rt("read_style", {}, CTX(env))).toEqual({ style: "回退" });
+  });
+  it("read_style returns empty when neither CLAUDE.json nor CLAUDE.md exists", async () => {
+    expect(await rt("read_style", {}, CTX(fakeEnv({})))).toEqual({ style: "" });
+  });
+  it("write_style PUTs the 文风 to /files/api/style (source=agent) and returns ok", async () => {
+    globalThis.fetch = fakeFetch({
+      "PUT https://jianshuo.dev/files/api/style": () => ({ ok: true, body: { ok: true, head: 1 } }),
+    });
+    expect(await rt("write_style", { content: "new style" }, CTX(fakeEnv({})))).toEqual({ ok: true });
+    expect(JSON.parse(globalThis.fetch.calls[0].body)).toMatchObject({ style: "new style", source: "agent" });
+  });
+  it("write_style surfaces an upload failure", async () => {
+    globalThis.fetch = fakeFetch({
+      "PUT https://jianshuo.dev/files/api/style": () => ({ ok: false, status: 500, body: {} }),
+    });
+    expect((await rt("write_style", { content: "x" }, CTX(fakeEnv({})))).error).toMatch(/upload_failed/);
   });
   it("write_style rejects empty content", async () => {
-    const env = fakeEnv({});
-    expect(await rt("write_style", { content: "" }, CTX(env))).toEqual({ error: "empty_content" });
+    expect(await rt("write_style", { content: "" }, CTX(fakeEnv({})))).toEqual({ error: "empty_content" });
   });
 });
 
