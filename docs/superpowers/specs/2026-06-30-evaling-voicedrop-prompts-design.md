@@ -141,6 +141,7 @@ jianshuo.dev/agent/
   - 语气：情绪宣泄 / 技术干货 / 日常记事
 - 格式：`{ id, transcript, photos?: [{relKey,label,b64}], tags: [...] }`，与 `mineVariant` 入参对齐。
 - 维护：风格漂移后定期换血，避免 prompt 过拟合到老录音。
+- 🔒 **公私分离**：真实金标集放 `fixtures/local/`（gitignore）；仓库只提交 `fixtures/samples/` 的合成示例。harness 优先读 `local/`，无则回退 `samples/`。详见 §16。
 
 ## 8. 裁判 rubric 与协议（`references/judge-rubric.md`，单一真源）
 
@@ -158,8 +159,8 @@ jianshuo.dev/agent/
 ## 9. 报告格式
 
 - `report.json`（机读）：每条 fixture 的 winner、各维度、代理检查；总胜率、判定结论。
-- `report.md`（人读、git 可 diff）：表格化胜负 + 平手/回退高亮 + 候选 vs 生产 prompt 的 `git diff` 摘要 + 判定建议。
-- 可选：按用户「HTML 报告统一进 `/a/`」的惯例，渲一份 HTML 摘要推到 `jianshuo.dev/a/`（v1 非必须）。
+- `report.md`（人读）：表格化胜负 + 平手/回退高亮 + 候选 vs 生产 prompt 的 `git diff` 摘要 + 判定建议。
+- 🔒 报告与产出落 `agent/eval/runs/`（**gitignore，不提交**——含真实转写衍生内容，见 §16）；只在本地查看。需要可 diff 的产物时，prompt 版本本身在 `mine.js`（git 可 diff），报告留本地。
 
 ## 10. skill 交互（`SKILL.md` 行为）
 
@@ -213,3 +214,14 @@ jianshuo.dev/agent/
 ## 15. 开放问题
 
 无（D1–D9 已拍板）。实现期若发现 Workers 文本 import 不便，回退到「常量同步自 `mine-system.md`」方案（§4.1），不影响其余设计。
+
+## 16. 数据隐私（硬约束）
+
+`github.com/jianshuo/jianshuo.dev` 是 **PUBLIC** 仓库；现有架构已把全部 VoiceDrop 用户数据（录音/转写/文章）放 R2 私有桶，代码仓库不碰。eval 必须延续这条边界：
+
+- **绝不 commit**：真实录音转写、跑批产出（文章）、含上述内容的报告。它们是私人数据；一旦进公开 repo，git 历史 + GitHub 缓存无法彻底抹除。
+- **gitignore**：`agent/eval/fixtures/local/`（真实金标集）、`agent/eval/runs/`（跑批产物）。
+- **只提交**：`agent/eval/fixtures/samples/` 的合成/脱敏示例（仅供自测流程）、`README.md`、代码。
+- **不碰 mp3**：harness 只需文本转写（VoiceDrop 已转写），永不下载/存储音频。
+- **权威备份**：真实金标集的真源是 VoiceDrop / R2（私有）；`local/` 只是可随时重拉的本地快照，丢了不致命。
+- **落地顺序**：先写 `.gitignore` 再放任何真实数据；每次 `git add` 后用 `git status` 核对没有 `local/` 或 `runs/` 文件混入。
