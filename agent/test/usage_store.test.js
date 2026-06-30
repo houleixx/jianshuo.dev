@@ -95,7 +95,19 @@ describe("debit draws soonest-expiry first", () => {
   it("overdraft drives the last live bucket negative", async () => {
     seed(50, "campaign:x", null);
     await debit(db, U, 70, "mine", { stem: "s" }, 2);
+    const row = db.prepare("SELECT remaining_uy FROM bucket WHERE user_sub=? AND source='campaign:x'").bind(U).first();
+    expect(row.remaining_uy).toBe(-20);
     expect(await balanceUY(db, U, 2)).toBe(-20);
+  });
+  it("inserts an overdraft bucket when there are no live buckets", async () => {
+    seed(100, "campaign:expired", 1000);     // expires before now=2000
+    await debit(db, U, 40, "mine", null, 2000);
+    const od = db.prepare(
+      "SELECT remaining_uy, expires_at FROM bucket WHERE user_sub=? AND source='overdraft'"
+    ).bind(U).first();
+    expect(od.remaining_uy).toBe(-40);
+    expect(od.expires_at).toBeNull();
+    expect(await balanceUY(db, U, 2000)).toBe(-40);
   });
 });
 
