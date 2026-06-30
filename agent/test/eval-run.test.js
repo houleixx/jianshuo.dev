@@ -10,9 +10,9 @@ const fixtures = [
 function fakeCallModel(payload) {
   const sys = payload.system?.[0]?.text || "";
   if (sys.includes("CAND")) {
-    return JSON.stringify({ articles: [{ title: "A", body: "正文一二三四五" }, { title: "B", body: "正文一二三四五" }] });
+    return JSON.stringify({ articles: [{ title: "A", body: "这是一段足够长的正文内容用于测试" }, { title: "B", body: "这是一段足够长的正文内容用于测试" }] });
   }
-  return JSON.stringify({ articles: [{ title: "C", body: "正文一二三四五" }] });
+  return JSON.stringify({ articles: [{ title: "C", body: "这是一段足够长的正文内容用于测试" }] });
 }
 
 describe("runEval（注入式）", () => {
