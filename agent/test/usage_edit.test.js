@@ -7,14 +7,12 @@ vi.mock("agents", () => ({
   Agent: class Agent {},
   getAgentByName: async () => ({}),
 }));
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { fakeD1 } from "./fakes.js";
+import { fakeD1, usageSql } from "./fakes.js";
 import { meteredEditGate } from "../src/index.js";
 import { ensureAccount, debit } from "../src/usage_store.js";
 import { SIGNUP_GRANT_UY } from "../src/usage.js";
 
-const SQL = readFileSync(fileURLToPath(new URL("../migrations/0001_usage.sql", import.meta.url)), "utf8");
+const SQL = usageSql();
 
 describe("meteredEditGate", () => {
   it("ok for funded new user", async () => {

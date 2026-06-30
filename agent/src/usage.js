@@ -46,3 +46,10 @@ export function editGate(balanceUY, editsSoFar) {
   if ((editsSoFar || 0) >= MAX_EDITS_PER_ARTICLE) return "limit";
   return "ok";
 }
+
+// ── 过期 / 订阅常量（分桶账本）─────────────────────────────────────────────
+export const DAY_MS = 86400000;
+export const SIGNUP_EXPIRE_DAYS  = 365;   // 注册赠送 1 年
+export const CAMPAIGN_EXPIRE_DAYS = 90;   // 活动赠送默认 3 个月
+export const SUB_GRANT_SUANLI = 200;      // 包月发放（P3 用，先定义集中管理）
+export const expiryAfterDays = (now, days) => now + days * DAY_MS;

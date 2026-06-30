@@ -25,8 +25,8 @@ import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
-import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY } from "./usage.js";
-import { ensureAccount, debit, editCount, getLedger, grant, allAccounts } from "./usage_store.js";
+import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS } from "./usage.js";
+import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -463,9 +463,10 @@ export async function handleUsageRoute(url, request, env) {
     const scope = await resolveScope(tok, env);
     if (!scope) return J({ error: "unauthorized" }, 401);
     if (!env.USAGE) return J({ suanli: 0, yuan: 0, granted_suanli: 0, spent_suanli: 0, degraded: true });
-    await ensureAccount(env.USAGE, scope, Date.now());
-    const a = await env.USAGE.prepare("SELECT balance_uy,granted_uy,spent_uy FROM account WHERE user_sub=?").bind(scope).first();
-    return J({ suanli: r1(uyToSuanli(a.balance_uy)), yuan: r2(uyToYuan(a.balance_uy)),
+    const now = Date.now();
+    const bal = await ensureAccount(env.USAGE, scope, now);   // 返回活余额
+    const a = await env.USAGE.prepare("SELECT granted_uy,spent_uy FROM account WHERE user_sub=?").bind(scope).first();
+    return J({ suanli: r1(uyToSuanli(bal)), yuan: r2(uyToYuan(bal)),
       granted_suanli: r1(uyToSuanli(a.granted_uy)), spent_suanli: r1(uyToSuanli(a.spent_uy)) });
   }
 
@@ -483,14 +484,36 @@ export async function handleUsageRoute(url, request, env) {
   if (url.pathname === "/agent/usage/grant" && request.method === "POST") {
     if (!isAdmin) return J({ error: "unauthorized" }, 401);
     const b = await request.json().catch(() => ({}));
-    if (!b.user_sub || typeof b.suanli !== "number") return J({ error: "bad-request" }, 400);
-    await grant(env.USAGE, b.user_sub, suanliToUY(b.suanli), "campaign:" + (b.reason || "manual"), Date.now());
-    return J({ ok: true });
+    if (!b.user_sub || !Number.isFinite(b.suanli)) return J({ error: "bad-request" }, 400);
+    const now = Date.now();
+    const days = Number.isFinite(b.expire_days) ? b.expire_days : CAMPAIGN_EXPIRE_DAYS;
+    const expiresAt = now + days * DAY_MS;
+    await grantBucket(env.USAGE, b.user_sub, suanliToUY(b.suanli), "campaign:" + (b.reason || "manual"), expiresAt, now);
+    return J({ ok: true, suanli: b.suanli, cost_yuan: r2(b.suanli / RATE), expires_at: expiresAt });
+  }
+
+  if (url.pathname === "/agent/usage/grant/batch" && request.method === "POST") {
+    if (!isAdmin) return J({ error: "unauthorized" }, 401);
+    const b = await request.json().catch(() => ({}));
+    if (!Number.isFinite(b.suanli)) return J({ error: "bad-request" }, 400);
+    const now = Date.now();
+    const days = Number.isFinite(b.expire_days) ? b.expire_days : CAMPAIGN_EXPIRE_DAYS;
+    const expiresAt = now + days * DAY_MS;
+    let targets = Array.isArray(b.user_subs) ? b.user_subs.filter((s) => typeof s === "string" && s) : null;
+    if ((!targets || targets.length === 0) && b.all === true) {
+      targets = (await allAccounts(env.USAGE, now)).map((a) => a.user_sub);
+    }
+    if (!targets || targets.length === 0) return J({ error: "bad-request", hint: "user_subs[] or all:true" }, 400);
+    const source = "campaign:" + (b.reason || "manual");
+    for (const u of targets) {
+      await grantBucket(env.USAGE, u, suanliToUY(b.suanli), source, expiresAt, now);
+    }
+    return J({ ok: true, count: targets.length, suanli_each: b.suanli, cost_yuan: r2((b.suanli * targets.length) / RATE), expires_at: expiresAt });
   }
 
   if (url.pathname === "/agent/usage/admin/accounts" && request.method === "GET") {
     if (!isAdmin) return J({ error: "unauthorized" }, 401);
-    const rows = await allAccounts(env.USAGE);
+    const rows = await allAccounts(env.USAGE, Date.now());
     return J({ accounts: rows.map((a) => ({ user_sub: a.user_sub,
       balance_suanli: r1(uyToSuanli(a.balance_uy)), granted_suanli: r1(uyToSuanli(a.granted_uy)),
       spent_suanli: r1(uyToSuanli(a.spent_uy)), spent_yuan: r2(uyToYuan(a.spent_uy)) })) });

@@ -42,3 +42,18 @@ describe("usage gates", () => {
     expect(editGate(100, 0)).toBe("ok");
   });
 });
+
+import { DAY_MS, SIGNUP_EXPIRE_DAYS, CAMPAIGN_EXPIRE_DAYS, expiryAfterDays } from "../src/usage.js";
+
+describe("expiry units", () => {
+  it("DAY_MS is one day in ms", () => {
+    expect(DAY_MS).toBe(86400000);
+  });
+  it("signup is 365d, campaign is 90d", () => {
+    expect(SIGNUP_EXPIRE_DAYS).toBe(365);
+    expect(CAMPAIGN_EXPIRE_DAYS).toBe(90);
+  });
+  it("expiryAfterDays adds days to now", () => {
+    expect(expiryAfterDays(1000, 90)).toBe(1000 + 90 * 86400000);
+  });
+});
