@@ -10,7 +10,10 @@ CREATE TABLE IF NOT EXISTS bucket (
 );
 CREATE INDEX IF NOT EXISTS idx_bucket_user_exp ON bucket(user_sub, expires_at);
 
--- 回填：把每个非零余额迁成一个永不过期的桶（不给既有余额追加过期日，避免意外清零）
+-- 回填：把每个非零余额迁成一个「1 年后过期」的 migrated 桶。
+-- 保留老用户既有余额，但时间盒子（符合新「万物有过期」模型），不留永久负债。
+-- expires_at = 迁移时刻 + 365 天；SQLite strftime('%s','now') 是秒，*1000 转毫秒，31536000000 = 365*86400000。
 INSERT INTO bucket (user_sub, amount_uy, remaining_uy, source, created_at, expires_at)
-SELECT user_sub, balance_uy, balance_uy, 'migrated', updated_at, NULL
+SELECT user_sub, balance_uy, balance_uy, 'migrated', updated_at,
+       (CAST(strftime('%s','now') AS INTEGER) * 1000 + 31536000000)
 FROM account WHERE balance_uy <> 0;
