@@ -5,7 +5,7 @@ import {
   writeStyleDoc, setStyleHead, STYLE_MAX_VERSIONS,
   readProfileName, mergeProfile,
   styleLabel, styleComment, prependStyleComment,
-  DEFAULT_STYLE,
+  DEFAULT_STYLE, ensureStyleSeeded, isDefaultSeed,
 } from "../../functions/lib/style-store.js";
 
 const KEY = "users/u/CLAUDE.json";
@@ -211,5 +211,50 @@ describe("DEFAULT_STYLE — canonical 默认王建硕风格（mine.js re-export 
   it("mine.js 的 MINE_DEFAULT_STYLE 与之字节一致", async () => {
     const { MINE_DEFAULT_STYLE } = await import("../src/prompts/mine.js");
     expect(MINE_DEFAULT_STYLE).toBe(DEFAULT_STYLE);
+  });
+});
+
+describe("ensureStyleSeeded — 懒种子默认文风为 v1", () => {
+  it("无 CLAUDE.json / 无 legacy → 种 v1（source=default），isDefaultSeed=true", async () => {
+    const env = fakeEnv({});
+    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    expect(doc.head).toBe(1);
+    expect(doc.versions).toHaveLength(1);
+    expect(doc.versions[0]).toMatchObject({ v: 1, source: "default", style: DEFAULT_STYLE });
+    expect(isDefaultSeed(doc)).toBe(true);
+    // 已落库
+    expect(resolveStyle(JSON.parse(env.FILES._store.get(KEY)))).toBe(DEFAULT_STYLE);
+  });
+
+  it("幂等：再调一次不产生 v2", async () => {
+    const env = fakeEnv({});
+    await ensureStyleSeeded(env, KEY, LEGACY);
+    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    expect(doc.head).toBe(1);
+    expect(doc.versions).toHaveLength(1);
+  });
+
+  it("已有 CLAUDE.json → 原样返回，不被默认覆盖", async () => {
+    const env = fakeEnv({});
+    await writeStyleDoc(env, KEY, "我自己的文风", "app");   // head 1, source app
+    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    expect(doc.head).toBe(1);
+    expect(doc.versions[0]).toMatchObject({ source: "app", style: "我自己的文风" });
+    expect(isDefaultSeed(doc)).toBe(false);                 // source 非 default
+  });
+
+  it("遗留 CLAUDE.md 有文风 → 不种，返回 null，CLAUDE.json 仍不存在", async () => {
+    const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\n老用户的文风" });
+    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    expect(doc).toBeNull();
+    expect(env.FILES._store.has(KEY)).toBe(false);
+  });
+
+  it("isDefaultSeed：种 v1 后编辑成 v2 → false", async () => {
+    const env = fakeEnv({});
+    await ensureStyleSeeded(env, KEY, LEGACY);              // v1 default
+    const doc = await writeStyleDoc(env, KEY, "改成我的", "app"); // v2
+    expect(doc.head).toBe(2);
+    expect(isDefaultSeed(doc)).toBe(false);
   });
 });
