@@ -74,9 +74,11 @@ select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;backgroun
 .trow .name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem}
 .tres .role{color:var(--mine)} .tres.bad .role{color:var(--err)}
 .row .tok{font-size:.72rem;color:var(--muted);flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.row .cost{font-size:.72rem;color:var(--accent);flex:none;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-width:56px;text-align:right}
-.grphd .gcost{float:right;color:var(--accent);font-weight:700}
-.tag.cost{color:var(--accent);border-color:var(--accent-bg);background:var(--accent-bg);font-weight:700}
+.row .cost{font-size:.82rem;color:var(--accent);flex:none;font-weight:800;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-width:52px;text-align:right;background:var(--accent-bg);border-radius:6px;padding:1px 7px}
+.grphd .gcost{float:right;color:var(--accent);font-weight:800;font-size:.9rem}
+.tag.cost{color:var(--accent);border-color:var(--accent-bg);background:var(--accent-bg);font-weight:800}
+.detail .meta .slprice{font-size:.95rem}
+.detail .meta .slprice b{color:var(--accent);font-size:1.1rem;font-weight:800}
 
 /* ---- detail ---- */
 .detail{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
@@ -181,12 +183,21 @@ function costOf(rec){
         cc=u.cache_creation_input_tokens||0, cr=u.cache_read_input_tokens||0;
   return (inp*pin + cc*pin*1.25 + cr*pin*0.1 + out*pout) / 1e6;
 }
-function fmtUSD(c){
-  if(c==null) return '';
-  if(c===0) return '$0';
-  if(c<0.01) return '$'+c.toFixed(4);
-  if(c<1) return '$'+c.toFixed(3);
-  return '$'+c.toFixed(2);
+// 算力 (compute credits) — 镜像 agent/src/usage.js：微元 = ceil(usd·FX·1e6)，算力 = 微元·RATE/1e6
+const FX = 7.3, SL_PER_YUAN = 23;            // USD→¥ 固定汇率；23 算力 = ¥1
+function suanliOf(rec){
+  const usd = costOf(rec); if(usd==null) return null;
+  return Math.ceil(usd * FX * 1e6) * SL_PER_YUAN / 1e6;   // 与计费账本完全一致
+}
+function fmtSL(s){
+  if(s==null) return '';
+  if(s===0) return '⚡0';
+  let n;
+  if(s<1) n=s.toFixed(2);
+  else if(s<100) n=s.toFixed(1);
+  else if(s<10000) n=String(Math.round(s));
+  else n=(s/1000).toFixed(1)+'k';
+  return '⚡'+n;
 }
 
 // ---- load one day: fetch all pages (ascending), then reverse → newest first ----
@@ -221,8 +232,8 @@ async function fetchRecords(objects){
 function renderList(){
   const list = $('#list');
   if(!RECORDS.length){ list.innerHTML = `<div class="empty-state">这一天没有交互</div>`; $('#count').textContent=''; return; }
-  const dayCost = RECORDS.reduce((s,r)=> s + (costOf(r)||0), 0);
-  $('#count').innerHTML = `${RECORDS.length} 次交互 · <span class="tag cost">今日 ${esc(fmtUSD(dayCost))}</span>`;
+  const daySL = RECORDS.reduce((s,r)=> s + (suanliOf(r)||0), 0);
+  $('#count').innerHTML = `${RECORDS.length} 次交互 · <span class="tag cost" title="算力">今日 ${esc(fmtSL(daySL))} 算力</span>`;
   const groups = new Map();
   for(const r of RECORDS){ const k=r.turn_id||r._key; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(r); }
   // within a turn: real send order = step (tie-break by send time);
@@ -234,8 +245,8 @@ function renderList(){
     const llmSteps = g.filter((r)=>r.kind!=='tool_runs').length;  // 🔧 tool_runs rows aren't 步
     const multi = llmSteps>1;
     if(g.length>1){
-      const turnCost = g.reduce((s,r)=> s + (costOf(r)||0), 0);
-      html += `<div class="grp"><div class="grphd">turn · ${llmSteps} 步 · ${esc(g[0].meta?.stem||'')}<span class="gcost">${esc(fmtUSD(turnCost))}</span></div>`;
+      const turnSL = g.reduce((s,r)=> s + (suanliOf(r)||0), 0);
+      html += `<div class="grp"><div class="grphd">turn · ${llmSteps} 步 · ${esc(g[0].meta?.stem||'')}<span class="gcost" title="算力">${esc(fmtSL(turnSL))}</span></div>`;
     }
     else html += `<div class="grp">`;
     for(const r of g){
@@ -259,7 +270,7 @@ function renderList(){
         ${r.meta&&r.meta.restyle!=null?`<span class="badge restyle">↻ v${esc(r.meta.restyle)}</span>`:''}
         <span class="grow">${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
         <span class="tok">${esc(usageStr(r.response&&r.response.usage))}</span>
-        <span class="cost">${esc(fmtUSD(costOf(r)))}</span>
+        <span class="cost" title="算力">${esc(fmtSL(suanliOf(r)))}</span>
         <span class="badge ${okCls}">${okTxt}</span>
       </div>`;
     }
@@ -334,7 +345,7 @@ function renderDetail(r){
     <span>发送 <b>${esc(new Date(sentAt(r)).toLocaleString('zh-CN'))}</b></span>
     <span>耗时 <b>${r.latency_ms!=null?(r.latency_ms/1000).toFixed(1)+'s':'—'}</b></span>
     <span>HTTP <b>${esc(r.http_status)}</b> ${r.ok?'':'· <b style="color:var(--err)">失败</b>'}</span>
-    ${cost!=null?`<span>价格 <b style="color:var(--accent)">${esc(fmtUSD(cost))}</b></span>`:''}
+    ${cost!=null?`<span class="slprice">算力 <b>${esc(fmtSL(suanliOf(r)))} 算力</b></span>`:''}
     ${r.user_scope?`<span>${esc(r.user_scope)}</span>`:''}
     ${r.meta&&r.meta.stem?`<span>${esc(r.meta.stem)}</span>`:''}
     ${r.turn_id?`<span class="usage">turn ${esc(r.turn_id)}${r.step!=null?` #${r.step}`:''}</span>`:''}
