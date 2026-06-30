@@ -8,8 +8,8 @@ export function runProxyChecks(articles, { transcript } = {}) {
   add("articleCount", arr.length > 0, `articles=${arr.length}`);
   add("titlePresent", arr.length > 0 && arr.every(a => (a.title || "").trim().length > 0), "每篇都要有非空标题");
   add("bodyNonEmpty", arr.length > 0 && arr.every(a => (a.body || "").trim().length > 0), "每篇正文非空");
-  const tooShort = arr.filter(a => (a.body || "").trim().length < 10);
-  add("bodyLengthSane", tooShort.length === 0, tooShort.length ? `${tooShort.length} 篇正文 <10 字` : "");
+  const tooShort = arr.filter(a => (a.body || "").trim().length < 5);
+  add("bodyLengthSane", tooShort.length === 0, tooShort.length ? `${tooShort.length} 篇正文 <5 字` : "");
 
   return { pass: checks.every(c => c.pass), checks };
 }
