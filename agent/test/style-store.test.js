@@ -257,4 +257,11 @@ describe("ensureStyleSeeded — 懒种子默认文风为 v1", () => {
     expect(doc.head).toBe(2);
     expect(isDefaultSeed(doc)).toBe(false);
   });
+
+  it("遗留 CLAUDE.md 文风为空白 → 仍种 v1", async () => {
+    const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\n   \n" });
+    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    expect(doc).not.toBeNull();
+    expect(doc.versions[0].source).toBe("default");
+  });
 });
