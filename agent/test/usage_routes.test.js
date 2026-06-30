@@ -32,6 +32,20 @@ describe("usage routes", () => {
     const bad = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/grant"), req("/agent/usage/grant", { method: "POST", token: "nope" }), env);
     expect(bad.status).toBe(401);
   });
+  it("balance route returns live bucket balance, not the stale cached column", async () => {
+    const db = fakeD1(usageSql());
+    const env = { USAGE: db, SESSION_SECRET: "" };
+    const tok = "anon_unittesttoken_abcdefghijklmnop";
+    // Bootstrap the account (creates the 500-算力 signup bucket + caches balance_uy=SIGNUP_GRANT_UY)
+    await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/balance"),
+      req("/agent/usage/balance", { token: tok }), env);
+    // Expire every bucket: live sum is now 0, but account.balance_uy still caches 500
+    await db.prepare("UPDATE bucket SET expires_at=1").bind().run();
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/balance"),
+      req("/agent/usage/balance", { token: tok }), env);
+    const body = await r.json();
+    expect(body.suanli).toBe(0); // live=0; the old cached-column path would return 500
+  });
   it("admin accounts lists live (bucket) balance", async () => {
     const env = { USAGE: fakeD1(usageSql()), FILES_TOKEN: "admintok" };
     // 触发一个用户的 signup（500 算力桶）
