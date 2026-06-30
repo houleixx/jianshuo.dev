@@ -5,6 +5,7 @@ import {
   writeStyleDoc, setStyleHead, STYLE_MAX_VERSIONS,
   readProfileName, mergeProfile,
   styleLabel, styleComment, prependStyleComment,
+  DEFAULT_STYLE,
 } from "../../functions/lib/style-store.js";
 
 const KEY = "users/u/CLAUDE.json";
@@ -199,5 +200,16 @@ describe("style comment protocol — <!-- style: 风格 vN --> (canonical format
     expect(body.startsWith("<!-- style: 风格 v7 -->")).toBe(true);
     // The version number is recoverable for the app's reuse-if-present matcher.
     expect(body.match(/<!--\s*style:\s*风格 v(\d+)\s*-->/)[1]).toBe("7");
+  });
+});
+
+describe("DEFAULT_STYLE — canonical 默认王建硕风格（mine.js re-export 自此）", () => {
+  it("含王建硕语气 DNA 标记", () => {
+    expect(DEFAULT_STYLE).toContain("胸有成竹");
+    expect(DEFAULT_STYLE).toContain("绝不用「笔者」");
+  });
+  it("mine.js 的 MINE_DEFAULT_STYLE 与之字节一致", async () => {
+    const { MINE_DEFAULT_STYLE } = await import("../src/prompts/mine.js");
+    expect(MINE_DEFAULT_STYLE).toBe(DEFAULT_STYLE);
   });
 });

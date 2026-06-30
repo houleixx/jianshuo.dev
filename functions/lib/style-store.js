@@ -20,6 +20,18 @@
 
 export const STYLE_MAX_VERSIONS = 10;
 
+// The default 王建硕 writing style — canonical single source. Seeded as a user's
+// own v1 by ensureStyleSeeded() on first use, and re-exported by
+// agent/src/prompts/mine.js as MINE_DEFAULT_STYLE (the generation-time fallback),
+// so the seed text and the fallback text can never drift.
+export const DEFAULT_STYLE = `胸有成竹地下断言，不绕弯、不加「我觉得可能也许」的缓冲。
+不讲故事、不铺垫，直接给结论再给理由；开头一句就立住，绝不用小白式提问钩子。
+第一人称用「我」，绝不用「笔者」。称呼 AI / Claude 一律用「他」，不用「它」。
+多用「我 / 他」起句，少用「这里会有…」这类无人称、物称句。
+细节能列就用表格 / 列表，不在叙述句里堆细节。
+保留口语词（吧 / 呢 / 啊 / 了）、自造词、家常比喻——这是你的声音，别改成书面语。
+不加 AI 味连接词（首先 / 其次 / 综上所述 / 值得注意的是），不加 emoji。`;
+
 // ── Per-version body comment protocol: `<!-- key: value -->`, extensible. ─────────
 // First key: `style`. The article reader shows meta.style on a chip and strips the
 // comment from every rendered surface. These are the SINGLE source of the format, so
