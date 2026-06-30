@@ -6,47 +6,65 @@
 <meta name="robots" content="noindex,nofollow"/>
 <title>VoiceDrop · 举报审核</title>
 <link rel="stylesheet" href="./theme.css"/>
+<script>
+/* Standalone/preview fallback for the three helpers the pages use. The production
+   server's /voicedrop/shared.js loads later and overrides these — safe either way. */
+window.$=window.$||function(s,r){return (r||document).querySelector(s);};
+window.esc=window.esc||function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');};
+window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];var a=doc.articles||(doc.result&&doc.result.articles)||(doc.output&&doc.output.articles)||doc.results||[];if(!Array.isArray(a))return[];return a.map(function(x){return typeof x==='string'?{title:'',body:x}:{title:x.title||x.heading||'',body:x.body||x.content||x.text||''};});};
+</script>
 <style>
-.wrap{max-width:760px;margin:0 auto;padding:24px 18px 80px}
-.lead{color:var(--muted);font-size:.9rem;margin:0 0 18px}
-.rep{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;
+.wrap{max-width:780px;margin:0 auto;padding:26px 22px 90px}
+.rep{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:18px 20px;
   margin-bottom:14px;box-shadow:var(--shadow)}
-.rep .rtitle{font-weight:680;font-size:1.05rem;color:var(--ink);margin:0 0 2px}
-.rep .rmeta{font-size:.78rem;color:var(--muted);margin-bottom:10px}
-.rep .rbody{white-space:pre-wrap;font-size:.9rem;line-height:1.7;color:var(--bodyInk,#4A443C);
-  background:#fbf8f2;border:1px solid var(--line2);border-radius:10px;padding:11px 13px;max-height:200px;overflow:auto}
-.rep .gone{color:var(--warn);font-size:.88rem}
-.rep .acts{display:flex;gap:10px;margin-top:12px}
-.btn.danger{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.danger:hover{filter:brightness(1.04)}
-.pill.rep{background:var(--warn-bg);color:var(--warn);font-size:.74rem;padding:2px 9px;border-radius:999px}
-.empty-state{text-align:center;color:var(--muted);padding:50px 0}
+.rep .rtitle{font-weight:700;font-size:1.06rem;color:var(--ink);margin:0 0 3px}
+.rep .rmeta{font-size:.78rem;color:var(--muted);margin-bottom:11px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rep .rbody{white-space:pre-wrap;font-size:.9rem;line-height:1.75;color:var(--ink-2);
+  background:var(--bg-sunk);border:1px solid var(--line2);border-radius:var(--r-sm);padding:12px 14px;max-height:210px;overflow:auto}
+.rep .gone{color:var(--warn);font-size:.88rem;background:var(--warn-bg);border-radius:var(--r-sm);padding:10px 13px}
+.rep .acts{display:flex;gap:10px;margin-top:14px}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <div id="gate" hidden>
-    <h1>举报审核</h1>
-    <p>输入 master token 审核被举报的社区内容。token 只存在本机浏览器，不上传。</p>
-    <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
-    <div class="err" id="gateErr"></div>
-    <button class="btn primary" id="enter">进入</button>
-  </div>
+<div id="gate" hidden style="max-width:430px">
+  <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+  <h1>举报审核</h1>
+  <p>输入 master token 审核被举报的社区内容。token 只存在本机浏览器，不上传。</p>
+  <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+  <div class="err" id="gateErr"></div>
+  <button class="btn primary block" id="enter">进入</button>
+</div>
 
-  <div id="app" hidden>
-    <header class="top">
+<div id="app" hidden>
+  <nav class="appbar">
+    <div class="appbar-in">
+      <a class="brand" href="./">
+        <svg class="mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdNav" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdNav)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+        <span class="name">VoiceDrop</span><span class="sub">控制台</span>
+      </a>
+      <div class="nav-tabs">
+        <a class="nav-tab" href="./">概览</a>
+        <a class="nav-tab active" href="./reports.html">举报审核</a>
+        <a class="nav-tab" href="./usage.html">算力账本</a>
+        <a class="nav-tab" href="./mine.html">挖文日志</a>
+        <a class="nav-tab" href="./llm.html">LLM 日志</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn ghost" id="refresh">刷新</button>
+        <button class="btn ghost" id="logout">退出</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="pagehead">
       <h1>举报审核</h1>
       <span class="tag" id="updated"></span>
-      <span class="grow"></span>
-      <button class="btn" id="refresh">刷新</button>
-      <a class="btn" href="./">← 控制台</a>
-      <button class="btn" id="logout">退出</button>
-    </header>
-    <p class="lead">被举报的内容已<b>自动从社区下架</b>，在这里等你处理。删除 = 永久移除；恢复 = 重新上架（举报无效）。建议 24 小时内处理。</p>
+    </div>
+    <p class="subtle">被举报的内容已<b>自动从社区下架</b>，在这里等你处理。删除 = 永久移除；恢复 = 重新上架（举报无效）。建议 24 小时内处理。</p>
     <div id="list"></div>
   </div>
-
 </div>
 
 <script src="/voicedrop/shared.js"></script>
@@ -75,7 +93,7 @@ async function load(){
     const when = rp.firstAt ? new Date(rp.firstAt).toLocaleString('zh-CN') : '';
     card.innerHTML = `
       <div class="rtitle">${esc(rp.title || (rp.gone ? '（原文已删除）' : '无题'))}</div>
-      <div class="rmeta">作者 ${esc(rp.author||'匿名')} · <span class="pill rep">${rp.reports} 次举报</span> · ${esc(when)}</div>
+      <div class="rmeta">作者 ${esc(rp.author||'匿名')} <span class="pill rep">${rp.reports} 次举报</span> ${esc(when)}</div>
       ${rp.gone ? '<div class="gone">原帖/原文已不存在，可直接清除此举报记录。</div>'
                 : `<div class="rbody">${esc(rp.body||'（无正文）')}</div>`}
       <div class="acts">

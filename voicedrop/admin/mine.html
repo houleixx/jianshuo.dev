@@ -5,125 +5,99 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="robots" content="noindex,nofollow"/>
 <title>挖文日志 · VoiceDrop</title>
+<link rel="stylesheet" href="./theme.css"/>
+<script>
+/* Standalone/preview fallback for the three helpers the pages use. The production
+   server's /voicedrop/shared.js loads later and overrides these — safe either way. */
+window.$=window.$||function(s,r){return (r||document).querySelector(s);};
+window.esc=window.esc||function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');};
+window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];var a=doc.articles||(doc.result&&doc.result.articles)||(doc.output&&doc.output.articles)||doc.results||[];if(!Array.isArray(a))return[];return a.map(function(x){return typeof x==='string'?{title:'',body:x}:{title:x.title||x.heading||'',body:x.body||x.content||x.text||''};});};
+</script>
 <style>
-:root{
-  color-scheme:light;
-  --bg:#f6f5f2; --panel:#ffffff; --ink:#1d1d1f; --muted:#86868b;
-  --line:#e8e5df; --line2:#f0eee9;
-  --accent:#0a7d52; --accent-bg:#e7f6ee;
-  --warn:#9a6b00; --warn-bg:#fbf2dc;
-  --err:#c0392b; --err-bg:#fdecea;
-  --idle:#5b6470; --idle-bg:#eef1f4;
-  --blue:#0a66c2;
-  --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04);
-}
-*{box-sizing:border-box}
-html,body{margin:0}
-body{
-  background:var(--bg); color:var(--ink);
-  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
-  -webkit-text-size-adjust:100%;
-}
-a{color:var(--blue);text-decoration:none}
-.wrap{max-width:1280px;margin:0 auto;padding:24px 18px 60px}
+.wrap{max-width:1320px;margin:0 auto;padding:22px 22px 60px}
 
-#gate{max-width:420px;margin:14vh auto 0;background:var(--panel);
-  border:1px solid var(--line);border-radius:16px;padding:30px 26px;box-shadow:var(--shadow)}
-#gate h1{font-size:1.25rem;margin:0 0 4px}
-#gate p{color:var(--muted);margin:0 0 18px;font-size:.92rem}
-#gate input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;
-  font-size:.95rem;background:#fcfcfb;margin-bottom:12px}
-#gate input:focus{outline:none;border-color:var(--accent)}
-.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);
-  background:var(--panel);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:.88rem;font-weight:560}
-.btn:hover{background:#faf9f7}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;justify-content:center;padding:11px}
-.btn.primary:hover{filter:brightness(1.05)}
-.err{color:var(--err);font-size:.86rem;min-height:1.2em;margin-top:2px}
-
-header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-header.top h1{font-size:1.3rem;margin:0;font-weight:700;letter-spacing:-.01em}
-header.top .grow{flex:1}
-.tag{font-size:.74rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);
-  padding:3px 9px;border-radius:999px}
-select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;background:#fcfcfb;font-size:.86rem;color:var(--ink)}
-
-.panes{display:grid;grid-template-columns:360px 1fr;gap:16px;align-items:start}
+.panes{display:grid;grid-template-columns:380px 1fr;gap:16px;align-items:start}
 @media(max-width:860px){.panes{grid-template-columns:1fr}}
-.list{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+.list{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);
   max-height:calc(100vh - 150px);overflow-y:auto}
-.row{padding:10px 14px;border-top:1px solid var(--line2);cursor:pointer;display:flex;align-items:center;gap:8px}
+.row{padding:11px 15px;border-top:1px solid var(--line2);cursor:pointer;display:flex;align-items:center;gap:9px}
 .row:first-child{border-top:none}
-.row:hover{background:#faf9f7}
+.row:hover{background:var(--bg-sunk)}
 .row.sel{background:var(--accent-bg)}
-.row .t{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;color:var(--muted);flex:none}
-.row .stem{flex:1;font-size:.82rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.row .ela{font-size:.72rem;color:var(--muted);flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.badge{font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:6px;flex:none;letter-spacing:.02em}
-.badge.mined{background:var(--accent-bg);color:var(--accent)}
-.badge.empty{background:var(--warn-bg);color:var(--warn)}
-.badge.error{background:var(--err-bg);color:var(--err)}
+.row .t{font-family:var(--fm);font-size:.78rem;color:var(--muted);flex:none}
+.row .stem{flex:1;font-size:.83rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink)}
+.row .ela{font-size:.72rem;color:var(--muted);flex:none;font-family:var(--fm)}
 
-.detail{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px}
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);padding:20px 22px}
 .detail .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.82rem;color:var(--muted);margin-bottom:16px;
   padding-bottom:14px;border-bottom:1px solid var(--line2)}
 .detail .meta b{color:var(--ink);font-weight:600}
-.audio-key{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.76rem;color:var(--muted);
-  word-break:break-all;margin-bottom:14px}
+.audio-key{font-family:var(--fm);font-size:.76rem;color:var(--muted);
+  word-break:break-all;margin-bottom:16px;background:var(--bg-sunk);padding:8px 11px;border-radius:8px;border:1px solid var(--line2)}
 
 /* timeline */
 .timeline{display:flex;flex-direction:column;gap:0}
-.ev{display:flex;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--line2)}
+.ev{display:flex;align-items:baseline;gap:11px;padding:8px 0;border-top:1px solid var(--line2)}
 .ev:first-child{border-top:none}
-.ev .off{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.74rem;color:var(--muted);
-  flex:none;width:52px;text-align:right}
-.ev .msg{flex:1;font-size:.88rem}
-.ev .data{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.76rem;color:var(--muted);
-  word-break:break-all}
-.ev.key .msg{font-weight:600;color:var(--ink)}
+.ev .off{font-family:var(--fm);font-size:.74rem;color:var(--muted);flex:none;width:54px;text-align:right}
+.ev .msg{flex:1;font-size:.88rem;color:var(--ink-2)}
+.ev .data{font-family:var(--fm);font-size:.76rem;color:var(--muted);word-break:break-all;margin-top:2px}
+.ev.key .msg{font-weight:700;color:var(--ink)}
 .ev.warn .msg{color:var(--warn)}
-.ev.ok .msg{color:var(--accent)}
+.ev.ok .msg{color:var(--ok)}
 .ev.bad .msg{color:var(--err)}
 
-.empty-state{text-align:center;color:var(--muted);padding:60px 0}
-.loading{color:var(--muted);font-size:.85rem;padding:14px}
-.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
-  border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
-@keyframes sp{to{transform:rotate(360deg)}}
-.errbox{background:var(--err-bg);border:1px solid #f3c9c2;border-radius:9px;padding:10px 12px;color:var(--err);
-  white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+.loading{color:var(--muted);font-size:.85rem;padding:16px}
+.errbox{background:var(--err-bg);border:1px solid var(--accent-ring);border-radius:9px;padding:11px 13px;color:var(--err);
+  white-space:pre-wrap;font:12px/1.55 var(--fm)}
 </style>
-<link rel="stylesheet" href="./theme.css"/>
 </head>
 <body>
-<div class="wrap">
 
-  <div id="gate" hidden>
-    <h1>挖文日志</h1>
-    <p>输入 master token 查看每次挖文的详细步骤。</p>
-    <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
-    <div class="err" id="gateErr"></div>
-    <button class="btn primary" id="enter">进入</button>
-  </div>
+<div id="gate" hidden style="max-width:430px">
+  <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+  <h1>挖文日志</h1>
+  <p>输入 master token 查看每次挖文的详细步骤。</p>
+  <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+  <div class="err" id="gateErr"></div>
+  <button class="btn primary block" id="enter">进入</button>
+</div>
 
-  <div id="app" hidden>
-    <header class="top">
+<div id="app" hidden>
+  <nav class="appbar">
+    <div class="appbar-in">
+      <a class="brand" href="./">
+        <svg class="mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdNav" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdNav)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+        <span class="name">VoiceDrop</span><span class="sub">控制台</span>
+      </a>
+      <div class="nav-tabs">
+        <a class="nav-tab" href="./">概览</a>
+        <a class="nav-tab" href="./reports.html">举报审核</a>
+        <a class="nav-tab" href="./usage.html">算力账本</a>
+        <a class="nav-tab active" href="./mine.html">挖文日志</a>
+        <a class="nav-tab" href="./llm.html">LLM 日志</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn ghost" id="refresh">刷新</button>
+        <button class="btn ghost" id="logout">退出</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="pagehead">
       <h1>挖文日志</h1>
       <span class="tag" id="count"></span>
       <span class="grow"></span>
-      <select id="date" title="按日期"></select>
-      <button class="btn" id="refresh">刷新</button>
-      <a class="btn" href="./usage.html">算力账本</a>
-      <a class="btn" href="./llm.html">LLM 日志</a>
-      <a class="btn" href="./">← 控制台</a>
-      <button class="btn" id="logout">退出</button>
-    </header>
+      <div class="tools">
+        <select id="date" title="按日期"></select>
+      </div>
+    </div>
     <div class="panes">
       <div class="list" id="list"></div>
       <div class="detail" id="detail"><div class="empty-state">选一条查看详细步骤</div></div>
     </div>
   </div>
-
 </div>
 
 <script src="/voicedrop/shared.js"></script>

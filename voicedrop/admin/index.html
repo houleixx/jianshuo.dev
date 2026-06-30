@@ -5,147 +5,124 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="robots" content="noindex,nofollow"/>
 <title>VoiceDrop 控制台</title>
+<link rel="stylesheet" href="./theme.css"/>
+<script>
+/* Standalone/preview fallback for the three helpers the pages use. The production
+   server's /voicedrop/shared.js loads later and overrides these — safe either way. */
+window.$=window.$||function(s,r){return (r||document).querySelector(s);};
+window.esc=window.esc||function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');};
+window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];var a=doc.articles||(doc.result&&doc.result.articles)||(doc.output&&doc.output.articles)||doc.results||[];if(!Array.isArray(a))return[];return a.map(function(x){return typeof x==='string'?{title:'',body:x}:{title:x.title||x.heading||'',body:x.body||x.content||x.text||''};});};
+</script>
 <style>
-:root{
-  color-scheme:light;
-  --bg:#f6f5f2; --panel:#ffffff; --ink:#1d1d1f; --muted:#86868b;
-  --line:#e8e5df; --line2:#f0eee9;
-  --accent:#0a7d52; --accent-bg:#e7f6ee;
-  --warn:#9a6b00; --warn-bg:#fbf2dc;
-  --idle:#5b6470; --idle-bg:#eef1f4;
-  --blue:#0a66c2;
-  --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04);
-}
-*{box-sizing:border-box}
-html,body{margin:0}
-body{
-  background:var(--bg); color:var(--ink);
-  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
-  -webkit-text-size-adjust:100%;
-}
-a{color:var(--blue);text-decoration:none}
-.wrap{max-width:1040px;margin:0 auto;padding:24px 18px 80px}
-
-/* ---- gate ---- */
-#gate{max-width:420px;margin:14vh auto 0;background:var(--panel);
-  border:1px solid var(--line);border-radius:16px;padding:30px 26px;box-shadow:var(--shadow)}
-#gate h1{font-size:1.25rem;margin:0 0 4px}
-#gate p{color:var(--muted);margin:0 0 18px;font-size:.92rem}
-#gate input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;
-  font-size:.95rem;background:#fcfcfb;margin-bottom:12px}
-#gate input:focus{outline:none;border-color:var(--accent)}
-.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);
-  background:var(--panel);color:var(--ink);border-radius:10px;padding:9px 15px;font-size:.9rem;font-weight:560}
-.btn:hover{background:#faf9f7}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;justify-content:center;padding:11px}
-.btn.primary:hover{filter:brightness(1.05)}
-.err{color:#c0392b;font-size:.86rem;min-height:1.2em;margin-top:2px}
-
-/* ---- header ---- */
-header.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
-header.top h1{font-size:1.3rem;margin:0;font-weight:700;letter-spacing:-.01em}
-header.top .grow{flex:1}
-.tag{font-size:.74rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);
-  padding:3px 9px;border-radius:999px}
-
-/* ---- stat cards ---- */
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:26px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
-.card .n{font-size:1.7rem;font-weight:740;letter-spacing:-.02em;line-height:1.1}
-.card .l{font-size:.8rem;color:var(--muted);margin-top:2px}
-.card.ok .n{color:var(--accent)} .card.warn .n{color:var(--warn)} .card.idle .n{color:var(--idle)}
+.wrap{max-width:1040px;margin:0 auto;padding:26px 22px 90px}
 
 /* ---- user list ---- */
-.user{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;
+.user{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:12px;
   overflow:hidden;box-shadow:var(--shadow)}
-.user>summary{list-style:none;cursor:pointer;padding:15px 18px;display:flex;align-items:center;gap:12px}
+.user>summary{list-style:none;cursor:pointer;padding:16px 18px;display:flex;align-items:center;gap:12px}
 .user>summary::-webkit-details-marker{display:none}
-.user>summary .caret{color:var(--muted);font-size:.8rem;transition:transform .15s;flex:none}
+.user>summary:hover{background:var(--bg-sunk)}
+.user>summary .caret{color:var(--muted);font-size:.72rem;transition:transform .15s;flex:none}
 .user[open]>summary .caret{transform:rotate(90deg)}
-.user .uname{font-weight:650;font-size:1rem}
-.user .usub{font-size:.74rem;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.user[open]>summary{border-bottom:1px solid var(--line2)}
+.uava{width:34px;height:34px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;
+  background:var(--accent-bg);color:var(--accent-deep);font-weight:800;font-size:.86rem}
+.user .uname{font-weight:700;font-size:1rem}
+.user .usub{font-size:.73rem;color:var(--muted);font-family:var(--fm)}
 .user .ustat{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
-.pill{font-size:.74rem;padding:2px 9px;border-radius:999px;white-space:nowrap}
-.pill.au{background:var(--idle-bg);color:var(--idle)}
-.pill.ok{background:var(--accent-bg);color:var(--accent)}
-.pill.warn{background:var(--warn-bg);color:var(--warn)}
-.ubody{border-top:1px solid var(--line2);padding:6px 18px 14px}
-.style{font-size:.82rem;color:var(--muted);background:#fbfaf8;border:1px solid var(--line2);
-  border-radius:10px;padding:9px 12px;margin:10px 0 4px;white-space:pre-wrap;
-  max-height:120px;overflow-y:auto}
-.style b{color:var(--ink)}
+.ubody{padding:4px 18px 14px}
+.style{font-size:.84rem;color:var(--ink-2);background:var(--bg-sunk);border:1px solid var(--line2);
+  border-radius:var(--r-sm);padding:11px 13px;margin:12px 0 4px;white-space:pre-wrap;
+  max-height:140px;overflow-y:auto;line-height:1.7}
+.style b{color:var(--accent-deep);display:block;margin-bottom:4px;font-size:.78rem;letter-spacing:.02em}
 
 /* ---- recording rows ---- */
-.rec{border-top:1px solid var(--line2);padding:13px 2px}
+.rec{border-top:1px solid var(--line2);padding:14px 2px}
 .rec:first-child{border-top:none}
 .rec .rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.badge{font-size:.72rem;font-weight:600;padding:2px 8px;border-radius:6px;flex:none}
-.badge.ok{background:var(--accent-bg);color:var(--accent)}
-.badge.warn{background:var(--warn-bg);color:var(--warn)}
-.badge.idle{background:var(--idle-bg);color:var(--idle)}
-.rec .rtitle{font-weight:560}
+.rec .rtitle{font-weight:600;color:var(--ink)}
 .rec .rmeta{font-size:.78rem;color:var(--muted)}
-.rec .rmeta .dot{margin:0 5px;opacity:.5}
-.rec audio{height:34px;margin-top:9px;width:100%;max-width:460px;display:block}
-.rec .acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
-.lnk{font-size:.82rem;color:var(--blue);cursor:pointer;background:none;border:none;padding:0}
-.lnk:hover{text-decoration:underline}
-.detail{margin-top:10px;background:#fbfaf8;border:1px solid var(--line2);border-radius:10px;padding:0 14px;
+.rec .rmeta .dot{margin:0 5px;opacity:.45}
+.rec audio{height:36px;margin-top:10px;width:100%;max-width:460px;display:block}
+.rec .acts{margin-top:9px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.detail{margin-top:11px;background:var(--bg-sunk);border:1px solid var(--line2);border-radius:var(--r-sm);padding:0 14px;
   display:none}
-.detail.open{display:block;padding:12px 14px}
-.detail h4{margin:14px 0 6px;font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.detail.open{display:block;padding:14px 16px}
+.detail h4{margin:15px 0 6px;font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .detail h4:first-child{margin-top:2px}
-.detail .art{margin:0 0 10px}
-.detail .art .at{font-weight:680;font-size:1.02rem;margin:0 0 6px}
-.detail .art .ab{white-space:pre-wrap;font-size:.92rem;line-height:1.7}
-.detail .tx{white-space:pre-wrap;font-size:.86rem;color:#444;line-height:1.6;
-  background:#fff;border:1px solid var(--line2);border-radius:8px;padding:10px 12px}
+.detail .art{margin:0 0 12px}
+.detail .art .at{font-weight:700;font-size:1.04rem;margin:0 0 6px;color:var(--ink)}
+.detail .art .ab{white-space:pre-wrap;font-size:.92rem;line-height:1.75;color:var(--ink-2)}
+.detail .tx{white-space:pre-wrap;font-size:.86rem;color:var(--ink-2);line-height:1.65;
+  background:#fff;border:1px solid var(--line2);border-radius:9px;padding:11px 13px}
 .detail .reason{color:var(--warn);font-size:.9rem}
-.detail .kv{font-size:.78rem;color:var(--muted)}
-.detail hr{border:none;border-top:1px dashed var(--line);margin:14px 0}
+.detail .kv{font-size:.78rem;color:var(--muted);font-family:var(--fm)}
+.detail hr{border:none;border-top:1px dashed var(--line-strong);margin:15px 0}
 .loading{color:var(--muted);font-size:.85rem;padding:8px 0}
-.empty-state{text-align:center;color:var(--muted);padding:50px 0}
-.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
-  border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
-@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---- model panel ---- */
+.modelpanel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);
+  padding:20px 22px;margin-bottom:22px;box-shadow:var(--shadow)}
+.modelpanel .mp-h{font-weight:700;margin-bottom:6px;font-size:1.04rem;color:var(--ink)}
+.modelpanel .mp-note{font-size:.82rem;color:var(--muted);margin-bottom:16px;line-height:1.6}
+.modelpanel label>div{font-size:.8rem;color:var(--muted);margin-bottom:5px;font-weight:600}
+.modelpanel input,.modelpanel select{width:100%;padding:10px 12px;border:1px solid var(--line-strong);
+  border-radius:var(--r-sm);font-size:.95rem;background:var(--bg-sunk);color:var(--ink);box-shadow:none}
+.modelpanel input:focus,.modelpanel select:focus{outline:none;border-color:var(--accent);background:#fff}
 </style>
-<link rel="stylesheet" href="./theme.css"/>
 </head>
 <body>
-<div class="wrap">
 
-  <!-- token gate -->
-  <div id="gate" hidden>
-    <h1>VoiceDrop 控制台</h1>
-    <p>输入 master token 查看全系统状态。token 只存在本机浏览器，不上传。</p>
-    <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
-    <div class="err" id="gateErr"></div>
-    <button class="btn primary" id="enter">进入</button>
-  </div>
+<!-- token gate -->
+<div id="gate" hidden style="max-width:430px">
+  <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+  <h1>VoiceDrop 控制台</h1>
+  <p>输入 master token 查看全系统状态。token 只存在本机浏览器，不上传。</p>
+  <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+  <div class="err" id="gateErr"></div>
+  <button class="btn primary block" id="enter">进入</button>
+</div>
 
-  <!-- dashboard -->
-  <div id="app" hidden>
-    <header class="top">
-      <h1>VoiceDrop 控制台</h1>
+<!-- dashboard -->
+<div id="app" hidden>
+  <nav class="appbar">
+    <div class="appbar-in">
+      <a class="brand" href="./">
+        <svg class="mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdNav" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdNav)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+        <span class="name">VoiceDrop</span><span class="sub">控制台</span>
+      </a>
+      <div class="nav-tabs">
+        <a class="nav-tab active" href="./">概览</a>
+        <a class="nav-tab" href="./reports.html">举报审核</a>
+        <a class="nav-tab" href="./usage.html">算力账本</a>
+        <a class="nav-tab" href="./mine.html">挖文日志</a>
+        <a class="nav-tab" href="./llm.html">LLM 日志</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn ghost" id="refresh">刷新</button>
+        <button class="btn ghost" id="logout">退出</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="pagehead">
+      <h1>概览</h1>
       <span class="tag" id="updated"></span>
       <span class="grow"></span>
-      <a class="btn" href="./reports.html">举报审核</a>
-      <a class="btn" href="./usage.html">算力账本</a>
-      <a class="btn" href="./mine.html">挖文日志</a>
-      <a class="btn" href="./llm.html">LLM 日志</a>
-      <button class="btn" id="modelBtn">模型设置</button>
-      <button class="btn" id="refresh">刷新</button>
-      <button class="btn" id="logout">退出</button>
-    </header>
+      <div class="tools">
+        <button class="btn" id="modelBtn">模型设置</button>
+      </div>
+    </div>
 
     <!-- ── 模型设置面板 ── -->
-    <div id="modelPanel" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px;box-shadow:var(--shadow)">
-      <div style="font-weight:650;margin-bottom:14px;font-size:1rem">挖文模型设置</div>
-      <div style="font-size:.8rem;color:var(--muted);margin-bottom:12px">API Key 通过 Cloudflare Worker Secrets 管理，此处不需要填写。</div>
-      <div style="display:grid;gap:10px;max-width:480px">
+    <div id="modelPanel" class="modelpanel" style="display:none">
+      <div class="mp-h">挖文模型设置</div>
+      <div class="mp-note">API Key 通过 Cloudflare Worker Secrets 管理，此处不需要填写。</div>
+      <div style="display:grid;gap:12px;max-width:480px">
         <label>
-          <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">供应商</div>
-          <select id="mProvider" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb">
+          <div>供应商</div>
+          <select id="mProvider">
             <option value="anthropic">Anthropic (Claude)</option>
             <option value="openai">OpenAI</option>
             <option value="deepseek">DeepSeek</option>
@@ -157,15 +134,15 @@ header.top .grow{flex:1}
           </select>
         </label>
         <label>
-          <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">模型名称</div>
-          <input id="mModel" type="text" placeholder="claude-sonnet-4-6" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb"/>
+          <div>模型名称</div>
+          <input id="mModel" type="text" placeholder="claude-sonnet-4-6"/>
         </label>
         <label id="mBaseUrlRow" style="display:none">
-          <div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">Base URL</div>
-          <input id="mBaseUrl" type="text" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:.95rem;background:#fcfcfb"/>
+          <div>Base URL</div>
+          <input id="mBaseUrl" type="text"/>
         </label>
-        <div style="display:flex;gap:10px;align-items:center;margin-top:2px">
-          <button class="btn primary" id="mSave" style="width:auto;padding:9px 22px">保存</button>
+        <div style="display:flex;gap:12px;align-items:center;margin-top:2px">
+          <button class="btn primary" id="mSave" style="padding:9px 24px">保存</button>
           <span id="mMsg" style="font-size:.86rem"></span>
         </div>
       </div>
@@ -174,7 +151,6 @@ header.top .grow{flex:1}
     <div class="cards" id="cards"></div>
     <div id="users"></div>
   </div>
-
 </div>
 
 <script src="/voicedrop/shared.js"></script>
@@ -320,6 +296,7 @@ function renderUser(u){
   const d = el('details','user');
   const sum = el('summary');
   sum.innerHTML = `<span class="caret">▶</span>
+    <span class="uava" data-ava>${esc(avaInit(u.sub))}</span>
     <span><span class="uname" data-name>${esc(shortSub(u.sub))}</span>
     <span class="usub"> ${esc(u.sub)}</span></span>
     <span class="ustat">
@@ -340,8 +317,9 @@ function renderUser(u){
       try{
         const md = await apiGetText(u.claudemd.name);
         const {name,style} = parseClaudeMd(md);
-        if(name){ const nm=sum.querySelector('[data-name]'); if(nm) nm.textContent=name; }
-        if(style) body.prepend(el('div','style', `<b>文风设置</b>\n${esc(style)}`));
+        if(name){ const nm=sum.querySelector('[data-name]'); if(nm) nm.textContent=name;
+          const av=sum.querySelector('[data-ava]'); if(av) av.textContent=avaInit(name); }
+        if(style) body.prepend(el('div','style', `<b>文风设置</b>${esc(style)}`));
       }catch(_){}
     }
     // sort recordings newest first
@@ -363,6 +341,7 @@ function parseClaudeMd(md){
   return {name:name.trim(),style:style.trim()};
 }
 function shortSub(sub){ return sub.replace(/^anon-/,'匿名 ').slice(0,12); }
+function avaInit(s){ const t=String(s||'').replace(/^anon-/,'').replace(/^users\//,''); return (t[0]||'?').toUpperCase(); }
 
 function renderRec(r){
   const p = parseStem(r.stem);
@@ -516,8 +495,8 @@ $('#mSave').onclick = async () => {
       body: JSON.stringify(cfg),
     });
     if (!r.ok) throw new Error(`${r.status}`);
-    showMsg('已保存 ✓', 'var(--accent)');
-  } catch(e) { showMsg('保存失败：'+e.message, '#c0392b'); }
+    showMsg('已保存 ✓', 'var(--ok)');
+  } catch(e) { showMsg('保存失败：'+e.message, 'var(--err)'); }
   finally { $('#mSave').disabled = false; }
 };
 function showMsg(txt, color) {

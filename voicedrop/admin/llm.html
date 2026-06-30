@@ -5,143 +5,118 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="robots" content="noindex,nofollow"/>
 <title>LLM 日志 · VoiceDrop</title>
+<link rel="stylesheet" href="./theme.css"/>
+<script>
+/* Standalone/preview fallback for the three helpers the pages use. The production
+   server's /voicedrop/shared.js loads later and overrides these — safe either way. */
+window.$=window.$||function(s,r){return (r||document).querySelector(s);};
+window.esc=window.esc||function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');};
+window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];var a=doc.articles||(doc.result&&doc.result.articles)||(doc.output&&doc.output.articles)||doc.results||[];if(!Array.isArray(a))return[];return a.map(function(x){return typeof x==='string'?{title:'',body:x}:{title:x.title||x.heading||'',body:x.body||x.content||x.text||''};});};
+</script>
 <style>
-:root{
-  color-scheme:light;
-  --bg:#f6f5f2; --panel:#ffffff; --ink:#1d1d1f; --muted:#86868b;
-  --line:#e8e5df; --line2:#f0eee9;
-  --accent:#0a7d52; --accent-bg:#e7f6ee;
-  --warn:#9a6b00; --warn-bg:#fbf2dc;
-  --err:#c0392b; --err-bg:#fdecea;
-  --idle:#5b6470; --idle-bg:#eef1f4;
-  --blue:#0a66c2; --mine:#7a4fd0; --mine-bg:#f0eafb; --agent:#0a66c2; --agent-bg:#e8f1fb; --restyle:#c2410c; --restyle-bg:#fdeee4;
-  --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04);
-}
-*{box-sizing:border-box}
-html,body{margin:0}
-body{
-  background:var(--bg); color:var(--ink);
-  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
-  -webkit-text-size-adjust:100%;
-}
-a{color:var(--blue);text-decoration:none}
-.wrap{max-width:1280px;margin:0 auto;padding:24px 18px 60px}
-
-/* ---- gate ---- */
-#gate{max-width:420px;margin:14vh auto 0;background:var(--panel);
-  border:1px solid var(--line);border-radius:16px;padding:30px 26px;box-shadow:var(--shadow)}
-#gate h1{font-size:1.25rem;margin:0 0 4px}
-#gate p{color:var(--muted);margin:0 0 18px;font-size:.92rem}
-#gate input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;
-  font-size:.95rem;background:#fcfcfb;margin-bottom:12px}
-#gate input:focus{outline:none;border-color:var(--accent)}
-.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);
-  background:var(--panel);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:.88rem;font-weight:560}
-.btn:hover{background:#faf9f7}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;justify-content:center;padding:11px}
-.btn.primary:hover{filter:brightness(1.05)}
-.err{color:var(--err);font-size:.86rem;min-height:1.2em;margin-top:2px}
-
-/* ---- header ---- */
-header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-header.top h1{font-size:1.3rem;margin:0;font-weight:700;letter-spacing:-.01em}
-header.top .grow{flex:1}
-.tag{font-size:.74rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);
-  padding:3px 9px;border-radius:999px}
-select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;background:#fcfcfb;font-size:.86rem;color:var(--ink)}
+:root{ --mine:#7a4fd0; --mine-bg:#f0eafb; --agent:#B24A2C; --agent-bg:#F8E6DC; --restyle:#c2410c; --restyle-bg:#fdeee4; }
+.wrap{max-width:1320px;margin:0 auto;padding:22px 22px 60px}
 
 /* ---- two-pane layout ---- */
-.panes{display:grid;grid-template-columns:380px 1fr;gap:16px;align-items:start}
+.panes{display:grid;grid-template-columns:392px 1fr;gap:16px;align-items:start}
 @media(max-width:860px){.panes{grid-template-columns:1fr}}
-.list{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+.list{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);
   max-height:calc(100vh - 150px);overflow-y:auto}
 .grp{border-top:1px solid var(--line2)}
 .grp:first-child{border-top:none}
-.grphd{font-size:.72rem;color:var(--muted);padding:7px 14px 3px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.row{padding:9px 14px;border-top:1px solid var(--line2);cursor:pointer;display:flex;align-items:center;gap:8px}
+.grphd{font-size:.72rem;color:var(--muted);padding:8px 15px 4px;font-family:var(--fm)}
+.row{padding:10px 15px;border-top:1px solid var(--line2);cursor:pointer;display:flex;align-items:center;gap:8px}
 .grphd + .row{border-top:none}
-.row:hover{background:#faf9f7}
+.row:hover{background:var(--bg-sunk)}
 .row.sel{background:var(--accent-bg)}
-.row .t{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;color:var(--muted);flex:none}
+.row .t{font-family:var(--fm);font-size:.78rem;color:var(--muted);flex:none}
 .row .grow{flex:1}
-.badge{font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:6px;flex:none;letter-spacing:.02em}
 .badge.mine{background:var(--mine-bg);color:var(--mine)}
 .badge.agent{background:var(--agent-bg);color:var(--agent)}
-.badge.ok{background:var(--accent-bg);color:var(--accent)}
-.badge.err{background:var(--err-bg);color:var(--err)}
 .badge.tool{background:var(--idle-bg);color:var(--idle)}
 .badge.restyle{background:var(--restyle-bg);color:var(--restyle)}
-.mico{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;font-size:.7rem;font-weight:800;flex:none;margin-right:6px;vertical-align:middle}
+.mico{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:6px;font-size:.7rem;font-weight:800;flex:none;margin-right:6px;vertical-align:middle}
 .mico.opus{background:#ede9fe;color:#6d28d9}
 .mico.sonnet{background:#e0f2fe;color:#0369a1}
 .mico.haiku{background:#dcfce7;color:#15803d}
 .mico.fable{background:#fce7f3;color:#be185d}
 .mico.other{background:var(--idle-bg);color:var(--idle)}
-.trow .name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem}
+.trow .name{font-family:var(--fm);font-size:.78rem}
 .tres .role{color:var(--mine)} .tres.bad .role{color:var(--err)}
-.row .tok{font-size:.72rem;color:var(--muted);flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.row .cost{font-size:.72rem;color:var(--accent);flex:none;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;min-width:56px;text-align:right}
+.row .tok{font-size:.72rem;color:var(--muted);flex:none;font-family:var(--fm)}
+.row .cost{font-size:.72rem;color:var(--accent);flex:none;font-weight:700;font-family:var(--fm);min-width:56px;text-align:right}
 .grphd .gcost{float:right;color:var(--accent);font-weight:700}
 .tag.cost{color:var(--accent);border-color:var(--accent-bg);background:var(--accent-bg);font-weight:700}
 
 /* ---- detail ---- */
-.detail{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
-  padding:18px 20px;min-height:200px}
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);
+  padding:20px 22px;min-height:200px}
 .detail .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.82rem;color:var(--muted);margin-bottom:14px}
 .detail .meta b{color:var(--ink);font-weight:600}
-h3.sec{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
-  margin:18px 0 8px;border-bottom:1px solid var(--line2);padding-bottom:5px}
-.msg{border:1px solid var(--line2);border-radius:9px;padding:9px 12px;margin:8px 0;background:#fcfcfb}
+h3.sec{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700;
+  margin:20px 0 9px;border-bottom:1px solid var(--line2);padding-bottom:6px}
+.msg{border:1px solid var(--line2);border-radius:10px;padding:10px 13px;margin:9px 0;background:var(--bg-sunk)}
 .msg .role{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px}
-.msg.user .role{color:var(--blue)} .msg.assistant .role{color:var(--accent)}
-.tx{white-space:pre-wrap;font-size:.88rem;line-height:1.65;word-break:break-word}
-.blk{margin:6px 0;padding:6px 10px;border-left:3px solid var(--line);background:#fff;border-radius:0 7px 7px 0}
+.msg.user .role{color:var(--blue)} .msg.assistant .role{color:var(--ok)}
+.tx{white-space:pre-wrap;font-size:.88rem;line-height:1.7;word-break:break-word;color:var(--ink-2)}
+.blk{margin:7px 0;padding:7px 11px;border-left:3px solid var(--line-strong);background:#fff;border-radius:0 8px 8px 0}
 .blk .bt{font-size:.7rem;font-weight:700;color:var(--mine);text-transform:uppercase;letter-spacing:.03em}
-pre.code{white-space:pre-wrap;word-break:break-word;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;
-  background:#fbfaf8;border:1px solid var(--line2);border-radius:8px;padding:10px 12px;margin:4px 0;overflow-x:auto;color:#333}
-details.fold{margin:6px 0}
-details.fold>summary{cursor:pointer;font-size:.82rem;color:var(--blue);user-select:none}
-.errbox{background:var(--err-bg);border:1px solid #f3c9c2;border-radius:9px;padding:10px 12px;color:var(--err);
-  white-space:pre-wrap;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
-.empty-state{text-align:center;color:var(--muted);padding:60px 0}
-.loading{color:var(--muted);font-size:.85rem;padding:14px}
-.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
-  border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
-@keyframes sp{to{transform:rotate(360deg)}}
-.usage{font-size:.78rem;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+pre.code{white-space:pre-wrap;word-break:break-word;font:12px/1.55 var(--fm);
+  background:var(--bg-sunk);border:1px solid var(--line2);border-radius:9px;padding:11px 13px;margin:5px 0;overflow-x:auto;color:var(--ink-2)}
+details.fold{margin:7px 0}
+details.fold>summary{cursor:pointer;font-size:.82rem;color:var(--link);user-select:none;font-weight:600}
+.errbox{background:var(--err-bg);border:1px solid var(--accent-ring);border-radius:9px;padding:11px 13px;color:var(--err);
+  white-space:pre-wrap;font:12px/1.55 var(--fm)}
+.loading{color:var(--muted);font-size:.85rem;padding:16px}
+.usage{font-size:.78rem;color:var(--muted);font-family:var(--fm)}
 </style>
-<link rel="stylesheet" href="./theme.css"/>
 </head>
 <body>
-<div class="wrap">
 
-  <!-- token gate -->
-  <div id="gate" hidden>
-    <h1>LLM 日志</h1>
-    <p>输入 master token 查看所有与大语言模型的交互。token 只存在本机浏览器，不上传。</p>
-    <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
-    <div class="err" id="gateErr"></div>
-    <button class="btn primary" id="enter">进入</button>
-  </div>
+<div id="gate" hidden style="max-width:430px">
+  <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+  <h1>LLM 日志</h1>
+  <p>输入 master token 查看所有与大语言模型的交互。token 只存在本机浏览器，不上传。</p>
+  <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+  <div class="err" id="gateErr"></div>
+  <button class="btn primary block" id="enter">进入</button>
+</div>
 
-  <!-- app -->
-  <div id="app" hidden>
-    <header class="top">
+<div id="app" hidden>
+  <nav class="appbar">
+    <div class="appbar-in">
+      <a class="brand" href="./">
+        <svg class="mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdNav" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdNav)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+        <span class="name">VoiceDrop</span><span class="sub">控制台</span>
+      </a>
+      <div class="nav-tabs">
+        <a class="nav-tab" href="./">概览</a>
+        <a class="nav-tab" href="./reports.html">举报审核</a>
+        <a class="nav-tab" href="./usage.html">算力账本</a>
+        <a class="nav-tab" href="./mine.html">挖文日志</a>
+        <a class="nav-tab active" href="./llm.html">LLM 日志</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn ghost" id="refresh">刷新</button>
+        <button class="btn ghost" id="logout">退出</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="pagehead">
       <h1>LLM 日志</h1>
       <span class="tag" id="count"></span>
       <span class="grow"></span>
-      <select id="date" title="按日期"></select>
-      <button class="btn" id="refresh">刷新</button>
-      <a class="btn" href="./usage.html">算力账本</a>
-      <a class="btn" href="./">← 控制台</a>
-      <button class="btn" id="logout">退出</button>
-    </header>
+      <div class="tools">
+        <select id="date" title="按日期"></select>
+      </div>
+    </div>
     <div class="panes">
       <div class="list" id="list"></div>
       <div class="detail" id="detail"><div class="empty-state">选一条交互查看发出 / 收回的全部细节</div></div>
     </div>
   </div>
-
 </div>
 
 <script src="/voicedrop/shared.js"></script>

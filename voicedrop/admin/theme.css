@@ -1,74 +1,187 @@
-/* VoiceDrop admin — shared theme, matched to the iOS app (VoiceDropApp/Theme.swift).
-   One palette for every /admin page (index · usage · mine · llm). The app look:
-   warm beige chrome, white cards, ochre-red accent (赭红 #D8593B), warm-gray ink. */
+/* ============================================================================
+   VoiceDrop admin — shared theme.
+   One palette + one navigation for every page (概览 · 举报 · 账本 · 挖文 · LLM).
+   Matched to the iOS app (VoiceDropApp/Theme.swift): warm paper chrome, white
+   cards, ochre-red accent (赭红 #D8593B), warm-gray ink, sage green for "done".
+   This file is the single source of truth for palette + nav + shared widgets.
+   Page files keep ONLY their own layout-specific CSS.
+   ========================================================================== */
 :root{
   color-scheme:light;
-  --bg:#FAF6EF; --panel:#ffffff; --ink:#2A2521; --muted:#8A8175;
-  --line:#ECE3D5; --line2:#F2EBDD;
-  --accent:#D8593B; --accent-bg:#F6E4DC;        /* 赭红 — buttons / links / active */
-  --warn:#C98A3C; --warn-bg:#F7EDD7;            /* amberPending */
-  --idle:#8A8175; --idle-bg:#F1ECE3;
-  --ok:#5E8A6A; --ok-bg:#EAF1EC;                /* greenDone — 已成文 / 正常 */
-  --blue:#B24A2C;                               /* the app has no blue; links read as deep ochre */
-  --shadow:0 1px 2px rgba(42,37,33,.04),0 8px 24px rgba(42,37,33,.05);
+
+  /* surfaces */
+  --bg:#FAF6EF;            /* warm paper */
+  --bg-soft:#F3ECE0;       /* nav hover / table head / inset fills */
+  --bg-sunk:#FBF7F0;       /* code / quote insets */
+  --panel:#ffffff;
+
+  /* ink */
+  --ink:#2A2521;
+  --ink-2:#5B5246;         /* body secondary */
+  --muted:#94897A;
+  --line:#EBE2D4;
+  --line2:#F2EBDE;
+  --line-strong:#DFD4C2;
+
+  /* accent — 赭红 */
+  --accent:#D8593B;
+  --accent-deep:#BC4528;   /* hover / press / active */
+  --accent-bg:#F8E6DC;
+  --accent-ring:#F0C9BB;
+
+  /* semantic */
+  --ok:#5E8A6A;   --ok-bg:#E9F1EB;
+  --warn:#C2862F; --warn-bg:#F8EDD6;
+  --err:#C0432C;  --err-bg:#FBE8E3;
+  --idle:#8E8474; --idle-bg:#F1ECE2;
+
+  /* the app has no blue; links read as deep ochre */
+  --blue:#B24A2C;
+  --link:#B24A2C;
+
+  --shadow-sm:0 1px 2px rgba(42,37,33,.05);
+  --shadow:0 1px 2px rgba(42,37,33,.04),0 10px 30px rgba(42,37,33,.055);
+  --shadow-pop:0 12px 36px rgba(42,37,33,.14);
+
+  --r-sm:10px; --r-md:14px; --r-lg:18px; --r-pill:999px;
+  --fs:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --fm:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
 body{
   background:var(--bg); color:var(--ink);
-  font:15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  font:15px/1.6 var(--fs);
   -webkit-text-size-adjust:100%;
+  -webkit-font-smoothing:antialiased;
 }
-a{color:var(--blue);text-decoration:none}
-/* NOTE: no .wrap here — page width/layout stays per-page (index 1040, log viewers 1280).
-   theme.css is palette + shared visual components only, never layout. */
+a{color:var(--link);text-decoration:none}
+::selection{background:var(--accent-bg);color:var(--accent-deep)}
 
-/* ---- token gate ---- */
-#gate{max-width:420px;margin:14vh auto 0;background:var(--panel);
-  border:1px solid var(--line);border-radius:18px;padding:30px 26px;box-shadow:var(--shadow)}
-#gate h1{font-size:1.25rem;margin:0 0 4px;color:var(--ink)}
-#gate p{color:var(--muted);margin:0 0 18px;font-size:.92rem}
-#gate input{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;
-  font-size:.95rem;background:#fdfbf7;margin-bottom:12px;color:var(--ink)}
-#gate input:focus{outline:none;border-color:var(--accent)}
-.err{color:#c0392b;font-size:.86rem;min-height:1.2em;margin-top:2px}
+/* ============================================================================
+   Top app bar — identical on every page; only .active differs
+   ========================================================================== */
+.appbar{
+  position:sticky;top:0;z-index:50;
+  background:rgba(250,246,239,.82);
+  -webkit-backdrop-filter:saturate(1.4) blur(18px);
+  backdrop-filter:saturate(1.4) blur(18px);
+  border-bottom:1px solid var(--line);
+}
+.appbar-in{
+  display:flex;align-items:center;gap:14px;
+  max-width:1320px;margin:0 auto;padding:11px 20px;
+}
+.brand{display:flex;align-items:center;gap:9px;flex:none;color:var(--ink)}
+.brand:hover{color:var(--ink)}
+.brand .mark{width:30px;height:30px;flex:none;display:block;filter:drop-shadow(0 2px 5px rgba(216,89,59,.32))}
+.brand .name{font-size:1.06rem;font-weight:800;letter-spacing:-.02em;white-space:nowrap}
+.brand .sub{font-size:.7rem;font-weight:700;color:var(--accent-deep);white-space:nowrap;
+  background:var(--accent-bg);border-radius:var(--r-pill);padding:2px 8px;letter-spacing:.02em}
 
-/* ---- buttons ---- */
-.btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);
-  background:var(--panel);color:var(--ink);border-radius:12px;padding:9px 15px;font-size:.9rem;
-  font-weight:560;box-shadow:0 1px 1px rgba(42,37,33,.03)}
-.btn:hover{background:#fbf8f2}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;
-  justify-content:center;padding:11px}
-.btn.primary:hover{filter:brightness(1.04)}
+.nav-tabs{display:flex;align-items:center;gap:3px;flex-wrap:wrap}
+.nav-tab{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 11px;border-radius:var(--r-sm);
+  font-size:.89rem;font-weight:600;color:var(--muted);white-space:nowrap;
+  transition:background .12s,color .12s;white-space:nowrap;
+}
+.nav-tab:hover{background:var(--bg-soft);color:var(--ink)}
+.nav-tab.active{background:var(--accent-bg);color:var(--accent-deep)}
+.nav-tab .ic{font-size:.95em;opacity:.9}
 
-/* ---- header ---- */
-header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
-header.top h1{font-size:1.3rem;margin:0;font-weight:700;letter-spacing:-.01em;color:var(--ink)}
-header.top .grow{flex:1}
+.nav-actions{display:flex;align-items:center;gap:7px;margin-left:auto;flex:none}
+
+@media(max-width:1024px){
+  .appbar-in{flex-wrap:wrap;gap:10px 14px;padding:10px 16px}
+  .nav-tabs{order:3;width:100%;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;
+    padding-bottom:2px;scrollbar-width:none}
+  .nav-tabs::-webkit-scrollbar{display:none}
+  .nav-actions{margin-left:auto}
+}
+
+/* ============================================================================
+   Page header (below the appbar): title + per-page tools
+   ========================================================================== */
+.pagehead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 20px}
+.pagehead h1{font-size:1.5rem;margin:0;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+.pagehead .grow{flex:1}
+.pagehead .tools{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .tag{font-size:.74rem;color:var(--muted);background:var(--panel);border:1px solid var(--line);
-  padding:3px 9px;border-radius:999px}
+  padding:3px 10px;border-radius:var(--r-pill);white-space:nowrap}
+.subtle{color:var(--muted);font-size:.92rem;margin:0 0 18px;max-width:62ch}
+.subtle b{color:var(--ink)}
 
-/* ---- stat cards ---- */
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:22px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow)}
-.card .n{font-size:1.7rem;font-weight:740;letter-spacing:-.02em;line-height:1.1;color:var(--ink)}
-.card .l{font-size:.8rem;color:var(--muted);margin-top:2px}
+/* ============================================================================
+   Buttons
+   ========================================================================== */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;white-space:nowrap;
+  border:1px solid var(--line-strong);background:var(--panel);color:var(--ink);
+  border-radius:var(--r-sm);padding:8px 14px;font-size:.88rem;font-weight:600;
+  box-shadow:var(--shadow-sm);transition:background .12s,border-color .12s,transform .04s}
+.btn:hover{background:var(--bg-soft);border-color:var(--muted)}
+.btn:active{transform:translateY(.5px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(216,89,59,.28)}
+.btn.primary:hover{background:var(--accent-deep);border-color:var(--accent-deep)}
+.btn.primary[disabled]{opacity:.55;pointer-events:none}
+.btn.block{width:100%;padding:11px}
+.btn.danger{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger:hover{background:var(--accent-deep);border-color:var(--accent-deep)}
+.btn.ghost{box-shadow:none;border-color:var(--line)}
+.lnk{font-size:.84rem;color:var(--link);cursor:pointer;background:none;border:none;padding:0;font-weight:600}
+.lnk:hover{text-decoration:underline}
+
+select{font-family:var(--fs);padding:8px 11px;border:1px solid var(--line-strong);border-radius:var(--r-sm);
+  background:var(--panel);font-size:.86rem;color:var(--ink);box-shadow:var(--shadow-sm);cursor:pointer}
+select:focus{outline:none;border-color:var(--accent)}
+
+/* ============================================================================
+   Token gate
+   ========================================================================== */
+#gate{max-width:430px;margin:13vh auto 0;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--r-lg);padding:34px 30px;box-shadow:var(--shadow)}
+#gate .gate-mark{width:46px;height:46px;display:block;margin:0 0 16px}
+#gate h1{font-size:1.3rem;margin:0 0 6px;color:var(--ink);font-weight:800;letter-spacing:-.01em}
+#gate p{color:var(--muted);margin:0 0 20px;font-size:.92rem;line-height:1.65}
+#gate input{width:100%;padding:12px 14px;border:1.5px solid var(--line-strong);border-radius:var(--r-sm);
+  font-size:.95rem;background:var(--bg-sunk);margin-bottom:14px;color:var(--ink)}
+#gate input:focus{outline:none;border-color:var(--accent);background:#fff}
+.err{color:var(--err);font-size:.86rem;min-height:1.2em;margin-top:2px}
+
+/* ============================================================================
+   Stat cards
+   ========================================================================== */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));gap:13px;margin-bottom:24px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);
+  padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line-strong)}
+.card.ok::before{background:var(--ok)} .card.warn::before{background:var(--warn)}
+.card.idle::before{background:var(--idle)} .card.spent::before{background:var(--accent)}
+.card.bal::before{background:var(--ok)}
+.card .n{font-size:1.75rem;font-weight:800;letter-spacing:-.025em;line-height:1.1;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.card .l{font-size:.8rem;color:var(--muted);margin-top:3px}
 .card.ok .n{color:var(--ok)} .card.warn .n{color:var(--warn)} .card.idle .n{color:var(--idle)}
 .card.spent .n{color:var(--accent)} .card.bal .n{color:var(--ok)}
 
-/* status pills / badges — keep 已成文 green (greenDone), not the ochre accent.
-   These come AFTER each page's inline <style> (theme.css is linked last), so they
-   win the cascade and recolor the status chips to the app palette. */
+/* ============================================================================
+   Status pills / badges — these come AFTER each page's inline <style> in the
+   cascade (theme.css is linked LAST) so they recolor chips to the app palette.
+   ========================================================================== */
+.pill{font-size:.74rem;padding:2px 9px;border-radius:var(--r-pill);white-space:nowrap;font-weight:600}
+.pill.au,.pill.idle{background:var(--idle-bg);color:var(--idle)}
 .pill.ok{background:var(--ok-bg);color:var(--ok)}
-.badge.ok{background:var(--ok-bg);color:var(--ok)}
-.pill.warn{background:var(--warn-bg);color:var(--warn)}
-.badge.warn{background:var(--warn-bg);color:var(--warn)}
-.pill.au{background:var(--idle-bg);color:var(--idle)}
+.pill.warn,.pill.rep{background:var(--warn-bg);color:var(--warn)}
+.badge{font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:7px;flex:none;letter-spacing:.01em;white-space:nowrap}
+.badge.ok,.badge.mined{background:var(--ok-bg);color:var(--ok)}
+.badge.warn,.badge.empty{background:var(--warn-bg);color:var(--warn)}
 .badge.idle{background:var(--idle-bg);color:var(--idle)}
+.badge.err,.badge.error{background:var(--err-bg);color:var(--err)}
 
-/* ---- misc ---- */
+/* ============================================================================
+   Misc shared
+   ========================================================================== */
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);
   border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}
-.empty-state{text-align:center;color:var(--muted);padding:50px 0}
+.empty-state{text-align:center;color:var(--muted);padding:54px 20px}
