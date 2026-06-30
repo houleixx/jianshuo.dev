@@ -103,9 +103,12 @@ export async function editCount(db, userSub, stem) {
   return row ? row.n : 0;
 }
 
-export async function allAccounts(db) {
+export async function allAccounts(db, now) {
   const r = await db.prepare(
-    "SELECT user_sub,balance_uy,granted_uy,spent_uy,updated_at FROM account ORDER BY spent_uy DESC"
-  ).all();
+    "SELECT a.user_sub, a.granted_uy, a.spent_uy, a.updated_at, " +
+    "COALESCE((SELECT SUM(b.remaining_uy) FROM bucket b " +
+    "          WHERE b.user_sub=a.user_sub AND (b.expires_at IS NULL OR b.expires_at > ?)),0) AS balance_uy " +
+    "FROM account a ORDER BY a.spent_uy DESC"
+  ).bind(now).all();
   return r.results;
 }

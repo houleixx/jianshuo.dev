@@ -32,4 +32,16 @@ describe("usage routes", () => {
     const bad = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/grant"), req("/agent/usage/grant", { method: "POST", token: "nope" }), env);
     expect(bad.status).toBe(401);
   });
+  it("admin accounts lists live (bucket) balance", async () => {
+    const env = { USAGE: fakeD1(usageSql()), FILES_TOKEN: "admintok" };
+    // 触发一个用户的 signup（500 算力桶）
+    await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/balance"),
+      req("/agent/usage/balance", { token: "anon_unittesttoken_abcdefghijklmnop" }), env);
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/admin/accounts"),
+      req("/agent/usage/admin/accounts", { token: "admintok" }), env);
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.accounts.length).toBe(1);
+    expect(Math.round(body.accounts[0].balance_suanli)).toBe(500);
+  });
 });
