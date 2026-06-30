@@ -85,7 +85,30 @@ describe("usage routes", () => {
     expect(r.status).toBe(200);
     const body = await r.json();
     expect(body.count).toBe(2);
+    expect(body.suanli_each).toBe(500);
+    expect(body.cost_yuan).toBeCloseTo(43.48, 2); // r2(500*2/23)
+    expect(typeof body.expires_at).toBe("number");
     const n = env.USAGE.prepare("SELECT COUNT(*) AS n FROM bucket WHERE source='campaign:promo'").first().n;
+    expect(n).toBe(2);
+  });
+  it("batch grant all:true fans out to every account", async () => {
+    const db = fakeD1(usageSql());
+    const env = { USAGE: db, FILES_TOKEN: "admintok" };
+    // seed two accounts directly so allAccounts() returns them
+    db.prepare("INSERT INTO account (user_sub,balance_uy,granted_uy,spent_uy,created_at,updated_at) VALUES (?,?,?,?,?,?)")
+      .bind("users/anon-a/", 0, 0, 0, 1, 1).run();
+    db.prepare("INSERT INTO account (user_sub,balance_uy,granted_uy,spent_uy,created_at,updated_at) VALUES (?,?,?,?,?,?)")
+      .bind("users/anon-b/", 0, 0, 0, 1, 1).run();
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/grant/batch"),
+      new Request("https://jianshuo.dev/agent/usage/grant/batch", {
+        method: "POST",
+        headers: { Authorization: "Bearer admintok", "Content-Type": "application/json" },
+        body: JSON.stringify({ suanli: 100, all: true }),
+      }), env);
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.count).toBe(2);
+    const n = db.prepare("SELECT COUNT(*) AS n FROM bucket WHERE source='campaign:manual'").bind().first().n;
     expect(n).toBe(2);
   });
   it("batch grant requires a target set", async () => {
