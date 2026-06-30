@@ -71,6 +71,12 @@ select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;backgroun
 .badge.err{background:var(--err-bg);color:var(--err)}
 .badge.tool{background:var(--idle-bg);color:var(--idle)}
 .badge.restyle{background:var(--restyle-bg);color:var(--restyle)}
+.mico{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;font-size:.7rem;font-weight:800;flex:none;margin-right:6px;vertical-align:middle}
+.mico.opus{background:#ede9fe;color:#6d28d9}
+.mico.sonnet{background:#e0f2fe;color:#0369a1}
+.mico.haiku{background:#dcfce7;color:#15803d}
+.mico.fable{background:#fce7f3;color:#be185d}
+.mico.other{background:var(--idle-bg);color:var(--idle)}
 .trow .name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem}
 .tres .role{color:var(--mine)} .tres.bad .role{color:var(--err)}
 .row .tok{font-size:.72rem;color:var(--muted);flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -164,6 +170,19 @@ function fmtTime(ts){ const d=new Date(ts); const p=(n)=>String(n).padStart(2,'0
 // they're off by the call latency — a harmless few seconds for historical review.
 function sentAt(r){ return (r && r.ts) || 0; }
 function shortModel(m){ return String(m||'').replace(/^claude-/,'').replace(/-\d{8}$/,''); }
+// 模型字母图标：按家族给一个字母 + 配色（Sonnet→S、Opus→O、Haiku→H…）。
+function modelIcon(m){ const s=String(m||'').toLowerCase();
+  if(s.includes('opus'))    return {l:'O',c:'opus'};
+  if(s.includes('sonnet'))  return {l:'S',c:'sonnet'};
+  if(s.includes('haiku'))   return {l:'H',c:'haiku'};
+  if(s.includes('fable'))   return {l:'F',c:'fable'};
+  if(s.includes('deepseek'))return {l:'D',c:'other'};
+  if(s.includes('kimi')||s.includes('moonshot')) return {l:'K',c:'other'};
+  if(s.includes('qwen'))    return {l:'Q',c:'other'};
+  if(s.includes('gpt')||s.includes('openai')) return {l:'G',c:'other'};
+  if(s.includes('gemini'))  return {l:'✦',c:'other'};
+  return {l:(s.replace(/.*\//,'')[0]||'?').toUpperCase(),c:'other'}; }
+function modelIco(m){ const i=modelIcon(m); return `<span class="mico ${i.c}" title="${esc(m||'')}">${i.l}</span>`; }
 function usageStr(u){ if(!u) return ''; const i=u.input_tokens??u.inputTokens, o=u.output_tokens??u.outputTokens;
   if(i==null&&o==null) return ''; return `${i??'?'}→${o??'?'} tok`; }
 
@@ -268,7 +287,7 @@ function renderList(){
         <span class="t" title="发送时刻">${esc(fmtTime(sentAt(r)))}</span>
         <span class="badge ${r.source==='mine'?'mine':'agent'}">${esc(r.source||'?')}</span>
         ${r.meta&&r.meta.restyle!=null?`<span class="badge restyle">↻ v${esc(r.meta.restyle)}</span>`:''}
-        <span class="grow">${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
+        <span class="grow">${modelIco(r.model)}${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
         <span class="tok">${esc(usageStr(r.response&&r.response.usage))}</span>
         <span class="cost" title="算力">${esc(fmtSL(suanliOf(r)))}</span>
         <span class="badge ${okCls}">${okTxt}</span>
@@ -341,7 +360,7 @@ function renderDetail(r){
   let h = `<div class="meta">
     <span><b>${esc(r.source||'?')}</b></span>
     ${r.meta&&r.meta.restyle!=null?`<span class="badge restyle">↻ restyle v${esc(r.meta.restyle)}</span>`:''}
-    <span>${esc(shortModel(r.model))}</span>
+    <span>${modelIco(r.model)}${esc(shortModel(r.model))}</span>
     <span>发送 <b>${esc(new Date(sentAt(r)).toLocaleString('zh-CN'))}</b></span>
     <span>耗时 <b>${r.latency_ms!=null?(r.latency_ms/1000).toFixed(1)+'s':'—'}</b></span>
     <span>HTTP <b>${esc(r.http_status)}</b> ${r.ok?'':'· <b style="color:var(--err)">失败</b>'}</span>
