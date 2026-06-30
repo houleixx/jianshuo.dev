@@ -20,7 +20,7 @@
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
 import { readArticleDoc, writeArticleDoc, setHead, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
-import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile } from "../../lib/style-store.js";
+import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
 
@@ -721,8 +721,11 @@ export async function onRequest(context) {
 
     if (request.method === 'GET' && !subaction) {
       // `name` is additive (from doc.profile) — old clients decode only `style` and ignore it.
-      const doc = await readStyleDoc(env, styleKey);
-      if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', styles: (doc.profile && doc.profile.styles) || [], head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0 });
+      // Lazy-seed: a user with no CLAUDE.json (and no legacy 文风) gets the default 王建硕
+      // style materialized as their own v1 here, so the settings screen shows an editable
+      // baseline instead of an empty box. `default:true` flags an un-edited seed.
+      const doc = await ensureStyleSeeded(env, styleKey, legacyKey);
+      if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', styles: (doc.profile && doc.profile.styles) || [], head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0, default: isDefaultSeed(doc) });
       const legacy = await env.FILES.get(legacyKey);
       if (legacy) {
         const md = await legacy.text();

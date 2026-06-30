@@ -19,9 +19,30 @@ function reqCtx(method, segments, { token = TOKEN, body, contentType } = {}) {
 }
 
 describe("GET /style", () => {
-  it("404s when neither CLAUDE.json nor CLAUDE.md exists", async () => {
+  it("seeds the default 王建硕 style as v1 when neither exists (default:true)", async () => {
+    const { DEFAULT_STYLE } = await import("../../functions/lib/style-store.js");
     const ctx = reqCtx("GET", ["style"]);
-    expect((await onRequest(ctx)).status).toBe(404);
+    const scope = await anonScope(TOKEN);
+    const res = await onRequest(ctx);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.style).toBe(DEFAULT_STYLE);
+    expect(body.head).toBe(1);
+    expect(body.default).toBe(true);
+    // 已落库为该用户自己的 CLAUDE.json
+    expect(ctx.env.FILES._store.has(`${scope}CLAUDE.json`)).toBe(true);
+  });
+
+  it("default:false once the user has their own style", async () => {
+    const ctx = reqCtx("GET", ["style"]);
+    const scope = await anonScope(TOKEN);
+    ctx.env.FILES._store.set(`${scope}CLAUDE.json`, JSON.stringify({
+      schema: 3, head: 1, createdAt: 1, updatedAt: 2,
+      versions: [{ v: 1, savedAt: 1, source: "app", style: "我自己的" }],
+    }));
+    const body = await (await onRequest(ctx)).json();
+    expect(body.style).toBe("我自己的");
+    expect(body.default).toBe(false);
   });
 
   it("reads the current 文风 from CLAUDE.json", async () => {
