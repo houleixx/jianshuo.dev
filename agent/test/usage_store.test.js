@@ -1,7 +1,7 @@
 // test/usage_store.test.js
 import { describe, it, expect, beforeEach } from "vitest";
 import { fakeD1, usageSql } from "./fakes.js";
-import { ensureAccount, getBalanceUY, debit, grant, getLedger, editCount, allAccounts } from "../src/usage_store.js";
+import { ensureAccount, getBalanceUY, debit, grant, getLedger, editCount, allAccounts, balanceUY, grantBucket } from "../src/usage_store.js";
 import { SIGNUP_GRANT_UY } from "../src/usage.js";
 
 const SQL = usageSql();
@@ -60,5 +60,21 @@ describe("usage_store", () => {
     const bal = await ensureAccount(db, U, 200);
     expect(bal).toBe(currentBal);                        // existing balance, not SIGNUP_GRANT_UY
     expect((await getLedger(db, U, 10)).length).toBe(1); // still only 1 grant row — no double-grant
+  });
+});
+
+describe("buckets", () => {
+  it("balanceUY sums only live buckets", async () => {
+    await grantBucket(db, U, 1000, "campaign:x", 5000, 1);   // 过期=5000
+    await grantBucket(db, U, 2000, "campaign:y", null, 1);   // 永不过期
+    expect(await balanceUY(db, U, 1)).toBe(3000);            // now=1 都活
+    expect(await balanceUY(db, U, 6000)).toBe(2000);         // now=6000，第一个已过期
+  });
+  it("grantBucket bumps granted_uy and writes a grant ledger row", async () => {
+    await grantBucket(db, U, 1000, "campaign:x", null, 1);
+    const led = await getLedger(db, U, 10);
+    expect(led[0].kind).toBe("grant");
+    expect(led[0].amount_uy).toBe(1000);
+    expect(led[0].reason).toBe("campaign:x");
   });
 });
