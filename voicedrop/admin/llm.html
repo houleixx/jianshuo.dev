@@ -14,7 +14,7 @@
   --warn:#9a6b00; --warn-bg:#fbf2dc;
   --err:#c0392b; --err-bg:#fdecea;
   --idle:#5b6470; --idle-bg:#eef1f4;
-  --blue:#0a66c2; --mine:#7a4fd0; --mine-bg:#f0eafb; --agent:#0a66c2; --agent-bg:#e8f1fb;
+  --blue:#0a66c2; --mine:#7a4fd0; --mine-bg:#f0eafb; --agent:#0a66c2; --agent-bg:#e8f1fb; --restyle:#c2410c; --restyle-bg:#fdeee4;
   --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04);
 }
 *{box-sizing:border-box}
@@ -70,6 +70,7 @@ select{padding:7px 11px;border:1px solid var(--line);border-radius:9px;backgroun
 .badge.ok{background:var(--accent-bg);color:var(--accent)}
 .badge.err{background:var(--err-bg);color:var(--err)}
 .badge.tool{background:var(--idle-bg);color:var(--idle)}
+.badge.restyle{background:var(--restyle-bg);color:var(--restyle)}
 .trow .name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem}
 .tres .role{color:var(--mine)} .tres.bad .role{color:var(--err)}
 .row .tok{font-size:.72rem;color:var(--muted);flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
@@ -255,6 +256,7 @@ function renderList(){
       html += `<div class="row" data-i="${idx}">
         <span class="t" title="发送时刻">${esc(fmtTime(sentAt(r)))}</span>
         <span class="badge ${r.source==='mine'?'mine':'agent'}">${esc(r.source||'?')}</span>
+        ${r.meta&&r.meta.restyle!=null?`<span class="badge restyle">↻ v${esc(r.meta.restyle)}</span>`:''}
         <span class="grow">${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
         <span class="tok">${esc(usageStr(r.response&&r.response.usage))}</span>
         <span class="cost">${esc(fmtUSD(costOf(r)))}</span>
@@ -327,6 +329,7 @@ function renderDetail(r){
   const cost=costOf(r);
   let h = `<div class="meta">
     <span><b>${esc(r.source||'?')}</b></span>
+    ${r.meta&&r.meta.restyle!=null?`<span class="badge restyle">↻ restyle v${esc(r.meta.restyle)}</span>`:''}
     <span>${esc(shortModel(r.model))}</span>
     <span>发送 <b>${esc(new Date(sentAt(r)).toLocaleString('zh-CN'))}</b></span>
     <span>耗时 <b>${r.latency_ms!=null?(r.latency_ms/1000).toFixed(1)+'s':'—'}</b></span>
