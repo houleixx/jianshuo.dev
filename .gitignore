@@ -5,3 +5,7 @@
 .wrangler/
 .staticrypt.json
 agent/debug
+
+# eval：真实录音转写与跑批产物是私人数据，公开 repo 绝不收
+agent/eval/fixtures/local/
+agent/eval/runs/
