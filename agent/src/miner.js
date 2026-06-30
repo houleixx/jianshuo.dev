@@ -472,6 +472,25 @@ function findSessionPhotos(audioKey, allKeys) {
 //                transcript+photos (often 10k+ tokens) are read from cache and only the
 //                文风 tail varies. Images can't sit in a system block, so caching photos
 //                across 文风 variants REQUIRES this layout.
+// A log-friendly copy of the request body: image base64 can be megabytes, so swap
+// it for a tiny placeholder (the llmlog R2 object must stay small). Everything else
+// is kept verbatim so admin/llm.html can replay model / system / messages / tools.
+function redactReqForLog(payload) {
+  const tag = (s) => `[base64 image · ~${Math.round((String(s).length * 3) / 4 / 1024)}KB elided]`;
+  const req = { ...payload };
+  if (Array.isArray(req.messages)) {
+    req.messages = req.messages.map((m) => {
+      if (!Array.isArray(m.content)) return m;
+      return { ...m, content: m.content.map((b) => {
+        if (b?.type === "image" && b.source?.data) return { ...b, source: { ...b.source, data: tag(b.source.data) } };
+        if (b?.type === "image_url" && b.image_url?.url) return { ...b, image_url: { ...b.image_url, url: tag(b.image_url.url) } };
+        return b;
+      }) };
+    });
+  }
+  return req;
+}
+
 async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system") {
   const hasPhotos = !!(photos?.length) && !force;
   // Static, cache-friendly instructions: identical for everyone, stable across re-mines
@@ -483,7 +502,7 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
   const transcriptCache = cacheMode === "transcript" && !force;
 
   const t0 = Date.now();
-  let text, latencyMs, rawResp;
+  let text, latencyMs, rawResp, reqForLog;
 
   if (modelCfg.provider === "openai-compat") {
     // ── OpenAI-compatible (DeepSeek / Kimi / Qwen / etc.) — no prompt caching ─────
@@ -507,6 +526,7 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
       ],
       response_format: { type: "json_object" },
     };
+    reqForLog = redactReqForLog(payload);
     const resp = await fetch(`${modelCfg.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${modelCfg.apiKey}`, "Content-Type": "application/json" },
@@ -549,6 +569,7 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
       messages: [{ role: "user", content }],
     };
     if (!force) payload.output_config = { format: { type: "json_schema", schema: ARTICLES_SCHEMA } };
+    reqForLog = redactReqForLog(payload);
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": modelCfg.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -560,7 +581,7 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
     text = (rawResp.content || []).filter(b => b.type === "text").map(b => b.text).join("");
   }
 
-  return { articles: parseArticles(text), latencyMs, rawResp };
+  return { articles: parseArticles(text), latencyMs, rawResp, request: reqForLog };
 }
 
 // ── Content moderation (Apple App Store 1.2 — filter objectionable UGC) ────────
@@ -705,7 +726,7 @@ export async function restyleArticle(env, scope, stem, styleV) {
   let articles;
   try {
     const r = await generateArticles(transcript, styleText, photos.length ? photos : null, false, env, modelCfg, "transcript");
-    await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step: 0, turn_id: turnId, meta, response: r.rawResp });
+    await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step: 0, turn_id: turnId, meta, request: r.request, response: r.rawResp });
     try {
       if (env.USAGE) {
         const u = r.rawResp?.usage || {};
@@ -879,7 +900,7 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         log(`LLM 开始${tag ? " " + tag : ""}${force ? " (force)" : ""}`, { step });
         try {
           const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos.length ? photos : null), force, env, modelCfg, cacheMode);
-          await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+          await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
           try {
             if (env.USAGE) {
               const u = r.rawResp?.usage || {};
@@ -987,7 +1008,7 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
       log(`LLM 开始${force ? " (force)" : ""}`, { step });
       try {
         const r = await generateArticles(text, force ? "" : claudeMd, null, force, env, modelCfg);
-        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, response: r.rawResp });
+        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
         // Debit Claude cost (best-effort)
         try {
           if (env.USAGE) {

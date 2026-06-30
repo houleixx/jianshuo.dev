@@ -343,7 +343,13 @@ function renderDetail(r){
 
   h += `<h3 class="sec">发出 · request</h3>`;
   h += `<div class="usage">model=${esc(req.model)} · max_tokens=${esc(req.max_tokens)}${req.tool_choice?` · tool_choice=${esc(JSON.stringify(req.tool_choice))}`:''}</div>`;
-  if(req.system) h += `<details class="fold"><summary>system prompt（${String(req.system).length} 字）</summary><pre class="code">${esc(req.system)}</pre></details>`;
+  if(req.system){
+    // system can be a plain string (agent) or Anthropic text-blocks (mine: cache_control breakpoints).
+    const sysTxt = typeof req.system==='string' ? req.system
+      : Array.isArray(req.system) ? req.system.map((b)=> typeof b==='string'?b:(b.text||JSON.stringify(b))).join('\n\n')
+      : JSON.stringify(req.system,null,2);
+    h += `<details class="fold"><summary>system prompt（${sysTxt.length} 字）</summary><pre class="code">${esc(sysTxt)}</pre></details>`;
+  }
   h += msgsHtml(req.messages);
   if(req.tools&&req.tools.length) h += `<details class="fold"><summary>tools（${req.tools.length}）</summary><pre class="code">${esc(JSON.stringify(req.tools,null,2))}</pre></details>`;
   if(req.output_config) h += `<details class="fold"><summary>output_config（结构化输出 schema）</summary><pre class="code">${esc(JSON.stringify(req.output_config,null,2))}</pre></details>`;
