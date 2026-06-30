@@ -16,7 +16,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { readStyleText, readProfileName, readStyleDoc, resolveStyle, prependStyleComment } from "../../functions/lib/style-store.js";
+import { readStyleText, readProfileName, readStyleDoc, resolveStyle, prependStyleComment, ensureStyleSeeded } from "../../functions/lib/style-store.js";
 import {
   MINE_SYSTEM as SYSTEM,
   MINE_SYSTEM_FORCE as SYSTEM_FORCE,
@@ -879,6 +879,10 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // profile.styles 非空就覆盖 head（含单选）：1 个=单篇用那个风格；≥2 个=每个风格各挖
     // 一篇；空=用 head 默认文风。每篇都作为一个标准 article version 写入（head=最后一个），
     // 且只要风格版本号已知就在 body 顶加 `<!-- style: 风格 vN -->` 标签（展示时剥离、阅读页 chip 显示）。
+    // Lazy-seed the default 王建硕 style as v1 on first mine (no-op if the user
+    // already has a style; skips legacy CLAUDE.md users). After this the first
+    // article is tagged 风格 v1 and the user owns an editable baseline.
+    await ensureStyleSeeded(env, scope + "CLAUDE.json", scope + "CLAUDE.md");
     const styleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
     const claudeMd  = (styleDoc ? resolveStyle(styleDoc) : await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
     const headV     = (styleDoc && styleDoc.head) ? styleDoc.head : null;
