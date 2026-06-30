@@ -43,13 +43,39 @@ export async function grantBucket(db, userSub, amountUY, source, expiresAt, now)
 
 export async function debit(db, userSub, amountUY, reason, detail, now) {
   if (!amountUY || amountUY <= 0) return;
-  const cur = await db.prepare("SELECT balance_uy FROM account WHERE user_sub=?").bind(userSub).first();
-  const bal = (cur ? cur.balance_uy : 0) - amountUY;
-  const updateStmt = db.prepare("UPDATE account SET balance_uy=?, spent_uy=spent_uy+?, updated_at=? WHERE user_sub=?")
-    .bind(bal, amountUY, now, userSub);
-  const insertStmt = db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
+  const live = (await db.prepare(
+    "SELECT id, remaining_uy FROM bucket WHERE user_sub=? AND remaining_uy > 0 AND (expires_at IS NULL OR expires_at > ?) " +
+    "ORDER BY (expires_at IS NULL) ASC, expires_at ASC, id ASC"
+  ).bind(userSub, now).all()).results;
+
+  let left = amountUY;
+  let lastId = null;
+  const stmts = [];
+  for (const b of live) {
+    if (left <= 0) break;
+    const take = Math.min(b.remaining_uy, left);
+    stmts.push(db.prepare("UPDATE bucket SET remaining_uy = remaining_uy - ? WHERE id=?").bind(take, b.id));
+    left -= take;
+    lastId = b.id;
+  }
+  if (left > 0) {
+    if (lastId != null) {
+      stmts.push(db.prepare("UPDATE bucket SET remaining_uy = remaining_uy - ? WHERE id=?").bind(left, lastId));
+    } else {
+      // 无任何活桶（gate 一般会拦在前面，仅多步操作中途可能命中）：建一个永不过期的负桶记欠款。
+      stmts.push(db.prepare(
+        "INSERT INTO bucket (user_sub,amount_uy,remaining_uy,source,created_at,expires_at) VALUES (?,?,?,?,?,?)"
+      ).bind(userSub, 0, -left, "overdraft", now, null));
+    }
+  }
+  if (stmts.length) await db.batch(stmts);
+
+  const bal = await balanceUY(db, userSub, now);
+  const up = db.prepare("UPDATE account SET spent_uy=spent_uy+?, balance_uy=?, updated_at=? WHERE user_sub=?")
+    .bind(amountUY, bal, now, userSub);
+  const led = db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
     .bind(userSub, now, "spend", amountUY, reason, detail ? JSON.stringify(detail) : null, bal);
-  await db.batch([updateStmt, insertStmt]);
+  await db.batch([up, led]);
 }
 
 export async function grant(db, userSub, amountUY, reason, now) {

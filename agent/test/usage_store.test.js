@@ -65,6 +65,40 @@ describe("usage_store", () => {
   });
 });
 
+describe("debit draws soonest-expiry first", () => {
+  // Seed buckets directly (bypass grantBucket/ensureAccount) so these tests
+  // isolate debit's draining order without a signup bucket in the mix.
+  const seed = (amount, source, expiresAt) =>
+    db.prepare("INSERT INTO bucket (user_sub,amount_uy,remaining_uy,source,created_at,expires_at) VALUES (?,?,?,?,?,?)")
+      .bind(U, amount, amount, source, 1, expiresAt).run();
+
+  it("spends the sooner-expiring bucket before the later/never one", async () => {
+    seed(100, "campaign:soon", 5000);   // 先过期
+    seed(100, "campaign:never", null);  // 永不过期
+    await debit(db, U, 120, "mine", { stem: "s" }, 2);
+    const rows = db.prepare("SELECT source,remaining_uy FROM bucket WHERE user_sub=? ORDER BY id").bind(U).all().results;
+    const soon = rows.find((r) => r.source === "campaign:soon");
+    const never = rows.find((r) => r.source === "campaign:never");
+    expect(soon.remaining_uy).toBe(0);    // 先扣光
+    expect(never.remaining_uy).toBe(80);  // 再扣 20
+  });
+  it("skips expired buckets entirely", async () => {
+    seed(100, "campaign:dead", 5000);   // now>5000 时已过期
+    seed(100, "campaign:live", null);
+    await debit(db, U, 30, "mine", { stem: "s" }, 6000);
+    const live = db.prepare("SELECT remaining_uy FROM bucket WHERE user_sub=? AND source='campaign:live'").bind(U).first();
+    const dead = db.prepare("SELECT remaining_uy FROM bucket WHERE user_sub=? AND source='campaign:dead'").bind(U).first();
+    expect(live.remaining_uy).toBe(70);   // 只从活桶扣
+    expect(dead.remaining_uy).toBe(100);  // 过期桶不动
+    expect(await balanceUY(db, U, 6000)).toBe(70);
+  });
+  it("overdraft drives the last live bucket negative", async () => {
+    seed(50, "campaign:x", null);
+    await debit(db, U, 70, "mine", { stem: "s" }, 2);
+    expect(await balanceUY(db, U, 2)).toBe(-20);
+  });
+});
+
 describe("buckets", () => {
   it("balanceUY sums only live buckets", async () => {
     await grantBucket(db, U, 1000, "campaign:x", 5000, 1);   // 过期=5000
