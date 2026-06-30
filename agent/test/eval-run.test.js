@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { runEval } from "../eval/run-eval.mjs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runEval, loadFixtures } from "../eval/run-eval.mjs";
 
 const fixtures = [
   { id: "f1", transcript: "甲乙丙", photos: [], tags: [] },
@@ -34,5 +37,19 @@ describe("runEval（注入式）", () => {
       callModel: fakeCallModel, model: "m",
     });
     expect(r.results[0].candidate.articles.map(a => a.title)).toEqual(["A", "B"]);
+  });
+});
+
+describe("loadFixtures local/samples 回退", () => {
+  it("有 local 时优先读 local，否则读 samples", () => {
+    const base = mkdtempSync(join(tmpdir(), "fx-"));
+    mkdirSync(join(base, "samples"), { recursive: true });
+    writeFileSync(join(base, "samples", "s.json"), JSON.stringify({ id: "s", transcript: "x", photos: [], tags: [] }));
+    // no local/ yet → reads samples
+    expect(loadFixtures(base).map(f => f.id)).toEqual(["s"]);
+    // add a local/ fixture → now prefers local
+    mkdirSync(join(base, "local"), { recursive: true });
+    writeFileSync(join(base, "local", "l.json"), JSON.stringify({ id: "l", transcript: "y", photos: [], tags: [] }));
+    expect(loadFixtures(base).map(f => f.id)).toEqual(["l"]);
   });
 });

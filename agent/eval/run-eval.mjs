@@ -7,10 +7,10 @@ import { runProxyChecks } from "./lib/proxy-checks.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // 优先用真实金标集 fixtures/local/（gitignore，私人数据）；没有则回退到合成 samples/。
-export function loadFixtures() {
-  const local = join(HERE, "fixtures", "local");
+export function loadFixtures(baseDir = join(HERE, "fixtures")) {
+  const local = join(baseDir, "local");
   const dir = (existsSync(local) && readdirSync(local).some(f => f.endsWith(".json")))
-    ? local : join(HERE, "fixtures", "samples");
+    ? local : join(baseDir, "samples");
   return readdirSync(dir)
     .filter(f => f.endsWith(".json"))
     .map(f => JSON.parse(readFileSync(join(dir, f), "utf8")))
