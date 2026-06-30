@@ -1,12 +1,10 @@
 // test/usage_mine.test.js
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { fakeD1 } from "./fakes.js";
+import { fakeD1, usageSql } from "./fakes.js";
 import { meteredMineGate } from "../src/miner.js";   // extracted, see Step 3
 import { SIGNUP_GRANT_UY } from "../src/usage.js";
 
-const SQL = readFileSync(fileURLToPath(new URL("../migrations/0001_usage.sql", import.meta.url)), "utf8");
+const SQL = usageSql();
 
 describe("meteredMineGate", () => {
   it("new user (lazy 500) with normal duration => ok", async () => {

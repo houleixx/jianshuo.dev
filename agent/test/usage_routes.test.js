@@ -7,12 +7,10 @@ vi.mock("agents", () => ({
   Agent: class Agent {},
   getAgentByName: async () => ({}),
 }));
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { fakeD1 } from "./fakes.js";
+import { fakeD1, usageSql } from "./fakes.js";
 import { handleUsageRoute } from "../src/index.js";
 
-const SQL = readFileSync(fileURLToPath(new URL("../migrations/0001_usage.sql", import.meta.url)), "utf8");
+const SQL = usageSql();
 function req(path, { method = "GET", token } = {}) {
   return new Request("https://jianshuo.dev" + path, { method, headers: token ? { Authorization: "Bearer " + token } : {} });
 }

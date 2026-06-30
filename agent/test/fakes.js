@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 // A Map-backed R2 bucket mock — only the methods our tools use.
 export function fakeEnv(seed = {}) {
   const store = new Map(Object.entries(seed)); // key -> string value
@@ -66,4 +69,10 @@ export function fakeD1(migrationSql) {
     },
     exec(sql) { db.exec(sql); return { count: 0 }; },
   };
+}
+
+// 读取 usage 相关全部迁移（0001 + 0002），供 fakeD1 建一个有 bucket 表的库。
+export function usageSql() {
+  const f = (name) => readFileSync(fileURLToPath(new URL("../migrations/" + name, import.meta.url)), "utf8");
+  return f("0001_usage.sql") + "\n" + f("0002_buckets.sql");
 }
