@@ -724,7 +724,13 @@ export async function onRequest(context) {
       // Lazy-seed: a user with no CLAUDE.json (and no legacy 文风) gets the default 王建硕
       // style materialized as their own v1 here, so the settings screen shows an editable
       // baseline instead of an empty box. `default:true` flags an un-edited seed.
-      const doc = await ensureStyleSeeded(env, styleKey, legacyKey);
+      // Seed only when the caller reads their OWN style (scope set). An admin
+      // reading another user via /style/<sub> must not mutate that user's data
+      // (a read shouldn't write) nor pre-freeze the default for users who never
+      // touched their style — so the admin-targeted path is a plain read.
+      const doc = scope
+        ? await ensureStyleSeeded(env, styleKey, legacyKey)
+        : await readStyleDoc(env, styleKey);
       if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', styles: (doc.profile && doc.profile.styles) || [], head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0, default: isDefaultSeed(doc) });
       const legacy = await env.FILES.get(legacyKey);
       if (legacy) {

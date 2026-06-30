@@ -68,6 +68,13 @@ describe("GET /style", () => {
     expect(body.style).toBe("回退文风");
     expect(body.legacy).toBe(true);
   });
+
+  it("admin GET /style/<sub> does NOT seed another user's store (read must not write)", async () => {
+    const ctx = reqCtx("GET", ["style", "someuser"], { token: "admin" });
+    const res = await onRequest(ctx);
+    expect(res.status).toBe(404);                                              // no doc, no legacy → not found
+    expect(ctx.env.FILES._store.has("users/someuser/CLAUDE.json")).toBe(false); // crucially, NOT seeded
+  });
 });
 
 describe("PUT /style", () => {
