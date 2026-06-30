@@ -694,6 +694,50 @@ async function notifyStatus(scope, stem, status, env) {
   } catch (_) {}
 }
 
+// ── The ONE place LLM article-mining happens ──────────────────────────────────
+// generateArticles + LLM logging + 算力 debit + the natural→force retry, in a single
+// core so the scheduled mine (audio + text) AND the on-demand restyle share exactly one
+// implementation. They used to be three copies of this closure and drifted — restyle
+// once shipped WITHOUT the force retry, so thin / test recordings failed with no-article.
+//
+// Returns the article array ([] if even the force pass produced nothing; hard LLM errors
+// also collapse to [] after both passes, same as the scheduled mine). The force pass
+// drops the 文风 + photos to coax an article out of thin content — identical to runMine.
+//   cacheMode  — "system" | "transcript" (prompt-cache layout for this call).
+//   metaExtra  — extra fields on the LLM-log meta (e.g. { source:"text" } / { restyle:v }).
+//   debitExtra — extra fields on the 算力 ledger meta (e.g. { restyle:v }).
+//   label/log  — optional mine-run narration (runMine passes its logger; restyle doesn't).
+async function mineVariant(env, {
+  transcript, styleText, photos, cacheMode, modelCfg, scope, stem, turnId,
+  metaExtra = {}, debitExtra = {}, label = "", log = () => {},
+}) {
+  const meta = { user_scope: scope, stem, ...metaExtra };
+  const tag = label ? " " + label : "";
+  const runLlm = async (force, step) => {
+    const tLlm = Date.now();
+    log(`LLM 开始${tag}${force ? " (force)" : ""}`, { step });
+    try {
+      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, modelCfg, cacheMode);
+      await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
+      try {
+        if (env.USAGE) {
+          const u = r.rawResp?.usage || {};
+          await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
+            "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId, ...debitExtra }, Date.now());
+        }
+      } catch (_) {}
+      log(`LLM 完成${tag}${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
+      return r.articles;
+    } catch (e) {
+      await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now() - tLlm, step, turn_id: turnId, meta, error: String(e) });
+      throw e;
+    }
+  };
+  let arts = await runLlm(false, 0);
+  if (!arts.length) { log("LLM 无文章，重试 (force)"); try { arts = await runLlm(true, 1); } catch (_) { arts = []; } }
+  return arts;
+}
+
 // ── On-demand restyle ─────────────────────────────────────────────────────────
 // Re-mine ONE existing article with a chosen 文风 version → a new article version
 // tagged `<!-- style: 风格 vN -->`, head moves to it. Reuses the mining LLM path so the
@@ -725,24 +769,13 @@ export async function restyleArticle(env, scope, stem, styleV) {
 
   const modelCfg = await loadModelConfig(env);
   const turnId = `${Date.now()}-${stem.slice(-8)}`;
-  const meta = { user_scope: scope, stem, restyle: styleV };
-  const tLlm = Date.now();
-  let articles;
-  try {
-    const r = await generateArticles(transcript, styleText, photos.length ? photos : null, false, env, modelCfg, "transcript");
-    await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step: 0, turn_id: turnId, meta, request: r.request, response: r.rawResp });
-    try {
-      if (env.USAGE) {
-        const u = r.rawResp?.usage || {};
-        await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
-          "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId, restyle: styleV }, Date.now());
-      }
-    } catch (_) {}
-    articles = r.articles;
-  } catch (e) {
-    await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now() - tLlm, step: 0, turn_id: turnId, meta, error: String(e) });
-    return { ok: false, reason: "llm-error" };
-  }
+
+  // Same mining core as the scheduled mine — natural pass then a force retry for thin
+  // recordings — so restyle can never again drift from runMine.
+  const articles = await mineVariant(env, {
+    transcript, styleText, photos, cacheMode: "transcript", modelCfg, scope, stem, turnId,
+    metaExtra: { restyle: styleV }, debitExtra: { restyle: styleV },
+  });
   if (!articles.length) return { ok: false, reason: "no-article" };
 
   const tagged = articles.map((a) => ({ ...a, body: prependStyleComment(a.body, styleV) }));
@@ -895,34 +928,12 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     if (photos.length) log("照片", { count: photos.length });
 
     const turnId = `${Date.now()}-${stem.slice(-8)}`;
-    const meta   = { user_scope: scope, stem };
 
-    // Mine once for one style text: first pass, then a force retry if empty. → articles ([] if none).
-    const mineOnce = async (styleText, tag) => {
-      const runLlm = async (force, step) => {
-        const tLlm = Date.now();
-        log(`LLM 开始${tag ? " " + tag : ""}${force ? " (force)" : ""}`, { step });
-        try {
-          const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos.length ? photos : null), force, env, modelCfg, cacheMode);
-          await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
-          try {
-            if (env.USAGE) {
-              const u = r.rawResp?.usage || {};
-              await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
-                "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId }, Date.now());
-            }
-          } catch (_) {}
-          log(`LLM 完成${tag ? " " + tag : ""}${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
-          return r.articles;
-        } catch (e) {
-          await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
-          throw e;
-        }
-      };
-      let arts = await runLlm(false, 0);
-      if (!arts.length) { log("LLM 无文章，重试 (force)"); try { arts = await runLlm(true, 1); } catch (_) { arts = []; } }
-      return arts;
-    };
+    // Mine once for one style text → articles ([] if none). Shared core with text-mine
+    // and restyle (force retry + log + debit live in mineVariant; no per-path copies).
+    const mineOnce = (styleText, tag) => mineVariant(env, {
+      transcript, styleText, photos, cacheMode, modelCfg, scope, stem, turnId, label: tag, log,
+    });
 
     // Build the variant(s): one per style to mine, each tagged when its version is known.
     const variants = [];
@@ -1005,40 +1016,18 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
     if (claudeMd) log("文风", { chars: claudeMd.length });
 
     const turnId = `${Date.now()}-${stem.slice(-8)}`;
-    const meta   = { user_scope: scope, stem, source: "text" };
 
-    const runLlm = async (force, step) => {
-      const tLlm = Date.now();
-      log(`LLM 开始${force ? " (force)" : ""}`, { step });
-      try {
-        const r = await generateArticles(text, force ? "" : claudeMd, null, force, env, modelCfg);
-        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
-        // Debit Claude cost (best-effort)
-        try {
-          if (env.USAGE) {
-            const u = r.rawResp?.usage || {};
-            await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
-              "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId }, Date.now());
-          }
-        } catch (_) {}
-        log(`LLM 完成${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
-        return r.articles;
-      } catch (e) {
-        await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now()-tLlm, step, turn_id: turnId, meta, error: String(e) });
-        throw e;
-      }
-    };
-
-    let articles = await runLlm(false, 0);
+    // Same mining core as audio/restyle (force retry + log + debit in mineVariant). Text is
+    // its own transcript, no photos, system-cache layout.
+    const articles = await mineVariant(env, {
+      transcript: text, styleText: claudeMd, photos: null, cacheMode: "system",
+      modelCfg, scope, stem, turnId, metaExtra: { source: "text" }, log,
+    });
     if (!articles.length) {
-      log("LLM 无文章，重试 (force)");
-      try { articles = await runLlm(true, 1); } catch (_) { articles = []; }
-      if (!articles.length) {
-        await writeEmpty(textKey, "no-article", env);
-        await notifyStatus(scope, stem, "empty", env);
-        log("无文章 (两次均空)");
-        return (result = "empty");
-      }
+      await writeEmpty(textKey, "no-article", env);
+      await notifyStatus(scope, stem, "empty", env);
+      log("无文章 (两次均空)");
+      return (result = "empty");
     }
 
     const doc = {
