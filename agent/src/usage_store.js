@@ -38,6 +38,10 @@ export async function grantBucket(db, userSub, amountUY, source, expiresAt, now)
     .bind(amountUY, bal, now, userSub);
   const led = db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
     .bind(userSub, now, "grant", amountUY, source, null, bal);
+  // NOTE (known limitation): the bucket mutation above and this account+ledger write
+  // are two separate D1 batches (balanceUY must be read between them). Balance stays
+  // correct because buckets are the source of truth; a crash here can drop this
+  // ledger/stats row. Accepted as a fast-follow per final review.
   await db.batch([up, led]);
 }
 
@@ -75,19 +79,13 @@ export async function debit(db, userSub, amountUY, reason, detail, now) {
     .bind(amountUY, bal, now, userSub);
   const led = db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
     .bind(userSub, now, "spend", amountUY, reason, detail ? JSON.stringify(detail) : null, bal);
+  // NOTE (known limitation): the bucket mutation above and this account+ledger write
+  // are two separate D1 batches (balanceUY must be read between them). Balance stays
+  // correct because buckets are the source of truth; a crash here can drop this
+  // ledger/stats row. Accepted as a fast-follow per final review.
   await db.batch([up, led]);
 }
 
-export async function grant(db, userSub, amountUY, reason, now) {
-  await ensureAccount(db, userSub, now);
-  const cur = await db.prepare("SELECT balance_uy FROM account WHERE user_sub=?").bind(userSub).first();
-  const bal = cur.balance_uy + amountUY;
-  const updateStmt = db.prepare("UPDATE account SET balance_uy=?, granted_uy=granted_uy+?, updated_at=? WHERE user_sub=?")
-    .bind(bal, amountUY, now, userSub);
-  const insertStmt = db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
-    .bind(userSub, now, "grant", amountUY, reason, null, bal);
-  await db.batch([updateStmt, insertStmt]);
-}
 
 export async function getLedger(db, userSub, limit = 50) {
   const r = await db.prepare(

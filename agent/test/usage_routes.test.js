@@ -121,4 +121,14 @@ describe("usage routes", () => {
       }), env);
     expect(r.status).toBe(400);
   });
+  it("grant rejects non-finite suanli (Infinity via 1e999)", async () => {
+    const env = { USAGE: fakeD1(usageSql()), FILES_TOKEN: "admintok" };
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/grant"),
+      new Request("https://jianshuo.dev/agent/usage/grant", {
+        method: "POST",
+        headers: { Authorization: "Bearer admintok", "Content-Type": "application/json" },
+        body: '{"user_sub":"users/x/","suanli":1e999}',
+      }), env);
+    expect(r.status).toBe(400);
+  });
 });

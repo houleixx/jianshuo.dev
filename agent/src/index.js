@@ -484,7 +484,7 @@ export async function handleUsageRoute(url, request, env) {
   if (url.pathname === "/agent/usage/grant" && request.method === "POST") {
     if (!isAdmin) return J({ error: "unauthorized" }, 401);
     const b = await request.json().catch(() => ({}));
-    if (!b.user_sub || typeof b.suanli !== "number") return J({ error: "bad-request" }, 400);
+    if (!b.user_sub || !Number.isFinite(b.suanli)) return J({ error: "bad-request" }, 400);
     const now = Date.now();
     const days = Number.isFinite(b.expire_days) ? b.expire_days : CAMPAIGN_EXPIRE_DAYS;
     const expiresAt = now + days * DAY_MS;
@@ -495,7 +495,7 @@ export async function handleUsageRoute(url, request, env) {
   if (url.pathname === "/agent/usage/grant/batch" && request.method === "POST") {
     if (!isAdmin) return J({ error: "unauthorized" }, 401);
     const b = await request.json().catch(() => ({}));
-    if (typeof b.suanli !== "number") return J({ error: "bad-request" }, 400);
+    if (!Number.isFinite(b.suanli)) return J({ error: "bad-request" }, 400);
     const now = Date.now();
     const days = Number.isFinite(b.expire_days) ? b.expire_days : CAMPAIGN_EXPIRE_DAYS;
     const expiresAt = now + days * DAY_MS;
