@@ -15,9 +15,16 @@ describe("runProxyChecks", () => {
   it("缺标题不过", () => {
     const r = runProxyChecks([{ title: "", body: "正文正文正文" }], { transcript: "x" });
     expect(r.checks.find(c => c.name === "titlePresent").pass).toBe(false);
+    expect(r.pass).toBe(false);
   });
   it("正文为空不过", () => {
     const r = runProxyChecks([{ title: "t", body: "   " }], { transcript: "x" });
     expect(r.checks.find(c => c.name === "bodyNonEmpty").pass).toBe(false);
+    expect(r.pass).toBe(false);
+  });
+  it("正文过短不过", () => {
+    const r = runProxyChecks([{ title: "t", body: "短" }], { transcript: "x" });
+    expect(r.checks.find(c => c.name === "bodyLengthSane").pass).toBe(false);
+    expect(r.pass).toBe(false);
   });
 });

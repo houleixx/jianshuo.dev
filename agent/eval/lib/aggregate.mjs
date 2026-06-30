@@ -2,6 +2,10 @@
 // 判定规则：候选胜率 ≥ threshold 且无确定性回退 → promote；否则 hold。
 // 人工认可那一票在 skill 流程里，不在此处。
 export function aggregate(verdicts, { threshold = 0.7, proxyFails = [] } = {}) {
+  const VALID = new Set(["candidate", "champion", "tie"]);
+  for (const v of verdicts) {
+    if (!VALID.has(v.winner)) throw new Error(`aggregate: 非法 winner "${v.winner}"（应为 candidate/champion/tie，A/B 须先还原）`);
+  }
   const wins = verdicts.filter(v => v.winner === "candidate").length;
   const losses = verdicts.filter(v => v.winner === "champion").length;
   const ties = verdicts.filter(v => v.winner === "tie").length;

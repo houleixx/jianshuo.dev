@@ -32,6 +32,9 @@ describe("aggregate", () => {
     expect(s.candidateWinRate).toBe(0);
     expect(s.decision).toBe("hold");
   });
+  it("非法 winner 抛错", () => {
+    expect(() => aggregate([{ fixtureId: "x", winner: "A" }], { threshold: 0.7 })).toThrow(/非法 winner/);
+  });
 });
 
 describe("renderReport", () => {
