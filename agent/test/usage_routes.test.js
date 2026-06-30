@@ -58,4 +58,20 @@ describe("usage routes", () => {
     expect(body.accounts.length).toBe(1);
     expect(Math.round(body.accounts[0].balance_suanli)).toBe(500);
   });
+  it("admin grant writes a campaign bucket with default 90d expiry and echoes cost", async () => {
+    const env = { USAGE: fakeD1(usageSql()), FILES_TOKEN: "admintok" };
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/grant"),
+      new Request("https://jianshuo.dev/agent/usage/grant", {
+        method: "POST",
+        headers: { Authorization: "Bearer admintok", "Content-Type": "application/json" },
+        body: JSON.stringify({ user_sub: "users/anon-c/", suanli: 1000, reason: "spring" }),
+      }), env);
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.ok).toBe(true);
+    expect(Math.round(body.cost_yuan * 100) / 100).toBe(Math.round((1000 / 23) * 100) / 100); // ≈43.48
+    const row = env.USAGE.prepare("SELECT source,expires_at FROM bucket WHERE user_sub='users/anon-c/' AND source LIKE 'campaign:%'").first();
+    expect(row.source).toBe("campaign:spring");
+    expect(row.expires_at).toBeGreaterThan(0); // 盖了过期日（90 天后）
+  });
 });

@@ -26,7 +26,7 @@ import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS } from "./usage.js";
-import { ensureAccount, debit, editCount, getLedger, grant, grantBucket, allAccounts, balanceUY } from "./usage_store.js";
+import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -485,8 +485,11 @@ export async function handleUsageRoute(url, request, env) {
     if (!isAdmin) return J({ error: "unauthorized" }, 401);
     const b = await request.json().catch(() => ({}));
     if (!b.user_sub || typeof b.suanli !== "number") return J({ error: "bad-request" }, 400);
-    await grant(env.USAGE, b.user_sub, suanliToUY(b.suanli), "campaign:" + (b.reason || "manual"), Date.now());
-    return J({ ok: true });
+    const now = Date.now();
+    const days = Number.isFinite(b.expire_days) ? b.expire_days : CAMPAIGN_EXPIRE_DAYS;
+    const expiresAt = now + days * DAY_MS;
+    await grantBucket(env.USAGE, b.user_sub, suanliToUY(b.suanli), "campaign:" + (b.reason || "manual"), expiresAt, now);
+    return J({ ok: true, suanli: b.suanli, cost_yuan: r2(b.suanli / RATE), expires_at: expiresAt });
   }
 
   if (url.pathname === "/agent/usage/admin/accounts" && request.method === "GET") {
