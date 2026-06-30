@@ -492,6 +492,25 @@ export async function handleUsageRoute(url, request, env) {
     return J({ ok: true, suanli: b.suanli, cost_yuan: r2(b.suanli / RATE), expires_at: expiresAt });
   }
 
+  if (url.pathname === "/agent/usage/grant/batch" && request.method === "POST") {
+    if (!isAdmin) return J({ error: "unauthorized" }, 401);
+    const b = await request.json().catch(() => ({}));
+    if (typeof b.suanli !== "number") return J({ error: "bad-request" }, 400);
+    const now = Date.now();
+    const days = Number.isFinite(b.expire_days) ? b.expire_days : CAMPAIGN_EXPIRE_DAYS;
+    const expiresAt = now + days * DAY_MS;
+    let targets = Array.isArray(b.user_subs) ? b.user_subs.filter((s) => typeof s === "string" && s) : null;
+    if ((!targets || targets.length === 0) && b.all === true) {
+      targets = (await allAccounts(env.USAGE, now)).map((a) => a.user_sub);
+    }
+    if (!targets || targets.length === 0) return J({ error: "bad-request", hint: "user_subs[] or all:true" }, 400);
+    const source = "campaign:" + (b.reason || "manual");
+    for (const u of targets) {
+      await grantBucket(env.USAGE, u, suanliToUY(b.suanli), source, expiresAt, now);
+    }
+    return J({ ok: true, count: targets.length, suanli_each: b.suanli, cost_yuan: r2((b.suanli * targets.length) / RATE), expires_at: expiresAt });
+  }
+
   if (url.pathname === "/agent/usage/admin/accounts" && request.method === "GET") {
     if (!isAdmin) return J({ error: "unauthorized" }, 401);
     const rows = await allAccounts(env.USAGE, Date.now());

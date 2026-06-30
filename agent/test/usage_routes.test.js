@@ -74,4 +74,28 @@ describe("usage routes", () => {
     expect(row.source).toBe("campaign:spring");
     expect(row.expires_at).toBeGreaterThan(0); // 盖了过期日（90 天后）
   });
+  it("batch grant fans out to explicit user_subs", async () => {
+    const env = { USAGE: fakeD1(usageSql()), FILES_TOKEN: "admintok" };
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/grant/batch"),
+      new Request("https://jianshuo.dev/agent/usage/grant/batch", {
+        method: "POST",
+        headers: { Authorization: "Bearer admintok", "Content-Type": "application/json" },
+        body: JSON.stringify({ user_subs: ["users/anon-a/", "users/anon-b/"], suanli: 500, reason: "promo" }),
+      }), env);
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.count).toBe(2);
+    const n = env.USAGE.prepare("SELECT COUNT(*) AS n FROM bucket WHERE source='campaign:promo'").first().n;
+    expect(n).toBe(2);
+  });
+  it("batch grant requires a target set", async () => {
+    const env = { USAGE: fakeD1(usageSql()), FILES_TOKEN: "admintok" };
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/grant/batch"),
+      new Request("https://jianshuo.dev/agent/usage/grant/batch", {
+        method: "POST",
+        headers: { Authorization: "Bearer admintok", "Content-Type": "application/json" },
+        body: JSON.stringify({ suanli: 500 }),
+      }), env);
+    expect(r.status).toBe(400);
+  });
 });
