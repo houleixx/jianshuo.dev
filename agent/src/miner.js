@@ -383,7 +383,7 @@ function buildSrt(utterances) {
 
 // ── Article JSON parsing ───────────────────────────────────────────────────────
 
-function parseArticles(text) {
+export function parseArticles(text) {
   let t = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
   const i = t.indexOf("{"), j = t.lastIndexOf("}");
   if (i !== -1 && j > i) t = t.slice(i, j + 1);
@@ -458,23 +458,23 @@ function redactReqForLog(payload) {
   return req;
 }
 
-async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system") {
+// Pure prompt/payload builder — no env, no fetch, no billing/logging side effects.
+// Shared by production generateArticles AND the eval harness (agent/eval/run-eval.mjs)
+// so the prompt bytes are identical. cacheMode/provider behavior unchanged.
+export function buildMinePrompt({
+  transcript, styleText, photos, force, cacheMode = "system",
+  provider = "anthropic", model,
+  systemPrompt = SYSTEM, forcePrompt = SYSTEM_FORCE,
+  photoInstr = _PHOTO_INSTR, defaultStyle = DEFAULT_STYLE,
+}) {
   const hasPhotos = !!(photos?.length) && !force;
-  // Static, cache-friendly instructions: identical for everyone, stable across re-mines
-  // of the SAME recording. The per-user 文风 is kept OUT so cacheMode can position it.
-  const staticSystem = force ? SYSTEM_FORCE : (SYSTEM + (hasPhotos ? _PHOTO_INSTR : ""));
-  // 风格槽（<style> 标签）. 没有个人文风 / restyle 时回退到 DEFAULT_STYLE，让风格永远只有一段，
-  // 不和 SYSTEM 打架。Volatile across styles (restyle / 多文风), stable across recordings.
-  const effectiveStyle = (claudeMd && claudeMd.trim()) ? claudeMd.trim() : DEFAULT_STYLE;
+  const staticSystem = force ? forcePrompt : (systemPrompt + (hasPhotos ? photoInstr : ""));
+  const effectiveStyle = (styleText && styleText.trim()) ? styleText.trim() : defaultStyle;
   const styleTail = !force ? `\n\n<style>\n${effectiveStyle}\n</style>` : "";
   const transcriptText = `<transcript>\n${transcript}\n</transcript>`;
   const transcriptCache = cacheMode === "transcript" && !force;
 
-  const t0 = Date.now();
-  let text, latencyMs, rawResp, reqForLog;
-
-  if (modelCfg.provider === "openai-compat") {
-    // ── OpenAI-compatible (DeepSeek / Kimi / Qwen / etc.) — no prompt caching ─────
+  if (provider === "openai-compat") {
     const system = staticSystem + styleTail;
     let userContent;
     if (!hasPhotos) {
@@ -487,16 +487,58 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
         userContent.push({ type: "text", text: `\n</photo>` });
       }
     }
-    const payload = {
-      model: modelCfg.model,
+    return {
+      model,
       max_tokens: force ? 2000 : 8000,
       messages: [
         { role: "system", content: system },
-        { role: "user",   content: userContent },
+        { role: "user", content: userContent },
       ],
       response_format: { type: "json_object" },
     };
-    reqForLog = redactReqForLog(payload);
+  }
+
+  // Anthropic — prompt caching via cache_control breakpoints
+  const systemText = transcriptCache ? staticSystem : (staticSystem + styleTail);
+  const systemBlocks = [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }];
+  let content;
+  if (!hasPhotos) {
+    if (transcriptCache) {
+      content = [{ type: "text", text: transcriptText, cache_control: { type: "ephemeral" } }];
+      if (styleTail) content.push({ type: "text", text: styleTail });
+    } else {
+      content = transcriptText;
+    }
+  } else {
+    content = [{ type: "text", text: transcriptText }];
+    for (let i = 0; i < photos.length; i++) {
+      content.push({ type: "text", text: `\n<photo key="${photos[i].relKey}" time="${photos[i].label}">` });
+      const img = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } };
+      if (transcriptCache && i === photos.length - 1) img.cache_control = { type: "ephemeral" };
+      content.push(img);
+      content.push({ type: "text", text: `\n</photo>` });
+    }
+    if (transcriptCache && styleTail) content.push({ type: "text", text: styleTail });
+  }
+  const payload = {
+    model, max_tokens: force ? 2000 : 8000,
+    system: systemBlocks,
+    messages: [{ role: "user", content }],
+  };
+  if (!force) payload.output_config = { format: { type: "json_schema", schema: ARTICLES_SCHEMA } };
+  return payload;
+}
+
+async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system") {
+  const payload = buildMinePrompt({
+    transcript, styleText: claudeMd, photos, force, cacheMode,
+    provider: modelCfg.provider, model: modelCfg.model,
+  });
+  const reqForLog = redactReqForLog(payload);
+  const t0 = Date.now();
+  let text, latencyMs, rawResp;
+
+  if (modelCfg.provider === "openai-compat") {
     const resp = await fetch(`${modelCfg.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${modelCfg.apiKey}`, "Content-Type": "application/json" },
@@ -507,40 +549,6 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
     rawResp = await resp.json();
     text = rawResp.choices?.[0]?.message?.content || "";
   } else {
-    // ── Anthropic — prompt caching via cache_control breakpoints ──────────────────
-    const systemText = transcriptCache ? staticSystem : (staticSystem + styleTail);
-    const systemBlocks = [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }];
-
-    let content;
-    if (!hasPhotos) {
-      if (transcriptCache) {
-        // Cache SYSTEM+transcript; 文风 tail after it varies and stays uncached.
-        content = [{ type: "text", text: transcriptText, cache_control: { type: "ephemeral" } }];
-        if (styleTail) content.push({ type: "text", text: styleTail });
-      } else {
-        content = transcriptText;
-      }
-    } else {
-      content = [{ type: "text", text: transcriptText }];
-      for (let i = 0; i < photos.length; i++) {
-        content.push({ type: "text", text: `\n<photo key="${photos[i].relKey}" time="${photos[i].label}">` });
-        const img = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } };
-        // transcript mode: break after the LAST photo so SYSTEM+transcript+photos cache
-        // together and get reused across 文风 variants of this recording.
-        if (transcriptCache && i === photos.length - 1) img.cache_control = { type: "ephemeral" };
-        content.push(img);
-        content.push({ type: "text", text: `\n</photo>` });
-      }
-      if (transcriptCache && styleTail) content.push({ type: "text", text: styleTail });
-    }
-
-    const payload = {
-      model: modelCfg.model, max_tokens: force ? 2000 : 8000,
-      system: systemBlocks,
-      messages: [{ role: "user", content }],
-    };
-    if (!force) payload.output_config = { format: { type: "json_schema", schema: ARTICLES_SCHEMA } };
-    reqForLog = redactReqForLog(payload);
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": modelCfg.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
