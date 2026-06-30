@@ -4,3 +4,5 @@ reco/
 node_modules
 # claude-agent is a standalone Node service on the Tokyo VPS, not Pages.
 claude-agent/
+# Claude Code worktree storage — git worktrees (each with its own node_modules) live here.
+.claude/
