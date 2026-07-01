@@ -913,7 +913,7 @@ async function mineStyleExtract(task, audioKey, env, modelCfg, log) {
   const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
   const style = await distillStyle(samples, makeTaskClaude(env, modelCfg.model, usage));
   await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
-  const { title, body } = buildStyleIntroArticle(style, samples.length);
+  const { title, body } = buildStyleIntroArticle(style, samples);
   await writeReadyArticle(title, body);
 
   if (task.clearAfter) {

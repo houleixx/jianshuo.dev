@@ -105,14 +105,32 @@ export function styleName(style) {
   return (first ? first.trim() : "你的文风").replace(/^[「『"']|[」』"']$/g, "").slice(0, 12);
 }
 
-// 固定的介绍模版（作者手写，非 LLM 生成）；只插入风格名与样本数。
-export function buildStyleIntroArticle(style, sampleCount) {
+// 固定的介绍模版（作者手写，非 LLM 生成）；插入风格名、样本数，以及这次蒸馏用到的素材清单。
+// `samples` 可传样本数组（渲染清单）或一个数字（只当计数，向后兼容旧调用）。
+export function buildStyleIntroArticle(style, samples) {
+  const list = Array.isArray(samples) ? samples : [];
+  const n = Array.isArray(samples) ? list.length : (samples || 0);
   const name = styleName(style);
-  const n = sampleCount || 0;
   const title = `你的写作风格 · ${name}`;
+
+  // 素材清单：让用户看清这套风格是从哪几篇里挖出来的。标题缺失时退回来源/文件名。
+  const MAX_LIST = 50;
+  const shown = list.slice(0, MAX_LIST);
+  const lines = shown.map((s, i) => {
+    const t = ((s && (s.title || s.sourceFile)) || "").toString().trim().slice(0, 40);
+    const src = ((s && s.source) || "").toString().trim();
+    const label = t || src || "（无标题素材）";
+    const tail = src && src !== label ? ` — ${src}` : "";
+    return `${i + 1}. ${label}${tail}`;
+  }).join("\n");
+  const more = list.length > MAX_LIST ? `\n…还有 ${list.length - MAX_LIST} 份（共 ${list.length} 份）` : "";
+  const materials = list.length
+    ? `\n\n**这次是从这些素材里蒸出来的（${n} 份）：**\n${lines}${more}`
+    : "";
+
   const body = `这是 VoiceDrop 刚为你提炼的**写作风格**——一份「你喜欢怎么写」的指纹，取名「${name}」。
 
-它是从你放进「风格数据集」的 ${n} 份素材里蒸馏出来的：不抄内容，只抓你欣赏的那种句子节奏、用词、语气、开头收尾的习惯。
+它是从你放进「风格数据集」的 ${n} 份素材里蒸馏出来的：不抄内容，只抓你欣赏的那种句子节奏、用词、语气、开头收尾的习惯。${materials}
 
 **有什么用？**
 从现在起，VoiceDrop 每次把你的语音或照片挖成文章，都会照这套风格来写——让机器写出来的更像「你想要的味道」。

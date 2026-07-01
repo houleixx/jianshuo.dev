@@ -50,11 +50,24 @@ describe("distillStyle", () => {
     expect(styleName("")).toBe("你的文风");
   });
 
-  it("buildStyleIntroArticle 模版插入风格名与样本数", () => {
+  it("buildStyleIntroArticle 模版插入风格名与样本数（数字入参，向后兼容）", () => {
     const { title, body } = buildStyleIntroArticle("松弛体\n画像…", 6);
     expect(title).toContain("松弛体");
     expect(body).toContain("松弛体");
     expect(body).toContain("6 份");
     expect(body).toContain("设置 → 写作风格");
+  });
+
+  it("buildStyleIntroArticle 传样本数组时列出素材清单（标题 + 来源，标题缺失退回来源）", () => {
+    const samples = [
+      { title: "上海咖啡馆漫游", source: "mp.weixin.qq.com" },
+      { title: "", source: "example.com/post" },      // 无标题 → 用来源
+      { sourceFile: "随笔.docx" },                      // 无 title/source → 用文件名
+    ];
+    const { body } = buildStyleIntroArticle("口语派\n画像…", samples);
+    expect(body).toContain("3 份");
+    expect(body).toContain("1. 上海咖啡馆漫游 — mp.weixin.qq.com");
+    expect(body).toContain("2. example.com/post");     // 标题空 → 来源当标签
+    expect(body).toContain("3. 随笔.docx");             // 退回 sourceFile
   });
 });

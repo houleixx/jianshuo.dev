@@ -687,7 +687,7 @@ export default {
         await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
         // 写作风格介绍文章（固定 stem，覆盖上一篇）— article JSON 先于 .m4a → miner skip。
         try {
-          const { title, body: introBody } = buildStyleIntroArticle(style, samples.length);
+          const { title, body: introBody } = buildStyleIntroArticle(style, samples);
           const introDoc = {
             schema: 2, id: STYLE_INTRO_STEM, sourceAudio: `${STYLE_INTRO_STEM}.m4a`,
             createdAt: new Date().toISOString(), transcript: "", srt: "",

@@ -225,6 +225,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     const articlePut = calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
     expect(articlePut).toBeTruthy();                                                    // 写了介绍文章
     expect(JSON.parse(articlePut.body).articles[0].title).toContain("口语派");          // 标题含风格名
+    expect(JSON.parse(articlePut.body).articles[0].body).toContain("1. 样本");           // 介绍文章列出素材清单
     expect(env.FILES._store.has(`${SCOPE}style/s1.json`)).toBe(false);                  // clearAfter → 语料清空
   });
 });
