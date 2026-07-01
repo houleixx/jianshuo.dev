@@ -1,9 +1,10 @@
 // 把风格数据集（外部素材样本，users/<sub>/style/<id>.json）蒸馏成一段「写作风格」描述。
 // 纯逻辑：Claude 调用注入（`claude({system,messages}) -> string`），便于单元测试；
 // 真实调用+计费+日志由 agent/src/index.js 的路由处理包装后注入。
-// DISTILL_SYSTEM = wjs-distilling-style 的 Prompt B（样本 → Style Card），保持原版纯净。
-// 起名单独交给 NAME_SYSTEM 的第二次调用（模型「只起名」时最听话，避免它把「样本过少」提醒塞第一行），
-// 由 distillStyle 把名字拼到风格文本第一行——iOS 与 intro 文章都拿第一行当风格名。
+// DISTILL_SYSTEM = wjs-distilling-style 的 Prompt B（样本 → Style Card），外加一行固定标记
+// `风格名：xxx` 让模型起名。**一次调用**即可：distillStyle 用正则把 `风格名：` 那行的名字抠出来、
+// 拼到风格文本第一行（iOS 与 intro 文章都拿第一行当风格名），并从卡里删掉标记行。
+// 用「标记」而非「位置」抓名字——所以哪怕模型把「样本过少」提醒放前面也不影响。
 export const DISTILL_SYSTEM = `# 角色
 你是文风蒸馏器。读【样本文章】,一次输出一张这批样本的 Style Card——
 "怎么写"的指纹,不是"怎么想"的画像。
@@ -14,6 +15,10 @@ export const DISTILL_SYSTEM = `# 角色
 - 样本少于 3 篇,在开头注明:指纹会不稳,易把一篇的偶然写法当签名。
 
 # 输出格式
+在输出的最前面,单独用一行给这套文风起个名字,格式固定:
+风格名：<五个字以内的名字,纯名字,不加书名号/引号>
+（例:风格名：松弛体）。这一行务必写,放最前面。
+
 ## 一句话画像
 <一句话抓住读起来是什么感觉>
 
@@ -42,16 +47,27 @@ export const DISTILL_SYSTEM = `# 角色
 // corpus, not just each sample, keeps every extraction call bounded regardless of dataset size.
 export const TOTAL_CORPUS_BUDGET = 48000;
 
-// 起名专用提示词——单独一次调用，只要求起名，模型不会再把「样本过少」提醒等塞进来。
-export const NAME_SYSTEM = `给下面这套写作风格起一个五个字以内的中文名字。只输出名字本身,不加任何标点、引号、书名号、"名字:"之类前缀或解释。`;
-
-// 从模型返回里清洗出一个干净的名字（第一行、去引号/前缀、限长、空回退）。
+// 清洗名字：去前缀/引号/书名号、限长、空回退。
 function cleanName(raw) {
-  const first = (raw || "").split(/\r?\n/).find((l) => l.trim());
-  return (first ? first.trim() : "")
+  return (raw || "").trim()
     .replace(/^(名字|风格名|名称)\s*[:：]\s*/, "")
     .replace(/^[「『"'（(【\[]+|[」』"'）)】\]]+$/g, "")
     .slice(0, 6) || "我的文风";
+}
+
+// 从一次调用的输出里,抠出 `风格名：xxx` 标记行的名字,并返回去掉该行后的卡片。
+// 用「标记」而非「位置」——所以模型把「样本过少」提醒放哪都不影响。找不到标记则回退首行。
+function splitNameAndCard(raw) {
+  const lines = (raw || "").split(/\r?\n/);
+  let name = "";
+  const kept = [];
+  for (const l of lines) {
+    const m = l.match(/^\s*风格名\s*[:：]\s*(.+?)\s*$/);
+    if (m && !name) { name = cleanName(m[1]); continue; }   // 吃掉第一条 风格名 标记行
+    kept.push(l);
+  }
+  if (!name) name = "我的文风";   // 模型没给标记时的安全回退（不拿警告行当名字）
+  return { name, card: kept.join("\n").trim() };
 }
 
 export async function distillStyle(samples, claude) {
@@ -72,11 +88,10 @@ export async function distillStyle(samples, claude) {
     budget -= block.length;
   }
   const corpus = parts.join("\n\n");
-  const card = ((await claude({ system: DISTILL_SYSTEM, messages: [{ role: "user", content: corpus }] })) || "").trim();
-  // Second, dedicated naming call — reliable ≤5-char name on line 1 (the big prompt won't
-  // put it there reliably: it insists on the「样本过少」warning first). iOS + intro use line 1.
-  const name = cleanName(await claude({ system: NAME_SYSTEM, messages: [{ role: "user", content: card.slice(0, 2000) }] }));
-  return `${name}\n${card}`;
+  // ONE call: DISTILL_SYSTEM makes the model output a `风格名：xxx` line + the Style Card.
+  const raw = ((await claude({ system: DISTILL_SYSTEM, messages: [{ role: "user", content: corpus }] })) || "").trim();
+  const { name, card } = splitNameAndCard(raw);
+  return `${name}\n${card}`;   // name on line 1 (iOS + intro read line 1 as the display name)
 }
 
 // ── 写作风格 intro 文章 ────────────────────────────────────────────────────────

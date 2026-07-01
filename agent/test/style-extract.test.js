@@ -22,22 +22,22 @@ describe("distillStyle", () => {
     expect(seenCorpusLength).toBeGreaterThan(TOTAL_CORPUS_BUDGET - 4100);
   });
 
-  it("两步调用：Prompt B 出 Style Card + 专用起名，名字拼到第一行", async () => {
+  it("一次调用：从 风格名 标记抠出名字放第一行，警告放哪都不影响", async () => {
     const samples = [{ title: "A", text: "我写东西偏口语。" }, { title: "B", text: "喜欢短句。" }];
-    const systems = [];
+    let callCount = 0;
     const fakeClaude = async ({ system, messages }) => {
-      systems.push(system);
-      if (system.includes("文风蒸馏器")) {          // Prompt B（Style Card 调用）
-        expect(messages[0].content).toContain("我写东西偏口语");
-        return "样本少于 3 篇，指纹会不稳\n## 一句话画像\n偏口语、短句、少形容词。";
-      }
-      expect(system).toMatch(/五个字以内/);          // NAME_SYSTEM（起名调用）
-      return "松弛体";                               // 模型只被要求起名时，干净返回
+      callCount++;
+      expect(system).toMatch(/文风/);       // Prompt B
+      expect(system).toMatch(/风格名/);      // 起名标记指令
+      expect(messages[0].content).toContain("我写东西偏口语");
+      // 模型把「样本过少」警告放第一行、风格名标记放第二行 —— 仍能被正确抠出。
+      return "样本少于 3 篇，指纹会不稳\n风格名：松弛体\n## 一句话画像\n偏口语、短句、少形容词。";
     };
     const style = await distillStyle(samples, fakeClaude);
-    expect(systems.length).toBe(2);                  // card + name
-    expect(style.split("\n")[0]).toBe("松弛体");     // 名字在第一行（即使 card 首行是「样本过少」提醒）
-    expect(style).toContain("短句");                 // Style Card 正文保留
+    expect(callCount).toBe(1);                        // 只调用一次 Claude
+    expect(style.split("\n")[0]).toBe("松弛体");      // 名字在第一行
+    expect(style).toContain("短句");                  // Style Card 正文保留
+    expect(style).not.toContain("风格名：");           // 标记行已删掉
   });
 
   it("空语料抛错", async () => {
