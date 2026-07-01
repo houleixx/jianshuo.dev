@@ -731,10 +731,16 @@ export default {
       const body = await request.json().catch(() => null);
       const m = body && body.callback_meta;
       if (!m || !m.scope || !m.newKey) return J({ error: "bad request" }, 400);
+      // 防御纵深：token 泄露时把写/读/抓取都钉死在合法形状内。
+      if (!/^users\/[^/]+\/$/.test(m.scope)) return J({ error: "bad scope" }, 400);
+      if (!/^photos\/.+\.(png|jpe?g)$/i.test(m.newKey)) return J({ error: "bad newKey" }, 400);
+      if (m.oldKey && !/^photos\/.+\.(png|jpe?g)$/i.test(m.oldKey)) return J({ error: "bad oldKey" }, 400);
       const fullNew = m.scope + m.newKey;
       // 幂等：结果键已存在 → 回调重送，直接成功不重复写/扣费
       if (await env.FILES.head(fullNew)) return J({ ok: true, dedup: true });
       if (body.status === "done" && body.result_url) {
+        const paintBase = env.PAINT_BASE || "https://paint.jianshuo.dev";
+        if (!String(body.result_url).startsWith(paintBase + "/")) return J({ error: "bad result_url" }, 400);
         const r = await globalThis.fetch(body.result_url);
         if (!r.ok) return J({ error: `fetch_result_${r.status}` }, 502);
         await env.FILES.put(fullNew, r.body, { httpMetadata: { contentType: r.headers.get("content-type") || "image/png" } });
