@@ -106,6 +106,30 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     expect(JSON.parse(emptyPut.body)).toMatchObject({ reason: "no-speech" });
   });
 
+  it("ASR 空但有照片，vision 也没写出文章时仍回退 .empty(no-speech)，且 noForce 抑制了二次强制重试", async () => {
+    const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
+    // Vision pass returns zero articles — miner should fall back to .empty rather than
+    // let mineVariant's normal force-retry fire a second Claude call against an empty transcript.
+    const fetchSpy = makeFetch({ transcriptText: "", articles: [] });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const allKeys = [AUDIO, PHOTO_KEY];
+    const r = await mineOneAudio(AUDIO, allKeys, {}, env, MODEL_CFG);
+    expect(r).toBe("empty");
+
+    const emptyPut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.includes(`articles/${SUB}/${STEM}/empty`));
+    expect(emptyPut).toBeTruthy();
+    expect(JSON.parse(emptyPut.body)).toMatchObject({ reason: "no-speech" });
+
+    const articlePut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
+    expect(articlePut).toBeUndefined();
+
+    // noForce:true should suppress mineVariant's force-retry, so Claude was hit exactly once
+    // (the natural vision pass), not twice.
+    const claudeCalls = fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com"));
+    expect(claudeCalls.length).toBe(1);
+  });
+
   it("默认 mine（有语音）行为不变：不受 IMAGE_ONLY_SYSTEM 影响", async () => {
     const env = envWithPhotos({ [AUDIO]: "audiobytes" });
     const fetchSpy = makeFetch({
