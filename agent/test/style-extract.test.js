@@ -9,8 +9,9 @@ describe("distillStyle", () => {
       text: "字".repeat(6000),
     }));
     let seenCorpusLength = null;
-    const fakeClaude = async ({ messages }) => {
-      seenCorpusLength = messages[0].content.length;
+    const fakeClaude = async ({ system, messages }) => {
+      // distillStyle makes 2 calls (card + name); only the card call carries the corpus.
+      if (system.includes("文风蒸馏器")) seenCorpusLength = messages[0].content.length;
       return "风格描述";
     };
     await distillStyle(samples, fakeClaude);
@@ -21,16 +22,22 @@ describe("distillStyle", () => {
     expect(seenCorpusLength).toBeGreaterThan(TOTAL_CORPUS_BUDGET - 4100);
   });
 
-  it("把语料样本拼进提示词并从 Claude 返回里取风格文本", async () => {
+  it("两步调用：Prompt B 出 Style Card + 专用起名，名字拼到第一行", async () => {
     const samples = [{ title: "A", text: "我写东西偏口语。" }, { title: "B", text: "喜欢短句。" }];
+    const systems = [];
     const fakeClaude = async ({ system, messages }) => {
-      expect(system).toMatch(/文风/);              // Prompt B（文风蒸馏器 / Style Card）
-      expect(system).toMatch(/五个字以内/);         // 第一行起名要求
-      expect(messages[0].content).toContain("我写东西偏口语");
-      return "偏口语、短句、少形容词。";
+      systems.push(system);
+      if (system.includes("文风蒸馏器")) {          // Prompt B（Style Card 调用）
+        expect(messages[0].content).toContain("我写东西偏口语");
+        return "样本少于 3 篇，指纹会不稳\n## 一句话画像\n偏口语、短句、少形容词。";
+      }
+      expect(system).toMatch(/五个字以内/);          // NAME_SYSTEM（起名调用）
+      return "松弛体";                               // 模型只被要求起名时，干净返回
     };
     const style = await distillStyle(samples, fakeClaude);
-    expect(style).toContain("短句");
+    expect(systems.length).toBe(2);                  // card + name
+    expect(style.split("\n")[0]).toBe("松弛体");     // 名字在第一行（即使 card 首行是「样本过少」提醒）
+    expect(style).toContain("短句");                 // Style Card 正文保留
   });
 
   it("空语料抛错", async () => {

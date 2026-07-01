@@ -647,7 +647,9 @@ export default {
       // API directly (this route isn't inside a DO, so it can't reuse that method),
       // logs to llmlogs/ (best-effort, writeLlmLog swallows its own errors), and
       // captures token usage for the 算力 debit below.
-      let lastUsage = null;
+      // distillStyle makes TWO Claude calls (Style Card + a dedicated naming call);
+      // accumulate usage across both so the 算力 debit reflects the full cost.
+      const usageSum = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
       const claude = async ({ system, messages }) => {
         const reqBody = { model: MODEL, max_tokens: 1500, system, messages };
         const t0 = Date.now();
@@ -666,7 +668,11 @@ export default {
           meta: { kind: "style-extract", samples: samples.length },
         });
         if (!ok) throw new Error(`Claude HTTP ${resp.status}`);
-        lastUsage = j.usage || null;
+        const u = j.usage || {};
+        usageSum.input_tokens += u.input_tokens || 0;
+        usageSum.output_tokens += u.output_tokens || 0;
+        usageSum.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
+        usageSum.cache_read_input_tokens += u.cache_read_input_tokens || 0;
         return (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
       };
 
@@ -676,6 +682,7 @@ export default {
       // 生成/刷新「写作风格介绍」文章（固定 stem，覆盖上一篇）。写 article JSON 先于
       // 占位 .m4a，这样 miner 扫到 .m4a 时 articles/<stem>.json 已存在 → 直接 skip，
       // 不会去 ASR 这段静音。best-effort：失败不影响提取本身。
+      let introErr = null;
       try {
         const { title, body: introBody } = buildStyleIntroArticle(style, samples.length);
         const introDoc = {
@@ -685,7 +692,7 @@ export default {
         };
         await env.FILES.put(`${scope}articles/${STYLE_INTRO_STEM}.json`, JSON.stringify(introDoc), { httpMetadata: { contentType: "application/json" } });
         await env.FILES.put(`${scope}${STYLE_INTRO_STEM}.m4a`, silentM4aBytes(), { httpMetadata: { contentType: "audio/mp4" } });
-      } catch (_) {}
+      } catch (e) { introErr = String((e && e.stack) || e); }
 
       if (body.clearAfter) {
         // Best-effort: the style write above already succeeded and is the
@@ -703,14 +710,12 @@ export default {
       try {
         if (env.USAGE) {
           await ensureAccount(env.USAGE, scope, Date.now());
-          const cost = lastUsage
-            ? claudeCostUY(MODEL, lastUsage.input_tokens, lastUsage.output_tokens, lastUsage.cache_creation_input_tokens, lastUsage.cache_read_input_tokens)
-            : 0;
+          const cost = claudeCostUY(MODEL, usageSum.input_tokens, usageSum.output_tokens, usageSum.cache_creation_input_tokens, usageSum.cache_read_input_tokens);
           await debit(env.USAGE, scope, cost, "style-extract", { samples: samples.length }, Date.now());
         }
       } catch {}
 
-      return J({ ok: true, version: head, styleSummary: style.slice(0, 80) });
+      return J({ ok: true, version: head, styleSummary: style.slice(0, 80), introErr });
     }
 
     // ── /agent/notify ── mine.py notifies about processing state ───────────

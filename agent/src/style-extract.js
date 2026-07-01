@@ -1,8 +1,9 @@
 // 把风格数据集（外部素材样本，users/<sub>/style/<id>.json）蒸馏成一段「写作风格」描述。
 // 纯逻辑：Claude 调用注入（`claude({system,messages}) -> string`），便于单元测试；
 // 真实调用+计费+日志由 agent/src/index.js 的路由处理包装后注入。
-// 蒸馏提示词 = wjs-distilling-style 的 Prompt B（样本 → Style Card），
-// 外加「输出第一行用五个字以内起个名字」——第一行的名字被 iOS 当作这版写作风格的显示名。
+// DISTILL_SYSTEM = wjs-distilling-style 的 Prompt B（样本 → Style Card），保持原版纯净。
+// 起名单独交给 NAME_SYSTEM 的第二次调用（模型「只起名」时最听话，避免它把「样本过少」提醒塞第一行），
+// 由 distillStyle 把名字拼到风格文本第一行——iOS 与 intro 文章都拿第一行当风格名。
 export const DISTILL_SYSTEM = `# 角色
 你是文风蒸馏器。读【样本文章】,一次输出一张这批样本的 Style Card——
 "怎么写"的指纹,不是"怎么想"的画像。
@@ -13,8 +14,6 @@ export const DISTILL_SYSTEM = `# 角色
 - 样本少于 3 篇,在开头注明:指纹会不稳,易把一篇的偶然写法当签名。
 
 # 输出格式
-输出的第一行:用五个字以内给这套文风起个名字(只有名字本身,不加标点、不加书名号、不加"名字:"之类前缀)。从第二行起才是下面的 Style Card。
-
 ## 一句话画像
 <一句话抓住读起来是什么感觉>
 
@@ -43,6 +42,18 @@ export const DISTILL_SYSTEM = `# 角色
 // corpus, not just each sample, keeps every extraction call bounded regardless of dataset size.
 export const TOTAL_CORPUS_BUDGET = 48000;
 
+// 起名专用提示词——单独一次调用，只要求起名，模型不会再把「样本过少」提醒等塞进来。
+export const NAME_SYSTEM = `给下面这套写作风格起一个五个字以内的中文名字。只输出名字本身,不加任何标点、引号、书名号、"名字:"之类前缀或解释。`;
+
+// 从模型返回里清洗出一个干净的名字（第一行、去引号/前缀、限长、空回退）。
+function cleanName(raw) {
+  const first = (raw || "").split(/\r?\n/).find((l) => l.trim());
+  return (first ? first.trim() : "")
+    .replace(/^(名字|风格名|名称)\s*[:：]\s*/, "")
+    .replace(/^[「『"'（(【\[]+|[」』"'）)】\]]+$/g, "")
+    .slice(0, 6) || "我的文风";
+}
+
 export async function distillStyle(samples, claude) {
   if (!samples || !samples.length) throw new Error("empty-dataset");
   let budget = TOTAL_CORPUS_BUDGET;
@@ -61,8 +72,11 @@ export async function distillStyle(samples, claude) {
     budget -= block.length;
   }
   const corpus = parts.join("\n\n");
-  const style = await claude({ system: DISTILL_SYSTEM, messages: [{ role: "user", content: corpus }] });
-  return (style || "").trim();
+  const card = ((await claude({ system: DISTILL_SYSTEM, messages: [{ role: "user", content: corpus }] })) || "").trim();
+  // Second, dedicated naming call — reliable ≤5-char name on line 1 (the big prompt won't
+  // put it there reliably: it insists on the「样本过少」warning first). iOS + intro use line 1.
+  const name = cleanName(await claude({ system: NAME_SYSTEM, messages: [{ role: "user", content: card.slice(0, 2000) }] }));
+  return `${name}\n${card}`;
 }
 
 // ── 写作风格 intro 文章 ────────────────────────────────────────────────────────

@@ -69,7 +69,9 @@ describe("POST /agent/style/extract", () => {
 
     const doc = JSON.parse(env.FILES._store.get(`${scope}CLAUDE.json`));
     expect(doc.head).toBe(1);
-    expect(doc.versions[0].style).toBe("偏口语、短句、少形容词。");
+    // style now = "<name>\n<Style Card>" (a dedicated naming call prepends a ≤5-char name)
+    expect(doc.versions[0].style).toContain("偏口语、短句、少形容词。");
+    expect(doc.versions[0].style.split("\n").length).toBeGreaterThan(1);   // name line + card
     expect(doc.versions[0].source).toBe("share-extract");
   });
 
