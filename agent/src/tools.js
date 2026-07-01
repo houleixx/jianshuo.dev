@@ -210,6 +210,14 @@ function relKey({ articleKey, scope }) {
   return articleKey.slice(scope.length);
 }
 
+// 编辑结果的新 R2 相对键：保留原图的 session 目录、换新时间戳文件名、强制 .png
+// （paint 默认出 png）。scope+此键必须匹配公开 /photo 端点的 photos/*.(jpg|png)。
+export function makeEditedKey(oldKey, nowMs) {
+  const m = /^photos\/([^/]+)\//.exec(String(oldKey || ""));
+  const session = m ? m[1] : String(nowMs);
+  return `photos/${session}/${nowMs}.png`;
+}
+
 async function postFiles(path, { token, origin }) {
   const resp = await globalThis.fetch(`${origin}/files/api/${path}`, {
     method: "POST",
