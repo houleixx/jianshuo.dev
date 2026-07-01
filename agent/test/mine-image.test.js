@@ -197,4 +197,34 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     const systemText = Array.isArray(payload.system) ? payload.system.map((b) => b.text).join("") : payload.system;
     expect(systemText).toContain("你是这段录音的录制者"); // MINE_SYSTEM，不是 IMAGE_ONLY_SYSTEM
   });
+
+  it("style-extract 任务：占位音频（文件名 TaskStyleExtract，无 sidecar）→ 蒸馏→写风格版本+介绍文章，清空语料，不打火山", async () => {
+    // 类型 tag 在文件名尾 token（TaskStyleExtract），和 VoiceDrop-style-/VoiceDrop-mine- 同一机制。
+    const STEM = "VoiceDrop-2026-07-02-100000-0m0s-Thu-Morning-TaskStyleExtract";
+    const AUD  = `${SCOPE}${STEM}.m4a`;
+    const env = envWithPhotos({
+      [AUD]: "silentbytes",
+      [`${SCOPE}style/s1.json`]: JSON.stringify({ id: "s1", title: "样本", text: "我写东西偏口语，短句多。" }),
+    });
+    const calls = [];
+    const fetchSpy = async (url, init = {}) => {
+      const u = String(url);
+      calls.push({ url: u, method: (init.method || "GET").toUpperCase(), body: init.body });
+      if (u.includes("api.anthropic.com")) {
+        return { ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: "风格名：口语派\n## 一句话画像\n偏口语、短句。" }], usage: {} }), text: async () => "" };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+    };
+    fetchSpy.calls = calls;
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await mineOneAudio(AUD, [AUD], {}, env, MODEL_CFG);
+    expect(r).toBe("mined");
+    expect(calls.some((c) => c.url.includes("openspeech.bytedance.com"))).toBe(false); // 没打火山 ASR
+    expect(env.FILES._store.has(`${SCOPE}CLAUDE.json`)).toBe(true);                    // 写了风格版本
+    const articlePut = calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
+    expect(articlePut).toBeTruthy();                                                    // 写了介绍文章
+    expect(JSON.parse(articlePut.body).articles[0].title).toContain("口语派");          // 标题含风格名
+    expect(env.FILES._store.has(`${SCOPE}style/s1.json`)).toBe(false);                  // clearAfter → 语料清空
+  });
 });

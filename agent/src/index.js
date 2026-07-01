@@ -716,11 +716,11 @@ export default {
           }
         } catch (_) {}
       };
-      // ctx.waitUntil keeps the worker alive to finish after the response is sent. In tests
-      // ctx may be absent → run inline (await) so assertions can see the writes.
-      if (ctx && typeof ctx.waitUntil === "function") { ctx.waitUntil(distillAndWrite().catch(() => {})); }
-      else { await distillAndWrite().catch(() => {}); }
-      return J({ ok: true, queued: true });
+      // Synchronous fallback endpoint. iOS now runs 提取风格 through the miner task flow
+      // (upload a tagged placeholder + trigger — see mineStyleExtract), which is robust and
+      // shows progress; this endpoint stays for debug/other callers and runs the distill inline.
+      try { await distillAndWrite(); } catch (e) { return J({ error: "distill-failed", detail: String((e && e.message) || e) }, 500); }
+      return J({ ok: true });
     }
 
     // ── /agent/notify ── mine.py notifies about processing state ───────────

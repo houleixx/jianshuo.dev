@@ -16,7 +16,8 @@ import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { readStyleText, readProfileName, readStyleDoc, resolveStyle, prependStyleComment, ensureStyleSeeded } from "../../functions/lib/style-store.js";
+import { readStyleText, readProfileName, readStyleDoc, resolveStyle, prependStyleComment, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
+import { distillStyle, buildStyleIntroArticle } from "./style-extract.js";
 import {
   MINE_SYSTEM as SYSTEM,
   MINE_SYSTEM_FORCE as SYSTEM_FORCE,
@@ -169,12 +170,27 @@ export async function meteredMineGate(db, scope, durationSec, now) {
   } catch { return "ok"; }              // fail-open on D1 error
 }
 
+// A placeholder recording tagged as a "task" — a job that rides the mining flow
+// (upload → 待处理→处理中→已成文 progress in 我的录音) but does something other than
+// ASR+挖文章. The tag lives in the FILENAME, same as VoiceDrop-style-/VoiceDrop-mine-
+// (no sidecar): the trailing place-token is `Task<Type>` (+ a separate `Keep` token to
+// retain any consumed corpus). e.g. …-Morning-TaskStyleExtract.m4a → style-extract, clear;
+// …-Morning-TaskStyleExtract-Keep.m4a → style-extract, keep. Returns {type,clearAfter}|null.
+export function taskSpec(key) {
+  const tokens = stemOf(key).split("-");
+  const tok = tokens.find((t) => /^Task[A-Z][A-Za-z0-9]*$/.test(t));
+  if (!tok) return null;
+  const type = tok.slice(4).replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase(); // StyleExtract → style-extract
+  return { type, clearAfter: !tokens.includes("Keep") };
+}
+
 // Route a freshly-listed R2 key to a pipeline. The app's Share Extension tags
 // shared items with a filename prefix (VoiceDrop-mine-* / VoiceDrop-style-*);
 // in-app recordings keep their plain VoiceDrop-<date>-… name and mine as audio.
 //   "audio"     → ASR → articles (in-app recordings + shared .m4a for 挖文章)
 //   "mine-text" → shared text/links for 挖文章; skip ASR, the text IS the transcript
 //   "style"     → shared text/word/links for 训练风格; collected into the corpus
+//   "task"      → tagged placeholder .m4a (Task<Type> in the name) → runTask by type
 //   null        → not ours, an output/marker, or a type we don't mine yet
 //                 (shared images for 挖文章 and .docx text extraction are deferred)
 export function classifyKey(key) {
@@ -184,7 +200,7 @@ export function classifyKey(key) {
   const ext = (leaf.match(/\.([^.]+)$/)?.[1] || "").toLowerCase();
   if (leaf.startsWith("VoiceDrop-style-")) return "style";
   if (leaf.startsWith("VoiceDrop-mine-") && (ext === "txt" || ext === "md")) return "mine-text";
-  if (ext === "m4a") return "audio";
+  if (ext === "m4a") return taskSpec(key) ? "task" : "audio";
   return null;
 }
 
@@ -825,6 +841,99 @@ async function writeMineLog(env, rec) {
 
 // ── Per-audio pipeline ─────────────────────────────────────────────────────────
 
+// ── Task placeholder jobs (extensible) ───────────────────────────────────────
+// The task type is read from the filename by `taskSpec` (no sidecar) — see classifyKey.
+// Dispatch by task type. Each handler writes articles/<stem>.json (the output) + notifies
+// status, returns "mined" | "empty". Add new task types here.
+const TASK_HANDLERS = { "style-extract": mineStyleExtract };
+async function runTask(task, audioKey, env, modelCfg, log) {
+  const handler = TASK_HANDLERS[task && task.type];
+  if (!handler) {
+    log("未知任务类型", { type: task && task.type });
+    await writeEmpty(audioKey, `unknown-task:${(task && task.type) || "?"}`, env);
+    await notifyStatus(userPrefix(audioKey), stemOf(audioKey), "empty", env);
+    return "empty";
+  }
+  return await handler(task, audioKey, env, modelCfg, log);
+}
+
+// Minimal Claude caller for task handlers (worker CLAUDE_API_KEY; accumulates usage).
+function makeTaskClaude(env, model, usage) {
+  return async ({ system, messages }) => {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": env.CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ model, max_tokens: 1500, system, messages }),
+    });
+    if (!resp.ok) throw new Error(`Claude HTTP ${resp.status}`);
+    const j = await resp.json();
+    const u = j.usage || {};
+    usage.input_tokens += u.input_tokens || 0;
+    usage.output_tokens += u.output_tokens || 0;
+    usage.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
+    usage.cache_read_input_tokens += u.cache_read_input_tokens || 0;
+    return (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+  };
+}
+
+// Task「style-extract」: read the 风格数据集 corpus → distill → write a new 写作风格 version +
+// write the 写作风格介绍 article as this placeholder's article (the visible output).
+async function mineStyleExtract(task, audioKey, env, modelCfg, log) {
+  const scope = userPrefix(audioKey);
+  const stem = stemOf(audioKey);
+  await notifyStatus(scope, stem, "mining", env);
+
+  const samples = [];
+  let cursor;
+  do {
+    const listed = await env.FILES.list({ prefix: `${scope}style/`, cursor });
+    for (const o of listed.objects) {
+      const obj = await env.FILES.get(o.key);
+      const s = obj && await obj.json().catch(() => null);
+      if (s && (s.text || "").trim()) samples.push(s);
+    }
+    cursor = listed.truncated ? listed.cursor : null;
+  } while (cursor);
+
+  const writeReadyArticle = async (title, body) => {
+    await writeArticle(audioKey, {
+      schema: 2, id: stem, sourceAudio: `${stem}.m4a`, createdAt: new Date().toISOString(),
+      transcript: "", srt: "", articles: [{ title, body }], status: "ready", model: "style-extract",
+    }, env);
+    await notifyStatus(scope, stem, "ready", env);
+  };
+
+  if (!samples.length) {
+    await writeReadyArticle("风格数据集为空",
+      "还没有可提炼的素材。先从别的 app 分享一些你喜欢的文章 / 网页 / 文档进来（会进「风格数据集」），再点「提取文章风格」。");
+    log("风格数据集为空");
+    return "mined";
+  }
+
+  const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+  const style = await distillStyle(samples, makeTaskClaude(env, modelCfg.model, usage));
+  await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
+  const { title, body } = buildStyleIntroArticle(style, samples.length);
+  await writeReadyArticle(title, body);
+
+  if (task.clearAfter) {
+    try {
+      for (const prefix of [`${scope}style/`, `${scope}VoiceDrop-style-`]) {
+        let c;
+        do { const l = await env.FILES.list({ prefix, cursor: c }); for (const o of l.objects) await env.FILES.delete(o.key); c = l.truncated ? l.cursor : null; } while (c);
+      }
+    } catch (_) {}
+  }
+  try {
+    if (env.USAGE) {
+      await ensureAccount(env.USAGE, scope, Date.now());
+      await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, usage.input_tokens, usage.output_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens), "style-extract", { samples: samples.length }, Date.now());
+    }
+  } catch (_) {}
+  log("风格提取完成", { name: (style.split("\n")[0] || "").slice(0, 12), samples: samples.length });
+  return "mined";
+}
+
 export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
   const leaf  = audioKey.split("/").pop();
   const scope = userPrefix(audioKey);
@@ -846,6 +955,19 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       console.log(`   skip (already processed)`);
       result = "skip";
       return "skip";
+    }
+
+    // ── Task dispatch ──────────────────────────────────────────────────────────
+    // A tagged placeholder rides the same flow as a real recording: the client uploads a
+    // (silent) placeholder .m4a whose filename carries a `Task<Type>` token, then triggers
+    // the miner. If the name is a task this is NOT a mine — dispatch by type to a handler
+    // that does the work and writes articles/<stem>.json (the output, shown in 我的录音 with
+    // the same 待处理→处理中→已成文 progress). Add task types to TASK_HANDLERS. First one:
+    // "style-extract" (读语料→蒸馏→写风格版本+介绍文章). Tag lives in the filename, not a sidecar.
+    const task = taskSpec(audioKey);
+    if (task) {
+      result = await runTask(task, audioKey, env, modelCfg, log);
+      return result;
     }
 
     // ── Balance gate (pre-ASR) ────────────────────────────────────────────────
@@ -1168,8 +1290,12 @@ export async function runMine(env) {
                         .filter(t => !keySet.has(articleKeyFor(t)) && !keySet.has(emptyKeyFor(t)));
   const styles = allKeys.filter(k => classifyKey(k) === "style")
                         .filter(s => !keySet.has(styleSampleKeyFor(s)));
+  // Tagged placeholder jobs (e.g. 提取文章风格): a Task<Type> .m4a, processed like audio but
+  // dispatched by mineOneAudio→runTask. Marker keys (articles/<stem>.json|.empty) gate reruns.
+  const tasks  = allKeys.filter(k => classifyKey(k) === "task")
+                        .filter(a => !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
 
-  console.log(`[mine] list: ${audios.length} audio · ${texts.length} text · ${styles.length} style · ${todo.length + texts.length + styles.length} unprocessed (${((Date.now()-t0)/1000).toFixed(1)}s)`);
+  console.log(`[mine] list: ${audios.length} audio · ${texts.length} text · ${styles.length} style · ${tasks.length} task · ${todo.length + texts.length + styles.length + tasks.length} unprocessed (${((Date.now()-t0)/1000).toFixed(1)}s)`);
 
   let mined = 0, empty = 0, styled = 0, pending = 0, failed = 0;
   // Subrequest budget: stop spending before hitting the per-invocation cap and
@@ -1189,6 +1315,20 @@ export async function runMine(env) {
     } catch (e) {
       failed++; budget -= ASR_POLLS_PER_PASS + 2;
       console.error(`[mine] FAILED ${todo[i]}: ${e.message || e}`);
+    }
+  }
+
+  for (let i = 0; i < tasks.length; i++) {
+    if (budget <= 0) { truncated = true; console.log(`[mine] subrequest 预算用尽,剩 ${tasks.length - i} 条任务留待下趟`); break; }
+    console.log(`[mine] ── ${tasks[i].split("/").pop()} (task ${i+1}/${tasks.length})`);
+    try {
+      const r = await mineOneAudio(tasks[i], allKeys, uploaded, env, modelCfg);
+      if (r === "mined") { mined++; budget -= 8; }
+      else if (r === "empty") { empty++; budget -= 4; }
+      else budget -= 2;
+    } catch (e) {
+      failed++; budget -= 4;
+      console.error(`[mine] FAILED ${tasks[i]}: ${e.message || e}`);
     }
   }
 

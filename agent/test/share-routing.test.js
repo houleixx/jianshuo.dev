@@ -3,7 +3,7 @@
 // prefix — VoiceDrop-mine-* (挖文章) and VoiceDrop-style-* (训练风格) — plus the
 // untagged in-app recordings (VoiceDrop-<date>-…) that still mine as audio.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { classifyKey, runMine } from "../src/miner.js";
+import { classifyKey, taskSpec, runMine } from "../src/miner.js";
 import { fakeEnv } from "./fakes.js";
 
 function env(seed = {}, secrets = { CLAUDE_API_KEY: "sk-ant" }) {
@@ -36,6 +36,22 @@ describe("classifyKey — routes inbox files by Share-Extension filename prefix"
   it("never re-ingests its own outputs (articles/ + style/ markers)", () => {
     expect(classifyKey("users/u1/articles/VoiceDrop-mine-1718000000.json")).toBeNull();
     expect(classifyKey("users/u1/style/VoiceDrop-style-1718000000.json")).toBeNull();
+  });
+  it("Task<Type> placeholder .m4a → task (not audio)", () => {
+    expect(classifyKey("users/u1/VoiceDrop-2026-07-02-100000-0m0s-Thu-Morning-TaskStyleExtract.m4a")).toBe("task");
+    expect(classifyKey("users/u1/VoiceDrop-2026-07-02-100000-0m0s-Thu-Morning-TaskStyleExtract-Keep.m4a")).toBe("task");
+  });
+});
+
+describe("taskSpec — reads task type + clearAfter from the filename (no sidecar)", () => {
+  it("Task<Type> → {type, clearAfter:true}; a Keep token → clearAfter:false", () => {
+    expect(taskSpec("users/u1/VoiceDrop-2026-07-02-100000-0m0s-Thu-Morning-TaskStyleExtract.m4a"))
+      .toEqual({ type: "style-extract", clearAfter: true });
+    expect(taskSpec("users/u1/VoiceDrop-2026-07-02-100000-0m0s-Thu-Morning-TaskStyleExtract-Keep.m4a"))
+      .toEqual({ type: "style-extract", clearAfter: false });
+  });
+  it("a plain recording (no Task token) → null", () => {
+    expect(taskSpec("users/u1/VoiceDrop-2026-06-26-120000-30-fri-am.m4a")).toBeNull();
   });
 });
 
