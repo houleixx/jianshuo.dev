@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { JobStore, type Job } from "../src/store.ts";
@@ -77,4 +77,28 @@ test("worker fires callback on done", async () => {
   assert.deepEqual(received[0].body.callback_meta, { note_id: "n1" });
   assert.ok(received[0].body.result_url.endsWith("/results/c1.png"));
   assert.equal(received[0].headers["authorization"], "Bearer xyz");
+});
+
+test("buildArgs failure → failed, input cleaned, pool still processes next", async () => {
+  const { store, worker, cfg } = await setup();
+  await mkdir(cfg.inputsDir, { recursive: true });
+  const inputPath = join(cfg.inputsDir, "te.img");
+  await writeFile(inputPath, "IN");
+  await store.create(job("te", { mode: "edit", inputPath, params: { size: "2K", format: "png", quality: "high", transparent: true } }));
+  worker.enqueue("te");
+  await waitFor(async () => (await store.get("te"))?.status === "failed");
+  await assert.rejects(readFile(inputPath)); // input cleaned despite early buildArgs throw
+  // pool still alive: a normal job completes afterward
+  await store.create(job("after"));
+  worker.enqueue("after");
+  await waitFor(async () => (await store.get("after"))?.status === "done");
+});
+
+test("pool drains all queued jobs", async () => {
+  const { store, worker } = await setup();
+  const ids = ["m1", "m2", "m3", "m4"];
+  for (const id of ids) await store.create(job(id));
+  for (const id of ids) worker.enqueue(id);
+  for (const id of ids) await waitFor(async () => (await store.get(id))?.status === "done");
+  for (const id of ids) assert.equal((await store.get(id))?.status, "done");
 });

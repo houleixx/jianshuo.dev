@@ -25,10 +25,12 @@ export class Worker {
     while (this.active < this.cfg.maxConcurrency && this.queue.length > 0) {
       const id = this.queue.shift()!;
       this.active++;
-      this.run(id).finally(() => {
-        this.active--;
-        this.pump();
-      });
+      this.run(id)
+        .catch((e) => console.error(`[worker] job ${id} crashed`, e))
+        .finally(() => {
+          this.active--;
+          this.pump();
+        });
     }
   }
 
@@ -44,6 +46,7 @@ export class Worker {
     try {
       args = buildArgs(job, outPath);
     } catch (e: any) {
+      if (job.inputPath) await unlink(job.inputPath).catch(() => {});
       await this.fail(job, { code: "invalid_argument", message: e?.message ?? "bad args" });
       return;
     }
