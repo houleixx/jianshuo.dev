@@ -673,12 +673,16 @@ export default {
       const { head } = await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
 
       if (body.clearAfter) {
-        let c;
-        do {
-          const l = await env.FILES.list({ prefix: `${scope}style/`, cursor: c });
-          for (const o of l.objects) await env.FILES.delete(o.key);
-          c = l.truncated ? l.cursor : null;
-        } while (c);
+        // Best-effort: the style write above already succeeded and is the
+        // important part. A delete failure mid-loop must not 500 the request.
+        try {
+          let c;
+          do {
+            const l = await env.FILES.list({ prefix: `${scope}style/`, cursor: c });
+            for (const o of l.objects) await env.FILES.delete(o.key);
+            c = l.truncated ? l.cursor : null;
+          } while (c);
+        } catch (_) {}
       }
 
       try {
