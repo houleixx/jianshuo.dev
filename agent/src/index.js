@@ -532,7 +532,7 @@ export async function handleUsageRoute(url, request, env) {
 // Worker entry: authenticate, then route the WS upgrade to the right DO.
 // ---------------------------------------------------------------------------
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // ── /agent/edit ── existing article-editing agent ──────────────────────
@@ -676,49 +676,51 @@ export default {
         return (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
       };
 
-      const style = await distillStyle(samples, claude);
-      const { head } = await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
-
-      // 生成/刷新「写作风格介绍」文章（固定 stem，覆盖上一篇）。写 article JSON 先于
-      // 占位 .m4a，这样 miner 扫到 .m4a 时 articles/<stem>.json 已存在 → 直接 skip，
-      // 不会去 ASR 这段静音。best-effort：失败不影响提取本身。
-      let introErr = null;
-      try {
-        const { title, body: introBody } = buildStyleIntroArticle(style, samples.length);
-        const introDoc = {
-          schema: 2, id: STYLE_INTRO_STEM, sourceAudio: `${STYLE_INTRO_STEM}.m4a`,
-          createdAt: new Date().toISOString(), transcript: "", srt: "",
-          articles: [{ title, body: introBody }], status: "ready", model: "style-intro",
-        };
-        await env.FILES.put(`${scope}articles/${STYLE_INTRO_STEM}.json`, JSON.stringify(introDoc), { httpMetadata: { contentType: "application/json" } });
-        await env.FILES.put(`${scope}${STYLE_INTRO_STEM}.m4a`, silentM4aBytes(), { httpMetadata: { contentType: "audio/mp4" } });
-      } catch (e) { introErr = String((e && e.stack) || e); }
-
-      if (body.clearAfter) {
-        // Best-effort: the style write above already succeeded and is the important part.
-        // Clear BOTH the corpus samples (style/*.json) AND the legacy raw drop files
-        // (top-level VoiceDrop-style-*) — else the miner re-collects them and they reappear.
+      // The heavy work — 2 Claude calls (蒸馏 Style Card + 起名) + writes — runs in the
+      // BACKGROUND via ctx.waitUntil so the share sheet closes immediately instead of
+      // spinning ~10-30s. The corpus was already validated non-empty above; a background
+      // failure leaves the corpus intact (clearAfter runs only after a successful write),
+      // so the user can just re-tap 提取. The 写作风格 version + intro article appear a few
+      // seconds later (user refreshes 我的录音).
+      const distillAndWrite = async () => {
+        const style = await distillStyle(samples, claude);
+        await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
+        // 写作风格介绍文章（固定 stem，覆盖上一篇）— article JSON 先于 .m4a → miner skip。
         try {
-          for (const prefix of [`${scope}style/`, `${scope}VoiceDrop-style-`]) {
-            let c;
-            do {
-              const l = await env.FILES.list({ prefix, cursor: c });
-              for (const o of l.objects) await env.FILES.delete(o.key);
-              c = l.truncated ? l.cursor : null;
-            } while (c);
+          const { title, body: introBody } = buildStyleIntroArticle(style, samples.length);
+          const introDoc = {
+            schema: 2, id: STYLE_INTRO_STEM, sourceAudio: `${STYLE_INTRO_STEM}.m4a`,
+            createdAt: new Date().toISOString(), transcript: "", srt: "",
+            articles: [{ title, body: introBody }], status: "ready", model: "style-intro",
+          };
+          await env.FILES.put(`${scope}articles/${STYLE_INTRO_STEM}.json`, JSON.stringify(introDoc), { httpMetadata: { contentType: "application/json" } });
+          await env.FILES.put(`${scope}${STYLE_INTRO_STEM}.m4a`, silentM4aBytes(), { httpMetadata: { contentType: "audio/mp4" } });
+        } catch (_) {}
+        if (body.clearAfter) {
+          try {
+            for (const prefix of [`${scope}style/`, `${scope}VoiceDrop-style-`]) {
+              let c;
+              do {
+                const l = await env.FILES.list({ prefix, cursor: c });
+                for (const o of l.objects) await env.FILES.delete(o.key);
+                c = l.truncated ? l.cursor : null;
+              } while (c);
+            }
+          } catch (_) {}
+        }
+        try {
+          if (env.USAGE) {
+            await ensureAccount(env.USAGE, scope, Date.now());
+            const cost = claudeCostUY(MODEL, usageSum.input_tokens, usageSum.output_tokens, usageSum.cache_creation_input_tokens, usageSum.cache_read_input_tokens);
+            await debit(env.USAGE, scope, cost, "style-extract", { samples: samples.length }, Date.now());
           }
         } catch (_) {}
-      }
-
-      try {
-        if (env.USAGE) {
-          await ensureAccount(env.USAGE, scope, Date.now());
-          const cost = claudeCostUY(MODEL, usageSum.input_tokens, usageSum.output_tokens, usageSum.cache_creation_input_tokens, usageSum.cache_read_input_tokens);
-          await debit(env.USAGE, scope, cost, "style-extract", { samples: samples.length }, Date.now());
-        }
-      } catch {}
-
-      return J({ ok: true, version: head, styleSummary: style.slice(0, 80), introErr });
+      };
+      // ctx.waitUntil keeps the worker alive to finish after the response is sent. In tests
+      // ctx may be absent → run inline (await) so assertions can see the writes.
+      if (ctx && typeof ctx.waitUntil === "function") { ctx.waitUntil(distillAndWrite().catch(() => {})); }
+      else { await distillAndWrite().catch(() => {}); }
+      return J({ ok: true, queued: true });
     }
 
     // ── /agent/notify ── mine.py notifies about processing state ───────────

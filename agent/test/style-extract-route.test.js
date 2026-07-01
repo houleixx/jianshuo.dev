@@ -54,18 +54,18 @@ describe("POST /agent/style/extract", () => {
     expect(await res.json()).toEqual({ error: "empty-dataset" });
   });
 
-  it("happy path: distills the corpus, writes a new CLAUDE.json version, returns {ok,version,styleSummary}", async () => {
+  it("happy path: returns {ok,queued} immediately, then distills + writes CLAUDE.json in the background", async () => {
     const scope = await scopeFor(TOKEN);
     const env = { ...fakeEnv(), CLAUDE_API_KEY: "k" };
     env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", title: "样本一", text: "我写东西偏口语。" }));
     vi.stubGlobal("fetch", mockClaudeFetch("偏口语、短句、少形容词。"));
 
+    // No ctx passed → distill runs inline (awaited) so the writes are visible below.
     const res = await worker.fetch(req({}), env);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
-    expect(body.version).toBe(1);
-    expect(body.styleSummary).toContain("短句");
+    expect(body.queued).toBe(true);   // heavy work moved to ctx.waitUntil (async in prod)
 
     const doc = JSON.parse(env.FILES._store.get(`${scope}CLAUDE.json`));
     expect(doc.head).toBe(1);
