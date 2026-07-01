@@ -11,8 +11,9 @@ const base: Job = {
 
 test("buildArgs generate", () => {
   const a = buildArgs(base, "/out/j1.png");
+  // --provider is a global option and MUST precede the subcommand (v0.7.1 rejects it after).
   assert.deepEqual(a, [
-    "--json", "--json-events", "images", "generate", "--provider", "codex",
+    "--json", "--json-events", "--provider", "codex", "images", "generate",
     "--prompt", "a red cat", "--out", "/out/j1.png",
     "--format", "png", "--size", "2K", "--quality", "high",
   ]);
@@ -32,7 +33,7 @@ test("buildArgs compression when set", () => {
 
 test("buildArgs transparent generate", () => {
   const a = buildArgs({ ...base, params: { ...base.params, transparent: true } }, "/out/j1.png");
-  assert.deepEqual(a.slice(0, 5), ["--json", "--json-events", "transparent", "generate", "--provider"]);
+  assert.deepEqual(a.slice(0, 6), ["--json", "--json-events", "--provider", "codex", "transparent", "generate"]);
 });
 
 test("buildArgs transparent+edit throws", () => {

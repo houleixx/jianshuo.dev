@@ -2,14 +2,18 @@ import type { Job } from "./store.js";
 
 export function buildArgs(job: Job, outPath: string): string[] {
   const { prompt, mode, params } = job;
-  const common = ["--provider", "codex", "--prompt", prompt, "--out", outPath];
+  // `--provider` is a GLOBAL option and must precede the subcommand (verified against
+  // gpt-image-2-skill v0.7.1 `--help`): the `images generate|edit` / `transparent generate`
+  // subcommands reject `--provider` if it appears after them.
+  const globals = ["--json", "--json-events", "--provider", "codex"];
+  const common = ["--prompt", prompt, "--out", outPath];
   const sizeQuality = ["--size", params.size, "--quality", params.quality];
 
   if (params.transparent) {
     if (mode === "edit") {
       throw new Error("transparent output is not supported for edit (transparent+edit)");
     }
-    return ["--json", "--json-events", "transparent", "generate", ...common, ...sizeQuality];
+    return [...globals, "transparent", "generate", ...common, ...sizeQuality];
   }
 
   const fmt = ["--format", params.format];
@@ -17,12 +21,9 @@ export function buildArgs(job: Job, outPath: string): string[] {
 
   if (mode === "edit") {
     if (!job.inputPath) throw new Error("edit mode requires inputPath");
-    return [
-      "--json", "--json-events", "images", "edit",
-      ...common, "--ref-image", job.inputPath, ...fmt, ...sizeQuality, ...comp,
-    ];
+    return [...globals, "images", "edit", ...common, "--ref-image", job.inputPath, ...fmt, ...sizeQuality, ...comp];
   }
-  return ["--json", "--json-events", "images", "generate", ...common, ...fmt, ...sizeQuality, ...comp];
+  return [...globals, "images", "generate", ...common, ...fmt, ...sizeQuality, ...comp];
 }
 
 export function parseResult(stdout: string): { ok: boolean; error?: { code: string; message: string } } {
