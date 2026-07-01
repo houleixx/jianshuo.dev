@@ -719,6 +719,13 @@ async function mineVariant(env, {
 // rewrite reads exactly like a first-time mine; re-feeds session photos so [[photo:…]]
 // markers are re-placed. The app already handles "switch to an existing variant" via
 // patchHead — this is only the generate path. Returns {ok, head?} / {ok:false, reason}.
+// 解析要用哪个文风版本：显式整数 styleV 优先；缺省则用文风 doc 的当前 head（重写场景）。
+// 都没有 → null（调用方随后按 no-style 处理）。
+export function resolveStyleVersion(styleDoc, styleV) {
+  if (Number.isInteger(styleV)) return styleV;
+  return (styleDoc && Number.isInteger(styleDoc.head)) ? styleDoc.head : null;
+}
+
 export async function restyleArticle(env, scope, stem, styleV) {
   const articleKey = `${scope}articles/${stem}.json`;
   const obj = await env.FILES.get(articleKey);
@@ -728,7 +735,9 @@ export async function restyleArticle(env, scope, stem, styleV) {
   if (!transcript) return { ok: false, reason: "no-transcript" };
 
   const styleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
-  const entry = styleDoc && Array.isArray(styleDoc.versions) ? styleDoc.versions.find((e) => e.v === styleV) : null;
+  // styleV 缺省（重写：POST /agent/restyle 只带 stem）→ 用当前文风 head，即"按原挖矿逻辑重挖"
+  const v = resolveStyleVersion(styleDoc, styleV);
+  const entry = styleDoc && Array.isArray(styleDoc.versions) ? styleDoc.versions.find((e) => e.v === v) : null;
   const styleText = entry && typeof entry.style === "string" ? entry.style.trim() : "";
   if (!styleText) return { ok: false, reason: "no-style" };
 
@@ -749,11 +758,11 @@ export async function restyleArticle(env, scope, stem, styleV) {
   // recordings — so restyle can never again drift from runMine.
   const articles = await mineVariant(env, {
     transcript, styleText, photos, cacheMode: "transcript", modelCfg, scope, stem, turnId,
-    metaExtra: { restyle: styleV }, debitExtra: { restyle: styleV },
+    metaExtra: { restyle: v }, debitExtra: { restyle: v },
   });
   if (!articles.length) return { ok: false, reason: "no-article" };
 
-  const tagged = articles.map((a) => ({ ...a, body: prependStyleComment(a.body, styleV) }));
+  const tagged = articles.map((a) => ({ ...a, body: prependStyleComment(a.body, v) }));
   const newDoc = {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),

@@ -595,8 +595,9 @@ export default {
       return stub.fetch(request);
     }
 
-    // ── /agent/restyle ── re-mine ONE article with a chosen 文风 version ──────
-    // Body {stem, styleV}. Produces a new article version tagged <!-- style: 风格 vN -->,
+    // ── /agent/restyle ── re-mine ONE recording from its stored transcript ──────
+    // Body {stem, styleV?}. styleV 缺省 → 用当前文风 head（App 的"重写"：只带 stem，
+    // 按原挖矿逻辑用当前文风重挖，可重新拆多篇）。Produces a new article version tagged <!-- style: 风格 vN -->,
     // head moves to it. The app calls this only when that style variant isn't already in
     // the article's versions[] (otherwise it just patchHead's — free). User token scoped.
     if (url.pathname === "/agent/restyle") {
@@ -606,8 +607,8 @@ export default {
       if (!scope) return new Response("unauthorized", { status: 401 });
       const body = await request.json().catch(() => ({}));
       const stem = typeof body.stem === "string" ? body.stem : "";
-      const styleV = Number.isInteger(body.styleV) ? body.styleV : null;
-      if (!stem || stem.includes("/") || stem.includes("..") || styleV === null) {
+      const styleV = Number.isInteger(body.styleV) ? body.styleV : null;   // null → restyleArticle 用当前文风 head（重写：只带 stem）
+      if (!stem || stem.includes("/") || stem.includes("..")) {
         return new Response(JSON.stringify({ ok: false, error: "bad-request" }), { status: 400, headers: { "content-type": "application/json" } });
       }
       const r = await restyleArticle(env, scope, stem, styleV);
