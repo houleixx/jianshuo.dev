@@ -695,15 +695,18 @@ export default {
       } catch (e) { introErr = String((e && e.stack) || e); }
 
       if (body.clearAfter) {
-        // Best-effort: the style write above already succeeded and is the
-        // important part. A delete failure mid-loop must not 500 the request.
+        // Best-effort: the style write above already succeeded and is the important part.
+        // Clear BOTH the corpus samples (style/*.json) AND the legacy raw drop files
+        // (top-level VoiceDrop-style-*) — else the miner re-collects them and they reappear.
         try {
-          let c;
-          do {
-            const l = await env.FILES.list({ prefix: `${scope}style/`, cursor: c });
-            for (const o of l.objects) await env.FILES.delete(o.key);
-            c = l.truncated ? l.cursor : null;
-          } while (c);
+          for (const prefix of [`${scope}style/`, `${scope}VoiceDrop-style-`]) {
+            let c;
+            do {
+              const l = await env.FILES.list({ prefix, cursor: c });
+              for (const o of l.objects) await env.FILES.delete(o.key);
+              c = l.truncated ? l.cursor : null;
+            } while (c);
+          }
         } catch (_) {}
       }
 

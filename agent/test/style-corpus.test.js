@@ -124,6 +124,11 @@ describe("DELETE /style/dataset", () => {
     const scope = await anonScope(TOKEN);
     env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", type: "text", title: "t1", chars: 1, source: "", text: "x", collectedAt: "2026-01-01" }));
     env.FILES._store.set(`${scope}style/a2.json`, JSON.stringify({ id: "a2", type: "text", title: "t2", chars: 1, source: "", text: "y", collectedAt: "2026-01-02" }));
+    // Legacy raw drop file (old SLCompose extension) — must ALSO be cleared, else the miner
+    // re-collects it into a sample and it "reappears" (the reported "删不掉" bug).
+    env.FILES._store.set(`${scope}VoiceDrop-style-1782627087.txt`, "raw legacy text");
+    // The 写作风格 intro placeholder must SURVIVE (prefix VoiceDrop-style- must not match it).
+    env.FILES._store.set(`${scope}VoiceDrop-writing-style-intro.m4a`, "silentbytes");
 
     const del = await onRequest({
       request: new Request("https://jianshuo.dev/files/api/style/dataset", { method: "DELETE", headers: { Authorization: `Bearer ${TOKEN}` } }),
@@ -132,9 +137,11 @@ describe("DELETE /style/dataset", () => {
     expect(del.status).toBe(200);
     const delBody = await del.json();
     expect(delBody.ok).toBe(true);
-    expect(delBody.deleted).toBe(2);
+    expect(delBody.deleted).toBe(3);   // 2 samples + 1 legacy raw .txt
     expect(env.FILES._store.has(`${scope}style/a1.json`)).toBe(false);
     expect(env.FILES._store.has(`${scope}style/a2.json`)).toBe(false);
+    expect(env.FILES._store.has(`${scope}VoiceDrop-style-1782627087.txt`)).toBe(false);
+    expect(env.FILES._store.has(`${scope}VoiceDrop-writing-style-intro.m4a`)).toBe(true);   // intro survives
 
     const after = await onRequest({
       request: new Request("https://jianshuo.dev/files/api/style/dataset", { method: "GET", headers: { Authorization: `Bearer ${TOKEN}` } }),

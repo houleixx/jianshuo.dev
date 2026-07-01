@@ -826,12 +826,20 @@ export async function onRequest(context) {
         return json({ items, count: items.length, totalChars: items.reduce((n, i) => n + (i.chars || 0), 0) });
       }
       if (request.method === 'DELETE') {
-        let cursor, deleted = 0;
-        do {
-          const listed = await env.FILES.list({ prefix: `${styleScope}style/`, cursor });
-          for (const o of listed.objects) { await env.FILES.delete(o.key); deleted++; }
-          cursor = listed.truncated ? listed.cursor : null;
-        } while (cursor);
+        let deleted = 0;
+        // Clear BOTH: the corpus samples (style/*.json) AND the legacy raw drop files
+        // (top-level VoiceDrop-style-*.<ext> uploaded by the old SLCompose extension).
+        // Deleting only the samples let the miner's collectStyle re-collect them from the
+        // lingering raw files → items "reappeared" and couldn't be deleted. Prefix
+        // `VoiceDrop-style-` does NOT match `VoiceDrop-writing-style-intro` (the intro).
+        for (const prefix of [`${styleScope}style/`, `${styleScope}VoiceDrop-style-`]) {
+          let cursor;
+          do {
+            const listed = await env.FILES.list({ prefix, cursor });
+            for (const o of listed.objects) { await env.FILES.delete(o.key); deleted++; }
+            cursor = listed.truncated ? listed.cursor : null;
+          } while (cursor);
+        }
         return json({ ok: true, deleted });
       }
     }
