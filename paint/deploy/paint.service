@@ -1,0 +1,29 @@
+[Unit]
+Description=paint - gpt-image-2 image service (Codex subscription)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=paint
+Group=paint
+WorkingDirectory=/opt/paint
+Environment=NODE_ENV=production
+Environment=HOME=/opt/paint
+EnvironmentFile=/opt/paint/.env
+ExecStart=/usr/bin/node /opt/paint/dist/server.js
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/paint
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

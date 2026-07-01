@@ -1,0 +1,14 @@
+# Caddy: HTTPS(Let's Encrypt) + basic_auth 只护网页；/api 与 /results 交给 Node 自己鉴权。
+# 用 provision.sh 生成的 bcrypt hash 替换下方占位。
+paint.jianshuo.dev {
+	encode gzip
+
+	@webui path /
+	basic_auth @webui {
+		wjs REPLACE_WITH_BCRYPT_HASH
+	}
+
+	reverse_proxy 127.0.0.1:8788 {
+		flush_interval -1
+	}
+}
