@@ -111,9 +111,12 @@ export function createApp(cfg: Config, deps: { store: JobStore; hub: EventHub; w
         return;
       }
 
-      // --- everything under /api requires bearer ---
+      // --- everything under /api requires bearer (SSE events path also accepts ?token=,
+      // since browser EventSource cannot set an Authorization header) ---
       if (path.startsWith("/api/")) {
-        if (!bearerOk(req, cfg.apiToken)) return sendJson(res, 401, { error: "unauthorized" });
+        const isSse = /^\/api\/jobs\/[^/]+\/events$/.test(path);
+        const authed = bearerOk(req, cfg.apiToken) || (isSse && url.searchParams.get("token") === cfg.apiToken);
+        if (!authed) return sendJson(res, 401, { error: "unauthorized" });
 
         // POST /api/jobs
         if (path === "/api/jobs" && req.method === "POST") {

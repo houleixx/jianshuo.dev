@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>paint · gpt-image-2</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 -apple-system, "PingFang SC", system-ui, sans-serif; color: #1a1a1a; background: #f7f7f8; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 18px; font-weight: 600; }
+  .card { background: #fff; border: 1px solid #e6e6e9; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  textarea, input, select { width: 100%; padding: 9px 11px; border: 1px solid #d9d9de; border-radius: 8px; font: inherit; background: #fff; }
+  textarea { min-height: 74px; resize: vertical; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > label { flex: 1; min-width: 120px; font-size: 13px; color: #555; }
+  button { background: #1a1a1a; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .bar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin: 10px 0; }
+  .bar > i { display: block; height: 100%; width: 0; background: #3b82f6; transition: width .3s; }
+  .log { font: 12px/1.5 ui-monospace, monospace; color: #666; white-space: pre-wrap; max-height: 120px; overflow: auto; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .gallery a { display: block; border: 1px solid #e6e6e9; border-radius: 8px; overflow: hidden; }
+  .gallery img { width: 100%; height: 120px; object-fit: cover; display: block; }
+  #result img { max-width: 100%; border-radius: 8px; border: 1px solid #e6e6e9; }
+  .muted { color: #888; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>paint · gpt-image-2（Codex 订阅）</h1>
+  <div class="card">
+    <textarea id="prompt" placeholder="提示词：画什么 / 怎么改这张图"></textarea>
+    <div class="row" style="margin:10px 0;">
+      <label>参考图（可选，留空=文生图）<input type="file" id="image" accept="image/*" /></label>
+    </div>
+    <div class="row">
+      <label>尺寸<select id="size"><option>2K</option><option>4K</option></select></label>
+      <label>格式<select id="format"><option>png</option><option>jpeg</option><option>webp</option></select></label>
+      <label>质量<select id="quality"><option>high</option><option>medium</option><option>low</option><option>auto</option></select></label>
+      <label>透明底<select id="transparent"><option value="false">否</option><option value="true">是（仅文生图）</option></select></label>
+    </div>
+    <div style="margin-top:12px;"><button id="go">生成</button></div>
+    <div class="bar"><i id="progress"></i></div>
+    <div class="log" id="log"></div>
+    <div id="result"></div>
+  </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <strong>历史</strong><span class="muted" id="hcount"></span>
+    </div>
+    <div class="gallery" id="gallery"></div>
+  </div>
+</div>
+<script>
+const TOKEN = "__API_TOKEN__";
+const H = { "Authorization": "Bearer " + TOKEN };
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+function log(s) { logEl.textContent += s + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+function fileToB64(f) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(f); }); }
+
+async function submit() {
+  $("go").disabled = true; logEl.textContent = ""; $("result").innerHTML = ""; $("progress").style.width = "0";
+  try {
+    const body = {
+      prompt: $("prompt").value,
+      size: $("size").value, format: $("format").value, quality: $("quality").value,
+      transparent: $("transparent").value === "true",
+    };
+    const f = $("image").files[0];
+    if (f) body.image_b64 = await fileToB64(f);
+    const r = await fetch("/api/jobs", { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) { log("错误: " + (j.error || r.status)); $("go").disabled = false; return; }
+    log("job " + j.job_id + " 已提交…");
+    listen(j.job_id);
+  } catch (e) { log("异常: " + e); $("go").disabled = false; }
+}
+
+function listen(id) {
+  const es = new EventSource("/api/jobs/" + id + "/events?token=" + encodeURIComponent(TOKEN));
+  // Note: EventSource can't set headers; server also accepts ?token= for SSE (see Task 8 note).
+  es.addEventListener("progress", (e) => { const d = JSON.parse(e.data); if (d.percent != null) $("progress").style.width = d.percent + "%"; if (d.phase) log("· " + d.phase + (d.percent!=null?" "+d.percent+"%":"")); });
+  es.addEventListener("done", (e) => { const d = JSON.parse(e.data); $("progress").style.width = "100%"; $("result").innerHTML = '<p class="muted">完成：<a href="'+d.result_url+'" target="_blank">'+d.result_url+'</a></p><img src="'+d.result_url+'">'; es.close(); $("go").disabled = false; loadGallery(); });
+  es.addEventListener("failed", (e) => { const d = JSON.parse(e.data); log("失败: " + JSON.stringify(d.error)); es.close(); $("go").disabled = false; });
+  es.onerror = () => { es.close(); $("go").disabled = false; };
+}
+
+async function loadGallery() {
+  const r = await fetch("/api/jobs?limit=50", { headers: H });
+  const { jobs } = await r.json();
+  const done = jobs.filter((j) => j.status === "done" && j.result_url);
+  $("hcount").textContent = done.length + " 张";
+  $("gallery").innerHTML = done.map((j) => '<a href="'+j.result_url+'" target="_blank"><img src="'+j.result_url+'" title="'+(j.prompt||"").replace(/"/g,"&quot;")+'"></a>').join("");
+}
+
+$("go").addEventListener("click", submit);
+loadGallery();
+</script>
+</body>
+</html>
