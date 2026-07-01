@@ -69,3 +69,57 @@ test("results path traversal blocked", async () => {
   assert.ok(res.status === 400 || res.status === 404);
   app.close();
 });
+
+test("GET /results/<missing> returns 404", async () => {
+  const { app, base } = await boot();
+  const res = await fetch(`${base}/results/does-not-exist-0000.png`);
+  assert.equal(res.status, 404);
+  app.close();
+});
+
+test("POST image_url to a blocked loopback host is rejected", async () => {
+  const { app, base } = await boot();
+  const res = await fetch(`${base}/api/jobs`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer secret" }, body: JSON.stringify({ prompt: "x", image_url: "http://127.0.0.1:9/x.png" }) });
+  assert.equal(res.status, 400);
+  app.close();
+});
+
+test("POST image_b64 over size cap is rejected", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "paint-routes-"));
+  const cfg = loadConfig({ API_TOKEN: "secret", CALLBACK_SIGNING_SECRET: "s", DATA_DIR: dataDir, GPT_IMAGE_BIN: FAKE, PUBLIC_BASE_URL: "http://localhost", MAX_INPUT_BYTES: "10" } as any);
+  const store = new JobStore(cfg.jobsDir); const hub = new EventHub(); const worker = new Worker(store, hub, cfg);
+  const app = createApp(cfg, { store, hub, worker });
+  await new Promise((r) => app.listen(0, r));
+  const b = `http://127.0.0.1:${(app.address()).port}`;
+  const big = Buffer.from("A".repeat(1000)).toString("base64");
+  const res = await fetch(`${b}/api/jobs`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer secret" }, body: JSON.stringify({ prompt: "x", image_b64: big }) });
+  assert.equal(res.status, 400);
+  app.close();
+});
+
+test("GET /api/jobs?limit=abc does not crash", async () => {
+  const { app, base } = await boot();
+  const res = await fetch(`${base}/api/jobs?limit=abc`, { headers: { Authorization: "Bearer secret" } });
+  assert.equal(res.status, 200);
+  app.close();
+});
+
+test("SSE streams to a terminal event for a generate job", async () => {
+  const { app, base } = await boot();
+  const sub = await fetch(`${base}/api/jobs`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer secret" }, body: JSON.stringify({ prompt: "a cat" }) });
+  const { job_id } = await sub.json();
+  const es = await fetch(`${base}/api/jobs/${job_id}/events`, { headers: { Authorization: "Bearer secret" } });
+  const reader = es.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", saw = false;
+  const t0 = Date.now();
+  while (Date.now() - t0 < 5000) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value);
+    if (buf.includes("event: done") || buf.includes("event: failed")) { saw = true; break; }
+  }
+  await reader.cancel().catch(() => {});
+  assert.ok(saw);
+  app.close();
+});

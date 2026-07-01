@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdir, writeFile, stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,26 @@ process.on("uncaughtException", (e) => console.error("[uncaughtException]", e));
 const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
 const VALID_FORMAT = new Set(["png", "jpeg", "webp"]);
 const VALID_QUALITY = new Set(["low", "medium", "high", "auto"]);
+
+// Direct-literal-IP SSRF guard for server-side image_url fetch. Blocks loopback,
+// private, and link-local (incl. cloud metadata 169.254.x) hosts. NOTE: DNS-rebinding
+// via a hostname resolving to a private IP is NOT covered — acceptable for this
+// single-user, token-gated internal tool (v1); revisit with a resolver if opened up.
+function isBlockedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const a = Number(m[1]), b = Number(m[2]);
+    if (a === 127 || a === 10 || a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    return false;
+  }
+  if (h === "::1" || h.startsWith("fd") || h.startsWith("fe80")) return true;
+  return false;
+}
 
 function bearerOk(req: IncomingMessage, token: string): boolean {
   const h = req.headers["authorization"];
@@ -58,8 +78,13 @@ export function createApp(cfg: Config, deps: { store: JobStore; hub: EventHub; w
         if (!name || name.includes("..") || name.includes("/")) return sendJson(res, 400, { error: "bad name" });
         const file = join(cfg.resultsDir, name);
         const ext = extname(name).toLowerCase();
+        try {
+          await stat(file);
+        } catch {
+          return sendJson(res, 404, { error: "not found" });
+        }
         res.writeHead(200, { "Content-Type": MIME[ext] ?? "application/octet-stream" });
-        createReadStream(file).on("error", () => { if (!res.headersSent) res.writeHead(404); res.end(); }).pipe(res);
+        createReadStream(file).on("error", () => { res.destroy(); }).pipe(res);
         return;
       }
 
@@ -77,13 +102,13 @@ export function createApp(cfg: Config, deps: { store: JobStore; hub: EventHub; w
 
         // POST /api/jobs
         if (path === "/api/jobs" && req.method === "POST") {
-          const raw = await readBody(req, cfg.maxInputBytes + 1024 * 1024);
+          const raw = await readBody(req, Math.ceil(cfg.maxInputBytes * 1.4) + 1024 * 1024);
           const body = JSON.parse(raw.toString("utf8") || "{}");
           return await submitJob(body, cfg, store, worker, res);
         }
         // GET /api/jobs (list)
         if (path === "/api/jobs" && req.method === "GET") {
-          const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
+          const limit = Math.max(1, Math.min(Number(url.searchParams.get("limit")) || 50, 200));
           const jobs = await store.list(limit);
           return sendJson(res, 200, { jobs: jobs.map((j) => publicJob(j, cfg)) });
         }
@@ -91,9 +116,9 @@ export function createApp(cfg: Config, deps: { store: JobStore; hub: EventHub; w
         const m = path.match(/^\/api\/jobs\/([^/]+)(\/events)?$/);
         if (m && req.method === "GET") {
           const id = m[1];
+          if (m[2] === "/events") return await sseEvents(id, cfg, store, hub, res);
           const job = await store.get(id);
           if (!job) return sendJson(res, 404, { error: "not found" });
-          if (m[2] === "/events") return sseEvents(id, job, cfg, store, hub, res);
           return sendJson(res, 200, publicJob(job, cfg));
         }
         return sendJson(res, 404, { error: "not found" });
@@ -129,12 +154,20 @@ async function submitJob(body: any, cfg: Config, store: JobStore, worker: Worker
     inputPath = join(cfg.inputsDir, `${id}.img`);
     try {
       if (typeof body.image_url === "string") {
-        if (!/^https?:\/\//.test(body.image_url)) return sendJson(res, 400, { error: "image_url must be http(s)" });
-        const r = await fetch(body.image_url, { signal: AbortSignal.timeout(30000) });
-        if (!r.ok) return sendJson(res, 400, { error: `image_url fetch failed: ${r.status}` });
-        const buf = Buffer.from(await r.arrayBuffer());
-        if (buf.length > cfg.maxInputBytes) return sendJson(res, 400, { error: "input image too large" });
-        await writeFile(inputPath, buf);
+        let target: URL;
+        try { target = new URL(body.image_url); } catch { return sendJson(res, 400, { error: "image_url invalid" }); }
+        if (target.protocol !== "http:" && target.protocol !== "https:") return sendJson(res, 400, { error: "image_url must be http(s)" });
+        if (isBlockedHost(target.hostname)) return sendJson(res, 400, { error: "image_url host not allowed" });
+        const r = await fetch(target, { signal: AbortSignal.timeout(30000) });
+        if (!r.ok || !r.body) return sendJson(res, 400, { error: `image_url fetch failed: ${r.status}` });
+        const chunks: Buffer[] = [];
+        let total = 0;
+        for await (const c of r.body as any) {
+          total += (c as Uint8Array).length;
+          if (total > cfg.maxInputBytes) return sendJson(res, 400, { error: "input image too large" });
+          chunks.push(Buffer.from(c));
+        }
+        await writeFile(inputPath, Buffer.concat(chunks));
       } else {
         const buf = Buffer.from(body.image_b64, "base64");
         if (buf.length > cfg.maxInputBytes) return sendJson(res, 400, { error: "input image too large" });
@@ -170,24 +203,26 @@ function publicJob(j: Job, cfg: Config) {
   };
 }
 
-function sseEvents(id: string, job: Job, cfg: Config, store: JobStore, hub: EventHub, res: ServerResponse): void {
+async function sseEvents(id: string, cfg: Config, store: JobStore, hub: EventHub, res: ServerResponse): Promise<void> {
   res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
   const send = (event: string, data: unknown) => {
     if (res.writableEnded) return;
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
-  // replay current state first
-  send("progress", { percent: job.percent });
-  if (job.status === "done") { send("done", publicJob(job, cfg)); res.end(); return; }
-  if (job.status === "failed") { send("failed", { error: job.error }); res.end(); return; }
-
+  let ping: ReturnType<typeof setInterval>;
   const off = hub.subscribe(id, (event, data) => {
     send(event, data);
-    if (event === "done" || event === "failed") { off(); clearInterval(ping); res.end(); }
+    if (event === "done" || event === "failed") { off(); clearInterval(ping); if (!res.writableEnded) res.end(); }
   });
-  const ping = setInterval(() => { if (!res.writableEnded) res.write(": keepalive\n\n"); }, 15000);
+  ping = setInterval(() => { if (!res.writableEnded) res.write(": keepalive\n\n"); }, 15000);
   res.on("close", () => { off(); clearInterval(ping); });
+  // Read state AFTER subscribing so a terminal event fired during this read isn't lost.
+  const job = await store.get(id);
+  if (!job) { off(); clearInterval(ping); send("failed", { error: { code: "not_found", message: "job not found" } }); if (!res.writableEnded) res.end(); return; }
+  send("progress", { percent: job.percent });
+  if (job.status === "done") { off(); clearInterval(ping); send("done", publicJob(job, cfg)); if (!res.writableEnded) res.end(); }
+  else if (job.status === "failed") { off(); clearInterval(ping); send("failed", { error: job.error }); if (!res.writableEnded) res.end(); }
 }
 
 async function main(): Promise<void> {
