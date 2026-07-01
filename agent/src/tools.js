@@ -4,6 +4,8 @@
 import { resolveArticles } from "../../functions/lib/article-store.js";
 import { resolveStyle, parseStyleMarkdown } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
+import { imageCostUY } from "./usage.js";
+import { ensureAccount } from "./usage_store.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
 
@@ -236,4 +238,80 @@ register(
 register(
   { name: "share_to_community", description: "把当前这篇文章分享到 VoiceDrop 社区（立即分享）。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   async (_args, ctx) => postFiles(`community/share/${relKey(ctx)}`, ctx)
+);
+
+register(
+  {
+    name: "edit_photo",
+    description:
+      "把当前文章里某张图按指令重画/编辑（如变成广告、换背景、改风格）。参数 key 用该图 [[photo:KEY]] 里的 KEY（从当前正文图M那行读出）；prompt 是你把用户口述蒸馏成的完整图像编辑指令。异步：提交后约 1 分钟自动替换，本轮先告诉用户在处理，不要重复调用。",
+    input_schema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "要编辑的图片的 [[photo:KEY]] 里的 KEY，原样照抄，一个字都不要改。" },
+        prompt: { type: "string", description: "编辑指令蒸馏成的完整 prompt，例如：把这张产品照做成干净的电商广告主图，突出主体、简洁背景、留白舒适。" },
+      },
+      required: ["key", "prompt"],
+      additionalProperties: false,
+    },
+  },
+  async ({ key, prompt }, ctx) => {
+    const { env, scope, articleKey, articleIndex, origin, editId } = ctx;
+    if (!key || !prompt) return { error: "missing_key_or_prompt" };
+
+    const now = Date.now();
+    const bal = await ensureAccount(env.USAGE, scope, now);
+    if (bal < imageCostUY()) return { error: "算力不足，生成一张图 4.2 算力，请充值" };
+
+    const obj = await env.FILES.get(articleKey);
+    if (!obj) return { error: "not_found" };
+    let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
+    const articles = resolveArticles(doc);
+    if (!articles.length) return { error: "no_article" };
+    const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
+
+    const marker = `[[photo:${key}]]`;
+    if (!String(articles[idx].body || "").includes(marker)) return { error: "找不到这张图" };
+
+    const newKey = makeEditedKey(key, now);
+    const newMarker = `[[photo:${newKey}]]`;
+    const swap = (b) => String(b).split(marker).join(newMarker);
+    doc.articles = articles.map((a, i) => {
+      const next = { title: String(a.title || "(无题)"), body: i === idx ? swap(a.body) : String(a.body || "") };
+      if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
+      return next;
+    });
+    delete doc.title; delete doc.body;
+    const werr = await putArticleDoc(doc, ctx);
+    if (werr) return werr;
+
+    const paintBase = env.PAINT_BASE || "https://paint.jianshuo.dev";
+    let resp = null;
+    try {
+      resp = await globalThis.fetch(`${paintBase}/api/jobs`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${env.PAINT_API_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          size: "1024x1024",
+          image_url: `${origin}/files/api/photo/${scope}${key}`,
+          callback_url: `${origin}/agent/paint-callback`,
+          callback_token: env.PAINT_CALLBACK_TOKEN,
+          callback_meta: { scope, oldKey: key, newKey, articleKey, editId: editId || null },
+        }),
+      });
+    } catch { resp = null; }
+
+    if (!resp || resp.status !== 202) {
+      // 回退指针：把 newKey 换回 oldKey，保持文档与"没有在跑的任务"一致
+      const revert = resolveArticles(doc).map((a, i) => {
+        const next = { title: a.title, body: i === idx ? String(a.body).split(newMarker).join(marker) : a.body };
+        if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
+        return next;
+      });
+      await putArticleDoc({ ...doc, articles: revert }, ctx);
+      return { error: "图片服务提交失败" };
+    }
+    return { ok: true, message: "🎨 正在把图片改成…，约 1 分钟完成" };
+  }
 );
