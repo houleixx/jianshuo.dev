@@ -36,6 +36,11 @@ export function claudeCostUY(model, inTok, outTok, cacheWriteTok = 0, cacheReadT
 export function asrCostUY(seconds) {
   return Math.ceil(((seconds || 0) / 3600) * ASR_RMB_PER_HOUR * 1e6);
 }
+
+// 图片编辑（gpt-image-2 via paint）单价：按算力计价，避免 FX 漂移。
+export const IMAGE_SUANLI = 4.2;
+export function imageCostUY() { return suanliToUY(IMAGE_SUANLI); }
+
 export function gateDecision(balanceUY, durationSec) {
   if ((durationSec || 0) > MAX_RECORDING_SEC) return "too-long";
   if (balanceUY <= 0) return "no-credit";
