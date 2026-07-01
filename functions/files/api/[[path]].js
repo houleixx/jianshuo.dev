@@ -776,6 +776,61 @@ export async function onRequest(context) {
       return json({ ok: true, head: doc.head });
     }
 
+    // ── 风格数据集（语料）collect / dataset ─────────────────────────────────
+    // A separate raw-corpus feed alongside the versioned 文风 doc above — one
+    // sample per submission under `<styleScope>style/<id>.json`. This is the
+    // SAME directory `collectStyle()` (agent/src/miner.js) already writes to
+    // for shared-file submissions, so `dataset` must tolerate its older shape
+    // `{stem,sourceFile,type,needsExtraction,collectedAt,text}` (no id/chars/title).
+    //   POST   /style/collect   body {type?,title?,text,source?} → {ok, id}
+    //   GET    /style/dataset   → {items:[{id,type,title,chars,source,collectedAt}], count, totalChars}
+    //                              newest-first, metadata only (no `text`)
+    //   DELETE /style/dataset   → {ok, deleted}  (clears every sample in scope)
+    if (subaction === 'collect' && request.method === 'POST') {
+      let body; try { body = await request.json(); } catch { body = {}; }
+      const text = typeof body.text === 'string' ? body.text.trim() : '';
+      if (!text) return json({ error: 'empty_text' }, 400);
+      const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const sample = {
+        id, type: body.type || 'text', title: (body.title || '').slice(0, 200),
+        chars: [...text].length, source: body.source || '', text,
+        collectedAt: new Date().toISOString(),
+      };
+      await env.FILES.put(`${styleScope}style/${id}.json`, JSON.stringify(sample), { httpMetadata: { contentType: 'application/json' } });
+      return json({ ok: true, id });
+    }
+
+    if (subaction === 'dataset') {
+      if (request.method === 'GET') {
+        const items = [];
+        let cursor;
+        do {
+          const listed = await env.FILES.list({ prefix: `${styleScope}style/`, cursor });
+          for (const o of listed.objects) {
+            const obj = await env.FILES.get(o.key);
+            if (!obj) continue;
+            const s = await obj.json().catch(() => null);
+            if (!s) continue;
+            const id = s.id || o.key.split('/').pop().replace(/\.json$/, '');
+            const chars = typeof s.chars === 'number' ? s.chars : [...(s.text || '')].length;
+            items.push({ id, type: s.type || '', title: s.title || s.sourceFile || '', chars, source: s.source || '', collectedAt: s.collectedAt || '' });
+          }
+          cursor = listed.truncated ? listed.cursor : null;
+        } while (cursor);
+        items.sort((a, b) => (a.collectedAt < b.collectedAt ? 1 : -1));
+        return json({ items, count: items.length, totalChars: items.reduce((n, i) => n + (i.chars || 0), 0) });
+      }
+      if (request.method === 'DELETE') {
+        let cursor, deleted = 0;
+        do {
+          const listed = await env.FILES.list({ prefix: `${styleScope}style/`, cursor });
+          for (const o of listed.objects) { await env.FILES.delete(o.key); deleted++; }
+          cursor = listed.truncated ? listed.cursor : null;
+        } while (cursor);
+        return json({ ok: true, deleted });
+      }
+    }
+
     return json({ error: 'method not allowed' }, 405);
   }
 
