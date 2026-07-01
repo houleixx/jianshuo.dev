@@ -91,6 +91,26 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     expect(doc.status).toBe("ready");
   });
 
+  it("0 秒静音占位（-0m0s-）跳过 ASR：有照片直接看图成文，不打火山", async () => {
+    const STEM0  = "VoiceDrop-2026-07-01-101010-0m0s-周三-上午";
+    const AUDIO0 = `${SCOPE}${STEM0}.m4a`;
+    const env = envWithPhotos({ [AUDIO0]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
+    const fetchSpy = makeFetch({
+      transcriptText: "不该被用到", // 若真调了 ASR 会拿到这个非空文本，就不会走 vision 了
+      articles: [{ title: "图", body: `随手拍。\n\n[[photo:${PHOTO_REL}]]` }],
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await mineOneAudio(AUDIO0, [AUDIO0, PHOTO_KEY], {}, env, MODEL_CFG);
+    expect(r).toBe("mined");
+    // 关键：火山 ASR 端点一次都没被调（0 秒被跳过）。
+    expect(fetchSpy.calls.some((c) => c.url.includes("openspeech.bytedance.com"))).toBe(false);
+    // vision 照常写出图文。
+    expect(fetchSpy.calls.some((c) => c.url.includes("api.anthropic.com"))).toBe(true);
+    const articlePut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM0}`));
+    expect(articlePut).toBeTruthy();
+  });
+
   it("ASR 空且无照片仍写 .empty(no-speech)，不调用 Claude", async () => {
     const env = envWithPhotos({ [AUDIO]: "audiobytes" });
     const fetchSpy = makeFetch({ transcriptText: "", articles: [] });

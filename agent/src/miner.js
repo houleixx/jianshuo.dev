@@ -856,33 +856,40 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // Drop stale .blocked marker before proceeding (e.g. user topped up)
     try { await env.FILES.delete(`${userPrefix(audioKey)}articles/${stemOf(audioKey)}.blocked`); } catch (_) {}
 
-    await notifyStatus(scope, stem, "asr", env);
-
     // ── ASR (resumable across passes) ───────────────────────────────────────────
+    // 0 秒 = 静音占位（图片分享的占位音频，文件名 …-0m0s-…）：没有可转写的语音，直接
+    // 跳过 ASR —— 省一趟火山提交+轮询（延迟 + 钱 + subrequest 预算），落到下面的
+    // 「无语音 → 有照片就看图」路径。1 秒及以上照常 ASR。
     let transcript, srt, asrDurMs;
-    try {
-      const tAsr = Date.now();
-      const r = await transcribeResumable(audioKey, env, log);
-      if (r.status === "pending") {
-        log("ASR 处理中,本趟未完成,下趟续查");
-        result = "pending";
-        return "pending";
+    if (durSec === 0) {
+      transcript = ""; srt = ""; asrDurMs = 0;
+      log("0 秒静音占位,跳过 ASR");
+    } else {
+      await notifyStatus(scope, stem, "asr", env);
+      try {
+        const tAsr = Date.now();
+        const r = await transcribeResumable(audioKey, env, log);
+        if (r.status === "pending") {
+          log("ASR 处理中,本趟未完成,下趟续查");
+          result = "pending";
+          return "pending";
+        }
+        ({ transcript, srt, asrDurMs } = r);
+        log("ASR 完成", { chars: transcript.length, duration_ms: Date.now() - tAsr });
+      } catch (e) {
+        if (e instanceof AsrError) {
+          await env.FILES.delete(asrTaskKeyFor(audioKey)).catch(() => {});
+          await writeEmpty(audioKey, `asr-error:${e.code}`, env);
+          await notifyStatus(scope, stem, "empty", env);
+          log("ASR 错误", { code: e.code });
+          result = "empty";
+          return "empty";
+        }
+        // Non-deterministic (network / subrequest budget): record the REAL error so
+        // it's visible in the minelog; leave no marker (sidecar persists) → retry next pass.
+        log("ASR 失败(非确定性,下趟重试)", { name: e?.name, message: String(e?.message ?? e).slice(0, 200) });
+        throw e;
       }
-      ({ transcript, srt, asrDurMs } = r);
-      log("ASR 完成", { chars: transcript.length, duration_ms: Date.now() - tAsr });
-    } catch (e) {
-      if (e instanceof AsrError) {
-        await env.FILES.delete(asrTaskKeyFor(audioKey)).catch(() => {});
-        await writeEmpty(audioKey, `asr-error:${e.code}`, env);
-        await notifyStatus(scope, stem, "empty", env);
-        log("ASR 错误", { code: e.code });
-        result = "empty";
-        return "empty";
-      }
-      // Non-deterministic (network / subrequest budget): record the REAL error so
-      // it's visible in the minelog; leave no marker (sidecar persists) → retry next pass.
-      log("ASR 失败(非确定性,下趟重试)", { name: e?.name, message: String(e?.message ?? e).slice(0, 200) });
-      throw e;
     }
 
     // Debit ASR cost (best-effort; uses actual ASR duration or filename estimate).
