@@ -27,6 +27,8 @@ import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS } from "./usage.js";
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
+import { writeStyleDoc } from "../../functions/lib/style-store.js";
+import { distillStyle } from "./style-extract.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -613,6 +615,83 @@ export default {
       }
       const r = await restyleArticle(env, scope, stem, styleV);
       return new Response(JSON.stringify(r), { status: r.ok ? 200 : 422, headers: { "content-type": "application/json" } });
+    }
+
+    // ── /agent/style/extract ── distill the collected 风格数据集 (「接受分享」
+    // corpus, users/<sub>/style/<id>.json — see style-corpus.test.js / Task 2) into
+    // ONE 写作风格 description and write it as a new CLAUDE.json version. Body
+    // {clearAfter?}. Best-effort 算力 debit (same shape as _makeLoggedCall above) —
+    // billing never blocks or fails the response.
+    if (url.pathname === "/agent/style/extract") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const scope = await resolveScope(tok, env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+
+      const samples = [];
+      let cursor;
+      do {
+        const listed = await env.FILES.list({ prefix: `${scope}style/`, cursor });
+        for (const o of listed.objects) {
+          const obj = await env.FILES.get(o.key);
+          const s = obj && await obj.json().catch(() => null);
+          if (s && (s.text || "").trim()) samples.push(s);
+        }
+        cursor = listed.truncated ? listed.cursor : null;
+      } while (cursor);
+      if (!samples.length) return J({ error: "empty-dataset" }, 400);
+
+      // Same call shape as _makeLoggedCall: builds the request, hits the Anthropic
+      // API directly (this route isn't inside a DO, so it can't reuse that method),
+      // logs to llmlogs/ (best-effort, writeLlmLog swallows its own errors), and
+      // captures token usage for the 算力 debit below.
+      let lastUsage = null;
+      const claude = async ({ system, messages }) => {
+        const reqBody = { model: MODEL, max_tokens: 1500, system, messages };
+        const t0 = Date.now();
+        const resp = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": env.CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify(reqBody),
+        });
+        const ok = resp.ok;
+        const j = ok ? await resp.json() : null;
+        await writeLlmLog(env, {
+          ts: t0, source: "agent", user_scope: scope, model: MODEL,
+          latency_ms: Date.now() - t0, http_status: resp.status, ok,
+          step: 0, request: reqBody, response: ok ? j : undefined,
+          error: ok ? undefined : (await resp.text().catch(() => "")).slice(0, 2000),
+          meta: { kind: "style-extract", samples: samples.length },
+        });
+        if (!ok) throw new Error(`Claude HTTP ${resp.status}`);
+        lastUsage = j.usage || null;
+        return (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+      };
+
+      const style = await distillStyle(samples, claude);
+      const { head } = await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
+
+      if (body.clearAfter) {
+        let c;
+        do {
+          const l = await env.FILES.list({ prefix: `${scope}style/`, cursor: c });
+          for (const o of l.objects) await env.FILES.delete(o.key);
+          c = l.truncated ? l.cursor : null;
+        } while (c);
+      }
+
+      try {
+        if (env.USAGE) {
+          await ensureAccount(env.USAGE, scope, Date.now());
+          const cost = lastUsage
+            ? claudeCostUY(MODEL, lastUsage.input_tokens, lastUsage.output_tokens, lastUsage.cache_creation_input_tokens, lastUsage.cache_read_input_tokens)
+            : 0;
+          await debit(env.USAGE, scope, cost, "style-extract", { samples: samples.length }, Date.now());
+        }
+      } catch {}
+
+      return J({ ok: true, version: head, styleSummary: style.slice(0, 80) });
     }
 
     // ── /agent/notify ── mine.py notifies about processing state ───────────
