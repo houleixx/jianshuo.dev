@@ -130,6 +130,36 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     expect(claudeCalls.length).toBe(1);
   });
 
+  it("看图模式的 system prompt 不含口述叙事措辞（PHOTO_INSTR 未被追加），但仍保留 [[photo:<key>]] 标记指引", async () => {
+    const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
+    const fetchSpy = makeFetch({
+      transcriptText: "",
+      articles: [{ title: "午后的三张照片", body: `随手拍。\n\n[[photo:${PHOTO_REL}]]` }],
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const allKeys = [AUDIO, PHOTO_KEY];
+    const r = await mineOneAudio(AUDIO, allKeys, {}, env, MODEL_CFG);
+    expect(r).toBe("mined");
+
+    const claudeCall = fetchSpy.calls.find((c) => c.url.includes("api.anthropic.com"));
+    const payload = JSON.parse(claudeCall.body);
+    const systemText = Array.isArray(payload.system) ? payload.system.map((b) => b.text).join("") : payload.system;
+
+    // PHOTO_INSTR talks about 口述/"一边说一边拍" (spoken narration) — meaningless (and
+    // confusing) on the image-only vision path, where there is no speech at all. It must NOT
+    // be appended on top of IMAGE_ONLY_SYSTEM.
+    expect(systemText).not.toContain("口述");
+    expect(systemText).not.toContain("一边说一边拍");
+    // IMAGE_ONLY_SYSTEM already carries its own [[photo:<key>]] marker instruction (point 4),
+    // so the model still knows to insert the marker even without PHOTO_INSTR.
+    expect(systemText).toContain("[[photo:<key>]]");
+    // The photo's actual key still reaches the model via the <photo key="..."> tag that
+    // buildMinePrompt emits in the user content regardless of photoInstr.
+    const userTexts = payload.messages[0].content.filter((b) => b.type === "text").map((b) => b.text).join("");
+    expect(userTexts).toContain(`key="${PHOTO_REL}"`);
+  });
+
   it("默认 mine（有语音）行为不变：不受 IMAGE_ONLY_SYSTEM 影响", async () => {
     const env = envWithPhotos({ [AUDIO]: "audiobytes" });
     const fetchSpy = makeFetch({

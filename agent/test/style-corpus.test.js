@@ -40,6 +40,21 @@ describe("POST /style/collect", () => {
     expect(typeof stored.collectedAt).toBe("string");
   });
 
+  it("does not 500 on a non-string title/type; sanitizes them to strings", async () => {
+    const ctx = reqCtx("POST", ["style", "collect"], {
+      body: { type: 42, title: { evil: true }, text: "正文……" },
+    });
+    const scope = await anonScope(TOKEN);
+    const res = await onRequest(ctx);
+    expect(res.status).toBe(200);
+    const { ok, id } = await res.json();
+    expect(ok).toBe(true);
+
+    const stored = JSON.parse(ctx.env.FILES._store.get(`${scope}style/${id}.json`));
+    expect(stored.type).toBe("text"); // non-string type coerces to the default
+    expect(stored.title).toBe("");    // non-string title sanitizes to empty, not a thrown error
+  });
+
   it("rejects empty/blank text with 400", async () => {
     const res1 = await onRequest(reqCtx("POST", ["style", "collect"], { body: { text: "" } }));
     expect(res1.status).toBe(400);

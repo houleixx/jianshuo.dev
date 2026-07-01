@@ -543,11 +543,14 @@ export function buildMinePrompt({
   return payload;
 }
 
-async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system", systemOverride = null) {
+async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system", systemOverride = null, photoInstr = undefined) {
   const payload = buildMinePrompt({
     transcript, styleText: claudeMd, photos, force, cacheMode,
     provider: modelCfg.provider, model: modelCfg.model,
     ...(systemOverride ? { systemPrompt: systemOverride } : {}),
+    // Explicit "" (image-only vision path) must win over buildMinePrompt's PHOTO_INSTR
+    // default; omitted (undefined) leaves every other caller's behavior unchanged.
+    ...(photoInstr !== undefined ? { photoInstr } : {}),
   });
   const reqForLog = redactReqForLog(payload);
   const t0 = Date.now();
@@ -704,10 +707,16 @@ async function notifyStatus(scope, stem, status, env) {
 //                    force pass drops photos/style and coaxes a transcript-only article out
 //                    of thin content — meaningless (and prone to inventing facts) when there
 //                    is no transcript at all, so the image-only caller sets this true.
+//   photoInstr     — override the default PHOTO_INSTR appended after the system prompt when
+//                    photos are present. Omitted → PHOTO_INSTR (unchanged for every existing
+//                    caller). The image-only vision path passes "" — PHOTO_INSTR talks about
+//                    口述/"一边说一边拍" (spoken narration), which doesn't apply when there is
+//                    no speech at all; IMAGE_ONLY_SYSTEM already carries its own complete
+//                    instructions, including the [[photo:<key>]] marker guidance.
 async function mineVariant(env, {
   transcript, styleText, photos, cacheMode, modelCfg, scope, stem, turnId,
   metaExtra = {}, debitExtra = {}, label = "", log = () => {},
-  systemOverride = null, noForce = false,
+  systemOverride = null, noForce = false, photoInstr = undefined,
 }) {
   const meta = { user_scope: scope, stem, ...metaExtra };
   const tag = label ? " " + label : "";
@@ -715,7 +724,7 @@ async function mineVariant(env, {
     const tLlm = Date.now();
     log(`LLM 开始${tag}${force ? " (force)" : ""}`, { step });
     try {
-      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, modelCfg, cacheMode, systemOverride);
+      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, modelCfg, cacheMode, systemOverride, photoInstr);
       await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
       try {
         if (env.USAGE) {
@@ -901,7 +910,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         const turnId = `${Date.now()}-${stem.slice(-8)}`;
         const arts = await mineVariant(env, {
           transcript: "", styleText, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
-          systemOverride: IMAGE_ONLY_SYSTEM, noForce: true,
+          systemOverride: IMAGE_ONLY_SYSTEM, noForce: true, photoInstr: "",
           metaExtra: { source: "image" }, log,
         });
         if (arts.length) {

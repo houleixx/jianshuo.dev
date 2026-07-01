@@ -791,8 +791,13 @@ export async function onRequest(context) {
       const text = typeof body.text === 'string' ? body.text.trim() : '';
       if (!text) return json({ error: 'empty_text' }, 400);
       const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      // title/type must be sanitized to strings the same way `text` is above — a non-string
+      // body.title (number/object/array from a malformed client) would otherwise throw on
+      // `.slice` (no String.prototype.slice) and 500 the whole request.
       const sample = {
-        id, type: body.type || 'text', title: (body.title || '').slice(0, 200),
+        id,
+        type: (typeof body.type === 'string' && body.type) ? body.type : 'text',
+        title: typeof body.title === 'string' ? body.title.slice(0, 200) : '',
         chars: [...text].length, source: body.source || '', text,
         collectedAt: new Date().toISOString(),
       };
