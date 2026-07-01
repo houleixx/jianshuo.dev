@@ -22,6 +22,7 @@ import {
   MINE_SYSTEM_FORCE as SYSTEM_FORCE,
   PHOTO_INSTR as _PHOTO_INSTR,
   MINE_DEFAULT_STYLE as DEFAULT_STYLE,
+  IMAGE_ONLY_SYSTEM,
 } from "./prompts/mine.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
@@ -427,6 +428,19 @@ function findSessionPhotos(audioKey, allKeys) {
   return allKeys.filter(k => k.startsWith(folder) && /\.jpe?g$/i.test(k)).sort();
 }
 
+// Collect + load this recording's session photos (photos/<sessionTs>/*.jpg). Single
+// shared mechanism for both the has-speech mine and the no-speech-but-photos path —
+// same keys, same loader, same "skip a photo that fails to load" behavior.
+async function gatherPhotos(audioKey, allKeys, env, log = () => {}) {
+  const photoKeys = findSessionPhotos(audioKey, allKeys);
+  const photos = [];
+  for (const pk of photoKeys) {
+    try { const p = await loadPhoto(pk, env); if (p) photos.push(p); }
+    catch (e) { log("照片加载失败", { key: pk, err: e.message }); }
+  }
+  return photos;
+}
+
 // ── Claude (article generation) ───────────────────────────────────────────────
 
 // cacheMode picks the prompt-cache layout (Anthropic only; ignored for openai-compat):
@@ -529,10 +543,11 @@ export function buildMinePrompt({
   return payload;
 }
 
-async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system") {
+async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system", systemOverride = null) {
   const payload = buildMinePrompt({
     transcript, styleText: claudeMd, photos, force, cacheMode,
     provider: modelCfg.provider, model: modelCfg.model,
+    ...(systemOverride ? { systemPrompt: systemOverride } : {}),
   });
   const reqForLog = redactReqForLog(payload);
   const t0 = Date.now();
@@ -678,13 +693,21 @@ async function notifyStatus(scope, stem, status, env) {
 // Returns the article array ([] if even the force pass produced nothing; hard LLM errors
 // also collapse to [] after both passes, same as the scheduled mine). The force pass
 // drops the 文风 + photos to coax an article out of thin content — identical to runMine.
-//   cacheMode  — "system" | "transcript" (prompt-cache layout for this call).
-//   metaExtra  — extra fields on the LLM-log meta (e.g. { source:"text" } / { restyle:v }).
-//   debitExtra — extra fields on the 算力 ledger meta (e.g. { restyle:v }).
-//   label/log  — optional mine-run narration (runMine passes its logger; restyle doesn't).
+//   cacheMode      — "system" | "transcript" (prompt-cache layout for this call).
+//   metaExtra      — extra fields on the LLM-log meta (e.g. { source:"text" } / { restyle:v }).
+//   debitExtra     — extra fields on the 算力 ledger meta (e.g. { restyle:v }).
+//   label/log      — optional mine-run narration (runMine passes its logger; restyle doesn't).
+//   systemOverride — replace the default MINE_SYSTEM prompt for the natural pass only
+//                    (e.g. IMAGE_ONLY_SYSTEM for the no-speech-but-photos path). Omitted
+//                    → MINE_SYSTEM, i.e. behavior for every existing caller is unchanged.
+//   noForce        — skip the force retry when the natural pass returns no articles. The
+//                    force pass drops photos/style and coaxes a transcript-only article out
+//                    of thin content — meaningless (and prone to inventing facts) when there
+//                    is no transcript at all, so the image-only caller sets this true.
 async function mineVariant(env, {
   transcript, styleText, photos, cacheMode, modelCfg, scope, stem, turnId,
   metaExtra = {}, debitExtra = {}, label = "", log = () => {},
+  systemOverride = null, noForce = false,
 }) {
   const meta = { user_scope: scope, stem, ...metaExtra };
   const tag = label ? " " + label : "";
@@ -692,7 +715,7 @@ async function mineVariant(env, {
     const tLlm = Date.now();
     log(`LLM 开始${tag}${force ? " (force)" : ""}`, { step });
     try {
-      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, modelCfg, cacheMode);
+      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, modelCfg, cacheMode, systemOverride);
       await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
       try {
         if (env.USAGE) {
@@ -709,7 +732,7 @@ async function mineVariant(env, {
     }
   };
   let arts = await runLlm(false, 0);
-  if (!arts.length) { log("LLM 无文章，重试 (force)"); try { arts = await runLlm(true, 1); } catch (_) { arts = []; } }
+  if (!arts.length && !noForce) { log("LLM 无文章，重试 (force)"); try { arts = await runLlm(true, 1); } catch (_) { arts = []; } }
   return arts;
 }
 
@@ -793,7 +816,7 @@ async function writeMineLog(env, rec) {
 
 // ── Per-audio pipeline ─────────────────────────────────────────────────────────
 
-async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
+export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
   const leaf  = audioKey.split("/").pop();
   const scope = userPrefix(audioKey);
   const stem  = stemOf(audioKey);
@@ -867,6 +890,35 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     } catch (_) {}
 
     if (!transcript) {
+      // 没听出语音：如果这条录音带了照片（场景照片，或「只拍照不说话」的录音），就看图
+      // 写一条极简图文，而不是直接判「无语音」。只有连照片都没有，或看图也写不出内容，
+      // 才落回原来的 .empty(no-speech)。
+      const photos = await gatherPhotos(audioKey, allKeys, env, log);
+      if (photos.length) {
+        log("无语音但有照片,改走看图模式", { count: photos.length });
+        await notifyStatus(scope, stem, "mining", env);
+        const styleText = (await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+        const turnId = `${Date.now()}-${stem.slice(-8)}`;
+        const arts = await mineVariant(env, {
+          transcript: "", styleText, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
+          systemOverride: IMAGE_ONLY_SYSTEM, noForce: true,
+          metaExtra: { source: "image" }, log,
+        });
+        if (arts.length) {
+          const doc = {
+            schema: 2, id: stem, sourceAudio: leaf,
+            createdAt: uploaded[audioKey] || new Date().toISOString(),
+            transcript: "", srt: "", articles: arts, status: "ready", model: modelCfg.model,
+          };
+          await writeArticle(audioKey, doc, env);
+          await notifyStatus(scope, stem, "ready", env);
+          try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
+          log("看图写入完成", { articles: arts.length });
+          result = "mined";
+          return "mined";
+        }
+        log("看图也没写出内容,回退无语音");
+      }
       await writeEmpty(audioKey, "no-speech", env);
       await notifyStatus(scope, stem, "empty", env);
       log("ASR 无语音");
@@ -907,12 +959,7 @@ async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     const cacheMode = toMine.length >= 2 ? "transcript" : "system";
     if (claudeMd || picks.length) log("文风", { chars: claudeMd.length, use: picks.length ? picks.map((p) => `v${p.v}`).join(",") : (headV ? `v${headV}(head)` : "none") });
 
-    const photoKeys = findSessionPhotos(audioKey, allKeys);
-    const photos    = [];
-    for (const pk of photoKeys) {
-      try { const p = await loadPhoto(pk, env); if (p) photos.push(p); }
-      catch (e) { log("照片加载失败", { key: pk, err: e.message }); }
-    }
+    const photos = await gatherPhotos(audioKey, allKeys, env, log);
     if (photos.length) log("照片", { count: photos.length });
 
     const turnId = `${Date.now()}-${stem.slice(-8)}`;

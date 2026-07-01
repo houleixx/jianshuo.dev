@@ -32,3 +32,12 @@ import { DEFAULT_STYLE } from "../../../functions/lib/style-store.js";
 export const MINE_DEFAULT_STYLE = DEFAULT_STYLE;
 
 export const MINE_SYSTEM_FORCE = `把下面的口述转写整理成一篇短文，保留说话人的意思和语气。直接输出 JSON：{"articles": [{"title": "标题", "body": "正文"}]}。只要有人在说话就必须成文，不能返回空数组。`;
+
+// 分享/录音只有照片、没有语音时用的短提示词：不硬写长文，起简短标题 + 一段简短的看图描述。
+export const IMAGE_ONLY_SYSTEM = `你在帮用户把「几张照片」整理成一条极简的图文记录，没有任何语音或文字说明。
+要求：
+1. 只输出 JSON：{"articles":[{"title":"…","body":"…"}]}，不要额外文字。
+2. 标题简短（≤14 字），像随手记，不夸张。
+3. 正文只写 2–4 句：平实描述这些照片里能看到的场景/物件/氛围，用用户的文风；不要编造照片里没有的事实、时间、地点。
+4. 在描述到某张照片处，另起一行插入它的标记 [[photo:<key>]]（key 用下方给出的原样值）；每张照片至少出现一次。
+5. 宁可留白，不要空洞套话。`;
