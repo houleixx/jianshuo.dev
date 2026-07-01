@@ -20,11 +20,23 @@ const VALID_FORMAT = new Set(["png", "jpeg", "webp"]);
 const VALID_QUALITY = new Set(["low", "medium", "high", "auto"]);
 
 // Direct-literal-IP SSRF guard for server-side image_url fetch. Blocks loopback,
-// private, and link-local (incl. cloud metadata 169.254.x) hosts. NOTE: DNS-rebinding
-// via a hostname resolving to a private IP is NOT covered — acceptable for this
-// single-user, token-gated internal tool (v1); revisit with a resolver if opened up.
-function isBlockedHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+// private, and link-local (incl. cloud metadata 169.254.x) hosts, including
+// IPv4-mapped IPv6 literals (::ffff:a.b.c.d). NOTE: DNS-rebinding via a hostname
+// that resolves to a private IP is NOT covered — acceptable for this single-user,
+// token-gated internal tool (v1); revisit with a resolver if opened up. Exported for unit tests.
+export function isBlockedHost(hostname: string): boolean {
+  let h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  // Unwrap IPv4-mapped IPv6 (::ffff:a.b.c.d dotted, or ::ffff:aabb:ccdd hex) to its IPv4.
+  const mapped = h.match(/^::ffff:(.+)$/i);
+  if (mapped) {
+    let v4 = mapped[1];
+    const hex = v4.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+    if (hex) {
+      const n1 = parseInt(hex[1], 16), n2 = parseInt(hex[2], 16);
+      v4 = `${(n1 >> 8) & 255}.${n1 & 255}.${(n2 >> 8) & 255}.${n2 & 255}`;
+    }
+    h = v4;
+  }
   if (h === "localhost" || h.endsWith(".localhost")) return true;
   const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (m) {
@@ -35,7 +47,10 @@ function isBlockedHost(hostname: string): boolean {
     if (a === 192 && b === 168) return true;
     return false;
   }
-  if (h === "::1" || h.startsWith("fd") || h.startsWith("fe80")) return true;
+  // IPv6-literal-only checks (must contain ':', so plain domains like fda.gov are safe)
+  if (h.includes(":")) {
+    if (h === "::1" || h.startsWith("fd") || h.startsWith("fe80")) return true;
+  }
   return false;
 }
 
@@ -204,6 +219,8 @@ function publicJob(j: Job, cfg: Config) {
 }
 
 async function sseEvents(id: string, cfg: Config, store: JobStore, hub: EventHub, res: ServerResponse): Promise<void> {
+  const exists = await store.get(id);
+  if (!exists) return sendJson(res, 404, { error: "not found" });
   res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
   const send = (event: string, data: unknown) => {
     if (res.writableEnded) return;
@@ -217,9 +234,8 @@ async function sseEvents(id: string, cfg: Config, store: JobStore, hub: EventHub
   });
   ping = setInterval(() => { if (!res.writableEnded) res.write(": keepalive\n\n"); }, 15000);
   res.on("close", () => { off(); clearInterval(ping); });
-  // Read state AFTER subscribing so a terminal event fired during this read isn't lost.
-  const job = await store.get(id);
-  if (!job) { off(); clearInterval(ping); send("failed", { error: { code: "not_found", message: "job not found" } }); if (!res.writableEnded) res.end(); return; }
+  // Re-read AFTER subscribing so a terminal event fired during this read isn't lost.
+  const job = (await store.get(id)) ?? exists;
   send("progress", { percent: job.percent });
   if (job.status === "done") { off(); clearInterval(ping); send("done", publicJob(job, cfg)); if (!res.writableEnded) res.end(); }
   else if (job.status === "failed") { off(); clearInterval(ping); send("failed", { error: job.error }); if (!res.writableEnded) res.end(); }

@@ -7,7 +7,7 @@ import { loadConfig } from "../src/config.ts";
 import { JobStore } from "../src/store.ts";
 import { EventHub } from "../src/events.ts";
 import { Worker } from "../src/worker.ts";
-import { createApp } from "../src/server.ts";
+import { createApp, isBlockedHost } from "../src/server.ts";
 
 const FAKE = resolve("test/fixtures/fake-gpt-image-2-skill.mjs");
 
@@ -77,10 +77,19 @@ test("GET /results/<missing> returns 404", async () => {
   app.close();
 });
 
-test("POST image_url to a blocked loopback host is rejected", async () => {
+test("isBlockedHost blocks private/loopback/link-local incl IPv4-mapped IPv6, allows public", () => {
+  const blocked = ["http://127.0.0.1/","http://10.0.0.1/","http://192.168.1.1/","http://169.254.169.254/","http://172.16.0.1/","http://172.31.9.9/","http://0.0.0.0/","http://localhost/","http://[::1]/","http://[fd00::1]/","http://[fe80::1]/","http://[::ffff:169.254.169.254]/","http://[::ffff:127.0.0.1]/"];
+  for (const u of blocked) assert.equal(isBlockedHost(new URL(u).hostname), true, `should block ${u}`);
+  const allowed = ["http://example.com/","http://fda.gov/","http://fdic.gov/","http://172.15.0.1/","http://172.32.0.1/","http://11.0.0.1/","http://8.8.8.8/","http://jianshuo.dev/"];
+  for (const u of allowed) assert.equal(isBlockedHost(new URL(u).hostname), false, `should allow ${u}`);
+});
+
+test("POST image_url to a blocked host is rejected by the SSRF guard", async () => {
   const { app, base } = await boot();
-  const res = await fetch(`${base}/api/jobs`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer secret" }, body: JSON.stringify({ prompt: "x", image_url: "http://127.0.0.1:9/x.png" }) });
+  const res = await fetch(`${base}/api/jobs`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer secret" }, body: JSON.stringify({ prompt: "x", image_url: "http://[::ffff:169.254.169.254]/x.png" }) });
   assert.equal(res.status, 400);
+  const j = await res.json();
+  assert.equal(j.error, "image_url host not allowed"); // gates the guard specifically, not a fetch failure
   app.close();
 });
 
@@ -121,5 +130,12 @@ test("SSE streams to a terminal event for a generate job", async () => {
   }
   await reader.cancel().catch(() => {});
   assert.ok(saw);
+  app.close();
+});
+
+test("GET /api/jobs/<missing>/events returns 404", async () => {
+  const { app, base } = await boot();
+  const res = await fetch(`${base}/api/jobs/does-not-exist/events`, { headers: { Authorization: "Bearer secret" } });
+  assert.equal(res.status, 404);
   app.close();
 });
