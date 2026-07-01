@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JobStore, type Job } from "../src/store.ts";
@@ -50,4 +50,39 @@ test("recover flips running to queued", async () => {
   const ids = (await store.recover()).sort();
   assert.deepEqual(ids, ["q1", "r1"]);
   assert.equal((await store.get("r1"))?.status, "queued");
+});
+
+test("list ignores stray dot/temp files", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "paint-store-"));
+  const store = new JobStore(dir);
+  await store.create(sampleJob("a1"));
+  await writeFile(join(dir, ".zzz.tmp.json"), "not json");
+  await writeFile(join(dir, ".zzz.tmp"), "not json either");
+  const list = await store.list(10);
+  assert.equal(list.length, 1);
+  assert.equal(list[0].id, "a1");
+});
+
+test("list is stable with equal createdAt", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "paint-store-"));
+  const store = new JobStore(dir);
+  const createdAt = "2026-03-01T00:00:00.000Z";
+  await store.create({ ...sampleJob("x1"), createdAt });
+  await store.create({ ...sampleJob("x2"), createdAt });
+  const list = await store.list(10);
+  assert.equal(list.length, 2);
+  assert.deepEqual(list.map((j) => j.id).sort(), ["x1", "x2"]);
+});
+
+test("concurrent updates both apply", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "paint-store-"));
+  const store = new JobStore(dir);
+  await store.create(sampleJob("c1"));
+  await Promise.all([
+    store.update("c1", { percent: 50 }),
+    store.update("c1", { status: "running" }),
+  ]);
+  const got = await store.get("c1");
+  assert.equal(got?.percent, 50);
+  assert.equal(got?.status, "running");
 });

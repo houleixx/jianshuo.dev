@@ -34,6 +34,7 @@ export interface Job {
 }
 
 export class JobStore {
+  private chains = new Map<string, Promise<unknown>>(); // per-id update serialization (single-process)
   constructor(private dir: string) {}
 
   private path(id: string): string {
@@ -59,16 +60,22 @@ export class JobStore {
   }
 
   async update(id: string, patch: Partial<Job>): Promise<Job> {
-    const cur = await this.get(id);
-    if (!cur) throw new Error(`job not found: ${id}`);
-    const next = { ...cur, ...patch };
-    await this.writeAtomic(next);
-    return next;
+    const run = async (): Promise<Job> => {
+      const cur = await this.get(id);
+      if (!cur) throw new Error(`job not found: ${id}`);
+      const next = { ...cur, ...patch };
+      await this.writeAtomic(next);
+      return next;
+    };
+    const prev = (this.chains.get(id) ?? Promise.resolve()).catch(() => {});
+    const p = prev.then(run);
+    this.chains.set(id, p.catch(() => {}));
+    return p;
   }
 
   async list(limit: number): Promise<Job[]> {
     await this.ensureDir();
-    const files = (await readdir(this.dir)).filter((f) => f.endsWith(".json"));
+    const files = (await readdir(this.dir)).filter((f) => f.endsWith(".json") && !f.startsWith("."));
     const jobs: Job[] = [];
     for (const f of files) {
       try {
@@ -77,7 +84,7 @@ export class JobStore {
         /* skip unreadable */
       }
     }
-    jobs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    jobs.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
     return jobs.slice(0, limit);
   }
 
@@ -94,7 +101,7 @@ export class JobStore {
   }
 
   private async writeAtomic(job: Job): Promise<void> {
-    const tmp = this.path(`.${job.id}.tmp`);
+    const tmp = join(this.dir, `.${job.id}.tmp`); // must NOT go through path() (which appends .json)
     await writeFile(tmp, JSON.stringify(job, null, 2));
     await rename(tmp, this.path(job.id));
   }
