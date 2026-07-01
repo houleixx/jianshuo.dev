@@ -139,3 +139,10 @@ test("GET /api/jobs/<missing>/events returns 404", async () => {
   assert.equal(res.status, 404);
   app.close();
 });
+
+test("POST /api/jobs with malformed JSON returns 400", async () => {
+  const { app, base } = await boot();
+  const res = await fetch(`${base}/api/jobs`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer secret" }, body: "{not json" });
+  assert.equal(res.status, 400);
+  app.close();
+});

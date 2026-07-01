@@ -45,3 +45,18 @@ test("deliver no bearer header when token omitted", async () => {
   await deliver("https://cb", undefined, payload, "sec", { fetchImpl, delayMs: () => 0 });
   assert.equal(seen.headers["Authorization"], undefined);
 });
+
+test("deliver aborts on timeout and reports failure", async () => {
+  // AbortSignal.timeout()'s internal timer is unref'd, so a ref'd keepalive
+  // timer is needed to keep the event loop alive long enough for it to fire.
+  const keep = setInterval(() => {}, 10_000);
+  try {
+    const fetchImpl = ((_u: string, init: any) => new Promise((_res, rej) => {
+      init.signal?.addEventListener("abort", () => rej(new Error("aborted")));
+    })) as unknown as typeof fetch;
+    const res = await deliver("https://cb", undefined, payload, "sec", { fetchImpl, timeoutMs: 20, retries: 1, delayMs: () => 0 });
+    assert.equal(res.ok, false);
+  } finally {
+    clearInterval(keep);
+  }
+});

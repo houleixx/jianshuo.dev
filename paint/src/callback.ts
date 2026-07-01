@@ -22,11 +22,12 @@ export async function deliver(
   token: string | undefined,
   payload: CallbackPayload,
   secret: string,
-  opts: { retries?: number; delayMs?: (attempt: number) => number; fetchImpl?: typeof fetch } = {},
+  opts: { retries?: number; delayMs?: (attempt: number) => number; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<{ ok: boolean; attempts: number }> {
   const retries = opts.retries ?? 3;
   const delayMs = opts.delayMs ?? ((n) => 1000 * 2 ** (n - 1));
   const doFetch = opts.fetchImpl ?? fetch;
+  const timeoutMs = opts.timeoutMs ?? 15000;
   const body = JSON.stringify(payload);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -39,7 +40,7 @@ export async function deliver(
   for (let n = 1; n <= retries; n++) {
     attempts = n;
     try {
-      const res = await doFetch(url, { method: "POST", headers, body });
+      const res = await doFetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(timeoutMs) });
       if (res.ok) return { ok: true, attempts };
     } catch {
       /* network error → retry */

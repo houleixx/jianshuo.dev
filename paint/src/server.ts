@@ -121,7 +121,9 @@ export function createApp(cfg: Config, deps: { store: JobStore; hub: EventHub; w
         // POST /api/jobs
         if (path === "/api/jobs" && req.method === "POST") {
           const raw = await readBody(req, Math.ceil(cfg.maxInputBytes * 1.4) + 1024 * 1024);
-          const body = JSON.parse(raw.toString("utf8") || "{}");
+          let body: any;
+          try { body = JSON.parse(raw.toString("utf8") || "{}"); }
+          catch { return sendJson(res, 400, { error: "invalid JSON body" }); }
           return await submitJob(body, cfg, store, worker, res);
         }
         // GET /api/jobs (list)
@@ -176,7 +178,12 @@ async function submitJob(body: any, cfg: Config, store: JobStore, worker: Worker
         try { target = new URL(body.image_url); } catch { return sendJson(res, 400, { error: "image_url invalid" }); }
         if (target.protocol !== "http:" && target.protocol !== "https:") return sendJson(res, 400, { error: "image_url must be http(s)" });
         if (isBlockedHost(target.hostname)) return sendJson(res, 400, { error: "image_url host not allowed" });
-        const r = await fetch(target, { signal: AbortSignal.timeout(30000) });
+        // redirect: "manual" — fetch follows redirects by default, so a 3xx from an
+        // allowed host could redirect to a blocked target (e.g. cloud metadata) and
+        // bypass isBlockedHost, which only checks the initial hostname. With "manual",
+        // undici returns an opaqueredirect response (ok===false) for any 3xx, so it's
+        // rejected below before we ever connect to the redirect target.
+        const r = await fetch(target, { signal: AbortSignal.timeout(30000), redirect: "manual" });
         if (!r.ok || !r.body) return sendJson(res, 400, { error: `image_url fetch failed: ${r.status}` });
         const chunks: Buffer[] = [];
         let total = 0;
