@@ -28,7 +28,8 @@ import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS } from "./usage.js";
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
-import { distillStyle } from "./style-extract.js";
+import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM } from "./style-extract.js";
+import { silentM4aBytes } from "./silent-m4a.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -671,6 +672,20 @@ export default {
 
       const style = await distillStyle(samples, claude);
       const { head } = await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
+
+      // 生成/刷新「写作风格介绍」文章（固定 stem，覆盖上一篇）。写 article JSON 先于
+      // 占位 .m4a，这样 miner 扫到 .m4a 时 articles/<stem>.json 已存在 → 直接 skip，
+      // 不会去 ASR 这段静音。best-effort：失败不影响提取本身。
+      try {
+        const { title, body: introBody } = buildStyleIntroArticle(style, samples.length);
+        const introDoc = {
+          schema: 2, id: STYLE_INTRO_STEM, sourceAudio: `${STYLE_INTRO_STEM}.m4a`,
+          createdAt: new Date().toISOString(), transcript: "", srt: "",
+          articles: [{ title, body: introBody }], status: "ready", model: "style-intro",
+        };
+        await env.FILES.put(`${scope}articles/${STYLE_INTRO_STEM}.json`, JSON.stringify(introDoc), { httpMetadata: { contentType: "application/json" } });
+        await env.FILES.put(`${scope}${STYLE_INTRO_STEM}.m4a`, silentM4aBytes(), { httpMetadata: { contentType: "audio/mp4" } });
+      } catch (_) {}
 
       if (body.clearAfter) {
         // Best-effort: the style write above already succeeded and is the

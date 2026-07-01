@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { distillStyle, TOTAL_CORPUS_BUDGET } from "../src/style-extract.js";
+import { distillStyle, TOTAL_CORPUS_BUDGET, styleName, buildStyleIntroArticle } from "../src/style-extract.js";
 
 describe("distillStyle", () => {
   it("大数据集（很多超长样本）拼出的语料被总量封顶，不会无界增长撑爆 Claude 上下文", async () => {
@@ -35,5 +35,19 @@ describe("distillStyle", () => {
 
   it("空语料抛错", async () => {
     await expect(distillStyle([], async () => "")).rejects.toThrow(/empty/);
+  });
+
+  it("styleName 取第一行做名字（去引号、限长、空回退）", () => {
+    expect(styleName("松弛体\n## 一句话画像\n更多内容")).toBe("松弛体");
+    expect(styleName("「短句风」\n后续")).toBe("短句风");
+    expect(styleName("")).toBe("你的文风");
+  });
+
+  it("buildStyleIntroArticle 模版插入风格名与样本数", () => {
+    const { title, body } = buildStyleIntroArticle("松弛体\n画像…", 6);
+    expect(title).toContain("松弛体");
+    expect(body).toContain("松弛体");
+    expect(body).toContain("6 份");
+    expect(body).toContain("设置 → 写作风格");
   });
 });

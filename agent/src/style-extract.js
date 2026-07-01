@@ -64,3 +64,34 @@ export async function distillStyle(samples, claude) {
   const style = await claude({ system: DISTILL_SYSTEM, messages: [{ role: "user", content: corpus }] });
   return (style || "").trim();
 }
+
+// ── 写作风格 intro 文章 ────────────────────────────────────────────────────────
+// 提取风格后，除了写进 CLAUDE.json，还生成一篇「介绍这套风格」的文章，让抽象的风格
+// 变成看得见的东西（对新手友好）。固定 stem —— 每次提取都覆盖上一篇，永远只有最新一篇。
+export const STYLE_INTRO_STEM = "VoiceDrop-writing-style-intro";
+
+// 从蒸馏结果里取第一行当风格名（DISTILL_SYSTEM 要求第一行≤5 字起名）。
+export function styleName(style) {
+  const first = (style || "").split(/\r?\n/).find((l) => l.trim());
+  return (first ? first.trim() : "你的文风").replace(/^[「『"']|[」』"']$/g, "").slice(0, 12);
+}
+
+// 固定的介绍模版（作者手写，非 LLM 生成）；只插入风格名与样本数。
+export function buildStyleIntroArticle(style, sampleCount) {
+  const name = styleName(style);
+  const n = sampleCount || 0;
+  const title = `你的写作风格 · ${name}`;
+  const body = `这是 VoiceDrop 刚为你提炼的**写作风格**——一份「你喜欢怎么写」的指纹，取名「${name}」。
+
+它是从你放进「风格数据集」的 ${n} 份素材里蒸馏出来的：不抄内容，只抓你欣赏的那种句子节奏、用词、语气、开头收尾的习惯。
+
+**有什么用？**
+从现在起，VoiceDrop 每次把你的语音或照片挖成文章，都会照这套风格来写——让机器写出来的更像「你想要的味道」。
+
+**怎么管理？**
+去「设置 → 写作风格」，能看到它的完整内容和历史版本，随时切换或编辑。
+
+**想更准？**
+继续把你喜欢的文章分享进 VoiceDrop（会进「风格数据集」），攒够了再点一次「提取文章风格」——风格会更新，这篇介绍也跟着刷新成最新一版。`;
+  return { title, body };
+}
