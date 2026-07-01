@@ -25,7 +25,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
-import { editGate, claudeCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS } from "./usage.js";
+import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS } from "./usage.js";
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM } from "./style-extract.js";
@@ -720,6 +720,30 @@ export default {
       // (upload a tagged placeholder + trigger — see mineStyleExtract), which is robust and
       // shows progress; this endpoint stays for debug/other callers and runs the distill inline.
       try { await distillAndWrite(); } catch (e) { return J({ error: "distill-failed", detail: String((e && e.message) || e) }, 500); }
+      return J({ ok: true });
+    }
+
+    // ── /agent/paint-callback ── paint 出图完成回调：验 token → 幂等 → 写 R2 (+扣费) ──
+    if (url.pathname === "/agent/paint-callback") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!env.PAINT_CALLBACK_TOKEN || tok !== env.PAINT_CALLBACK_TOKEN) return new Response("unauthorized", { status: 401 });
+      const body = await request.json().catch(() => null);
+      const m = body && body.callback_meta;
+      if (!m || !m.scope || !m.newKey) return J({ error: "bad request" }, 400);
+      const fullNew = m.scope + m.newKey;
+      // 幂等：结果键已存在 → 回调重送，直接成功不重复写/扣费
+      if (await env.FILES.head(fullNew)) return J({ ok: true, dedup: true });
+      if (body.status === "done" && body.result_url) {
+        const r = await globalThis.fetch(body.result_url);
+        if (!r.ok) return J({ error: `fetch_result_${r.status}` }, 502);
+        await env.FILES.put(fullNew, r.body, { httpMetadata: { contentType: r.headers.get("content-type") || "image/png" } });
+        await debit(env.USAGE, m.scope, imageCostUY(), "image-edit", { jobId: body.job_id || null, newKey: m.newKey }, Date.now());
+      } else {
+        // 失败：写原图副本（保留原图可见），不扣费
+        const o = m.oldKey ? await env.FILES.get(m.scope + m.oldKey) : null;
+        if (o) await env.FILES.put(fullNew, o.body, { httpMetadata: { contentType: (o.httpMetadata && o.httpMetadata.contentType) || "image/jpeg" } });
+      }
       return J({ ok: true });
     }
 
