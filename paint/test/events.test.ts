@@ -19,3 +19,12 @@ test("unsubscribe stops delivery", () => {
   hub.publish("j1", "done", {});
   assert.equal(got.length, 0);
 });
+
+test("a throwing listener does not block sibling listeners", () => {
+  const hub = new EventHub();
+  const got: string[] = [];
+  hub.subscribe("j1", () => { throw new Error("boom"); }); // first listener throws
+  hub.subscribe("j1", (ev) => got.push(ev));               // sibling must still fire
+  hub.publish("j1", "done", {});
+  assert.deepEqual(got, ["done"]);
+});
