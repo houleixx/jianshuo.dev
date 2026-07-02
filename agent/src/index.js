@@ -743,12 +743,14 @@ export default {
         if (!String(body.result_url).startsWith(paintBase + "/")) return J({ error: "bad result_url" }, 400);
         const r = await globalThis.fetch(body.result_url);
         if (!r.ok) return J({ error: `fetch_result_${r.status}` }, 502);
-        await env.FILES.put(fullNew, r.body, { httpMetadata: { contentType: r.headers.get("content-type") || "image/png" } });
+        // R2.put 要求 body 有已知长度；fetch 的响应体流长度未知（paint /results 无 Content-Length），
+        // 必须先缓冲成 ArrayBuffer，否则抛 "Provided readable stream must have a known length"。
+        await env.FILES.put(fullNew, await r.arrayBuffer(), { httpMetadata: { contentType: r.headers.get("content-type") || "image/png" } });
         await debit(env.USAGE, m.scope, imageCostUY(), "image-edit", { jobId: body.job_id || null, newKey: m.newKey }, Date.now());
       } else {
         // 失败：写原图副本（保留原图可见），不扣费
         const o = m.oldKey ? await env.FILES.get(m.scope + m.oldKey) : null;
-        if (o) await env.FILES.put(fullNew, o.body, { httpMetadata: { contentType: (o.httpMetadata && o.httpMetadata.contentType) || "image/jpeg" } });
+        if (o) await env.FILES.put(fullNew, await o.arrayBuffer(), { httpMetadata: { contentType: (o.httpMetadata && o.httpMetadata.contentType) || "image/jpeg" } });
       }
       return J({ ok: true });
     }

@@ -38,11 +38,13 @@ describe("POST /agent/paint-callback", () => {
 
   it("done: writes ad bytes to newKey and debits imageCostUY", async () => {
     const env = await env0();
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, body: "ADBYTES", headers: { get: () => "image/png" } })));
+    // Response body must be consumed via arrayBuffer() (R2.put needs a known length);
+    // no `.body` on the stub so a regression to `r.body` writes undefined and this fails.
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => "ADBYTES", headers: { get: () => "image/png" } })));
     const before = await balanceUY(env.USAGE, SCOPE, 2);
     const res = await worker.fetch(req({ job_id: "j1", status: "done", result_url: "https://paint.test/results/x.png", callback_meta: meta }), env);
     expect(res.status).toBe(200);
-    expect(await env.FILES.head(SCOPE + NEW)).toBeTruthy();
+    expect(await (await env.FILES.get(SCOPE + NEW)).text()).toBe("ADBYTES"); // exact bytes written
     const after = await balanceUY(env.USAGE, SCOPE, 2);
     expect(before - after).toBe(imageCostUY());
   });
@@ -59,7 +61,7 @@ describe("POST /agent/paint-callback", () => {
 
   it("idempotent: second done callback is a no-op (no double debit)", async () => {
     const env = await env0();
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, body: "ADBYTES", headers: { get: () => "image/png" } })));
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, arrayBuffer: async () => "ADBYTES", headers: { get: () => "image/png" } })));
     const b0 = await balanceUY(env.USAGE, SCOPE, 2);
     await worker.fetch(req({ job_id: "j1", status: "done", result_url: "https://paint.test/x.png", callback_meta: meta }), env);
     const b1 = await balanceUY(env.USAGE, SCOPE, 2);
