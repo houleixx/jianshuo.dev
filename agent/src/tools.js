@@ -431,7 +431,7 @@ register(
       const a = resolveArticles(doc)[0] || {};
       parts.push(`《${a.title || "(无题)"}》\n${a.body || ""}`);
     }
-    const style = (await readStyleText(env, `${scope}CLAUDE.json`).catch(() => "")) || "";
+    const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
     const system = `你是${"王建硕"}的写作助手。把用户给的几篇文章揉成一篇连贯的新文章：去重、顺逻辑、保持下面这套写作风格。第一行只写标题（不加书名号/引号），其余为正文。\n\n【写作风格】\n${style}`.trim();
     const user = `${guidance ? `合并侧重：${guidance}\n\n` : ""}请把以下 ${parts.length} 篇合并成一篇：\n\n${parts.join("\n\n---\n\n")}`;
     const resp = await callClaude({ system, messages: [{ role: "user", content: user }] });
@@ -454,7 +454,7 @@ register(
   async ({ stem }, { env, scope }) => {
     if (badStem(stem)) return { error: "bad_stem" };
     const r = await restyleArticle(env, scope, stem, null);   // null → 用当前文风 head
-    return r && r.ok === false ? { error: r.error || "restyle_failed" } : { ok: true, stem };
+    return r && r.ok === false ? { error: r.reason || "restyle_failed" } : { ok: true, stem };
   }
 );
 
