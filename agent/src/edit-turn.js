@@ -8,7 +8,7 @@ import { runAgentLoop } from "./loop.js";
 import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { inlineNumberedBody } from "./linenum.js";
 
-const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo"];
+const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo", "new_photo"];
 
 export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, system, history = [], callClaude }) {
   const obj = await env.FILES.get(articleKey);

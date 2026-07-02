@@ -241,6 +241,36 @@ register(
   async (_args, ctx) => postFiles(`community/share/${relKey(ctx)}`, ctx)
 );
 
+// Shared paint-job POST for both edit_photo (oldKey present → edit mode with
+// image_url) and new_photo (no oldKey → generate mode, no image_url). Returns
+// the fetch Response, or null on network failure (caller checks status).
+async function postPaintJob(ctx, { prompt, newKey, oldKey }) {
+  const { env, scope, articleKey, origin, editId } = ctx;
+  const paintBase = env.PAINT_BASE || "https://paint.jianshuo.dev";
+  const meta = { scope, newKey, articleKey, editId: editId || null };
+  const body = {
+    prompt,
+    size: "1024x1024",
+    format: "jpeg",
+    callback_url: `${origin}/agent/paint-callback`,
+    callback_token: env.PAINT_CALLBACK_TOKEN,
+    callback_meta: meta,
+  };
+  if (oldKey) {
+    body.image_url = `${origin}/files/api/photo/${scope}${oldKey}`;
+    meta.oldKey = oldKey;
+  }
+  try {
+    return await globalThis.fetch(`${paintBase}/api/jobs`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.PAINT_API_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return null;
+  }
+}
+
 register(
   {
     name: "edit_photo",
@@ -257,7 +287,7 @@ register(
     },
   },
   async ({ key, prompt }, ctx) => {
-    const { env, scope, articleKey, articleIndex, origin, editId } = ctx;
+    const { env, scope, articleKey, articleIndex } = ctx;
     if (!key || !prompt) return { error: "missing_key_or_prompt" };
 
     const now = Date.now();
@@ -287,23 +317,7 @@ register(
     const werr = await putArticleDoc(doc, ctx);
     if (werr) return werr;
 
-    const paintBase = env.PAINT_BASE || "https://paint.jianshuo.dev";
-    let resp = null;
-    try {
-      resp = await globalThis.fetch(`${paintBase}/api/jobs`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${env.PAINT_API_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          size: "1024x1024",
-          format: "jpeg",
-          image_url: `${origin}/files/api/photo/${scope}${key}`,
-          callback_url: `${origin}/agent/paint-callback`,
-          callback_token: env.PAINT_CALLBACK_TOKEN,
-          callback_meta: { scope, oldKey: key, newKey, articleKey, editId: editId || null },
-        }),
-      });
-    } catch { resp = null; }
+    const resp = await postPaintJob(ctx, { prompt, newKey, oldKey: key });
 
     if (!resp || resp.status !== 202) {
       // 回退指针：把 newKey 换回 oldKey，保持文档与"没有在跑的任务"一致
@@ -316,5 +330,66 @@ register(
       return { error: "图片服务提交失败" };
     }
     return { ok: true, message: "🎨 正在把图片改成…，约 1 分钟完成" };
+  }
+);
+
+register(
+  {
+    name: "new_photo",
+    description:
+      "凭空生成一张新图片插入当前文章（文生图：配图 / 插画 / 海报 / 广告）。prompt=完整的图像生成指令；after_line=插到当前正文第几行之后（0=插到正文最前面，行号用当前正文里标的第N行）。异步：提交后约 1 分钟自动出现，本轮先告诉用户在生成，不要重复调用。",
+    input_schema: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: "图像生成指令，完整清晰，例如：一张扁平插画风格的城市夜景，暖色调，简洁留白。" },
+        after_line: { type: "integer", description: "插到当前正文第 N 行之后；0 = 插到正文最前面。" },
+      },
+      required: ["prompt", "after_line"],
+      additionalProperties: false,
+    },
+  },
+  async ({ prompt, after_line }, ctx) => {
+    const { env, scope, articleKey, articleIndex } = ctx;
+    if (!prompt) return { error: "missing_prompt" };
+
+    const now = Date.now();
+    const bal = await ensureAccount(env.USAGE, scope, now);
+    if (bal < imageCostUY()) return { error: "算力不足，生成一张图 4.2 算力，请充值" };
+
+    const obj = await env.FILES.get(articleKey);
+    if (!obj) return { error: "not_found" };
+    let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
+    const articles = resolveArticles(doc);
+    if (!articles.length) return { error: "no_article" };
+    const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
+
+    const newKey = makeEditedKey("", now, Math.random().toString(36).slice(2, 8));
+    const marker = `[[photo:${newKey}]]`;
+    const r = applyArticleEdits(String(articles[idx].body || ""), [{ op: "insert_after", line: Number(after_line) || 0, text: marker }]);
+    if (r.error) return r; // surface line_not_found etc.
+
+    const origBodies = articles.map((a) => String(a.body || ""));
+    doc.articles = articles.map((a, i) => {
+      const next = { title: String(a.title || "(无题)"), body: i === idx ? r.body : String(a.body || "") };
+      if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
+      return next;
+    });
+    delete doc.title; delete doc.body;
+    const werr = await putArticleDoc(doc, ctx);
+    if (werr) return werr;
+
+    const resp = await postPaintJob(ctx, { prompt, newKey }); // generate: no oldKey
+
+    if (!resp || resp.status !== 202) {
+      // 回退：撤掉插入的新图 marker，保持文档与"没有在跑的任务"一致
+      const revert = articles.map((a, i) => {
+        const next = { title: String(a.title || "(无题)"), body: origBodies[i] };
+        if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
+        return next;
+      });
+      await putArticleDoc({ ...doc, articles: revert }, ctx);
+      return { error: "图片服务提交失败" };
+    }
+    return { ok: true, message: "🎨 正在生成新图，约 1 分钟出现" };
   }
 );

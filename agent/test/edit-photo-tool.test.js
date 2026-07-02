@@ -101,3 +101,46 @@ describe("edit_photo tool", () => {
     expect(calls.put.body.articles[0].body).toContain(`[[photo:${OLD}]]`);
   });
 });
+
+describe("new_photo tool", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("inserts a new marker into the body and fires paint with NO image_url", async () => {
+    const ctx = await makeCtx();
+    const calls = stubFetch();
+    const r = await runTool("new_photo", { prompt: "a poster", after_line: 0 }, ctx);
+    expect(r.ok).toBe(true);
+    expect(r.message).toContain("约 1 分钟出现");
+
+    const body = calls.put.body.articles[0].body;
+    expect(body).toMatch(/\[\[photo:photos\/.+\.jpg\]\]/);
+    // the original marker is untouched, still present
+    expect(body).toContain(`[[photo:${OLD}]]`);
+
+    expect(calls.paint.headers.Authorization).toBe("Bearer ptok");
+    expect(calls.paint.body.prompt).toBe("a poster");
+    expect(calls.paint.body.image_url).toBeUndefined();
+    expect(calls.paint.body.callback_meta.oldKey).toBeUndefined();
+    expect(calls.paint.body.callback_meta.scope).toBe(SCOPE);
+    expect(calls.paint.body.callback_meta.articleKey).toBe(ARTICLE_KEY);
+    expect(calls.paint.body.callback_meta.newKey).toMatch(/^photos\/.+\.jpg$/);
+  });
+
+  it("rejects when balance < imageCostUY (no paint call)", async () => {
+    const ctx = await makeCtx({ grantSuanli: 1 }); // < 4.2
+    const calls = stubFetch();
+    const r = await runTool("new_photo", { prompt: "x", after_line: 0 }, ctx);
+    expect(r.error).toContain("算力不足");
+    expect(calls.paint).toBe(null);
+  });
+
+  it("reverts the inserted marker when paint submit fails (non-202)", async () => {
+    const ctx = await makeCtx();
+    const calls = stubFetch({ paintStatus: 500 });
+    const r = await runTool("new_photo", { prompt: "x", after_line: 0 }, ctx);
+    expect(r.error).toBe("图片服务提交失败");
+    // final PUT'd body no longer contains the new marker — reverted to the original
+    expect(calls.put.body.articles[0].body).not.toMatch(/\[\[photo:photos\/(?!171\/171\.jpg).+\.jpg\]\]/);
+    expect(calls.put.body.articles[0].body).toBe(`第一段。\n[[photo:${OLD}]]\n第二段。`);
+  });
+});
