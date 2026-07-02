@@ -204,7 +204,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     const AUD  = `${SCOPE}${STEM}.m4a`;
     const env = envWithPhotos({
       [AUD]: "silentbytes",
-      [`${SCOPE}style/s1.json`]: JSON.stringify({ id: "s1", title: "样本", text: "我写东西偏口语，短句多。" }),
+      [`${SCOPE}style/s1.json`]: JSON.stringify({ id: "s1", title: "样本", text: "我写东西偏口语，短句多。".repeat(30) }),   // ≥ MIN_CORPUS_CHARS，过充足性硬闸
     });
     const calls = [];
     const fetchSpy = async (url, init = {}) => {
@@ -227,5 +227,35 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     expect(JSON.parse(articlePut.body).articles[0].title).toContain("口语派");          // 标题含风格名
     expect(JSON.parse(articlePut.body).articles[0].body).toContain("1. 样本");           // 介绍文章列出素材清单
     expect(env.FILES._store.has(`${SCOPE}style/s1.json`)).toBe(false);                  // clearAfter → 语料清空
+  });
+
+  it("style-extract 任务：语料只有书名级碎片（不足 MIN_CORPUS_CHARS）→ 写「样本不足」反馈文章，不写风格版本、不清语料、不打 Claude", async () => {
+    // anon-15 事故回归：只分享了《送你一颗子弹》书名 → 蒸馏器的「无法蒸馏」说明卡被
+    // 存成风格版本并成为生效文风。硬闸后：跳过蒸馏，反馈走文章通道，风格不动。
+    const STEM = "VoiceDrop-2026-07-02-110000-0m0s-Thu-Morning-TaskStyleExtract";
+    const AUD  = `${SCOPE}${STEM}.m4a`;
+    const env = envWithPhotos({
+      [AUD]: "silentbytes",
+      [`${SCOPE}style/s1.json`]: JSON.stringify({ id: "s1", title: "送你一颗子弹", text: "《送你一颗子弹》" }),
+    });
+    const calls = [];
+    const fetchSpy = async (url, init = {}) => {
+      calls.push({ url: String(url), method: (init.method || "GET").toUpperCase(), body: init.body });
+      return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+    };
+    fetchSpy.calls = calls;
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await mineOneAudio(AUD, [AUD], {}, env, MODEL_CFG);
+    expect(r).toBe("mined");
+    expect(calls.some((c) => c.url.includes("api.anthropic.com"))).toBe(false);   // 没打 Claude
+    expect(env.FILES._store.has(`${SCOPE}CLAUDE.json`)).toBe(false);              // 没写风格版本
+    const articlePut = calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
+    expect(articlePut).toBeTruthy();                                               // 反馈文章写了
+    const art = JSON.parse(articlePut.body).articles[0];
+    expect(art.title).toBe("样本不足，风格没有更新");
+    expect(art.body).toContain("送你一颗子弹");                                    // 列出收到的素材
+    expect(art.body).toContain("没有改动你的写作风格");
+    expect(env.FILES._store.has(`${SCOPE}style/s1.json`)).toBe(true);             // 语料保留，补够再提
   });
 });

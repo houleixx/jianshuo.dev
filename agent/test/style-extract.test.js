@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { distillStyle, TOTAL_CORPUS_BUDGET, styleName, buildStyleIntroArticle } from "../src/style-extract.js";
+import { distillStyle, TOTAL_CORPUS_BUDGET, styleName, buildStyleIntroArticle, corpusChars, MIN_CORPUS_CHARS, buildInsufficientCorpusArticle } from "../src/style-extract.js";
 
 describe("distillStyle", () => {
   it("大数据集（很多超长样本）拼出的语料被总量封顶，不会无界增长撑爆 Claude 上下文", async () => {
@@ -69,5 +69,29 @@ describe("distillStyle", () => {
     expect(body).toContain("1. 上海咖啡馆漫游 — mp.weixin.qq.com");
     expect(body).toContain("2. example.com/post");     // 标题空 → 来源当标签
     expect(body).toContain("3. 随笔.docx");             // 退回 sourceFile
+  });
+});
+
+describe("语料充足性硬闸（anon-15 回归）", () => {
+  it("corpusChars 数的是去空白后的有效字数（code points），空/缺 text 记 0", () => {
+    expect(corpusChars([])).toBe(0);
+    expect(corpusChars([{ text: "  " }, {}, null])).toBe(0);
+    expect(corpusChars([{ text: "《送你一颗子弹》" }])).toBe(8);
+    expect(corpusChars([{ text: "abc" }, { text: "字".repeat(10) }])).toBe(13);
+  });
+
+  it("MIN_CORPUS_CHARS 拦得住书名级碎片，放得过几个真实段落", () => {
+    expect(corpusChars([{ text: "《送你一颗子弹》" }])).toBeLessThan(MIN_CORPUS_CHARS);
+    expect(corpusChars([{ text: "真实段落。".repeat(80) }])).toBeGreaterThanOrEqual(MIN_CORPUS_CHARS);
+  });
+
+  it("buildInsufficientCorpusArticle：说明没改风格 + 列出收到的素材 + 教怎么补", () => {
+    const { title, body } = buildInsufficientCorpusArticle(
+      [{ title: "送你一颗子弹", source: "weread" }], 8);
+    expect(title).toBe("样本不足，风格没有更新");
+    expect(body).toContain("8 个字");
+    expect(body).toContain("1. 送你一颗子弹 — weread");
+    expect(body).toContain("没有改动你的写作风格");
+    expect(body).toContain("提取文章风格");
   });
 });

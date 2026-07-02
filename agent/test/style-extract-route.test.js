@@ -54,10 +54,26 @@ describe("POST /agent/style/extract", () => {
     expect(await res.json()).toEqual({ error: "empty-dataset" });
   });
 
+  it("400 insufficient-corpus when the corpus is only title-level fragments (anon-15 回归：书名蒸不出风格)", async () => {
+    const scope = await scopeFor(TOKEN);
+    const env = { ...fakeEnv(), CLAUDE_API_KEY: "k" };
+    env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", title: "送你一颗子弹", text: "《送你一颗子弹》" }));
+    const spy = mockClaudeFetch();
+    vi.stubGlobal("fetch", spy);
+    const res = await worker.fetch(req({}), env);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("insufficient-corpus");
+    expect(body.min).toBeGreaterThan(0);
+    expect(spy).not.toHaveBeenCalled();                                  // 没打 Claude
+    expect(env.FILES._store.has(`${scope}CLAUDE.json`)).toBe(false);     // 没写风格版本
+    expect(env.FILES._store.has(`${scope}style/a1.json`)).toBe(true);    // 语料保留
+  });
+
   it("happy path (sync fallback endpoint): distills the corpus + writes a new CLAUDE.json version", async () => {
     const scope = await scopeFor(TOKEN);
     const env = { ...fakeEnv(), CLAUDE_API_KEY: "k" };
-    env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", title: "样本一", text: "我写东西偏口语。" }));
+    env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", title: "样本一", text: "我写东西偏口语。".repeat(40) }));   // ≥ MIN_CORPUS_CHARS
     vi.stubGlobal("fetch", mockClaudeFetch("偏口语、短句、少形容词。"));
 
     const res = await worker.fetch(req({}), env);
@@ -79,7 +95,7 @@ describe("POST /agent/style/extract", () => {
     // clearAfter: true
     {
       const env = { ...fakeEnv(), CLAUDE_API_KEY: "k" };
-      env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", title: "t", text: "样本文本" }));
+      env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", title: "t", text: "样本文本，凑够充足性硬闸的字数。".repeat(25) }));
       vi.stubGlobal("fetch", mockClaudeFetch());
       const res = await worker.fetch(req({ clearAfter: true }), env);
       expect(res.status).toBe(200);
@@ -90,7 +106,7 @@ describe("POST /agent/style/extract", () => {
     // clearAfter: false (default) — corpus retained
     {
       const env = { ...fakeEnv(), CLAUDE_API_KEY: "k" };
-      env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", title: "t", text: "样本文本" }));
+      env.FILES._store.set(`${scope}style/a1.json`, JSON.stringify({ id: "a1", title: "t", text: "样本文本，凑够充足性硬闸的字数。".repeat(25) }));
       vi.stubGlobal("fetch", mockClaudeFetch());
       const res = await worker.fetch(req({ clearAfter: false }), env);
       expect(res.status).toBe(200);

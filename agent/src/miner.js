@@ -17,7 +17,7 @@ import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
-import { distillStyle, buildStyleIntroArticle } from "./style-extract.js";
+import { distillStyle, buildStyleIntroArticle, buildInsufficientCorpusArticle, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import {
   MINE_SYSTEM as SYSTEM,
   MINE_SYSTEM_FORCE as SYSTEM_FORCE,
@@ -906,8 +906,18 @@ async function mineStyleExtract(task, audioKey, env, modelCfg, log) {
 
   if (!samples.length) {
     await writeReadyArticle("风格数据集为空",
-      "还没有可提炼的素材。先从别的 app 分享一些你喜欢的文章 / 网页 / 文档进来（会进「风格数据集」），再点「提取文章风格」。");
+      "还没有可提炼的素材。先从别的 app 分享一些你喜欢的文章 / 网页 / 文档进来（会进「风格数据集」），再点「提取文章风格」。\n\n你的写作风格没有被改动，当前生效的还是原来那一版。");
     log("风格数据集为空");
+    return "mined";
+  }
+
+  // 硬闸：语料有效字数不够（如只分享了书名/链接）就不蒸馏、不落风格版本——否则
+  // 蒸馏器的「无法蒸馏」说明卡会被存成新版本并成为生效文风。语料保留，补够再提。
+  const totalChars = corpusChars(samples);
+  if (totalChars < MIN_CORPUS_CHARS) {
+    const { title, body } = buildInsufficientCorpusArticle(samples, totalChars);
+    await writeReadyArticle(title, body);
+    log("风格语料不足，跳过蒸馏", { totalChars, min: MIN_CORPUS_CHARS });
     return "mined";
   }
 

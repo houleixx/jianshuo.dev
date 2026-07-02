@@ -29,7 +29,7 @@ import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS } from "./usage.js";
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
-import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM } from "./style-extract.js";
+import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
@@ -890,6 +890,10 @@ export default {
         cursor = listed.truncated ? listed.cursor : null;
       } while (cursor);
       if (!samples.length) return J({ error: "empty-dataset" }, 400);
+      // 硬闸（与 miner 的 mineStyleExtract 同口径）：语料有效字数不够就不蒸馏——
+      // 否则蒸馏器的「无法蒸馏」说明卡会落成风格版本并成为生效文风。
+      const totalChars = corpusChars(samples);
+      if (totalChars < MIN_CORPUS_CHARS) return J({ error: "insufficient-corpus", totalChars, min: MIN_CORPUS_CHARS }, 400);
 
       // Same call shape as _makeLoggedCall: builds the request, hits the Anthropic
       // API directly (this route isn't inside a DO, so it can't reuse that method),

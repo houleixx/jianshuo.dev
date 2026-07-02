@@ -94,6 +94,48 @@ export async function distillStyle(samples, claude) {
   return `${name}\n${card}`;   // name on line 1 (iOS + intro read line 1 as the display name)
 }
 
+// ── 语料充足性 ────────────────────────────────────────────────────────────────
+// 蒸馏前的确定性硬闸：语料有效字数低于这个数就不值得（也不允许）蒸馏。只有书名 /
+// 一句话的语料会逼出一张「样本不足，无法蒸馏」的说明卡——那张卡若照常 writeStyleDoc
+// 落成版本，还会成为用户的生效文风（挖矿时被当文风注入 prompt）。300 字 ≈ 两三个
+// 真实段落，是能抓到句子节奏的最少样本量。两条提取路径（miner 任务 + 同步路由）和
+// 分享扩展的前置拦截（StyleDatasetView.minExtractChars）共用这个口径。
+export const MIN_CORPUS_CHARS = 300;
+
+// 数据集的可蒸馏字数——与 /style/collect 记的 `chars` 同口径（code points）。
+export function corpusChars(samples) {
+  return (samples || []).reduce((n, s) => n + [...((s && s.text) || "").trim()].length, 0);
+}
+
+// 素材清单行（标题缺失退回来源/文件名）——intro 文章与「样本不足」反馈共用。
+function sampleListLines(list, max = 50) {
+  const shown = (list || []).slice(0, max);
+  const lines = shown.map((s, i) => {
+    const t = ((s && (s.title || s.sourceFile)) || "").toString().trim().slice(0, 40);
+    const src = ((s && s.source) || "").toString().trim();
+    const label = t || src || "（无标题素材）";
+    const tail = src && src !== label ? ` — ${src}` : "";
+    return `${i + 1}. ${label}${tail}`;
+  }).join("\n");
+  const more = (list || []).length > max ? `\n…还有 ${list.length - max} 份（共 ${list.length} 份）` : "";
+  return lines + more;
+}
+
+// 语料不够时的反馈文章（不写风格版本！）——走和成功时同一条「结果=一篇文章」通道，
+// 用户在「我的录音」里能看到为什么没成、该怎么补。
+export function buildInsufficientCorpusArticle(samples, totalChars) {
+  const list = Array.isArray(samples) ? samples : [];
+  const title = "样本不足，风格没有更新";
+  const body = `你分享进来的素材加起来只有 **${totalChars} 个字**（不足 ${MIN_CORPUS_CHARS} 字）——多半只有标题或链接，没有正文。字数太少提炼不出真实的写作指纹，硬提只会得到一张编造的卡，所以这次**没有改动你的写作风格**，当前生效的还是原来那一版。
+
+**这次收到的素材（${list.length} 份）：**
+${sampleListLines(list)}
+
+**怎么补？**
+回到原 app，把文章的**正文**分享进来——选中正文文字再分享，或分享一个能解析出正文的网页链接（微信读书这类 app 的「分享」往往只带书名，不带正文）。攒够几个段落，再点一次「提取文章风格」就行，这些素材都还在数据集里。`;
+  return { title, body };
+}
+
 // ── 写作风格 intro 文章 ────────────────────────────────────────────────────────
 // 提取风格后，除了写进 CLAUDE.json，还生成一篇「介绍这套风格」的文章，让抽象的风格
 // 变成看得见的东西（对新手友好）。固定 stem —— 每次提取都覆盖上一篇，永远只有最新一篇。
@@ -114,18 +156,8 @@ export function buildStyleIntroArticle(style, samples) {
   const title = `你的写作风格 · ${name}`;
 
   // 素材清单：让用户看清这套风格是从哪几篇里挖出来的。标题缺失时退回来源/文件名。
-  const MAX_LIST = 50;
-  const shown = list.slice(0, MAX_LIST);
-  const lines = shown.map((s, i) => {
-    const t = ((s && (s.title || s.sourceFile)) || "").toString().trim().slice(0, 40);
-    const src = ((s && s.source) || "").toString().trim();
-    const label = t || src || "（无标题素材）";
-    const tail = src && src !== label ? ` — ${src}` : "";
-    return `${i + 1}. ${label}${tail}`;
-  }).join("\n");
-  const more = list.length > MAX_LIST ? `\n…还有 ${list.length - MAX_LIST} 份（共 ${list.length} 份）` : "";
   const materials = list.length
-    ? `\n\n**这次是从这些素材里蒸出来的（${n} 份）：**\n${lines}${more}`
+    ? `\n\n**这次是从这些素材里蒸出来的（${n} 份）：**\n${sampleListLines(list)}`
     : "";
 
   const body = `这是 VoiceDrop 刚为你提炼的**写作风格**——一份「你喜欢怎么写」的指纹，取名「${name}」。
