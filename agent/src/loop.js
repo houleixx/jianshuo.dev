@@ -17,7 +17,7 @@ export function parseAssistant(resp) {
 
 // Drive Claude with tools until it stops calling them (or maxSteps).
 // userContent: string (text-only) or content-block array (e.g. with image blocks).
-export async function runAgentLoop({ callClaude, ctx, system, userContent, history = [], maxSteps = 8 }) {
+export async function runAgentLoop({ callClaude, ctx, system, userContent, history = [], maxSteps = 8, tools = TOOL_DEFS, terminalTools = TERMINAL_TOOLS }) {
   // `history` = prior conversation turns (alternating user/assistant text messages)
   // prepended so the model has cross-turn context; the current turn follows.
   const messages = [...history, { role: "user", content: userContent }];
@@ -27,11 +27,12 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
   // terminal tool's result never lands in any logged request — this is the only
   // place it's captured, so the admin can show what each instruction actually did.
   const toolRuns = [];
+  const pending = []; // 工具暂存、待客户端确认的破坏性动作
   let finalText = "";
   let hadError = false;
   let steps = 0;
   while (steps < maxSteps) {
-    const resp = await callClaude({ system, messages, tools: TOOL_DEFS });
+    const resp = await callClaude({ system, messages, tools });
     steps++;
     const { text, toolUses } = parseAssistant(resp);
     messages.push({ role: "assistant", content: resp.content });
@@ -43,7 +44,8 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
       const result = await runTool(tu.name, tu.input, ctx);
       toolRuns.push({ step: steps - 1, name: tu.name, input: tu.input, result, ok: !(result && result.error) });
       if (result && result.error) hadError = true;
-      if (result && result.ok === true && TERMINAL_TOOLS.has(tu.name)) terminalDone = true;
+      if (result && result.pending) pending.push(result.pending);
+      if (result && result.ok === true && terminalTools.has(tu.name)) terminalDone = true;
       results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) });
     }
     messages.push({ role: "user", content: results });
@@ -53,5 +55,5 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
     // the failure back and can react.
     if (terminalDone && !hadError) { finalText = text; break; }
   }
-  return { calledTools, toolRuns, finalText, steps, hadError };
+  return { calledTools, toolRuns, finalText, steps, hadError, pending };
 }
