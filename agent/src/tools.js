@@ -459,6 +459,31 @@ register(
 );
 
 register(
+  { name: "delete_article", destructive: true,
+    description: "删除一篇文章（破坏性，需用户确认后才真正删）。stem 是要删的文章。",
+    input_schema: { type: "object", properties: { stem: { type: "string" } }, required: ["stem"], additionalProperties: false } },
+  async ({ stem }, { env, scope }) => {
+    if (badStem(stem)) return { error: "bad_stem" };
+    const obj = await env.FILES.get(`${scope}articles/${stem}.json`);
+    let title = stem;
+    if (obj) { try { title = resolveArticles(JSON.parse(await obj.text()))[0]?.title || stem; } catch {} }
+    // 破坏性：只暂存，等 DO 收到 confirm 再删。
+    return { ok: true, pending: { action: "delete", stem, title } };
+  }
+);
+
+// 真正删除一篇文章：文章 JSON + 其 m4a 锚点 + 常见 marker。供 DO 的 confirm 执行。
+export async function deleteArticleFiles(env, scope, stem) {
+  const keys = [
+    `${scope}articles/${stem}.json`,
+    `${scope}${stem}.m4a`,
+    `${scope}articles/${stem}.empty`,
+    `${scope}articles/${stem}.asr.json`,
+  ];
+  for (const k of keys) { try { await env.FILES.delete(k); } catch {} }
+}
+
+register(
   { name: "tag_article", destructive: false,
     description: "给一篇或多篇文章打标签/归类。stems 是文章数组，tag 是标签名。",
     input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, tag: { type: "string" } }, required: ["stems", "tag"], additionalProperties: false } },

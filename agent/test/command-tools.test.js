@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { runTool } from "../src/tools.js";
+import { runTool, deleteArticleFiles } from "../src/tools.js";
 
 // 极简 env.FILES（内存 R2），够工具读写。
 function memFiles(seed = {}) {
@@ -43,5 +43,20 @@ describe("merge_articles", () => {
     expect(env.FILES._store.has(`${SCOPE}articles/A.json`)).toBe(true);
     expect(env.FILES._store.has(`${SCOPE}articles/B.json`)).toBe(true);
     vi.unstubAllGlobals();
+  });
+});
+
+describe("delete_article 暂存 + deleteArticleFiles 执行", () => {
+  it("delete_article 只暂存 pending，不删文件", async () => {
+    const env = { FILES: memFiles({ [`${SCOPE}articles/A.json`]: art("A", "甲", "x"), [`${SCOPE}A.m4a`]: "BYTES" }) };
+    const r = await runTool("delete_article", { stem: "A" }, { env, scope: SCOPE });
+    expect(r).toEqual({ ok: true, pending: { action: "delete", stem: "A", title: "甲" } });
+    expect(env.FILES._store.has(`${SCOPE}articles/A.json`)).toBe(true);  // 没删
+  });
+  it("deleteArticleFiles 删文章 JSON + m4a 锚点", async () => {
+    const env = { FILES: memFiles({ [`${SCOPE}articles/A.json`]: art("A", "甲", "x"), [`${SCOPE}A.m4a`]: "BYTES" }) };
+    await deleteArticleFiles(env, SCOPE, "A");
+    expect(env.FILES._store.has(`${SCOPE}articles/A.json`)).toBe(false);
+    expect(env.FILES._store.has(`${SCOPE}A.m4a`)).toBe(false);
   });
 });
