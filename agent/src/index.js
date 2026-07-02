@@ -54,6 +54,15 @@ export async function meteredEditGate(db, scope, stem, now) {
   } catch { return "ok"; }
 }
 
+// 库级指令门：只看余额，不设每文章上限（指令是库级、不按篇计）。fail-open。
+export async function meteredCommandGate(db, scope, now) {
+  if (!db) return "ok";
+  try {
+    const bal = await ensureAccount(db, scope, now);
+    return bal > 0 ? "ok" : "no-credit";
+  } catch { return "ok"; }
+}
+
 // resolveArticles + withTopLevelArticles are imported from the shared
 // functions/lib/article-store.js (single source of truth).
 
