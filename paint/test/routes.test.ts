@@ -146,3 +146,14 @@ test("POST /api/jobs with malformed JSON returns 400", async () => {
   assert.equal(res.status, 400);
   app.close();
 });
+
+test("GET /log renders a jobs table with prompts", async () => {
+  const { app, base } = await boot();
+  await fetch(`${base}/api/jobs`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer secret" }, body: JSON.stringify({ prompt: "LOGTEST-PROMPT-xyz" }) });
+  const res = await fetch(`${base}/log`);
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.match(html, /paint 任务日志/);
+  assert.match(html, /LOGTEST-PROMPT-xyz/);
+  app.close();
+});

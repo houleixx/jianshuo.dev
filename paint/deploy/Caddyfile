@@ -3,7 +3,7 @@
 paint.jianshuo.dev {
 	encode gzip
 
-	@webui path /
+	@webui path / /log
 	basic_auth @webui {
 		wjs REPLACE_WITH_BCRYPT_HASH
 	}

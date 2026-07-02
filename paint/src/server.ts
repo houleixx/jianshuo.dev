@@ -111,6 +111,31 @@ export function createApp(cfg: Config, deps: { store: JobStore; hub: EventHub; w
         return;
       }
 
+      // --- operational log (behind Caddy basic_auth, same as "/") ---
+      if (path === "/log" && req.method === "GET") {
+        const jobs = await store.list(200);
+        const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+        const badge = (ok: boolean, txt: string) => `<span style="color:${ok ? "#15803d" : "#b91c1c"};font-weight:600">${esc(txt)}</span>`;
+        const rows = jobs.map((j) => {
+          const p = publicJob(j, cfg);
+          const t = esc(j.createdAt);
+          const st = badge(j.status === "done", j.status);
+          const cb = j.callbackStatus
+            ? badge(j.callbackStatus === "delivered", `${j.callbackStatus}${j.callbackAttempts ? "×" + j.callbackAttempts : ""}`)
+            : `<span style="color:#9ca3af">—</span>`;
+          const err = j.error ? `<div style="color:#b91c1c;font-size:12px">${esc(j.error.code)}: ${esc(j.error.message)}</div>` : "";
+          const thumb = p.result_url ? `<a href="${esc(p.result_url)}" target="_blank"><img src="${esc(p.result_url)}" style="height:48px;border-radius:6px" loading="lazy"></a>` : "";
+          return `<tr><td style="white-space:nowrap;color:#555">${t}</td><td>${esc(j.mode)}</td><td>${st}</td><td>${cb}</td><td style="max-width:420px">${esc((j.prompt || "").slice(0, 140))}${err}</td><td>${thumb}</td></tr>`;
+        }).join("");
+        const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>paint log</title>
+<style>body{font:14px/1.5 -apple-system,"PingFang SC",system-ui,sans-serif;background:#f7f7f8;color:#1a1a1a;margin:0;padding:20px}h1{font-size:17px}table{border-collapse:collapse;width:100%;background:#fff;border:1px solid #e6e6e9;border-radius:10px;overflow:hidden}th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top;font-size:13px}th{background:#faf9f7;color:#666;font-weight:600}tr:last-child td{border-bottom:0}</style></head>
+<body><h1>paint 任务日志 <span style="color:#888;font-weight:400">（最近 ${jobs.length} 条 · 出图 done/failed · 回调 delivered/failed/—）</span></h1>
+<table><thead><tr><th>时间(UTC)</th><th>模式</th><th>出图</th><th>回调</th><th>提示词 / 错误</th><th>结果</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(html);
+        return;
+      }
+
       // --- everything under /api requires bearer (SSE events path also accepts ?token=,
       // since browser EventSource cannot set an Authorization header) ---
       if (path.startsWith("/api/")) {
