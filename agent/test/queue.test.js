@@ -60,6 +60,23 @@ describe("ArticleQueue.drain", () => {
     expect(store.get("b").status).toBe("done");
   });
 
+  it("a _pending turn (destructive action awaiting confirm) is NOT marked done and broadcasts no updated/reply", async () => {
+    // LibraryAgent.runTurn returns {_pending:true} after it stages a delete and
+    // broadcasts its own `confirm`. The queue must leave the row 'running' (so
+    // drain won't re-pick it) and must NOT emit updated/reply — otherwise the
+    // user is told "done" before confirming and the pending is orphaned on reconnect.
+    const runTurn = vi.fn(async () => ({ ok: true, _pending: true, reply: "好了" }));
+    const { q, store, events } = harness({ runTurn });
+    await q.submit({ id: "a", text: "删掉第一篇" });
+    await q.drain();
+    expect(store.get("a").status).toBe("running"); // not done, not error
+    expect(events.some((e) => e.type === "updated")).toBe(false);
+    expect(events.some((e) => e.type === "reply")).toBe(false);
+    // recover() must flip it back to pending so a DO restart re-stages + re-asks.
+    expect(q.recover()).toBe(true);
+    expect(store.get("a").status).toBe("pending");
+  });
+
   it("skips the model when the doc already carries this instruction's id (exactly-once)", async () => {
     const { q, store, events, ran } = harness({ loadDoc: async () => ({ lastEditId: "a", articles: [] }) });
     await q.submit({ id: "a", text: "1" });

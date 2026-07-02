@@ -394,11 +394,12 @@ export class LibraryAgent extends Agent {
       instruction: row.text, refs, callClaude,
     });
 
-    // 破坏性 pending → 存起来、发 confirm，不落地。
+    // 破坏性 pending → 存起来、发 confirm，不落地。confirm 卡要列全 res.pending 里
+    // 每一条待删标题，因为 _resolvePending 确认时会删掉全部暂存动作。
     if (res.pending && res.pending.length) {
       this.sql`INSERT INTO config (k, v) VALUES (${"pending:" + row.id}, ${JSON.stringify(res.pending)}) ON CONFLICT(k) DO UPDATE SET v = excluded.v`;
-      const p = res.pending[0];
-      this.broadcast(JSON.stringify({ type: "confirm", id: row.id, summary: `要删掉《${p.title}》吗？`, action: p }));
+      const titles = res.pending.map((p) => `《${p.title}》`).join("、");
+      this.broadcast(JSON.stringify({ type: "confirm", id: row.id, summary: `要删掉${titles}吗？`, action: res.pending }));
       return { ok: true, reply: res.reply, article: null, _pending: true };
     }
 
@@ -446,7 +447,12 @@ export class LibraryAgent extends Agent {
     const raw = rows[0]?.v;
     if (!raw) return;
     this.sql`DELETE FROM config WHERE k = ${"pending:" + id}`;
-    if (!ok) { connection.send(JSON.stringify({ type: "reply", id, text: "已取消", ok: true })); return; }
+    if (!ok) {
+      // 收尾队列行：取消后别让 recover() 再翻回来重问。
+      try { this._queue.store.markDone(id, "已取消"); } catch {}
+      connection.send(JSON.stringify({ type: "reply", id, text: "已取消", ok: true }));
+      return;
+    }
 
     let actions = [];
     try { actions = JSON.parse(raw); } catch (_) {}
@@ -454,6 +460,8 @@ export class LibraryAgent extends Agent {
       if (a.action === "delete") await deleteArticleFiles(this.env, scope, a.stem);
     }
     this.sql`INSERT INTO history (instruction, reply, created_at) VALUES (${"（确认删除）"}, ${"已删除"}, ${Date.now()})`;
+    // 把队列里那条暂存 running 的行收尾，避免 recover() 把已解决的 pending 再翻回来重问。
+    try { this._queue.store.markDone(id, "已删除"); } catch {}
     connection.send(JSON.stringify({ type: "reply", id, text: "已删除", ok: true }));
     this.broadcast(JSON.stringify({ type: "updated", id, article: null })); // 客户端据此刷新列表
   }

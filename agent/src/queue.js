@@ -132,6 +132,13 @@ export class ArticleQueue {
     let res;
     try { res = await this.runTurn(row); }
     catch (e) { res = { ok: false, error: String((e && e.message) || e) }; }
+    if (res && res._pending) {
+      // Destructive action staged, awaiting the user's confirm/cancel. runTurn already
+      // broadcast the `confirm` message. Do NOT markDone and do NOT broadcast updated/reply —
+      // the row stays 'running' so drain won't re-pick it this pass; on DO restart, recover()
+      // flips it back to pending and re-runs → re-stages + re-broadcasts confirm (no orphan).
+      return;
+    }
     if (res && res.ok) {
       this.store.markDone(row.id, res.reply || "");
       this.broadcast({ type: "updated", id: row.id, article: res.article });
