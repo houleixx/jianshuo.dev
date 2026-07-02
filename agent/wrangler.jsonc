@@ -30,7 +30,8 @@
       { "name": "ArticleEditor", "class_name": "ArticleEditor" },
       { "name": "StatusHub",     "class_name": "StatusHub"     },
       { "name": "Miner",         "class_name": "Miner"         },
-      { "name": "LinkBroker",    "class_name": "LinkBroker"    }
+      { "name": "LinkBroker",    "class_name": "LinkBroker"    },
+      { "name": "LibraryAgent",  "class_name": "LibraryAgent"  }
     ]
   },
 
@@ -38,7 +39,8 @@
     { "tag": "v1", "new_sqlite_classes": ["ArticleEditor"] },
     { "tag": "v2", "new_sqlite_classes": ["StatusHub"] },
     { "tag": "v3", "new_sqlite_classes": ["Miner"] },
-    { "tag": "v4", "new_sqlite_classes": ["LinkBroker"] }
+    { "tag": "v4", "new_sqlite_classes": ["LinkBroker"] },
+    { "tag": "v5", "new_sqlite_classes": ["LibraryAgent"] }
   ],
 
   "triggers": {

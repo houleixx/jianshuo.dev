@@ -15,7 +15,8 @@
 // from raw client input.
 
 import { Agent, getAgentByName } from "agents";
-import { TOOL_DEFS } from "./tools.js";
+import { TOOL_DEFS, deleteArticleFiles } from "./tools.js";
+import { runCommandTurn } from "./command-turn.js";
 import { runMine, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
@@ -256,6 +257,205 @@ export class ArticleEditor extends Agent {
     // New work — tell the caller we're on it, then ensure the durable drain runs.
     connection.send(JSON.stringify({ type: "status", state: "working", id }));
     this.schedule(0, "drainQueue");
+  }
+
+  // One Anthropic Messages call WITH tools. Returns a result object
+  // {ok, status, json, errorText} (never throws on HTTP/network errors) so the
+  // caller can both log the exchange and decide how to proceed.
+  async _callClaudeRaw(reqBody) {
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": this.env.CLAUDE_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(reqBody),
+      });
+      if (!resp.ok) {
+        return { ok: false, status: resp.status, json: null, errorText: (await resp.text()).slice(0, 2000) };
+      }
+      return { ok: true, status: resp.status, json: await resp.json(), errorText: "" };
+    } catch (e) {
+      return { ok: false, status: 0, json: null, errorText: String((e && e.message) || e) };
+    }
+  }
+
+  // A logging callClaude for runAgentLoop: builds the request body, calls the
+  // API, records one llmlogs/ entry per HTTP call (grouped by turnId), then
+  // returns the response JSON or throws (preserving the loop's prior behavior).
+  _makeLoggedCall({ turnId, scope, stem, instruction, model = MODEL }) {
+    let step = 0;
+    return async ({ system, messages, tools }) => {
+      const reqBody = { model, max_tokens: 8000, system, messages, tools, tool_choice: { type: "auto" } };
+      const myStep = step++;
+      const ts = Date.now();
+      const r = await this._callClaudeRaw(reqBody);
+      await writeLlmLog(this.env, {
+        ts, source: "agent", user_scope: scope, model,
+        latency_ms: Date.now() - ts, http_status: r.status, ok: r.ok,
+        turn_id: turnId, step: myStep, request: reqBody,
+        response: r.ok ? r.json : undefined,
+        error: r.ok ? undefined : r.errorText,
+        meta: { stem, instruction },
+      });
+      // Debit the cost of this API call. Best-effort: never breaks the edit.
+      try {
+        if (this.env.USAGE) {
+          const u = r.json?.usage || {};
+          await debit(this.env.USAGE, scope, claudeCostUY(model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
+            "edit", { model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId }, Date.now());
+        }
+      } catch {}
+      if (!r.ok) throw new Error(`Claude HTTP ${r.status}: ${(r.errorText || "").slice(0, 160)}`);
+      return r.json;
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LibraryAgent: one Durable Object per USER (not per article) — the 语音指令
+// agent for "我的录音" list-level commands (merge / delete / restyle / tag /
+// write_style). Clones ArticleEditor's scaffolding (config/history/queue
+// tables, drain loop, logged Claude calls) but has no single doc to load —
+// each turn runs the command tool loop via runCommandTurn, and destructive
+// actions (delete) are staged in the config table pending a confirm/cancel
+// round-trip over the same socket.
+// ---------------------------------------------------------------------------
+export class LibraryAgent extends Agent {
+  onStart() {
+    this.sql`CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT)`;
+    this.sql`CREATE TABLE IF NOT EXISTS history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      instruction TEXT,
+      reply TEXT,
+      created_at INTEGER
+    )`;
+    try { this.sql`ALTER TABLE history ADD COLUMN reply TEXT`; } catch (_) {}
+    this.sql([QUEUE_TABLE_SQL]); // CREATE TABLE IF NOT EXISTS queue (...)
+    try { this.sql`ALTER TABLE queue ADD COLUMN article_index INTEGER`; } catch (_) {}
+    // Recover after hibernation/eviction: reset any leftover 'running' row and
+    // drain whatever is pending — even with no client connected.
+    if (this._queue.recover()) this.schedule(0, "drainQueue");
+  }
+
+  // The Worker has already authenticated the request and injected the
+  // token-derived scope as a header. Persist it (no articleKey — library-level).
+  onConnect(connection, ctx) {
+    const scope = ctx.request.headers.get("x-vd-scope");
+    const token = (ctx.request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    const set = (k, v) => { if (v) this.sql`INSERT INTO config (k, v) VALUES (${k}, ${v}) ON CONFLICT(k) DO UPDATE SET v = excluded.v`; };
+    set("scope", scope);
+    set("token", token);
+    // 库级无单一 doc，snapshot 只回队列状态。
+    try { connection.send(JSON.stringify({ type: "snapshot", queue: this._queue.snapshot() })); } catch (_) {}
+  }
+
+  _config() {
+    const rows = this.sql`SELECT k, v FROM config`;
+    const out = {};
+    for (const r of rows) out[r.k] = r.v;
+    return out;
+  }
+
+  get _queue() {
+    if (!this.__queue) {
+      const sql = this.sql.bind(this);
+      this.__queue = new ArticleQueue({
+        store: makeSqlStore(sql),
+        broadcast: (obj) => this.broadcast(JSON.stringify(obj)),
+        schedule: () => this.schedule(0, "drainQueue"),
+        loadDoc: async () => null, // 库级没有单一 doc
+        runTurn: (row) => this.runTurn(row),
+      });
+    }
+    return this.__queue;
+  }
+
+  // Scheduled drain entry point (durable; survives hibernation/eviction).
+  async drainQueue() { await this._queue.drain(); }
+
+  // Execute one queued instruction via the shared command-turn runner.
+  async runTurn(row) {
+    const { scope, token } = this._config();
+    if (!scope) return { ok: false, error: "会话未初始化" };
+
+    const decision = await meteredCommandGate(this.env.USAGE, scope, Date.now());
+    if (decision === "no-credit") return { ok: false, error: "算力不足" };
+
+    const turnId = `${Date.now()}-${rand6()}`;
+    const model = resolveEditModel(await loadModelConfig(this.env));
+    const callClaude = this._makeLoggedCall({ turnId, scope, stem: "", instruction: row.text, model });
+    // refs 走 queue 的 images 列（客户端发来的编号清单 [{n,stem,title}]，见 onMessage）。
+    const refs = row.images ? (() => { try { return JSON.parse(row.images); } catch { return []; } })() : [];
+    const res = await runCommandTurn({
+      env: this.env, scope, token, origin: "https://jianshuo.dev", turnId,
+      instruction: row.text, refs, callClaude,
+    });
+
+    // 破坏性 pending → 存起来、发 confirm，不落地。
+    if (res.pending && res.pending.length) {
+      this.sql`INSERT INTO config (k, v) VALUES (${"pending:" + row.id}, ${JSON.stringify(res.pending)}) ON CONFLICT(k) DO UPDATE SET v = excluded.v`;
+      const p = res.pending[0];
+      this.broadcast(JSON.stringify({ type: "confirm", id: row.id, summary: `要删掉《${p.title}》吗？`, action: p }));
+      return { ok: true, reply: res.reply, article: null, _pending: true };
+    }
+
+    this.sql`INSERT INTO history (instruction, reply, created_at) VALUES (${row.text}, ${res.reply || "（已处理）"}, ${Date.now()})`;
+    return { ok: res.ok, reply: res.reply, error: res.hadError ? (res.reply || "操作没完成") : undefined, article: null };
+  }
+
+  async onMessage(connection, message) {
+    let msg;
+    try { msg = JSON.parse(typeof message === "string" ? message : ""); } catch { return; }
+    if (!msg) return;
+    if (msg.type === "confirm") return this._resolvePending(connection, msg.id, true);
+    if (msg.type === "cancel") return this._resolvePending(connection, msg.id, false);
+    if (msg.type !== "instruct") return;
+
+    const instruction = String(msg.text || "").trim();
+    if (!instruction) { connection.send(JSON.stringify({ type: "error", message: "空指令" })); return; }
+
+    const id = (typeof msg.id === "string" && msg.id) ? msg.id : `srv-${Date.now()}-${rand6()}`;
+    // 编号清单（[{n, stem, title}, ...]）走 queue 的 images 列，供 runTurn 里读回当 refs。
+    const refs = Array.isArray(msg.refs) ? msg.refs.filter((r) => r && r.stem) : [];
+
+    const r = await this._queue.submit({ id, text: instruction, images: refs, article_index: 0 });
+    if (r.kind === "replay") {
+      // Already known — re-push its cached result to THIS caller, never re-run.
+      // 库级没有单一 doc 可重发，只重放状态/回复。
+      const row = r.row;
+      if (row.status === "done") {
+        if (row.reply) connection.send(JSON.stringify({ type: "reply", id, text: row.reply, ok: true }));
+      } else if (row.status === "error") {
+        connection.send(JSON.stringify({ type: "error", id, message: row.error || "操作没完成" }));
+      } else {
+        connection.send(JSON.stringify({ type: "status", state: "working", id }));
+      }
+      return;
+    }
+    connection.send(JSON.stringify({ type: "status", state: "working", id }));
+    this.schedule(0, "drainQueue");
+  }
+
+  // 确认/取消一个暂存的破坏性动作（目前只有 delete_article）。
+  async _resolvePending(connection, id, ok) {
+    const { scope } = this._config();
+    const rows = this.sql`SELECT v FROM config WHERE k = ${"pending:" + id}`;
+    const raw = rows[0]?.v;
+    if (!raw) return;
+    this.sql`DELETE FROM config WHERE k = ${"pending:" + id}`;
+    if (!ok) { connection.send(JSON.stringify({ type: "reply", id, text: "已取消", ok: true })); return; }
+
+    let actions = [];
+    try { actions = JSON.parse(raw); } catch (_) {}
+    for (const a of actions) {
+      if (a.action === "delete") await deleteArticleFiles(this.env, scope, a.stem);
+    }
+    this.sql`INSERT INTO history (instruction, reply, created_at) VALUES (${"（确认删除）"}, ${"已删除"}, ${Date.now()})`;
+    connection.send(JSON.stringify({ type: "reply", id, text: "已删除", ok: true }));
+    this.broadcast(JSON.stringify({ type: "updated", id, article: null })); // 客户端据此刷新列表
   }
 
   // One Anthropic Messages call WITH tools. Returns a result object
