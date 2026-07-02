@@ -127,7 +127,14 @@ export async function onRequest(context) {
       return json({ error: 'not a photo' }, 400);
     }
     const obj = await env.FILES.get(key);
-    if (!obj) return json({ error: 'not found' }, 404);
+    // A missing photo must NOT be cached: edited/AI images are written a bit after
+    // the article points at them, and clients poll this endpoint until the object
+    // appears. A cacheable 404 (the old default) froze the "not yet generated"
+    // state for hours, so the image never loaded even once it existed.
+    if (!obj) return new Response(JSON.stringify({ error: 'not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' },
+    });
     return new Response(obj.body, {
       headers: {
         'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
