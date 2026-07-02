@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { runTool, deleteArticleFiles } from "../src/tools.js";
+import { toolDefsFor, COMMAND_TOOL_NAMES } from "../src/tools.js";
 
 // 极简 env.FILES（内存 R2），够工具读写。
 function memFiles(seed = {}) {
@@ -58,5 +59,17 @@ describe("delete_article 暂存 + deleteArticleFiles 执行", () => {
     await deleteArticleFiles(env, SCOPE, "A");
     expect(env.FILES._store.has(`${SCOPE}articles/A.json`)).toBe(false);
     expect(env.FILES._store.has(`${SCOPE}A.m4a`)).toBe(false);
+  });
+});
+
+describe("命令工具子集", () => {
+  it("toolDefsFor 只返回指定工具，且命令集不含单篇编辑工具", () => {
+    const defs = toolDefsFor(COMMAND_TOOL_NAMES);
+    const names = defs.map((d) => d.name);
+    expect(names).toContain("merge_articles");
+    expect(names).toContain("delete_article");
+    expect(names).toContain("list_articles");
+    expect(names).not.toContain("edit_current_article");   // 单篇编辑不进命令集
+    expect(names).not.toContain("write_article");
   });
 });

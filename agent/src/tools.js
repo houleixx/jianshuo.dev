@@ -503,3 +503,19 @@ register(
     return { ok: true, tagged: stems.length, tag };
   }
 );
+
+// 库级（命令）agent 能用的工具：多篇读、合并、删除、重写、归类、风格、发布/分享。
+// 刻意不含 edit_current_article / write_article（那两个绑定单一 articleKey）。
+export const COMMAND_TOOL_NAMES = [
+  "list_articles", "read_article",
+  "merge_articles", "delete_article", "restyle_article", "tag_article",
+  "read_style", "write_style", "publish_wechat", "share_to_community",
+];
+export const COMMAND_TERMINAL = new Set([
+  "merge_articles", "delete_article", "restyle_article", "tag_article",
+  "write_style", "publish_wechat", "share_to_community",
+]);
+export function toolDefsFor(names) {
+  const set = new Set(names);
+  return TOOL_DEFS.filter((d) => set.has(d.name));
+}
