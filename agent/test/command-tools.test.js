@@ -73,3 +73,13 @@ describe("命令工具子集", () => {
     expect(names).not.toContain("write_article");
   });
 });
+
+describe("tool defs are valid Anthropic tool schemas (no extra keys)", () => {
+  it("every command tool def has ONLY name/description/input_schema (Anthropic 400s on extras like `destructive`)", () => {
+    const allowed = new Set(["name", "description", "input_schema", "type", "cache_control"]);
+    for (const def of toolDefsFor(COMMAND_TOOL_NAMES)) {
+      const extras = Object.keys(def).filter((k) => !allowed.has(k));
+      expect(extras, `tool ${def.name} has extra keys: ${extras.join(",")}`).toEqual([]);
+    }
+  });
+});

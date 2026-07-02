@@ -416,7 +416,7 @@ async function writeStandaloneArticle({ env, scope, token, origin }, stem, title
 }
 
 register(
-  { name: "merge_articles", destructive: false,
+  { name: "merge_articles",
     description: "把若干篇文章揉成一篇连贯的新文章（保持用户文风、去重、顺逻辑），另存为新一条，原文保留。用于「把第3和第4篇合并」。stems 传要合并的文章 stem 数组。",
     input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, guidance: { type: "string", description: "可选，合并侧重" } }, required: ["stems"], additionalProperties: false } },
   async ({ stems, guidance }, ctx) => {
@@ -452,7 +452,7 @@ register(
 );
 
 register(
-  { name: "restyle_article", destructive: false,
+  { name: "restyle_article",
     description: "用当前写作风格把某篇文章重写一遍（换个风格/口吻）。stem 是要重写的文章。",
     input_schema: { type: "object", properties: { stem: { type: "string" } }, required: ["stem"], additionalProperties: false } },
   async ({ stem }, { env, scope }) => {
@@ -463,7 +463,7 @@ register(
 );
 
 register(
-  { name: "delete_article", destructive: true,
+  { name: "delete_article",
     description: "删除一篇文章（破坏性，需用户确认后才真正删）。stem 是要删的文章。",
     input_schema: { type: "object", properties: { stem: { type: "string" } }, required: ["stem"], additionalProperties: false } },
   async ({ stem }, { env, scope }) => {
@@ -489,7 +489,7 @@ export async function deleteArticleFiles(env, scope, stem) {
 }
 
 register(
-  { name: "tag_article", destructive: false,
+  { name: "tag_article",
     description: "给一篇或多篇文章打标签/归类。stems 是文章数组，tag 是标签名。",
     input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, tag: { type: "string" } }, required: ["stems", "tag"], additionalProperties: false } },
   async ({ stems, tag }, { env, scope, token, origin }) => {
