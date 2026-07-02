@@ -2,10 +2,12 @@
 // Each handler takes (args, ctx) where ctx = {env, scope, articleKey, token, origin}.
 
 import { resolveArticles } from "../../functions/lib/article-store.js";
-import { resolveStyle, parseStyleMarkdown } from "../../functions/lib/style-store.js";
+import { resolveStyle, parseStyleMarkdown, readStyleText } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
 import { imageCostUY } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
+import { restyleArticle } from "./miner.js";
+import { silentM4aBytes } from "./silent-m4a.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
 
@@ -391,5 +393,88 @@ register(
       return { error: "图片服务提交失败" };
     }
     return { ok: true, message: "🎨 正在生成新图，约 1 分钟出现" };
+  }
+);
+
+// 生成合并/新文章的 stem。ts 用调用时刻（普通 Worker 运行时，Date 可用）。
+function mergedStem() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `VoiceDrop-merged-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+// 把一篇「无录音的独立文章」写进库并让它出现在「我的录音」：先写 article JSON（版本化
+// Files API），再写 0s 静音 m4a 锚点。返回 { ok, stem } 或 { error }。
+async function writeStandaloneArticle({ env, scope, token, origin }, stem, title, body) {
+  const doc = { schema: 2, id: stem, sourceAudio: `${stem}.m4a`, createdAt: new Date().toISOString(), transcript: "", srt: "", articles: [{ title, body }], status: "ready", model: "merge" };
+  const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
+    method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(doc),
+  });
+  if (!resp.ok) return { error: `upload_failed_${resp.status}` };
+  await env.FILES.put(`${scope}${stem}.m4a`, silentM4aBytes(), { httpMetadata: { contentType: "audio/mp4" } });
+  return { ok: true, stem };
+}
+
+register(
+  { name: "merge_articles", destructive: false,
+    description: "把若干篇文章揉成一篇连贯的新文章（保持用户文风、去重、顺逻辑），另存为新一条，原文保留。用于「把第3和第4篇合并」。stems 传要合并的文章 stem 数组。",
+    input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, guidance: { type: "string", description: "可选，合并侧重" } }, required: ["stems"], additionalProperties: false } },
+  async ({ stems, guidance }, ctx) => {
+    const { env, scope, callClaude } = ctx;
+    if (!Array.isArray(stems) || stems.length < 2) return { error: "need_two_stems" };
+    const parts = [];
+    for (const stem of stems) {
+      if (badStem(stem)) return { error: "bad_stem" };
+      const obj = await env.FILES.get(`${scope}articles/${stem}.json`);
+      if (!obj) return { error: `not_found:${stem}` };
+      let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: `bad_article:${stem}` }; }
+      const a = resolveArticles(doc)[0] || {};
+      parts.push(`《${a.title || "(无题)"}》\n${a.body || ""}`);
+    }
+    const style = (await readStyleText(env, `${scope}CLAUDE.json`).catch(() => "")) || "";
+    const system = `你是${"王建硕"}的写作助手。把用户给的几篇文章揉成一篇连贯的新文章：去重、顺逻辑、保持下面这套写作风格。第一行只写标题（不加书名号/引号），其余为正文。\n\n【写作风格】\n${style}`.trim();
+    const user = `${guidance ? `合并侧重：${guidance}\n\n` : ""}请把以下 ${parts.length} 篇合并成一篇：\n\n${parts.join("\n\n---\n\n")}`;
+    const resp = await callClaude({ system, messages: [{ role: "user", content: user }] });
+    const text = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    if (!text) return { error: "empty_merge" };
+    const nl = text.indexOf("\n");
+    const title = (nl === -1 ? text : text.slice(0, nl)).trim().slice(0, 40) || "合并文章";
+    const body = (nl === -1 ? "" : text.slice(nl + 1)).trim();
+    const stem = mergedStem();
+    const w = await writeStandaloneArticle(ctx, stem, title, body);
+    if (w.error) return w;
+    return { ok: true, newStem: stem, title, merged: stems.length };
+  }
+);
+
+register(
+  { name: "restyle_article", destructive: false,
+    description: "用当前写作风格把某篇文章重写一遍（换个风格/口吻）。stem 是要重写的文章。",
+    input_schema: { type: "object", properties: { stem: { type: "string" } }, required: ["stem"], additionalProperties: false } },
+  async ({ stem }, { env, scope }) => {
+    if (badStem(stem)) return { error: "bad_stem" };
+    const r = await restyleArticle(env, scope, stem, null);   // null → 用当前文风 head
+    return r && r.ok === false ? { error: r.error || "restyle_failed" } : { ok: true, stem };
+  }
+);
+
+register(
+  { name: "tag_article", destructive: false,
+    description: "给一篇或多篇文章打标签/归类。stems 是文章数组，tag 是标签名。",
+    input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, tag: { type: "string" } }, required: ["stems", "tag"], additionalProperties: false } },
+  async ({ stems, tag }, { env, scope, token, origin }) => {
+    if (!Array.isArray(stems) || !stems.length || !tag) return { error: "bad_args" };
+    for (const stem of stems) {
+      if (badStem(stem)) return { error: "bad_stem" };
+      const obj = await env.FILES.get(`${scope}articles/${stem}.json`);
+      if (!obj) continue;
+      let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
+      doc.tags = Array.from(new Set([...(doc.tags || []), String(tag)]));
+      const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
+        method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(doc),
+      });
+      if (!resp.ok) return { error: `upload_failed_${resp.status}` };
+    }
+    return { ok: true, tagged: stems.length, tag };
   }
 );
