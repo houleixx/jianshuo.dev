@@ -12,7 +12,7 @@ const COMMAND_SYSTEM = [
   "换风格重写用 restyle_article；归类用 tag_article；调整文风用 write_style。只做用户要求的操作。",
 ].join("");
 
-export async function runCommandTurn({ env, scope, token, origin, turnId, instruction, refs = [], callClaude }) {
+export async function runCommandTurn({ env, scope, token, origin, turnId, instruction, refs = [], callClaude, idemKey }) {
   const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
   const refLines = refs.map((r) => `第${r.n}篇 → stem=${r.stem}｜标题：${r.title}`).join("\n") || "（列表为空）";
   const systemBlocks = [
@@ -28,7 +28,8 @@ export async function runCommandTurn({ env, scope, token, origin, turnId, instru
   ].join("\n");
 
   // ctx 带 callClaude —— merge_articles 需要内部再调一次 Claude 做揉合成。
-  const ctx = { env, scope, token, origin, turnId, callClaude, refs };
+  // idemKey（稳定的队列行 id）让 merge_articles 派生确定性 stem，重跑不会造第二篇。
+  const ctx = { env, scope, token, origin, turnId, callClaude, refs, idemKey };
   const result = await runAgentLoop({
     callClaude, ctx, system: systemBlocks, userContent,
     tools: toolDefsFor(COMMAND_TOOL_NAMES), terminalTools: COMMAND_TERMINAL,

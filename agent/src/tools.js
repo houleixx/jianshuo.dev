@@ -440,7 +440,11 @@ register(
     const nl = text.indexOf("\n");
     const title = (nl === -1 ? text : text.slice(0, nl)).trim().slice(0, 40) || "合并文章";
     const body = (nl === -1 ? "" : text.slice(nl + 1)).trim();
-    const stem = mergedStem();
+    // 确定性 stem：从稳定的 idemKey（队列行 id）派生，重跑同一 turn 不会造出第二篇。
+    // 无 idemKey（旧调用）退回墙钟 mergedStem()。
+    const stem = "VoiceDrop-merged-" + String(ctx.idemKey || mergedStem()).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    // 幂等：这篇已存在（上次跑到一半被驱逐后重跑）→ 直接返回已有的，不再造第二篇。
+    if (await env.FILES.head(`${scope}articles/${stem}.json`)) return { ok: true, newStem: stem, title: "(已合并)", merged: stems.length };
     const w = await writeStandaloneArticle(ctx, stem, title, body);
     if (w.error) return w;
     return { ok: true, newStem: stem, title, merged: stems.length };
@@ -474,6 +478,7 @@ register(
 
 // 真正删除一篇文章：文章 JSON + 其 m4a 锚点 + 常见 marker。供 DO 的 confirm 执行。
 export async function deleteArticleFiles(env, scope, stem) {
+  if (badStem(stem)) return;
   const keys = [
     `${scope}articles/${stem}.json`,
     `${scope}${stem}.m4a`,

@@ -288,7 +288,10 @@ export class ArticleEditor extends Agent {
   _makeLoggedCall({ turnId, scope, stem, instruction, model = MODEL }) {
     let step = 0;
     return async ({ system, messages, tools }) => {
-      const reqBody = { model, max_tokens: 8000, system, messages, tools, tool_choice: { type: "auto" } };
+      const reqBody = { model, max_tokens: 8000, system, messages, tools };
+      // tool_choice:auto is only valid WITH tools. merge_articles calls callClaude
+      // with no tools (pure text synthesis) — including it there → Anthropic 400.
+      if (tools && tools.length) reqBody.tool_choice = { type: "auto" };
       const myStep = step++;
       const ts = Date.now();
       const r = await this._callClaudeRaw(reqBody);
@@ -381,6 +384,13 @@ export class LibraryAgent extends Agent {
     const { scope, token } = this._config();
     if (!scope) return { ok: false, error: "会话未初始化" };
 
+    // Per-turn done-marker: if this row already completed once (turn finished but
+    // the DO was evicted before the queue row was markDone'd → recover re-runs),
+    // short-circuit instead of re-executing (which would double-bill a restyle /
+    // re-run a non-idempotent tool). Best-effort; a missing marker just re-runs.
+    const doneKey = `${scope}command-turns/${row.id}.json`;
+    if (await this.env.FILES.head(doneKey)) return { ok: true, reply: "（已处理）", article: null };
+
     const decision = await meteredCommandGate(this.env.USAGE, scope, Date.now());
     if (decision === "no-credit") return { ok: false, error: "算力不足" };
 
@@ -391,7 +401,7 @@ export class LibraryAgent extends Agent {
     const refs = row.images ? (() => { try { return JSON.parse(row.images); } catch { return []; } })() : [];
     const res = await runCommandTurn({
       env: this.env, scope, token, origin: "https://jianshuo.dev", turnId,
-      instruction: row.text, refs, callClaude,
+      instruction: row.text, refs, callClaude, idemKey: row.id,
     });
 
     // 破坏性 pending → 存起来、发 confirm，不落地。confirm 卡要列全 res.pending 里
@@ -404,6 +414,11 @@ export class LibraryAgent extends Agent {
     }
 
     this.sql`INSERT INTO history (instruction, reply, created_at) VALUES (${row.text}, ${res.reply || "（已处理）"}, ${Date.now()})`;
+    // Mark this turn done (only on success — not pending, not error) so an
+    // eviction-before-markDone re-run short-circuits above instead of re-executing.
+    if (res.ok && !res.hadError) {
+      try { await this.env.FILES.put(doneKey, JSON.stringify({ at: Date.now(), reply: res.reply || "" })); } catch {}
+    }
     return { ok: res.ok, reply: res.reply, error: res.hadError ? (res.reply || "操作没完成") : undefined, article: null };
   }
 
@@ -495,7 +510,10 @@ export class LibraryAgent extends Agent {
   _makeLoggedCall({ turnId, scope, stem, instruction, model = MODEL }) {
     let step = 0;
     return async ({ system, messages, tools }) => {
-      const reqBody = { model, max_tokens: 8000, system, messages, tools, tool_choice: { type: "auto" } };
+      const reqBody = { model, max_tokens: 8000, system, messages, tools };
+      // tool_choice:auto is only valid WITH tools. merge_articles calls callClaude
+      // with no tools (pure text synthesis) — including it there → Anthropic 400.
+      if (tools && tools.length) reqBody.tool_choice = { type: "auto" };
       const myStep = step++;
       const ts = Date.now();
       const r = await this._callClaudeRaw(reqBody);
