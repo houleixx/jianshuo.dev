@@ -212,12 +212,13 @@ function relKey({ articleKey, scope }) {
   return articleKey.slice(scope.length);
 }
 
-// 编辑结果的新 R2 相对键：保留原图的 session 目录、换新时间戳文件名、强制 .png
-// （paint 默认出 png）。scope+此键必须匹配公开 /photo 端点的 photos/*.(jpg|png)。
-export function makeEditedKey(oldKey, nowMs) {
+// 编辑结果的新 R2 相对键：保留原图的 session 目录、换新时间戳文件名 + 随机后缀、
+// 跟原图一样的 .jpg（paint 走 jpeg 输出）。scope+此键必须匹配公开 /photo 端点的
+// photos/*.(jpg|png)。
+export function makeEditedKey(oldKey, nowMs, rand = "0") {
   const m = /^photos\/([^/]+)\//.exec(String(oldKey || ""));
   const session = m ? m[1] : String(nowMs);
-  return `photos/${session}/${nowMs}.png`;
+  return `photos/${session}/${nowMs}-${rand}.jpg`;
 }
 
 async function postFiles(path, { token, origin }) {
@@ -273,7 +274,8 @@ register(
     const marker = `[[photo:${key}]]`;
     if (!String(articles[idx].body || "").includes(marker)) return { error: "找不到这张图" };
 
-    const newKey = makeEditedKey(key, now);
+    const rand = Math.random().toString(36).slice(2, 8);
+    const newKey = makeEditedKey(key, now, rand);
     const newMarker = `[[photo:${newKey}]]`;
     const swap = (b) => String(b).split(marker).join(newMarker);
     doc.articles = articles.map((a, i) => {
@@ -294,6 +296,7 @@ register(
         body: JSON.stringify({
           prompt,
           size: "1024x1024",
+          format: "jpeg",
           image_url: `${origin}/files/api/photo/${scope}${key}`,
           callback_url: `${origin}/agent/paint-callback`,
           callback_token: env.PAINT_CALLBACK_TOKEN,

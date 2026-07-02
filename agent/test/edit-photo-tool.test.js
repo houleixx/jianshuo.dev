@@ -3,15 +3,15 @@ import { makeEditedKey, runTool } from "../src/tools.js";
 import { fakeEnv, fakeD1, usageSql } from "./fakes.js";
 
 describe("makeEditedKey", () => {
-  it("keeps session dir, new ts, .png", () => {
-    expect(makeEditedKey("photos/1719900000/1719900000.jpg", 1719999999))
-      .toBe("photos/1719900000/1719999999.png");
+  it("keeps session dir, new ts, rand suffix, .jpg", () => {
+    expect(makeEditedKey("photos/1719900000/1719900000.jpg", 1719999999, "abc"))
+      .toBe("photos/1719900000/1719999999-abc.jpg");
   });
   it("falls back to nowMs session when unparseable", () => {
-    expect(makeEditedKey("weird", 42)).toBe("photos/42/42.png");
+    expect(makeEditedKey("weird", 42, "z9")).toBe("photos/42/42-z9.jpg");
   });
   it("result matches the public /photo key shape after scope prefix", () => {
-    const rel = makeEditedKey("photos/abc/def.png", 7);
+    const rel = makeEditedKey("photos/abc/def.png", 7, "xy");
     expect("users/sub/" + rel).toMatch(/^users\/[^/]+\/photos\/.+\.(jpe?g|png)$/i);
   });
 });
@@ -54,7 +54,7 @@ function stubFetch({ paintStatus = 202 } = {}) {
 describe("edit_photo tool", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("swaps marker to a new .png key and fires paint with correct body", async () => {
+  it("swaps marker to a new .jpg key and fires paint with correct body", async () => {
     const ctx = await makeCtx();
     const calls = stubFetch();
     const r = await runTool("edit_photo", { key: OLD, prompt: "make it an ad" }, ctx);
@@ -63,16 +63,17 @@ describe("edit_photo tool", () => {
     // article PUT body swapped old→new marker
     const body = calls.put.body.articles[0].body;
     expect(body).not.toContain(`[[photo:${OLD}]]`);
-    expect(body).toMatch(/\[\[photo:photos\/171\/\d+\.png\]\]/);
+    expect(body).toMatch(/\[\[photo:photos\/171\/\d+-[a-z0-9]+\.jpg\]\]/);
     // paint POST body
     expect(calls.paint.headers.Authorization).toBe("Bearer ptok");
     expect(calls.paint.body.prompt).toBe("make it an ad");
     expect(calls.paint.body.size).toBe("1024x1024");
+    expect(calls.paint.body.format).toBe("jpeg");
     expect(calls.paint.body.image_url).toBe(`https://vd.test/files/api/photo/${SCOPE}${OLD}`);
     expect(calls.paint.body.callback_url).toBe("https://vd.test/agent/paint-callback");
     expect(calls.paint.body.callback_token).toBe("cbtok");
     expect(calls.paint.body.callback_meta.oldKey).toBe(OLD);
-    expect(calls.paint.body.callback_meta.newKey).toMatch(/^photos\/171\/\d+\.png$/);
+    expect(calls.paint.body.callback_meta.newKey).toMatch(/^photos\/171\/\d+-[a-z0-9]+\.jpg$/);
     expect(calls.paint.body.callback_meta.scope).toBe(SCOPE);
   });
 
