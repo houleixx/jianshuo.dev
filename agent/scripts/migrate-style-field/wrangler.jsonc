@@ -1,0 +1,15 @@
+// One-time migration worker — run with `wrangler dev --remote` ONLY, never deploy.
+{
+  "name": "voicedrop-style-migrate",
+  "main": "worker.js",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": false,
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "jianshuo-dev-files",
+      // remote dev binds the preview bucket; point it at the real one on purpose
+      "preview_bucket_name": "jianshuo-dev-files"
+    }
+  ]
+}

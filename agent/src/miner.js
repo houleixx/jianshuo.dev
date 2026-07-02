@@ -16,7 +16,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { readStyleText, readProfileName, readStyleDoc, resolveStyle, prependStyleComment, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
+import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle } from "./style-extract.js";
 import {
   MINE_SYSTEM as SYSTEM,
@@ -763,7 +763,7 @@ async function mineVariant(env, {
 
 // ── On-demand restyle ─────────────────────────────────────────────────────────
 // Re-mine ONE existing article with a chosen 文风 version → a new article version
-// tagged `<!-- style: 风格 vN -->`, head moves to it. Reuses the mining LLM path so the
+// tagged `articles[i].style = N`, head moves to it. Reuses the mining LLM path so the
 // rewrite reads exactly like a first-time mine; re-feeds session photos so [[photo:…]]
 // markers are re-placed. The app already handles "switch to an existing variant" via
 // patchHead — this is only the generate path. Returns {ok, head?} / {ok:false, reason}.
@@ -810,7 +810,8 @@ export async function restyleArticle(env, scope, stem, styleV) {
   });
   if (!articles.length) return { ok: false, reason: "no-article" };
 
-  const tagged = articles.map((a) => ({ ...a, body: prependStyleComment(a.body, v) }));
+  // 文风版本 = per-article 字段（不再往 body 塞注释——隐形行会让第N行编号错位）
+  const tagged = articles.map((a) => ({ ...a, style: v }));
   const newDoc = {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),
@@ -1077,7 +1078,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // 文风走 CLAUDE.json（schema-3），回退老 CLAUDE.md 的「# 我的文风」段。
     // profile.styles 非空就覆盖 head（含单选）：1 个=单篇用那个风格；≥2 个=每个风格各挖
     // 一篇；空=用 head 默认文风。每篇都作为一个标准 article version 写入（head=最后一个），
-    // 且只要风格版本号已知就在 body 顶加 `<!-- style: 风格 vN -->` 标签（展示时剥离、阅读页 chip 显示）。
+    // 且只要风格版本号已知就写 per-article `style: N` 字段（阅读页 chip 显示；不进 body——隐形注释行会让第N行编号错位）。
     // Lazy-seed the default 王建硕 style as v1 on first mine (no-op if the user
     // already has a style; skips legacy CLAUDE.md users). After this the first
     // article is tagged 风格 v1 and the user owns an editable baseline.
@@ -1112,7 +1113,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     const variants = [];
     for (const p of toMine) {
       const arts = await mineOnce(p.style, p.v ? `风格v${p.v}` : "");
-      if (arts.length) variants.push(p.v ? arts.map((a) => ({ ...a, body: prependStyleComment(a.body, p.v) })) : arts);
+      if (arts.length) variants.push(p.v ? arts.map((a) => ({ ...a, style: p.v })) : arts);
     }
 
     if (!variants.length) {

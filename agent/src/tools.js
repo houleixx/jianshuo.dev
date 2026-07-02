@@ -79,11 +79,12 @@ register(
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
     // Schema-3: current articles are in versions[head], not at top level.
     const prev = resolveArticles(doc);
-    doc.articles = articles.map((a, i) => {
-      const out = { title: String(a.title || "(无题)"), body: String(a.body || "") };
-      if (prev[i] && prev[i].wechatMediaId) out.wechatMediaId = prev[i].wechatMediaId;
-      return out;
-    });
+    // 继承+覆盖（不要白名单重建）：按 index 保留旧文章的一切字段（style / wechatMediaId /
+    // 未来新字段），只覆盖模型真正改的 title/body。白名单会在每次编辑时静默丢新字段。
+    doc.articles = articles.map((a, i) => ({
+      ...(prev[i] || {}),
+      title: String(a.title || "(无题)"), body: String(a.body || ""),
+    }));
     delete doc.title; delete doc.body; // collapse any v1 remnants
     // Stamp the instruction id that produced this doc — drives crash-safe
     // exactly-once in the durable queue (queue.js _runRow). writeArticleDoc's
@@ -170,11 +171,11 @@ register(
 
     // Rebuild the full article list, replacing only the target; preserve every
     // other article verbatim and keep each article's wechatMediaId.
-    doc.articles = articles.map((a, i) => {
-      const next = { title: String((i === idx ? newTitle : a.title) || "(无题)"), body: String(i === idx ? newBody : (a.body || "")) };
-      if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
-      return next;
-    });
+    doc.articles = articles.map((a, i) => ({
+      ...a, // 继承一切字段（style / wechatMediaId / …），只覆盖改动
+      title: String((i === idx ? newTitle : a.title) || "(无题)"),
+      body: String(i === idx ? newBody : (a.body || "")),
+    }));
     delete doc.title; delete doc.body; // collapse any v1 remnants
 
     const err = await putArticleDoc(doc, ctx);
@@ -310,11 +311,9 @@ register(
     const newKey = makeEditedKey(key, now, rand);
     const newMarker = `[[photo:${newKey}]]`;
     const swap = (b) => String(b).split(marker).join(newMarker);
-    doc.articles = articles.map((a, i) => {
-      const next = { title: String(a.title || "(无题)"), body: i === idx ? swap(a.body) : String(a.body || "") };
-      if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
-      return next;
-    });
+    doc.articles = articles.map((a, i) => ({
+      ...a, title: String(a.title || "(无题)"), body: i === idx ? swap(a.body) : String(a.body || ""),
+    }));
     delete doc.title; delete doc.body;
     const werr = await putArticleDoc(doc, ctx);
     if (werr) return werr;
@@ -323,11 +322,9 @@ register(
 
     if (!resp || resp.status !== 202) {
       // 回退指针：把 newKey 换回 oldKey，保持文档与"没有在跑的任务"一致
-      const revert = resolveArticles(doc).map((a, i) => {
-        const next = { title: a.title, body: i === idx ? String(a.body).split(newMarker).join(marker) : a.body };
-        if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
-        return next;
-      });
+      const revert = resolveArticles(doc).map((a, i) => ({
+        ...a, body: i === idx ? String(a.body).split(newMarker).join(marker) : a.body,
+      }));
       await putArticleDoc({ ...doc, articles: revert }, ctx);
       return { error: "图片服务提交失败" };
     }
@@ -371,11 +368,9 @@ register(
     if (r.error) return r; // surface line_not_found etc.
 
     const origBodies = articles.map((a) => String(a.body || ""));
-    doc.articles = articles.map((a, i) => {
-      const next = { title: String(a.title || "(无题)"), body: i === idx ? r.body : String(a.body || "") };
-      if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
-      return next;
-    });
+    doc.articles = articles.map((a, i) => ({
+      ...a, title: String(a.title || "(无题)"), body: i === idx ? r.body : String(a.body || ""),
+    }));
     delete doc.title; delete doc.body;
     const werr = await putArticleDoc(doc, ctx);
     if (werr) return werr;
@@ -384,11 +379,9 @@ register(
 
     if (!resp || resp.status !== 202) {
       // 回退：撤掉插入的新图 marker，保持文档与"没有在跑的任务"一致
-      const revert = articles.map((a, i) => {
-        const next = { title: String(a.title || "(无题)"), body: origBodies[i] };
-        if (a.wechatMediaId) next.wechatMediaId = a.wechatMediaId;
-        return next;
-      });
+      const revert = articles.map((a, i) => ({
+        ...a, title: String(a.title || "(无题)"), body: origBodies[i],
+      }));
       await putArticleDoc({ ...doc, articles: revert }, ctx);
       return { error: "图片服务提交失败" };
     }

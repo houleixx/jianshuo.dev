@@ -8,9 +8,15 @@
 //   - numbering ← VoiceDropApp/RecordingDetailView.swift  bodyRows()
 //
 // Algorithm:
+//   0. Strip ALL `<!--…-->` comments + trim (mirror of ArticleBody.stripOriginComment).
+//      The app never renders comments, so they must not consume a 第N行 — this was the
+//      off-by-one that mis-aimed 「改第3行」 on legacy `<!-- style: 风格 vN -->` bodies.
+//      New bodies carry no comments (style is the `articles[i].style` FIELD since
+//      2026-07-03); this strip is defense for stragglers, and an edit's rowsToBody
+//      round-trip drops the dead comment for good (self-healing).
 //   1. Split the body at [[photo:<token>]] markers into text / photo segments,
 //      trimming each text chunk of surrounding whitespace+newlines, dropping empties.
-//      (When there are NO markers the whole body is one untrimmed text segment,
+//      (When there are NO markers the whole body is one comment-stripped text segment,
 //       mirroring ArticleBody.segments' early return.)
 //   2. Walk the segments with ONE continuous line counter:
 //        - text segment: split on "\n", trim each line, drop empty → each is 第N行
@@ -18,7 +24,7 @@
 
 /** Split a body into ordered text / photo segments (mirror of ArticleBody.segments). */
 export function bodySegments(body) {
-  const s = String(body ?? "");
+  const s = String(body ?? "").replace(/<!--[\s\S]*?-->/g, "").trim();
   const marker = /\[\[photo:([^\]]+)\]\]/g;
   const out = [];
   let cursor = 0, m, any = false;

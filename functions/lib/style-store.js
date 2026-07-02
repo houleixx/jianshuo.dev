@@ -57,14 +57,14 @@ export function isDefaultSeed(doc) {
     && doc.versions[0].v === 1 && doc.versions[0].source === "default";
 }
 
-// ── Per-version body comment protocol: `<!-- key: value -->`, extensible. ─────────
-// First key: `style`. The article reader shows meta.style on a chip and strips the
-// comment from every rendered surface. These are the SINGLE source of the format, so
-// generation (miner / restyle) and the reader's match never drift. Future per-version
-// UI just adds another key (`<!-- model: opus -->` …).
+// ── 文风版本标签 ────────────────────────────────────────────────────────────────
+// The 文风 version now lives as a per-article FIELD (`articles[i].style = N`), not a
+// body comment — a hidden `<!--…-->` line desynced the 第N行 numbering between the
+// app (strips comments before numbering) and the agent (didn't). Bodies must contain
+// ONLY user-visible content. The old `<!-- style: 风格 vN -->` comments were migrated
+// off by scripts/migrate-style-field (2026-07-03); readers keep a comment fallback
+// for a transition window only.
 export function styleLabel(v) { return `风格 v${v}`; }                          // "风格 v8"
-export function styleComment(v) { return `<!-- style: ${styleLabel(v)} -->`; }  // "<!-- style: 风格 v8 -->"
-export function prependStyleComment(body, v) { return `${styleComment(v)}\n\n${body}`; }
 
 // Read the versioned CLAUDE.json doc (schema-3). Returns null if absent/corrupt.
 export async function readStyleDoc(env, styleKey) {
