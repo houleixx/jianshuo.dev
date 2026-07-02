@@ -504,16 +504,17 @@ register(
   }
 );
 
-// 库级（命令）agent 能用的工具：多篇读、合并、删除、重写、归类、风格、发布/分享。
-// 刻意不含 edit_current_article / write_article（那两个绑定单一 articleKey）。
+// 库级（命令）agent 能用的工具：多篇读、合并、删除、重写、归类、风格。
+// 刻意不含 edit_current_article / write_article / publish_wechat / share_to_community
+//（那些都绑定单一 articleKey，库级命令 turn 不设 articleKey，调了会报错）。
 export const COMMAND_TOOL_NAMES = [
   "list_articles", "read_article",
   "merge_articles", "delete_article", "restyle_article", "tag_article",
-  "read_style", "write_style", "publish_wechat", "share_to_community",
+  "read_style", "write_style",
 ];
 export const COMMAND_TERMINAL = new Set([
   "merge_articles", "delete_article", "restyle_article", "tag_article",
-  "write_style", "publish_wechat", "share_to_community",
+  "write_style",
 ]);
 export function toolDefsFor(names) {
   const set = new Set(names);
