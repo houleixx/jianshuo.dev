@@ -777,6 +777,18 @@ export default {
       return agent.fetch(fwd);
     }
 
+    // ── /agent/command ── 库级语音指令 agent（每用户一个 DO，无 stem）───────────
+    if (url.pathname === "/agent/command") {
+      if (request.headers.get("Upgrade") !== "websocket") return new Response("expected websocket", { status: 426 });
+      const token = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const scope = await resolveScope(token, env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
+      const agent = await getAgentByName(env.LibraryAgent, sanitizeName(scope + ":command"));
+      const fwd = new Request(request);
+      fwd.headers.set("x-vd-scope", scope);
+      return agent.fetch(fwd);
+    }
+
     // ── /agent/status ── app WebSocket for real-time status updates ─────────
     if (url.pathname === "/agent/status") {
       if (request.headers.get("Upgrade") !== "websocket") {
