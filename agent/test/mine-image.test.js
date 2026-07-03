@@ -4,7 +4,7 @@
 //   - photos present + vision succeeds → article written with [[photo:<key>]], no .empty
 //   - no photos → unchanged .empty(no-speech) behavior
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mineOneAudio } from "../src/miner.js";
+import { mineOneAudio, restyleArticle } from "../src/miner.js";
 import { fakeEnv } from "./fakes.js";
 
 const SUB   = "anon-abc";
@@ -352,5 +352,75 @@ describe("mineOneAudio: imagePipeline 开关", () => {
     expect(fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com")).length).toBe(1);
     const put = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
     expect(JSON.parse(put.body).vision).toBeUndefined();
+  });
+});
+
+// ── restyleArticle: 图片流水线产物复用观察结果 ─────────────────────────────────────
+
+describe("restyleArticle: 图片流水线产物复用观察结果", () => {
+  it("doc.vision/plan 在 → 只打 2 次 LLM（write+review），新版本保留 vision/plan", async () => {
+    const articleDoc = { schema: 2, id: STEM, sourceAudio: `${STEM}.m4a`, transcript: "", srt: "", articles: [{ title: "旧", body: "旧文" }], status: "ready", vision: PIPE_CANNED.observe, plan: PIPE_CANNED.plan };
+    const styleJson = { head: 2, versions: [{ v: 1, style: "文风一" }, { v: 2, style: "文风二" }] };
+    const env = envWithPhotos({
+      [`${SCOPE}articles/${STEM}.json`]: JSON.stringify(articleDoc),
+      [`${SCOPE}CLAUDE.json`]: JSON.stringify(styleJson),
+      [PHOTO_KEY]: "jpgbytes",
+      "config/model.json": JSON.stringify({ providerKey: "anthropic", imagePipeline: true }),
+    });
+    env.CLAUDE_API_KEY = "k";
+    const calls = []; let n = 0; const seq = ["write", "review"];
+    const fetchSpy = async (url, init = {}) => {
+      const u = String(url); calls.push({ url: u, method: (init.method || "GET").toUpperCase(), body: init.body });
+      if (u.includes("api.anthropic.com")) {
+        const body = PIPE_CANNED[seq[n++]];
+        return { ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: JSON.stringify(body) }], usage: {} }), text: async () => "" };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+    };
+    fetchSpy.calls = calls;
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await restyleArticle(env, SCOPE, STEM, 2);
+    expect(r.ok).toBe(true);
+    const llm = calls.filter((c) => c.url.includes("api.anthropic.com"));
+    expect(llm.length).toBe(2);
+    // 第 1 调用 = write 阶段：system 含目标文风、不带图片
+    const p1 = JSON.parse(llm[0].body);
+    const sys1 = Array.isArray(p1.system) ? p1.system.map((b) => b.text).join("") : p1.system;
+    expect(sys1).toContain("文风二");
+    expect(JSON.stringify(p1)).not.toContain('"type":"image"');
+    // 第 2 调用 = review 阶段：带图片
+    expect(JSON.stringify(JSON.parse(llm[1].body))).toContain('"type":"image"');
+    // 新版本 PUT：文章来自 review 稿、style=2、保留 vision/plan
+    const put = calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
+    const doc = JSON.parse(put.body);
+    expect(doc.articles[0].title).toBe("流水线终稿");
+    expect(doc.articles[0].style).toBe(2);
+    expect(doc.vision).toBeTruthy();
+    expect(doc.plan).toBeTruthy();
+  });
+  it("开关关：restyle 走既有 mineVariant 路径（1 次 LLM）", async () => {
+    const articleDoc = { schema: 2, id: STEM, sourceAudio: `${STEM}.m4a`, transcript: "", srt: "", articles: [{ title: "旧", body: "旧文" }], status: "ready", vision: PIPE_CANNED.observe, plan: PIPE_CANNED.plan };
+    const styleJson = { head: 2, versions: [{ v: 2, style: "文风二" }] };
+    const env = envWithPhotos({
+      [`${SCOPE}articles/${STEM}.json`]: JSON.stringify(articleDoc),
+      [`${SCOPE}CLAUDE.json`]: JSON.stringify(styleJson),
+      [PHOTO_KEY]: "jpgbytes",
+    });
+    env.CLAUDE_API_KEY = "k";
+    const calls = [];
+    const fetchSpy = async (url, init = {}) => {
+      const u = String(url); calls.push({ url: u, method: (init.method || "GET").toUpperCase(), body: init.body });
+      if (u.includes("api.anthropic.com")) {
+        return { ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ articles: [{ title: "单发重写", body: "x" }] }) }], usage: {} }), text: async () => "" };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+    };
+    fetchSpy.calls = calls;
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await restyleArticle(env, SCOPE, STEM, 2);
+    expect(r.ok).toBe(true);
+    expect(calls.filter((c) => c.url.includes("api.anthropic.com")).length).toBe(1);
   });
 });

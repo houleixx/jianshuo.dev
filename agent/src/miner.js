@@ -809,12 +809,28 @@ export async function restyleArticle(env, scope, stem, styleV) {
   const modelCfg = await loadModelConfig(env);
   const turnId = `${Date.now()}-${stem.slice(-8)}`;
 
-  // Same mining core as the scheduled mine — natural pass then a force retry for thin
-  // recordings — so restyle can never again drift from runMine.
-  const articles = await mineVariant(env, {
-    transcript: mineSource, styleText, photos, cacheMode: "transcript", modelCfg, scope, stem, turnId,
-    metaExtra: { restyle: v }, debitExtra: { restyle: v },
-  });
+  // 图片流水线产物（无转写、doc.vision/plan 在）→ 复用观察与立意，只重跑写作+审稿。
+  // 换文风不换立意；照片只在审稿阶段重新入场核对误读。失败静默落回下方 mineVariant。
+  let articles = null;
+  if (modelCfg.imagePipeline && !transcript && doc.vision && doc.plan && photos.length) {
+    try {
+      const factPack = await buildFactPack(env, { scope, stem, photos });
+      const callModel = makeStageCaller(env, { modelCfg, scope, stem, turnId });
+      const r = await rewriteFromVision({
+        photos, factPack, vision: doc.vision, plan: doc.plan, styleText,
+        provider: modelCfg.provider, model: modelCfg.model, callModel,
+      });
+      if (r.articles.length) articles = r.articles;
+    } catch (_) { articles = null; }
+  }
+  if (!articles) {
+    // Same mining core as the scheduled mine — natural pass then a force retry for thin
+    // recordings — so restyle can never again drift from runMine.
+    articles = await mineVariant(env, {
+      transcript: mineSource, styleText, photos, cacheMode: "transcript", modelCfg, scope, stem, turnId,
+      metaExtra: { restyle: v }, debitExtra: { restyle: v },
+    });
+  }
   if (!articles.length) return { ok: false, reason: "no-article" };
 
   // 文风版本 = per-article 字段（不再往 body 塞注释——隐形行会让第N行编号错位）
@@ -823,6 +839,9 @@ export async function restyleArticle(env, scope, stem, styleV) {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),
     transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: modelCfg.model,
+    // 流水线元数据随版本继承——下次 restyle 还能继续复用观察与立意
+    ...(doc.vision ? { vision: doc.vision } : {}),
+    ...(doc.plan ? { plan: doc.plan } : {}),
   };
   await writeArticle(audioKey, newDoc, env);          // appends a new version, head moves to it
   await notifyStatus(scope, stem, "ready", env);
