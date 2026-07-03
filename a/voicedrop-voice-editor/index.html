@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop 语音编辑器完整解剖：按住说话，文章自己改好——从麦克风的 16kHz PCM，到火山流式 ASR，到 Durable Object 持久队列，到 Claude agent loop 的行级定点修改，再到 R2 写回与实时推送。">
+<title>VoiceDrop 语音编辑器解剖 · jianshuo.dev/a</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --paper:#faf5ec;
+    --card:#fffdf8;
+    --ink:#33291f;
+    --soft:#8d7c69;
+    --faint:#b5a793;
+    --accent:#b8492a;        /* 赭红：app 里那颗播放键 */
+    --accent-soft:#f6ddd2;
+    --accent-faint:#fbeee7;
+    --line:#e8ddcc;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --serif:'Noto Serif SC',Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+  }
+  html{scroll-behavior:smooth}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.9;-webkit-font-smoothing:antialiased;font-size:16px}
+  ::selection{background:var(--accent-soft)}
+
+  /* 纸面颗粒 */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .6 0 0 0 0 .5 0 0 0 0 .4 0 0 0 .03 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+  .wrap{max-width:960px;margin:0 auto;padding:0 28px;position:relative;z-index:1}
+
+  /* ── 顶栏 ── */
+  .top{display:flex;justify-content:space-between;align-items:center;padding:26px 0 0;font-size:.82rem}
+  .top a{color:var(--soft);text-decoration:none;font-weight:600}
+  .top a:hover{color:var(--accent)}
+  .top .crumb b{color:var(--ink)}
+
+  /* ── Hero ── */
+  .hero{padding:72px 0 40px;display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center}
+  @media(max-width:820px){.hero{grid-template-columns:1fr;padding-top:48px}}
+  .kicker{font-family:var(--mono);font-size:.74rem;letter-spacing:.22em;color:var(--accent);text-transform:uppercase;margin-bottom:18px}
+  .kicker::before{content:"◉ ";font-size:.6rem;vertical-align:2px}
+  h1{font-family:var(--serif);font-weight:900;font-size:clamp(2.1rem,5.2vw,3.4rem);line-height:1.25;letter-spacing:.01em}
+  h1 em{font-style:normal;color:var(--accent);position:relative;white-space:nowrap}
+  h1 em::after{content:"";position:absolute;left:0;right:0;bottom:.08em;height:.32em;background:var(--accent-soft);z-index:-1;border-radius:3px}
+  .hero .lede{margin-top:24px;font-size:1.02rem;color:#5d5142;max-width:34em}
+  .hero .lede b{color:var(--ink)}
+  .herometa{margin-top:28px;display:flex;gap:26px;flex-wrap:wrap}
+  .herometa div{font-size:.78rem;color:var(--soft)}
+  .herometa strong{display:block;font-family:var(--serif);font-weight:900;font-size:1.5rem;color:var(--ink);line-height:1.3}
+  .herometa em{font-style:normal;color:var(--accent)}
+
+  /* ── 手机模型 ── */
+  .phone{width:270px;margin:0 auto;background:#fff;border-radius:38px;border:1.5px solid var(--line);
+    box-shadow:0 30px 60px rgba(74,55,35,.16),0 4px 14px rgba(74,55,35,.08);padding:16px 14px 18px;position:relative}
+  .phone::before{content:"";display:block;width:70px;height:5px;border-radius:99px;background:#e9e2d4;margin:0 auto 14px}
+  .ptitle{font-family:var(--serif);font-weight:700;font-size:.82rem;text-align:center;margin-bottom:10px;color:var(--ink)}
+  .pbody{position:relative;padding-left:34px;display:flex;flex-direction:column;gap:7px}
+  .prow{position:relative;font-size:.56rem;line-height:1.75;color:#6b5f50}
+  .prow .ln{position:absolute;left:-34px;top:1px;font-family:var(--mono);font-size:.5rem;color:var(--accent);
+    background:var(--accent-faint);border-radius:5px;padding:0 4px;opacity:0;animation:lnin .6s ease forwards}
+  .prow:nth-child(1) .ln{animation-delay:.3s}.prow:nth-child(2) .ln{animation-delay:.45s}
+  .prow:nth-child(3) .ln{animation-delay:.6s}.prow:nth-child(4) .ln{animation-delay:.75s}
+  .prow:nth-child(5) .ln{animation-delay:.9s}
+  @keyframes lnin{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
+  .prow.hot span.txt{background:linear-gradient(transparent 55%,var(--accent-soft) 55%)}
+  .pimg{height:52px;border-radius:9px;background:linear-gradient(135deg,#f0e4d2,#e3cdb2);position:relative}
+  .pimg .badge{position:absolute;top:5px;left:5px;font-family:var(--mono);font-size:.5rem;color:#fff;background:var(--accent);border-radius:5px;padding:0 5px;opacity:0;animation:lnin .6s .75s ease forwards}
+  .pbubble{margin:12px 4px 10px;background:var(--accent-faint);border:1px solid var(--accent-soft);border-radius:12px;padding:7px 10px;font-size:.6rem;color:#7a4530}
+  .pbubble b{color:var(--accent)}
+  .pbubble .cursor{display:inline-block;width:5px;height:.75em;background:var(--accent);vertical-align:-1px;margin-left:2px;animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .ppill{margin:4px auto 0;width:82%;border-radius:99px;background:var(--accent);color:#fff;text-align:center;font-size:.62rem;font-weight:700;padding:9px 0;letter-spacing:.08em;position:relative;overflow:hidden}
+  .ppill::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.35),transparent 60%);animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.2}50%{opacity:.8}}
+  .pcap{text-align:center;font-size:.68rem;color:var(--faint);margin-top:14px}
+
+  /* ── 目录 ── */
+  .toc{margin:30px 0 0;border-top:1.5px solid var(--line);border-bottom:1.5px solid var(--line);padding:18px 0;
+    display:flex;flex-wrap:wrap;gap:6px 22px;font-size:.8rem}
+  .toc a{color:var(--soft);text-decoration:none;font-weight:600}
+  .toc a b{font-family:var(--mono);color:var(--accent);font-weight:600;font-size:.72rem;margin-right:5px}
+  .toc a:hover{color:var(--ink)}
+
+  /* ── 章节 ── */
+  section{padding:64px 0 8px}
+  .chap{display:flex;align-items:baseline;gap:18px;margin-bottom:8px}
+  .chap .no{font-family:var(--serif);font-weight:900;font-size:3rem;color:var(--accent);opacity:.28;line-height:1}
+  .chap h2{font-family:var(--serif);font-weight:900;font-size:clamp(1.4rem,3vw,1.9rem);letter-spacing:.01em}
+  .chap .sub{font-family:var(--mono);font-size:.7rem;color:var(--faint);letter-spacing:.06em}
+  section>p, section .prose p{max-width:44em;margin:14px 0;color:#4e4335}
+  section p b, section li b{color:var(--ink)}
+  section p code, section li code, td code{font-family:var(--mono);font-size:.82em;background:#f3ecdd;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:#7a4530;white-space:nowrap}
+  section ul{max-width:44em;margin:14px 0 14px 1.2em;color:#4e4335}
+  section li{margin:7px 0}
+  .note{max-width:44em;margin:22px 0;background:var(--accent-faint);border-left:3px solid var(--accent);border-radius:0 12px 12px 0;padding:14px 20px;font-size:.9rem;color:#6e4a37}
+  .note b{color:var(--accent)}
+
+  /* ── 全景流程图 ── */
+  .pipeline{margin:34px 0 10px;display:flex;flex-direction:column;gap:0}
+  .lane{display:grid;grid-template-columns:96px 1fr;gap:14px;align-items:stretch;padding:16px 0;border-top:1px dashed var(--line)}
+  .lane:last-child{border-bottom:1px dashed var(--line)}
+  .lane .who{font-family:var(--mono);font-size:.66rem;color:var(--faint);letter-spacing:.1em;display:flex;align-items:center}
+  .lane .who b{writing-mode:initial;color:var(--soft)}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .nd{background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:8px 13px;font-size:.78rem;font-weight:600;color:var(--ink);box-shadow:0 3px 8px rgba(74,55,35,.05)}
+  .nd small{display:block;font-family:var(--mono);font-size:.62rem;font-weight:400;color:var(--soft);margin-top:1px}
+  .nd.hot{border-color:var(--accent);background:linear-gradient(180deg,#fff,var(--accent-faint))}
+  .nd.hot small{color:#a05a3e}
+  .ar{color:var(--faint);font-size:.85rem;flex:none}
+  .backline{margin-top:8px;font-family:var(--mono);font-size:.66rem;color:var(--accent);letter-spacing:.04em}
+
+  /* ── 代码块 ── */
+  pre{background:#2f2820;color:#efe6d5;border-radius:14px;padding:18px 22px;font-family:var(--mono);font-size:.76rem;line-height:1.75;overflow-x:auto;margin:20px 0;box-shadow:0 12px 28px rgba(56,42,26,.18)}
+  pre .c{color:#9d8d76}
+  pre .k{color:#f0a884}
+  pre .s{color:#c9d99a}
+  pre b{color:#ffd9c4;font-weight:600}
+  .src{font-family:var(--mono);font-size:.66rem;color:var(--faint);margin:-12px 0 18px;letter-spacing:.03em}
+
+  /* ── 表格 ── */
+  table{border-collapse:collapse;width:100%;margin:20px 0;font-size:.85rem;background:var(--card);border-radius:14px;overflow:hidden;box-shadow:0 6px 18px rgba(74,55,35,.06)}
+  th{font-family:var(--serif);font-weight:700;text-align:left;background:#f4ecdc;padding:11px 16px;font-size:.8rem}
+  td{padding:11px 16px;border-top:1px solid #f0e8d8;vertical-align:top;color:#4e4335}
+  td:first-child{white-space:nowrap}
+
+  /* ── 时序步骤 ── */
+  .steps{position:relative;margin:28px 0;padding-left:34px;max-width:46em}
+  .steps::before{content:"";position:absolute;left:11px;top:8px;bottom:8px;width:2px;background:linear-gradient(var(--accent-soft),var(--line))}
+  .step{position:relative;margin:0 0 22px}
+  .step::before{content:"";position:absolute;left:-30px;top:7px;width:11px;height:11px;border-radius:50%;background:var(--paper);border:3px solid var(--accent)}
+  .step h4{font-family:var(--serif);font-weight:700;font-size:1rem;margin-bottom:4px}
+  .step h4 span{font-family:var(--mono);font-weight:400;font-size:.68rem;color:var(--faint);margin-left:8px}
+  .step p{font-size:.9rem;color:#4e4335;margin:0}
+
+  /* ── 双栏卡片 ── */
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0}
+  @media(max-width:700px){.duo{grid-template-columns:1fr}}
+  .dcard{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:20px 22px}
+  .dcard h3{font-family:var(--serif);font-weight:700;font-size:1.02rem;margin-bottom:8px}
+  .dcard h3 i{font-style:normal;margin-right:8px}
+  .dcard p,.dcard li{font-size:.87rem;color:#4e4335}
+  .dcard ul{margin:8px 0 0 1.1em}
+  .dcard li{margin:5px 0}
+
+  /* ── 尾注 ── */
+  .fin{margin:70px 0 0;border-top:1.5px solid var(--line);padding:30px 0 60px;text-align:center;font-size:.8rem;color:var(--faint)}
+  .fin a{color:var(--accent);text-decoration:none;font-weight:600}
+
+  .reveal{opacity:0;transform:translateY(16px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="top">
+    <span class="crumb"><a href="/a/">/a</a> · <b>voicedrop-voice-editor</b></span>
+    <a href="https://jianshuo.dev">jianshuo.dev</a>
+  </nav>
+
+  <!-- ═══════════ HERO ═══════════ -->
+  <header class="hero">
+    <div>
+      <div class="kicker">VoiceDrop · Architecture Walkthrough</div>
+      <h1>按住说话，<br>文章<em>自己改好</em></h1>
+      <p class="lede">VoiceDrop 的语音编辑器：在文章详情页<b>按住底部的麦克风说一句话</b>——「把第三行改简洁点」「删掉图二」「标题换一个」——松手，几秒钟后文章原地更新。这页把这条链路完整拆开：从麦克风里的 16kHz PCM，到火山流式听写，到 Cloudflare Durable Object 里的持久队列，到 Claude 的行级定点修改，再到 R2 写回与 WebSocket 推送。</p>
+      <div class="herometa">
+        <div><strong>2 条</strong>WebSocket<br>听写一条 · 编辑一条</div>
+        <div><strong>4 种</strong>定点操作<br>删行 / 改行 / 插段 / 改题</div>
+        <div><strong><em>0 次</em></strong>整篇回传<br>小改绝不重写全文</div>
+      </div>
+    </div>
+    <figure class="phone" aria-label="按住说话时的界面示意">
+      <div class="ptitle">豫园的早晨</div>
+      <div class="pbody">
+        <div class="prow"><span class="ln">第1行</span><span class="txt">早上七点的豫园没有游客，只有猫。</span></div>
+        <div class="prow"><span class="ln">第2行</span><span class="txt">卖大饼的师傅认识每一只。</span></div>
+        <div class="prow hot"><span class="ln">第3行</span><span class="txt">我原本以为这种老城厢的生活方式大概已经不存在了，但是……</span></div>
+        <div class="prow"><span class="ln">第4行</span><div class="pimg"><span class="badge">图1</span></div></div>
+        <div class="prow"><span class="ln">第5行</span><span class="txt">九曲桥上的光，是借来的。</span></div>
+      </div>
+      <div class="pbubble">🎙 把<b>第3行</b>改简洁一点<span class="cursor"></span></div>
+      <div class="ppill">松开 发送 · 上滑取消</div>
+      <figcaption class="pcap">按住说话时，行号浮现在左边距</figcaption>
+    </figure>
+  </header>
+
+  <nav class="toc">
+    <a href="#s0"><b>00</b>十秒看懂</a>
+    <a href="#s1"><b>01</b>听写</a>
+    <a href="#s2"><b>02</b>定位</a>
+    <a href="#s3"><b>03</b>排队</a>
+    <a href="#s4"><b>04</b>改写</a>
+    <a href="#s5"><b>05</b>写回</a>
+    <a href="#s6"><b>06</b>闸门</a>
+    <a href="#s7"><b>07</b>完整旅程</a>
+  </nav>
+
+  <!-- ═══════════ 00 全景 ═══════════ -->
+  <section id="s0" class="reveal">
+    <div class="chap"><span class="no">00</span><div><h2>十秒看懂全景</h2><div class="sub">one round trip, three parties</div></div></div>
+    <p>一次语音编辑跨过三层：<b>手机</b>负责采声和显示，<b>Cloudflare 边缘</b>负责听写代理、排队和执行，<b>两家模型服务</b>分别管「听清」和「改对」。手机上没有任何密钥，所有第三方凭证都留在服务端。</p>
+
+    <div class="pipeline">
+      <div class="lane">
+        <div class="who"><b>📱 iOS</b></div>
+        <div class="flow">
+          <span class="nd">按住说话<small>PushToTalkBar</small></span><span class="ar">→</span>
+          <span class="nd">AVAudioEngine 取麦<small>mono 16k PCM</small></span><span class="ar">→</span>
+          <span class="nd">火山二进制协议分帧<small>VolcASRProtocol · gzip</small></span><span class="ar">→</span>
+          <span class="nd">松手 · 定稿文字<small>SpeechDictation</small></span>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="who"><b>☁️ CF Worker</b></div>
+        <div class="flow">
+          <span class="nd">/agent/asr 哑中继<small>验 token · 注密钥</small></span><span class="ar">⇄</span>
+          <span class="nd hot">火山流式 ASR<small>sauc/bigmodel</small></span>
+          <span class="ar" style="margin:0 14px">‖</span>
+          <span class="nd">/agent/edit WebSocket<small>指令入队</small></span><span class="ar">→</span>
+          <span class="nd hot">ArticleEditor DO<small>每篇文章一个 · SQLite 队列</small></span>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="who"><b>🤖 执行</b></div>
+        <div class="flow">
+          <span class="nd">计费闸<small>meteredEditGate</small></span><span class="ar">→</span>
+          <span class="nd hot">Claude agent loop<small>≤8 步 · 一组工具</small></span><span class="ar">→</span>
+          <span class="nd">R2 写回新版本<small>articles/&lt;stem&gt;.json</small></span><span class="ar">→</span>
+          <span class="nd">广播 updated<small>文章原地刷新</small></span>
+        </div>
+      </div>
+    </div>
+    <div class="backline">↺ 全程一个闭环：说话 → 文字 → 队列 → 改写 → 写回 → 推回手机，正文原地更新，行号重新长出来</div>
+  </section>
+
+  <!-- ═══════════ 01 听写 ═══════════ -->
+  <section id="s1" class="reveal">
+    <div class="chap"><span class="no">01</span><div><h2>听写：手机自己会说火山话</h2><div class="sub">SpeechDictation → /agent/asr → 火山流式 ASR</div></div></div>
+    <p>录口述备忘和说编辑指令，走的是<b>两条完全不同的音频路</b>。录备忘用 <code>AVAudioRecorder</code> 落成 m4a 文件慢慢传；而编辑指令要的是「边说边出字」，所以 <code>SpeechDictation</code>（VoiceEdit.swift）用 <code>AVAudioEngine</code> 在麦克风上装一个 tap，把每个 buffer 现场重采样成 <b>mono 16kHz Int16 PCM</b>，压根不存文件，直接流出去。</p>
+    <p>流去哪？手机自己实现了火山引擎的二进制协议（<code>VolcASRProtocol.swift</code>：gzip 分帧 + 序列号），但它连的不是火山，而是自家 Worker 的 <code>wss://jianshuo.dev/agent/asr</code>。这个代理是个<b>「哑中继」</b>——它只做三件事：</p>
+    <ul>
+      <li>验证 app 自己的 bearer token（无效直接 401 挡回）；</li>
+      <li>注入服务端保管的火山 AppKey / AccessKey，同时<b>剥掉客户端的 Authorization 头</b>——手机永远接触不到火山凭证；</li>
+      <li>把两个方向的二进制帧原样对拷到 <code>openspeech.bytedance.com/api/v3/sauc/bigmodel</code>（流式资源，区别于挖矿用的文件版 ASR）。</li>
+    </ul>
+    <p>说话的同时，识别出的字实时回流，屏幕上浮出一个转写气泡；说到「第3行」「图2」这类定位词，气泡里会用赭红色高亮出来（一个正则：<code>第[0-9]+行|图[0-9]+</code>）——你能亲眼确认「它听到的号就是我说的号」。</p>
+    <div class="note"><b>两个踩过的坑</b>（都修了）：① Cloudflare Workers 出站 WebSocket 必须写 <code>https://</code> 而不是 <code>wss://</code>；② CF 把二进制帧给成 Blob，直接转发会被强转成 13 个字节的字符串 <code>"[object Blob]"</code>——音频全毁，「说话和没说一样」。修法是两端 socket 都设 <code>binaryType="arraybuffer"</code> 并显式转换。</div>
+  </section>
+
+  <!-- ═══════════ 02 定位 ═══════════ -->
+  <section id="s2" class="reveal">
+    <div class="chap"><span class="no">02</span><div><h2>定位：第N行是一种共享语言</h2><div class="sub">用户、屏幕、模型，看的是同一套号</div></div></div>
+    <p>语音编辑最难的不是「改」，是「指哪」。VoiceDrop 的答案是把行号做成<b>三方共享的坐标系</b>：</p>
+    <div class="steps">
+      <div class="step"><h4>屏幕上：按住才浮现 <span>RecordingDetailView.bodyRows()</span></h4><p>手指按住说话时，正文左边距淡入「第N行」，每张图左上角淡入「图N」角标。用 overlay + offset 绝对定位，正文一个像素都不回流。松手号就隐去——平时读文章看不到它们。</p></div>
+      <div class="step"><h4>计数规则：图片也占一个行号 <span>连续计数器</span></h4><p>正文按真实换行拆成非空行，<b>照片标记单独成行、也消耗一个行号</b>。所以图后面的段落行号是连续累加的，屏幕上标的号和模型拿到的原始正文 1:1 对齐。（早期版本只数文字行、跳过图片，用户一说「第5行」就错位。）</p></div>
+      <div class="step"><h4>模型侧：读号，不数行 <span>linenum.js · inlineNumberedBody</span></h4><p>Worker 用和 Swift 完全相同的算法把正文逐行标号，直接把带号版本塞进 prompt——模型被明确告知「严格按标的号定位，别自己数」。靠模型自己数长文章的行数是会数错的，所以干脆不让它数。</p></div>
+      <div class="step"><h4>号只是坐标，不是内容 <span>applyArticleEdits</span></h4><p>行号从不写进保存的正文：模型输出的是「第3行换成这句」这样的操作，服务端把号解析回干净的原始行再落盘。多篇文章各自从第1行重新编号，app 每条指令都带上 <code>articleIndex</code>，指哪篇编哪篇的号。</p></div>
+    </div>
+    <div class="note"><b>一条硬契约：</b>iOS 的 <code>bodyRows()</code> 和 Worker 的 <code>linenum.js</code> 是同一个算法的两份实现，改其中一个必须同步改另一个（各自都有测试）。编号规则漂移的后果是「用户指第4行、模型改第5行」——这比改错字严重得多。</div>
+  </section>
+
+  <!-- ═══════════ 03 排队 ═══════════ -->
+  <section id="s3" class="reveal">
+    <div class="chap"><span class="no">03</span><div><h2>排队：每条指令恰好执行一次</h2><div class="sub">ArticleEditor DO · SQLite 队列 · exactly-once</div></div></div>
+    <p>你可以在上一条还在改的时候就说下一条——「正在改…按住继续说」。指令不会打架，因为两端各有一层队列：</p>
+    <div class="duo">
+      <div class="dcard">
+        <h3><i>📱</i>手机侧：严格串行</h3>
+        <ul>
+          <li>每条指令生成一个稳定 id，连同文字、缩略图、<code>articleIndex</code> 先<b>持久化到磁盘</b>（EditQueueStore）——app 被杀也不丢；</li>
+          <li>严格一条接一条发：上一条的 <code>updated</code> 回来了，才发下一条，保证每次编辑都建立在上一次的<b>结果</b>之上；</li>
+          <li>重连时先收服务端 snapshot 对账，发过没回音的指令按 id 重放。</li>
+        </ul>
+      </div>
+      <div class="dcard">
+        <h3><i>☁️</i>服务端：持久队列</h3>
+        <ul>
+          <li>每篇文章一个 Durable Object（<code>/agent/edit?stem=…</code>），指令写进 DO 自带的 <b>SQLite 队列表</b>，按 seq FIFO 排干；</li>
+          <li>同 id 重复提交 → 直接回放缓存结果，绝不重跑模型；</li>
+          <li>DO 被休眠/驱逐后恢复：把遗留的 running 行重置回 pending 继续排——<b>没有客户端连着也照样跑完</b>。</li>
+        </ul>
+      </div>
+    </div>
+    <p>最后一道保险缝在文章文档本身：每次成功的编辑会把这条指令的 id 盖章成 <code>doc.lastEditId</code>。队列崩溃恢复后重跑某条指令时，先看文档上的章——已经盖过，说明效果早就落盘了，直接返回现状，<b>模型一次都不会重复执行</b>。</p>
+<pre><span class="c">// edit-turn.js — 恰好一次的最后一道保险</span>
+<span class="k">if</span> (editId &amp;&amp; doc.<b>lastEditId</b> === editId) {
+  <span class="c">// 这条指令的效果已经落盘（上次跑完写入后盖了章，队列却没记住）</span>
+  <span class="k">return</span> { ok: <span class="k">true</span>, article: withTopLevelArticles(doc), hadError: <span class="k">false</span> };
+}</pre>
+    <div class="src">jianshuo.dev/agent/src/edit-turn.js:23</div>
+  </section>
+
+  <!-- ═══════════ 04 改写 ═══════════ -->
+  <section id="s4" class="reveal">
+    <div class="chap"><span class="no">04</span><div><h2>改写：一个带工具的小 agent</h2><div class="sub">runEditTurn → runAgentLoop · ≤8 步</div></div></div>
+    <p>轮到某条指令时，Worker 组一个 prompt 去驱动 Claude。这个 prompt 的结构本身就说明了设计取向：</p>
+    <ul>
+      <li><b>系统段（缓存前缀①）</b>：静态指令——工具怎么选、语气 DNA（胸有成竹下断言、第一人称用「我」、称 AI 用「他」、细节用表格列表、保留口语词、不加 AI 味连接词、盘古之白）。对所有用户所有文章字节相同，天然共享缓存。</li>
+      <li><b>转写段（缓存前缀②）</b>：这段录音的原始口述转写，作为「事实底稿」。同一篇文章的每次编辑它都不变，所以也钉进缓存前缀，一轮一轮白捡缓存命中。</li>
+      <li><b>易变段</b>：最近的编辑历史（最多 100 轮对话回放）＋ 带行号的当前正文 ＋ 新上传的照片（作为视觉输入）＋ 这次的语音指令。</li>
+    </ul>
+    <p>事实来源有明确的优先级，写死在系统提示词里：<b>用户当场说的就是最高事实</b>。他让你加「花了 2430」你就加，绝不拿「原始转写里没有」顶回去，绝不反问确认；转写只是底稿参考；唯一底线是不虚构用户根本没说的东西。</p>
+    <p>然后进 agent loop（最多 8 步），模型按指令挑工具：</p>
+    <table>
+      <tr><th>工具</th><th>干什么</th><th>什么时候用</th></tr>
+      <tr><td><code>edit_current_article</code></td><td>行级定点修改：<code>delete_lines</code> / <code>replace_line</code> / <code>insert_after</code> / <code>set_title</code>，一次可带多个 op，行号一律按改动前的编号</td><td><b>默认路径</b>——删行、改行、合并相邻行、删图、插段、改标题，绝不回传全文</td></tr>
+      <tr><td><code>write_article</code></td><td>回传完整文章数组，整篇重写当前这篇</td><td>只有伤筋动骨的大重构、把多篇合并成一篇时</td></tr>
+      <tr><td><code>list_articles</code> / <code>read_article</code></td><td>只读：列出、读取别的文章</td><td>合并 / 参考别篇重写前先看</td></tr>
+      <tr><td><code>read_style</code> / <code>write_style</code></td><td>读 / 整体写回用户文风（版本化存储）</td><td>「以后写得再口语一点」这类指令</td></tr>
+      <tr><td><code>publish_wechat</code> / <code>share_to_community</code></td><td>发公众号草稿 / 分享到 VD社区</td><td>说了就直接发</td></tr>
+      <tr><td><code>edit_photo</code> / <code>new_photo</code></td><td>AI 改图 / 凭空生成一张插入</td><td>「把图二变成广告」；异步约 1 分钟自动出现</td></tr>
+    </table>
+    <p>行级工具落盘时用展开继承重建文章数组——<code>{...a, title, body}</code>——除了这次改动的字段，<b>其它一切字段（文风版本、公众号 media id…）原样存活</b>。这是一条吃过亏才立下的规矩：白名单重建会在每次编辑时静默丢字段。</p>
+    <div class="note"><b>省一趟往返的小聪明：</b>定点修改、写回、发布这类「终结型」工具一旦成功，回合立即结束，不再多花一次 Claude 调用去要一句「改好了」的确认——直接拿模型调工具前说的话当回复，没有就默认回「改好了」。</div>
+  </section>
+
+  <!-- ═══════════ 05 写回 ═══════════ -->
+  <section id="s5" class="reveal">
+    <div class="chap"><span class="no">05</span><div><h2>写回：新版本、旧回声</h2><div class="sub">R2 versioned doc → broadcast → 原地刷新</div></div></div>
+    <p>每次成功的编辑都写一个<b>新版本</b>进 R2 的文章文档（schema-3：<code>{head, versions:[…]}</code>），而不是覆盖。这带来两个直接的产品能力：</p>
+    <ul>
+      <li><b>撤销 / 重做就是移动 head 指针</b>——详情页的 undo/redo 按钮只 PATCH 一个指针，不产生新版本，瞬时生效；</li>
+      <li><b>版本历史可回看</b>——每个版本记着来源（挖矿、语音编辑、换文风）。</li>
+    </ul>
+    <p>写完，DO 向这篇文章的所有连接广播 <code>{type:"updated", article}</code>，app 把正文原地换掉；按住说话时行号会按新正文重新长出来。这次改动的「回声」还会传得更远：</p>
+    <ul>
+      <li>发过公众号草稿的，编辑后可以「更新草稿」再推一次；</li>
+      <li>分享到 VD社区的帖子是一个<b>活指针</b>（只存 articleKey 不存副本）——你在编辑器里改一句，社区里立刻是新的。</li>
+    </ul>
+    <p>还有一个不显山露水的设计：详情页的「插入照片」按钮走的<b>也是语音编辑这条链</b>——它把照片缩略图打包成一条合成指令（「我刚拍了两张照片，请插到最合适的位置」）排进同一个队列，模型看着图决定插进哪段，写下 <code>[[photo:&lt;key&gt;]]</code> 标记。图文混排和语音改稿共用同一条肌肉。</p>
+  </section>
+
+  <!-- ═══════════ 06 闸门 ═══════════ -->
+  <section id="s6" class="reveal">
+    <div class="chap"><span class="no">06</span><div><h2>闸门：先验票，再花钱</h2><div class="sub">meteredEditGate · 上限 · 全量日志</div></div></div>
+    <p>每条指令在<b>调用 Claude 之前</b>先过计费闸 <code>meteredEditGate</code>：算力余额不足，或这篇已经改满 100 次（按真实编辑次数算——一次编辑是一个 agentic 回合，不管里面调了几次模型），直接拒绝入场，一个 token 都不花。拒绝消息原路推回手机，变成气泡里的「算力不足，无法继续编辑」。</p>
+    <p>放行的每一次模型调用都写进 <code>llmlogs/</code>（请求、响应、延迟、回合 id，30 天生命周期）。因为「终结型工具成功后不再多调一次模型」，工具执行记录会单独补一条日志——否则管理端就看不到这条指令到底做了什么。</p>
+  </section>
+
+  <!-- ═══════════ 07 完整旅程 ═══════════ -->
+  <section id="s7" class="reveal">
+    <div class="chap"><span class="no">07</span><div><h2>一条指令的完整旅程</h2><div class="sub">「把第3行改简洁点，顺便删掉图1」</div></div></div>
+    <div class="steps">
+      <div class="step"><h4>0.0s — 按住</h4><p>行号在左边距淡入。AVAudioEngine 开始把 16k PCM 流向 /agent/asr，火山的字实时回流，「第3行」「图1」在气泡里被染成赭红。</p></div>
+      <div class="step"><h4>2.8s — 松手</h4><p>定稿文字连同 id、articleIndex 持久化进本地队列，WebSocket 发出 <code>instruct</code>。麦克风按钮自己变成「正在改」的呼吸动画。</p></div>
+      <div class="step"><h4>2.9s — 入队 · 验票</h4><p>ArticleEditor DO 把指令写进 SQLite 队列；轮到它时先过计费闸，再组 prompt：缓存好的系统段 + 转写段，加上带行号的正文和这句指令。</p></div>
+      <div class="step"><h4>~6s — 一次工具调用</h4><p>Claude 回了一个 <code>edit_current_article</code>：<code>ops:[{op:"replace_line", line:3, text:"我以为这种生活早没了。"}, {op:"delete_lines", lines:[4]}]</code>。两个 op 的行号都按改动前算，服务端一次应用、盖上 lastEditId、写入新版本。</p></div>
+      <div class="step"><h4>~7s — 回声</h4><p>终结型工具成功，回合就地收束。<code>updated</code> 广播到手机，正文原地换新，气泡回一句「改好了」。原来的第5行现在叫第3行——下次按住，新的号自然长出来。</p></div>
+    </div>
+    <p>这就是整个语音编辑器：<b>一门三方共讲的行号语言</b>，两条各司其职的 WebSocket，一个恰好执行一次的持久队列，和一个只被允许做定点手术的模型。</p>
+  </section>
+
+  <footer class="fin">
+    源码：iOS <code style="font-family:var(--mono)">voicedrop/VoiceDropApp</code> · Worker <code style="font-family:var(--mono)">jianshuo.dev/agent/src</code><br><br>
+    <a href="/a/">← 回到 /a 归档</a>
+  </footer>
+
+</div>
+<script>
+  const io = new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
