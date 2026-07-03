@@ -31,7 +31,12 @@
       { "name": "StatusHub",     "class_name": "StatusHub"     },
       { "name": "Miner",         "class_name": "Miner"         },
       { "name": "LinkBroker",    "class_name": "LinkBroker"    },
-      { "name": "LibraryAgent",  "class_name": "LibraryAgent"  }
+      { "name": "LibraryAgent",  "class_name": "LibraryAgent"  },
+      // Geo-block fallback: api.anthropic.com 403s ("Request not allowed") when a
+      // DO's colo egress IP is in an unsupported region (HKG for mainland-China
+      // users). This DO is created with locationHint "enam" and replays blocked
+      // calls from a US colo. See src/anthropic.js.
+      { "name": "RELAY",         "class_name": "AnthropicRelay" }
     ]
   },
 
@@ -40,7 +45,8 @@
     { "tag": "v2", "new_sqlite_classes": ["StatusHub"] },
     { "tag": "v3", "new_sqlite_classes": ["Miner"] },
     { "tag": "v4", "new_sqlite_classes": ["LinkBroker"] },
-    { "tag": "v5", "new_sqlite_classes": ["LibraryAgent"] }
+    { "tag": "v5", "new_sqlite_classes": ["LibraryAgent"] },
+    { "tag": "v6", "new_sqlite_classes": ["AnthropicRelay"] }
   ],
 
   "triggers": {

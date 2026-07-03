@@ -13,6 +13,7 @@
 //   R2_SECRET_ACCESS_KEY   R2 S3-compatible secret key
 
 import { writeLlmLog } from "./llmlog.js";
+import { callAnthropic } from "./anthropic.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
@@ -584,14 +585,10 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
     rawResp = await resp.json();
     text = rawResp.choices?.[0]?.message?.content || "";
   } else {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": modelCfg.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const r = await callAnthropic(env, payload, { apiKey: modelCfg.apiKey });
     latencyMs = Date.now() - t0;
-    if (!resp.ok) throw new Error(`Claude ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-    rawResp = await resp.json();
+    if (!r.ok) throw new Error(`Claude ${r.status}: ${(r.errorText || "").slice(0, 200)}`);
+    rawResp = r.json;
     text = (rawResp.content || []).filter(b => b.type === "text").map(b => b.text).join("");
   }
 
@@ -611,14 +608,10 @@ export async function moderateArticles(articles, env) {
   if (!text) return { flagged: false };
   const system = `你是面向公开社区的内容安全审核员。判断下面这篇用户生成的中文文章，是否含有不适合公开展示的内容（${MOD_CATEGORIES}）。正常的观点表达、商业、生活、科技、情绪宣泄一律视为安全(false)；只有明确违规才标记 true。只输出 JSON，不要解释：{"flagged":true|false,"categories":["命中的类别"]}`;
   try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": env.CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 200,
-        system, messages: [{ role: "user", content: text }] }),
-    });
-    if (!resp.ok) return { flagged: false, error: `http-${resp.status}` };
-    const j = await resp.json();
+    const r = await callAnthropic(env, { model: "claude-haiku-4-5-20251001", max_tokens: 200,
+      system, messages: [{ role: "user", content: text }] });
+    if (!r.ok) return { flagged: false, error: `http-${r.status}` };
+    const j = r.json;
     const out = (j.content || []).filter(b => b.type === "text").map(b => b.text).join("");
     const m = out.match(/\{[\s\S]*\}/);
     const v = m ? JSON.parse(m[0]) : {};
@@ -866,13 +859,9 @@ async function runTask(task, audioKey, env, modelCfg, log) {
 // Minimal Claude caller for task handlers (worker CLAUDE_API_KEY; accumulates usage).
 function makeTaskClaude(env, model, usage) {
   return async ({ system, messages }) => {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": env.CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model, max_tokens: 1500, system, messages }),
-    });
-    if (!resp.ok) throw new Error(`Claude HTTP ${resp.status}`);
-    const j = await resp.json();
+    const r = await callAnthropic(env, { model, max_tokens: 1500, system, messages });
+    if (!r.ok) throw new Error(`Claude HTTP ${r.status}`);
+    const j = r.json;
     const u = j.usage || {};
     usage.input_tokens += u.input_tokens || 0;
     usage.output_tokens += u.output_tokens || 0;
