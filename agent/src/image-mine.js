@@ -5,7 +5,7 @@
 // 设计 spec：docs/superpowers/specs/2026-07-03-image-only-mine-pipeline-design.md
 
 import { resolveArticles } from "../../functions/lib/article-store.js";
-import { MAX_RECENT_TITLES } from "./prompts/image-pipeline.js";
+import { buildStagePayload, parseStageJson, QUALITY_GATE, MAX_RECENT_TITLES } from "./prompts/image-pipeline.js";
 
 // ── 素材层（Stage 0 的免费事实）─────────────────────────────────────────────────
 // 录音名约定（iOS RecordingName.make，单一真源在 App 侧 RecordingName.swift）：
@@ -59,4 +59,53 @@ export async function buildFactPack(env, { scope, stem, photos }) {
     photos: photos.map((p) => ({ key: p.relKey, time: p.label })),
     recentTitles: await fetchRecentTitles(env, scope, { excludeStem: stem }),
   };
+}
+
+// ── 纯编排层（callModel 注入，无 env 依赖；vitest 与 eval 直接驱动）────────────────
+// callModel 契约：async ({ stage, payload }) => 模型原始文本。
+
+const normalizeArticles = (arts) => (arts || [])
+  .filter((a) => a && typeof a === "object" && (a.body || "").trim())
+  .map((a) => ({ title: (a.title || "(无题)").trim(), body: (a.body || "").trim() }));
+
+// 写作 + 审稿一轮（plan 固定）。restyle 复用观察结果时也走这里——换文风不换立意。
+export async function rewriteFromVision({ photos, factPack, vision, plan, styleText, provider = "anthropic", model, callModel }) {
+  const run = async (stage, extra) =>
+    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, provider, model, ...extra }) }));
+  const draft = await run("write", { factPack, observation: vision, storyPlan: plan, styleText });
+  const draftArts = normalizeArticles(draft.articles);
+  if (!draftArts.length) throw new Error("write-stage-empty");
+  const review = await run("review", { photos, factPack, observation: vision, storyPlan: plan, draftArticles: draftArts });
+  const arts = normalizeArticles(review.articles);
+  return {
+    articles: arts.length ? arts : draftArts,
+    quality: review.quality || {},
+    issues: Array.isArray(review.issues) ? review.issues : [],
+  };
+}
+
+// 全流水线：观察 → (立意 → 写作 → 审稿)，质量门不过带 issues 从立意重跑一次，取分高一版。
+export async function runImagePipeline({ photos, factPack, styleText, provider = "anthropic", model, callModel, log = () => {} }) {
+  const run = async (stage, extra) =>
+    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, provider, model, ...extra }) }));
+
+  const vision = await run("observe", { photos, factPack });
+  log("观察完成", { images: (vision.images || []).length });
+
+  const oneRound = async (previousIssues) => {
+    const plan = await run("plan", { factPack, observation: vision, previousIssues });
+    log("立意完成", { selected: plan.selected });
+    const r = await rewriteFromVision({ photos, factPack, vision, plan, styleText, provider, model, callModel });
+    return { plan, ...r };
+  };
+
+  const r1 = await oneRound(null);
+  let final = r1;
+  if (!((r1.quality.overall || 0) >= QUALITY_GATE)) {
+    log("质量门未过,重跑一次", { overall: r1.quality.overall, issues: (r1.issues || []).slice(0, 5) });
+    const r2 = await oneRound(r1.issues && r1.issues.length ? r1.issues : ["整体质量不达标"]);
+    final = (r2.quality.overall || 0) >= (r1.quality.overall || 0) ? r2 : r1;
+  }
+  const lowQuality = !((final.quality.overall || 0) >= QUALITY_GATE);
+  return { articles: final.articles, vision, plan: final.plan, quality: final.quality, lowQuality };
 }
