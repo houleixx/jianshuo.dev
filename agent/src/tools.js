@@ -2,7 +2,7 @@
 // Each handler takes (args, ctx) where ctx = {env, scope, articleKey, token, origin}.
 
 import { resolveArticles } from "../../functions/lib/article-store.js";
-import { resolveStyle, parseStyleMarkdown, readStyleText } from "../../functions/lib/style-store.js";
+import { resolveStyle, parseStyleMarkdown, readStyleText, readStyleDoc } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
 import { imageCostUY } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
@@ -398,8 +398,9 @@ function mergedStem() {
 
 // 把一篇「无录音的独立文章」写进库并让它出现在「我的录音」：先写 article JSON（版本化
 // Files API），再写 0s 静音 m4a 锚点。返回 { ok, stem } 或 { error }。
-async function writeStandaloneArticle({ env, scope, token, origin }, stem, title, body) {
-  const doc = { schema: 2, id: stem, sourceAudio: `${stem}.m4a`, createdAt: new Date().toISOString(), transcript: "", srt: "", articles: [{ title, body }], status: "ready", model: "merge" };
+async function writeStandaloneArticle({ env, scope, token, origin }, stem, title, body, styleV) {
+  const article = { title, body, ...(Number.isInteger(styleV) ? { style: styleV } : {}) };
+  const doc = { schema: 2, id: stem, sourceAudio: `${stem}.m4a`, createdAt: new Date().toISOString(), transcript: "", srt: "", articles: [article], status: "ready", model: "merge" };
   const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
     method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(doc),
   });
@@ -438,7 +439,9 @@ register(
     const stem = "VoiceDrop-merged-" + String(ctx.idemKey || mergedStem()).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
     // 幂等：这篇已存在（上次跑到一半被驱逐后重跑）→ 直接返回已有的，不再造第二篇。
     if (await env.FILES.head(`${scope}articles/${stem}.json`)) return { ok: true, newStem: stem, title: "(已合并)", merged: stems.length };
-    const w = await writeStandaloneArticle(ctx, stem, title, body);
+    // 合并用的就是当前文风 head 的风格文本，所以新文章的 style 字段也打 head 的版本号。
+    const headV = await readStyleDoc(env, `${scope}CLAUDE.json`).then((d) => (d && Number.isInteger(d.head) ? d.head : null)).catch(() => null);
+    const w = await writeStandaloneArticle(ctx, stem, title, body, headV);
     if (w.error) return w;
     return { ok: true, newStem: stem, title, merged: stems.length };
   }

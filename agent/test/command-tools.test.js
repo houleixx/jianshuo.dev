@@ -45,6 +45,37 @@ describe("merge_articles", () => {
     expect(env.FILES._store.has(`${SCOPE}articles/B.json`)).toBe(true);
     vi.unstubAllGlobals();
   });
+
+  it("新文章打上当前文风 head 的 style 字段；无 CLAUDE.json 则不带", async () => {
+    const seed = {
+      [`${SCOPE}articles/A.json`]: art("A", "甲", "甲的正文"),
+      [`${SCOPE}articles/B.json`]: art("B", "乙", "乙的正文"),
+      [`${SCOPE}CLAUDE.json`]: JSON.stringify({ schema: 3, head: 7, versions: [{ v: 7, style: "王建硕风格\n…" }] }),
+    };
+    const env = { FILES: memFiles(seed) };
+    const callClaude = vi.fn(async () => ({ content: [{ type: "text", text: "合璧\n正文" }], usage: {} }));
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await runTool("merge_articles", { stems: ["A", "B"] },
+      { env, scope: SCOPE, token: "tk", origin: "https://jianshuo.dev", callClaude });
+    expect(r.ok).toBe(true);
+    const put = fetchSpy.mock.calls.find(([u, o]) => o?.method === "PUT" && String(u).includes("/files/api/articles/"));
+    expect(JSON.parse(put[1].body).articles[0].style).toBe(7);
+
+    // 无 CLAUDE.json → style 字段不出现（而不是 null/NaN）
+    const env2 = { FILES: memFiles({
+      [`${SCOPE}articles/A.json`]: art("A", "甲", "x"),
+      [`${SCOPE}articles/B.json`]: art("B", "乙", "y"),
+    }) };
+    fetchSpy.mockClear();
+    const r2 = await runTool("merge_articles", { stems: ["A", "B"] },
+      { env: env2, scope: SCOPE, token: "tk", origin: "https://jianshuo.dev", callClaude, idemKey: "k2" });
+    expect(r2.ok).toBe(true);
+    const put2 = fetchSpy.mock.calls.find(([u, o]) => o?.method === "PUT" && String(u).includes("/files/api/articles/"));
+    expect("style" in JSON.parse(put2[1].body).articles[0]).toBe(false);
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("delete_article 暂存 + deleteArticleFiles 执行", () => {
