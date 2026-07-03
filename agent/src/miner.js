@@ -73,10 +73,11 @@ export async function loadModelConfig(env) {
         model:   cfg.model   || MINE_MODEL_DEFAULT,
         baseUrl: cfg.baseUrl || "",
         apiKey,
+        imagePipeline: cfg.imagePipeline === true,
       };
     }
   } catch (_) {}
-  return { providerKey: "anthropic", provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "" };
+  return { providerKey: "anthropic", provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "", imagePipeline: false };
 }
 
 // Voice editing runs an Anthropic tool-use loop (Claude only). It's a quick,

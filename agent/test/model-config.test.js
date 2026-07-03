@@ -96,3 +96,14 @@ describe("runMine guard: abort when the selected provider's key is missing", () 
     expect(logged).toMatch(/DEEPSEEK_API_KEY/);
   });
 });
+
+describe("loadModelConfig: imagePipeline 开关", () => {
+  it("config/model.json 里 true → true；缺省 → false；无 config → false", async () => {
+    const on = await loadModelConfig(env(cfg({ providerKey: "anthropic", imagePipeline: true }), { CLAUDE_API_KEY: "k" }));
+    expect(on.imagePipeline).toBe(true);
+    const off = await loadModelConfig(env(cfg({ providerKey: "anthropic" }), { CLAUDE_API_KEY: "k" }));
+    expect(off.imagePipeline).toBe(false);
+    const noCfg = await loadModelConfig(env({}, { CLAUDE_API_KEY: "k" }));
+    expect(noCfg.imagePipeline).toBe(false);
+  });
+});
