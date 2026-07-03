@@ -16,9 +16,9 @@ const sysText = (p) => Array.isArray(p.system) ? p.system.map(b => b.text).join(
 const userBlocks = (p) => p.messages[0].content;
 
 describe("buildStagePayload (anthropic)", () => {
-  it("observe：带照片、带 facts、温度 0.2、无 style", () => {
+  it("observe：带照片、带 facts、无 temperature（opus-4.8 拒收）、无 style", () => {
     const p = buildStagePayload({ stage: "observe", model: "m", photos: PHOTOS, factPack: FACTS });
-    expect(p.temperature).toBe(0.2);
+    expect(p.temperature).toBeUndefined();
     expect(sysText(p)).toContain(OBSERVE_SYSTEM.slice(0, 20));
     expect(sysText(p)).not.toContain("<style>");
     const blocks = userBlocks(p);
@@ -28,23 +28,23 @@ describe("buildStagePayload (anthropic)", () => {
   });
   it("plan：不带照片、带 observation + previousIssues", () => {
     const p = buildStagePayload({ stage: "plan", model: "m", factPack: FACTS, observation: OBS, previousIssues: ["跑题"] });
-    expect(p.temperature).toBe(0.3);
+    expect(p.temperature).toBeUndefined();
     const c = p.messages[0].content;
     expect(typeof c === "string" ? c : c.map(b => b.text).join("")).toContain("<previous_issues>");
     expect(JSON.stringify(p)).not.toContain('"type":"image"');
   });
-  it("write：带 <style>（空 styleText 回退默认文风）、带 plan、温度 0.7、articles schema", () => {
+  it("write：带 <style>（空 styleText 回退默认文风）、带 plan、articles schema", () => {
     const p = buildStagePayload({ stage: "write", model: "m", factPack: FACTS, observation: OBS, storyPlan: PLAN, styleText: "" });
-    expect(p.temperature).toBe(0.7);
+    expect(p.temperature).toBeUndefined();
     expect(sysText(p)).toContain("<style>");
     expect(p.output_config.format.type).toBe("json_schema");
     expect(JSON.stringify(p)).not.toContain('"type":"image"');
     const c = p.messages[0].content;
     expect(typeof c === "string" ? c : c.map(b => b.text).join("")).toContain("<plan>");
   });
-  it("review：带照片 + draft + quality schema、温度 0.1", () => {
+  it("review：带照片 + draft + quality schema", () => {
     const p = buildStagePayload({ stage: "review", model: "m", photos: PHOTOS, factPack: FACTS, observation: OBS, storyPlan: PLAN, draftArticles: DRAFT });
-    expect(p.temperature).toBe(0.1);
+    expect(p.temperature).toBeUndefined();
     expect(userBlocks(p).some(b => b.type === "image")).toBe(true);
     expect(JSON.stringify(p.output_config.format.schema.properties)).toContain("quality");
   });
@@ -57,6 +57,7 @@ describe("buildStagePayload (openai-compat)", () => {
   it("observe：image_url 块 + response_format json_object", () => {
     const p = buildStagePayload({ stage: "observe", provider: "openai-compat", model: "m", photos: PHOTOS, factPack: FACTS });
     expect(p.response_format.type).toBe("json_object");
+    expect(p.temperature).toBe(0.2); // 阶段温度仅 openai-compat 生效
     expect(p.messages[0].role).toBe("system");
     expect(p.messages[1].content.some(b => b.type === "image_url")).toBe(true);
   });
