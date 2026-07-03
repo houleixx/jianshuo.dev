@@ -31,6 +31,8 @@ import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } 
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
+import { callAnthropic, anthropicFetch, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
+export { AnthropicRelay } from "./relay.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -260,26 +262,12 @@ export class ArticleEditor extends Agent {
   }
 
   // One Anthropic Messages call WITH tools. Returns a result object
-  // {ok, status, json, errorText} (never throws on HTTP/network errors) so the
-  // caller can both log the exchange and decide how to proceed.
+  // {ok, status, json, errorText, via, colo?} (never throws on HTTP/network
+  // errors) so the caller can both log the exchange and decide how to proceed.
+  // callAnthropic falls back to the ENAM relay DO when this DO's colo is
+  // geo-blocked by Anthropic (see anthropic.js).
   async _callClaudeRaw(reqBody) {
-    try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": this.env.CLAUDE_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(reqBody),
-      });
-      if (!resp.ok) {
-        return { ok: false, status: resp.status, json: null, errorText: (await resp.text()).slice(0, 2000) };
-      }
-      return { ok: true, status: resp.status, json: await resp.json(), errorText: "" };
-    } catch (e) {
-      return { ok: false, status: 0, json: null, errorText: String((e && e.message) || e) };
-    }
+    return callAnthropic(this.env, reqBody);
   }
 
   // A logging callClaude for runAgentLoop: builds the request body, calls the
@@ -298,6 +286,7 @@ export class ArticleEditor extends Agent {
       await writeLlmLog(this.env, {
         ts, source: "agent", user_scope: scope, model,
         latency_ms: Date.now() - ts, http_status: r.status, ok: r.ok,
+        via: r.via, ...(r.colo ? { colo: r.colo } : {}),
         turn_id: turnId, step: myStep, request: reqBody,
         response: r.ok ? r.json : undefined,
         error: r.ok ? undefined : r.errorText,
@@ -482,26 +471,12 @@ export class LibraryAgent extends Agent {
   }
 
   // One Anthropic Messages call WITH tools. Returns a result object
-  // {ok, status, json, errorText} (never throws on HTTP/network errors) so the
-  // caller can both log the exchange and decide how to proceed.
+  // {ok, status, json, errorText, via, colo?} (never throws on HTTP/network
+  // errors) so the caller can both log the exchange and decide how to proceed.
+  // callAnthropic falls back to the ENAM relay DO when this DO's colo is
+  // geo-blocked by Anthropic (see anthropic.js).
   async _callClaudeRaw(reqBody) {
-    try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": this.env.CLAUDE_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(reqBody),
-      });
-      if (!resp.ok) {
-        return { ok: false, status: resp.status, json: null, errorText: (await resp.text()).slice(0, 2000) };
-      }
-      return { ok: true, status: resp.status, json: await resp.json(), errorText: "" };
-    } catch (e) {
-      return { ok: false, status: 0, json: null, errorText: String((e && e.message) || e) };
-    }
+    return callAnthropic(this.env, reqBody);
   }
 
   // A logging callClaude for runAgentLoop: builds the request body, calls the
@@ -520,6 +495,7 @@ export class LibraryAgent extends Agent {
       await writeLlmLog(this.env, {
         ts, source: "agent", user_scope: scope, model,
         latency_ms: Date.now() - ts, http_status: r.status, ok: r.ok,
+        via: r.via, ...(r.colo ? { colo: r.colo } : {}),
         turn_id: turnId, step: myStep, request: reqBody,
         response: r.ok ? r.json : undefined,
         error: r.ok ? undefined : r.errorText,
@@ -771,6 +747,38 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    // ── /agent/llm-health ── admin: probe the direct Anthropic path AND the
+    // ENAM relay DO (colo + a 1-token call each), so a geo-block regression is
+    // diagnosable in one curl instead of by fishing llmlogs.
+    if (url.pathname === "/agent/llm-health") {
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      if (!env.FILES_TOKEN || tok !== env.FILES_TOKEN) return new Response("unauthorized", { status: 401 });
+      const ping = { model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [{ role: "user", content: "hi" }] };
+      const trace = await fetch("https://www.cloudflare.com/cdn-cgi/trace").then((r) => r.text()).catch(() => "");
+      const workerColo = (trace.match(/^colo=(\w+)/m) || [])[1] || "";
+      const d = await anthropicFetch(env.CLAUDE_API_KEY, ping);
+      let relay = { error: "no-binding" };
+      if (env.RELAY) {
+        try {
+          const stub = env.RELAY.get(env.RELAY.idFromName(RELAY_INSTANCE), { locationHint: RELAY_LOCATION_HINT });
+          const [coloResp, msgResp] = await Promise.all([
+            stub.fetch("https://relay/colo"),
+            stub.fetch("https://relay/messages", { method: "POST", body: JSON.stringify({ apiKey: env.CLAUDE_API_KEY, reqBody: ping }) }),
+          ]);
+          const relayColo = (await coloResp.json()).colo;
+          const r = await msgResp.json();
+          relay = { colo: relayColo, ok: r.ok, status: r.status, errorText: r.ok ? undefined : r.errorText };
+        } catch (e) {
+          relay = { error: String((e && e.message) || e) };
+        }
+      }
+      return Response.json({
+        workerColo,
+        direct: { ok: d.ok, status: d.status, errorText: d.ok ? undefined : d.errorText },
+        relay,
+      });
+    }
+
     // ── /agent/edit ── existing article-editing agent ──────────────────────
     if (url.pathname === "/agent/edit") {
       if (request.headers.get("Upgrade") !== "websocket") {
@@ -905,21 +913,17 @@ export default {
       const claude = async ({ system, messages }) => {
         const reqBody = { model: MODEL, max_tokens: 1500, system, messages };
         const t0 = Date.now();
-        const resp = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "x-api-key": env.CLAUDE_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-          body: JSON.stringify(reqBody),
-        });
-        const ok = resp.ok;
-        const j = ok ? await resp.json() : null;
+        const r = await callAnthropic(env, reqBody);
+        const j = r.json;
         await writeLlmLog(env, {
           ts: t0, source: "agent", user_scope: scope, model: MODEL,
-          latency_ms: Date.now() - t0, http_status: resp.status, ok,
-          step: 0, request: reqBody, response: ok ? j : undefined,
-          error: ok ? undefined : (await resp.text().catch(() => "")).slice(0, 2000),
+          latency_ms: Date.now() - t0, http_status: r.status, ok: r.ok,
+          via: r.via, ...(r.colo ? { colo: r.colo } : {}),
+          step: 0, request: reqBody, response: r.ok ? j : undefined,
+          error: r.ok ? undefined : r.errorText,
           meta: { kind: "style-extract", samples: samples.length },
         });
-        if (!ok) throw new Error(`Claude HTTP ${resp.status}`);
+        if (!r.ok) throw new Error(`Claude HTTP ${r.status}`);
         const u = j.usage || {};
         usageSum.input_tokens += u.input_tokens || 0;
         usageSum.output_tokens += u.output_tokens || 0;
