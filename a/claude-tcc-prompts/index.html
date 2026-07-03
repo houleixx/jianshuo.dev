@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="macOS「2.1.199 想访问其他 App 的数据」弹窗调查：46 天里 Claude Code 每个版本都重新要一次授权，共 28 次。原因与修复。">
+<title>「2.1.199」为什么总想访问其他 App 的数据 · jianshuo.dev/a</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  .viz-root{
+    --page:#f9f9f7;
+    --surface-1:#fcfcfb;
+    --text-primary:#0b0b0b;
+    --text-secondary:#52514e;
+    --text-muted:#898781;
+    --grid:#e1e0d9;
+    --baseline:#c3c2b7;
+    --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6;
+    --series-1-soft:#9ec5f4;
+    --good:#0ca30c;
+  }
+  body{background:var(--page);color:var(--text-primary);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding:48px 24px 72px}
+  a{color:var(--series-1)}
+
+  header h1{font-size:clamp(1.5rem,4vw,2.1rem);line-height:1.25;letter-spacing:-.01em}
+  header .sub{margin-top:10px;color:var(--text-secondary);font-size:.95rem}
+  header .sub .chip{display:inline-flex;align-items:center;gap:5px;background:var(--surface-1);border:1px solid var(--border);border-radius:999px;padding:2px 12px;font-size:.82rem;font-weight:600;color:var(--good);margin-left:8px;vertical-align:middle}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:32px 0 26px}
+  @media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:16px 18px}
+  .tile .label{font-size:.8rem;color:var(--text-secondary);font-weight:500}
+  .tile .value{font-size:1.9rem;font-weight:600;margin-top:2px}
+  .tile .value small{font-size:.95rem;font-weight:500;color:var(--text-secondary);margin-left:2px}
+
+  .card{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:22px 22px 16px;margin-bottom:26px}
+  .card h2{font-size:1.02rem;font-weight:600}
+  .card .desc{font-size:.85rem;color:var(--text-secondary);margin-top:2px}
+  #chart{margin-top:14px;position:relative}
+  #chart svg{display:block;width:100%;height:auto}
+
+  .tooltip{position:absolute;pointer-events:none;background:var(--text-primary);color:#fff;border-radius:8px;padding:8px 12px;font-size:.8rem;line-height:1.5;opacity:0;transition:opacity .12s;white-space:nowrap;transform:translate(-50%,-100%);z-index:5}
+  .tooltip.on{opacity:1}
+  .tooltip .tver{font-weight:600}
+  .tooltip .tmut{color:#c3c2b7}
+
+  .cause{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:26px}
+  @media(max-width:720px){.cause{grid-template-columns:1fr}}
+  .step{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:18px}
+  .step .n{width:26px;height:26px;border-radius:50%;background:var(--series-1);color:#fff;font-size:.85rem;font-weight:600;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+  .step h3{font-size:.95rem;font-weight:600}
+  .step p{font-size:.85rem;color:var(--text-secondary);margin-top:6px}
+  .step code{background:var(--page);border:1px solid var(--grid);border-radius:5px;padding:1px 6px;font-size:.8rem}
+
+  .fix{background:var(--surface-1);border:1px solid var(--border);border-left:4px solid var(--good);border-radius:14px;padding:20px 22px;margin-bottom:26px}
+  .fix h2{font-size:1.02rem;font-weight:600;display:flex;align-items:center;gap:8px}
+  .fix ul{margin:10px 0 0 1.2em;font-size:.9rem;color:var(--text-secondary)}
+  .fix li{margin-bottom:6px}
+  .fix code{background:var(--page);border:1px solid var(--grid);border-radius:5px;padding:1px 6px;font-size:.82rem;color:var(--text-primary)}
+
+  details{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:16px 22px;margin-bottom:26px}
+  summary{cursor:pointer;font-weight:600;font-size:.95rem}
+  table{width:100%;border-collapse:collapse;margin-top:14px;font-size:.85rem}
+  th{text-align:left;color:var(--text-secondary);font-weight:600;border-bottom:1px solid var(--baseline);padding:6px 8px}
+  td{border-bottom:1px solid var(--grid);padding:6px 8px;font-variant-numeric:tabular-nums}
+  td.num,th.num{text-align:right}
+
+  footer{color:var(--text-muted);font-size:.8rem}
+  footer a{color:var(--text-secondary)}
+</style>
+</head>
+<body class="viz-root">
+<div class="wrap">
+
+  <header>
+    <h1>「2.1.199」为什么总想「访问其他 App 的数据」？</h1>
+    <p class="sub">macOS 隐私弹窗调查报告 · 2026-07-03<span class="chip">✓ 已修复</span></p>
+  </header>
+
+  <div class="kpis">
+    <div class="tile"><div class="label">授权弹窗总数</div><div class="value">28<small>次</small></div></div>
+    <div class="tile"><div class="label">时间跨度</div><div class="value">46<small>天</small></div></div>
+    <div class="tile"><div class="label">平均间隔</div><div class="value">1.7<small>天</small></div></div>
+    <div class="tile"><div class="label">对应版本数</div><div class="value">28<small>个</small></div></div>
+  </div>
+
+  <div class="card">
+    <h2>每次授权弹窗距上一次的间隔（天）</h2>
+    <p class="desc">每根柱子是一次「x.x.xxx 想访问其他 App 的数据」弹窗——Claude Code 每天自动更新一个版本，macOS 就把它当成一个全新程序，重新要一次授权。</p>
+    <div id="chart"></div>
+  </div>
+
+  <div class="cause">
+    <div class="step"><div class="n">1</div><h3>可执行文件按版本号命名</h3><p>Claude Code 的命令行主程序放在 <code>~/.local/share/claude/versions/2.1.199</code>——文件名就是版本号，弹窗标题也就成了「2.1.199」。</p></div>
+    <div class="step"><div class="n">2</div><h3>macOS 按路径记录授权</h3><p>对没有 App 包的裸可执行文件，隐私授权（TCC）按绝对路径记账。路径一变，之前的「允许」全部作废。</p></div>
+    <div class="step"><div class="n">3</div><h3>每天自动更新 = 每天新程序</h3><p>Claude Code 几乎每天自动升级一个版本，每个新版本都是一条新路径——于是弹窗天天回来。这是官方已知 bug。</p></div>
+  </div>
+
+  <div class="fix">
+    <h2><span style="color:var(--good)">✓</span> 已做的修复</h2>
+    <ul>
+      <li>在 <code>~/.claude/settings.json</code> 写入 <code>"DISABLE_AUTOUPDATER": "1"</code>，关掉每日自动更新（这是 GitHub issue 里确认的唯一根治办法）。</li>
+      <li>下次弹窗（针对当前 2.1.199）点一次「允许」，之后就安静了。</li>
+      <li>以后想升级时手动跑 <code>claude update</code>；每次手动升级后会再问一次，点允许即可。</li>
+    </ul>
+  </div>
+
+  <details>
+    <summary>全部 28 条授权记录（来自 TCC.db）</summary>
+    <table id="tbl">
+      <thead><tr><th>版本</th><th>授权时间</th><th class="num">距上次（天）</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </details>
+
+  <footer>
+    数据来源：<code>~/Library/Application Support/com.apple.TCC/TCC.db</code> 中 kTCCServiceSystemPolicyAppData 的记录 ·
+    相关 issue：<a href="https://github.com/anthropics/claude-code/issues/66216">anthropics/claude-code#66216</a>、<a href="https://github.com/anthropics/claude-code/issues/63130">#63130</a>
+  </footer>
+
+</div>
+
+<script>
+const EVENTS = [
+  ["2.1.143","2026-05-19T10:46:20"],
+  ["2.1.156","2026-05-29T23:42:43"],
+  ["2.1.158","2026-06-01T00:14:16"],
+  ["2.1.159","2026-06-01T23:02:33"],
+  ["2.1.160","2026-06-02T23:00:04"],
+  ["2.1.161","2026-06-03T23:25:42"],
+  ["2.1.162","2026-06-04T11:39:19"],
+  ["2.1.169","2026-06-09T23:00:39"],
+  ["2.1.170","2026-06-11T00:37:40"],
+  ["2.1.172","2026-06-11T13:39:24"],
+  ["2.1.173","2026-06-12T00:11:21"],
+  ["2.1.175","2026-06-12T23:02:33"],
+  ["2.1.177","2026-06-15T23:06:59"],
+  ["2.1.178","2026-06-17T00:39:10"],
+  ["2.1.179","2026-06-17T23:13:07"],
+  ["2.1.181","2026-06-18T23:24:20"],
+  ["2.1.183","2026-06-20T22:00:05"],
+  ["2.1.185","2026-06-22T23:06:26"],
+  ["2.1.186","2026-06-23T22:02:05"],
+  ["2.1.187","2026-06-24T23:52:30"],
+  ["2.1.190","2026-06-25T11:18:57"],
+  ["2.1.191","2026-06-25T23:33:43"],
+  ["2.1.193","2026-06-26T22:06:42"],
+  ["2.1.195","2026-06-29T22:19:38"],
+  ["2.1.196","2026-07-01T00:12:04"],
+  ["2.1.197","2026-07-01T22:36:05"],
+  ["2.1.198","2026-07-03T08:28:55"],
+  ["2.1.199","2026-07-03T22:03:17"],
+];
+
+const rows = EVENTS.map(([v,t],i)=>{
+  const d = new Date(t);
+  const gap = i===0 ? null : (d - new Date(EVENTS[i-1][1]))/86400000;
+  return {v, d, gap};
+});
+
+const fmtDate = d => `${d.getMonth()+1}月${d.getDate()}日`;
+const fmtGap = g => g===null ? "—" : (Math.round(g*10)/10).toFixed(1);
+
+// ---- table ----
+document.querySelector("#tbl tbody").innerHTML = rows.map(r =>
+  `<tr><td>${r.v}</td><td>${r.d.getFullYear()}-${String(r.d.getMonth()+1).padStart(2,"0")}-${String(r.d.getDate()).padStart(2,"0")} ${String(r.d.getHours()).padStart(2,"0")}:${String(r.d.getMinutes()).padStart(2,"0")}</td><td class="num">${fmtGap(r.gap)}</td></tr>`
+).join("");
+
+// ---- chart ----
+const bars = rows.slice(1);               // 27 根柱子（首条无间隔）
+const css = k => getComputedStyle(document.body).getPropertyValue(k).trim();
+const W = 912, PL = 34, PR = 8, PT = 18, PH = 240, XB = 26, H = PT + PH + XB;
+const plotW = W - PL - PR;
+const slot = plotW / bars.length;
+const barW = Math.min(24, slot - 2);      // ≤24px，留 ≥2px 的底色间隙
+const maxGap = Math.ceil(Math.max(...bars.map(b=>b.gap)));  // 11
+const yMax = maxGap + 1;
+const y = g => PT + PH - g/yMax*PH;
+const avg = (rows[rows.length-1].d - rows[0].d)/86400000/bars.length;
+
+let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="每次授权弹窗距上一次的间隔天数柱状图">`;
+
+// 网格与 y 轴刻度（细实线、退居背景）
+for (let g=0; g<=yMax; g+=2){
+  svg += `<line x1="${PL}" y1="${y(g)}" x2="${W-PR}" y2="${y(g)}" stroke="${css('--grid')}" stroke-width="1"/>`;
+  svg += `<text x="${PL-8}" y="${y(g)+4}" text-anchor="end" font-size="11" fill="${css('--text-muted')}" style="font-variant-numeric:tabular-nums">${g}</text>`;
+}
+// 基线
+svg += `<line x1="${PL}" y1="${y(0)}" x2="${W-PR}" y2="${y(0)}" stroke="${css('--baseline')}" stroke-width="1"/>`;
+
+// 平均线（阈值线用虚线，区别于网格）
+svg += `<line x1="${PL}" y1="${y(avg)}" x2="${W-PR}" y2="${y(avg)}" stroke="${css('--text-muted')}" stroke-width="1" stroke-dasharray="4 3"/>`;
+svg += `<text x="${W-PR}" y="${y(avg)-6}" text-anchor="end" font-size="11" fill="${css('--text-secondary')}">平均 ${avg.toFixed(1)} 天</text>`;
+
+// 柱子：4px 圆角数据端、方角基线
+const maxIdx = bars.reduce((m,b,i)=> b.gap>bars[m].gap ? i : m, 0);
+bars.forEach((b,i)=>{
+  const cx = PL + slot*i + slot/2;
+  const x0 = cx - barW/2;
+  const h = Math.max(y(0)-y(b.gap), 2);
+  const top = y(0)-h;
+  const r = Math.min(4, h/2);
+  svg += `<path d="M${x0},${y(0)} V${top+r} Q${x0},${top} ${x0+r},${top} H${x0+barW-r} Q${x0+barW},${top} ${x0+barW},${top+r} V${y(0)} Z" fill="${css('--series-1')}"/>`;
+  if (i===maxIdx) svg += `<text x="${cx}" y="${top-7}" text-anchor="middle" font-size="11" fill="${css('--text-secondary')}">${fmtGap(b.gap)} 天</text>`;
+  // 命中区盖满整列（≥24px 目标）
+  svg += `<rect class="hit" data-i="${i}" x="${PL+slot*i}" y="${PT}" width="${slot}" height="${PH}" fill="transparent" tabindex="0"/>`;
+});
+
+// x 轴日期刻度（约每 5 根一个）
+bars.forEach((b,i)=>{
+  if ((i%5===0 && i < bars.length-3) || i===bars.length-1){
+    const cx = PL + slot*i + slot/2;
+    svg += `<text x="${cx}" y="${y(0)+18}" text-anchor="middle" font-size="11" fill="${css('--text-muted')}">${fmtDate(b.d)}</text>`;
+  }
+});
+svg += `</svg>`;
+
+const chart = document.getElementById("chart");
+chart.innerHTML = svg + `<div class="tooltip" id="tip"></div>`;
+
+const tip = document.getElementById("tip");
+function showTip(i){
+  const b = bars[i];
+  const cx = PL + slot*i + slot/2;
+  tip.innerHTML = `<span class="tver">${b.v}</span><br>${fmtDate(b.d)} 弹窗<br><span class="tmut">距上次</span> ${fmtGap(b.gap)} 天`;
+  const sv = chart.querySelector("svg").getBoundingClientRect();
+  tip.style.left = (cx/W*sv.width) + "px";
+  tip.style.top = ((y(b.gap)/H*sv.height) - 8) + "px";
+  tip.classList.add("on");
+}
+chart.querySelectorAll(".hit").forEach(el=>{
+  const i = +el.dataset.i;
+  el.addEventListener("mouseenter",()=>showTip(i));
+  el.addEventListener("focus",()=>showTip(i));
+  el.addEventListener("mouseleave",()=>tip.classList.remove("on"));
+  el.addEventListener("blur",()=>tip.classList.remove("on"));
+});
+</script>
+</body>
+</html>
