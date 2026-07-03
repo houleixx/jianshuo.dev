@@ -7,6 +7,7 @@
 import { resolveArticles } from "../../functions/lib/article-store.js";
 import { buildStagePayload, parseStageJson, QUALITY_GATE, MAX_RECENT_TITLES } from "./prompts/image-pipeline.js";
 import { writeLlmLog } from "./llmlog.js";
+import { callAnthropic } from "./anthropic.js";
 import { claudeCostUY } from "./usage.js";
 import { debit } from "./usage_store.js";
 
@@ -134,12 +135,14 @@ function redactPayloadForLog(payload) {
 }
 
 // 生产 callModel：provider 分发 + llmlog + 算力 debit，每阶段一次调用一条日志一笔账。
+// Anthropic 走 callAnthropic（geo-403 时自动经美东中继 DO 重放，见 anthropic.js）。
 export function makeStageCaller(env, { modelCfg, scope, stem, turnId, log = () => {} }) {
   return async ({ stage, payload }) => {
     const meta = { user_scope: scope, stem, stage, source: "image-pipeline" };
     const t0 = Date.now();
+    let via;
     try {
-      let text, rawResp;
+      let text, rawResp, colo;
       if (modelCfg.provider === "openai-compat") {
         const resp = await fetch(`${modelCfg.baseUrl}/chat/completions`, {
           method: "POST",
@@ -150,17 +153,14 @@ export function makeStageCaller(env, { modelCfg, scope, stem, turnId, log = () =
         rawResp = await resp.json();
         text = rawResp.choices?.[0]?.message?.content || "";
       } else {
-        const resp = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "x-api-key": modelCfg.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!resp.ok) throw new Error(`Claude ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-        rawResp = await resp.json();
+        const r = await callAnthropic(env, payload, { apiKey: modelCfg.apiKey });
+        via = r.via; colo = r.colo;
+        if (!r.ok) throw new Error(`Claude ${r.status}: ${(r.errorText || "").slice(0, 200)}`);
+        rawResp = r.json;
         text = (rawResp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
       }
       const latency = Date.now() - t0;
-      await writeLlmLog(env, { ts: t0, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: latency, step: stage, turn_id: turnId, meta, request: redactPayloadForLog(payload), response: rawResp });
+      await writeLlmLog(env, { ts: t0, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: latency, step: stage, turn_id: turnId, via, ...(colo ? { colo } : {}), meta, request: redactPayloadForLog(payload), response: rawResp });
       try {
         if (env.USAGE) {
           const u = rawResp?.usage || {};
@@ -171,7 +171,7 @@ export function makeStageCaller(env, { modelCfg, scope, stem, turnId, log = () =
       log(`阶段完成:${stage}`, { latency_ms: latency });
       return text;
     } catch (e) {
-      await writeLlmLog(env, { ts: t0, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now() - t0, step: stage, turn_id: turnId, meta, error: String(e) });
+      await writeLlmLog(env, { ts: t0, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now() - t0, step: stage, turn_id: turnId, via, meta, error: String(e) });
       throw e;
     }
   };
