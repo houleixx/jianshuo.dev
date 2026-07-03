@@ -180,6 +180,27 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     expect(userTexts).toContain(`key="${PHOTO_REL}"`);
   });
 
+  it("看图成文打上当前文风 head 的 style 字段（chip 显示风格版本）", async () => {
+    // 之前看图分支只把文风文本喂进 prompt，落盘却不打 articles[i].style —— iOS chip
+    // 显示「选风格」，看起来"没有风格"。现在和正常语音挖矿一样打 head 版本号。
+    const env = envWithPhotos({
+      [AUDIO]: "audiobytes",
+      [PHOTO_KEY]: "jpgbytes",
+      [`${SCOPE}CLAUDE.json`]: JSON.stringify({ schema: 3, head: 2, versions: [{ v: 1, style: "旧文风" }, { v: 2, style: "新文风：短句。" }] }),
+    });
+    const fetchSpy = makeFetch({
+      transcriptText: "",
+      articles: [{ title: "图", body: `随手拍。\n\n[[photo:${PHOTO_REL}]]` }],
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env, MODEL_CFG);
+    expect(r).toBe("mined");
+    const articlePut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
+    expect(articlePut).toBeTruthy();
+    expect(JSON.parse(articlePut.body).articles[0].style).toBe(2);
+  });
+
   it("默认 mine（有语音）行为不变：不受 IMAGE_ONLY_SYSTEM 影响", async () => {
     const env = envWithPhotos({ [AUDIO]: "audiobytes" });
     const fetchSpy = makeFetch({
