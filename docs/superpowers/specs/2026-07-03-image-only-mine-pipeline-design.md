@@ -1,7 +1,7 @@
 # 图片生文（image-only 挖矿）多遍流水线设计
 
 日期：2026-07-03
-状态：方向已确认（方案 A「编辑部流水线」+ JPG/地点元数据），本 spec 待建硕过目
+状态：已实现（分支 worktree-image-mine-pipeline，479 测试全绿）；开关默认关，待金标 eval 胜出后开闸
 范围：`jianshuo.dev/agent`（VoiceDrop 挖矿 Worker）。**不改 iOS App。**
 
 ## 1. 背景与问题
