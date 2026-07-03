@@ -17,3 +17,12 @@ photos（可选）：[{ "relKey": "photos/2026-xx/xx.jpg", "label": "HH:MM:SS", 
 1. 用 wjs-voicedrop skill 列出并取若干真实录音的转写（`vd list` → transcript 文本）。
 2. 每条存成 `local/<id>.json`，按内容打 tags。权威备份在 VoiceDrop/R2，本地只是可重拉快照。
 3. 冻结成文件才可复现；风格漂移后再换血。
+
+## 图片生文（image-only）eval
+
+- 入口：`CLAUDE_API_KEY=… node eval/run-image-eval.mjs <runId>`；产出在 `eval/runs/<runId>/`
+- champion = 现行 `IMAGE_ONLY_SYSTEM` 单发；candidate = 观察→立意→写作→审稿四阶段流水线
+- 金标 fixture：`image-local/*.json`（真实照片，**已 gitignore**）；合成样例见 `image-samples/sample-1.json`
+- fixture 结构：`{ id, stem, photos:[{b64,label,relKey}], styleText?, recentTitles?[] }`（stem 末尾可带地点标签）
+- 确定性检查（photo 标记完整性）在 `lib/image-proxy-checks.mjs`；语义质量用 `/wjs-evaling-voicedrop-prompts` 盲评 outputs
+- 通过标准（spec §6）：candidate 胜率 ≥ 60% 且编造项零回归 → 把 `config/model.json` 的 `imagePipeline` 置 true

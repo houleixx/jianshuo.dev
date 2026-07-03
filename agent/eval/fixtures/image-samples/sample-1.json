@@ -1,0 +1,15 @@
+{
+  "id": "sample-1",
+  "stem": "VoiceDrop-2026-07-01-101010-1s-周三-上午-Shanghai-Xuhui",
+  "photos": [
+    {
+      "b64": "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==",
+      "label": "10:10:10",
+      "relKey": "photos/2026-07-01-101010/0-sample.jpg"
+    }
+  ],
+  "styleText": "",
+  "recentTitles": [
+    "上一篇文章的标题"
+  ]
+}

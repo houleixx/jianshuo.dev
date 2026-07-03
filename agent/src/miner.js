@@ -16,6 +16,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
+import { resolveArticles } from "../../functions/lib/article-store.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, buildInsufficientCorpusArticle, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import {
@@ -25,6 +26,7 @@ import {
   MINE_DEFAULT_STYLE as DEFAULT_STYLE,
   IMAGE_ONLY_SYSTEM,
 } from "./prompts/mine.js";
+import { mineImageOnly, rewriteFromVision, buildFactPack, makeStageCaller } from "./image-mine.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
 const MIN_CHARS          = 20;
@@ -72,10 +74,11 @@ export async function loadModelConfig(env) {
         model:   cfg.model   || MINE_MODEL_DEFAULT,
         baseUrl: cfg.baseUrl || "",
         apiKey,
+        imagePipeline: cfg.imagePipeline === true,
       };
     }
   } catch (_) {}
-  return { providerKey: "anthropic", provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "" };
+  return { providerKey: "anthropic", provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "", imagePipeline: false };
 }
 
 // Voice editing runs an Anthropic tool-use loop (Claude only). It's a quick,
@@ -780,7 +783,11 @@ export async function restyleArticle(env, scope, stem, styleV) {
   if (!obj) return { ok: false, reason: "not-found" };
   let doc; try { doc = JSON.parse(await obj.text()); } catch { return { ok: false, reason: "corrupt" }; }
   const transcript = (doc.transcript || "").trim();
-  if (!transcript) return { ok: false, reason: "no-transcript" };
+  // 合并 / 图片 / 独立文章没有口述转写（transcript=""）——正文就是它的事实来源，
+  // 用当前 head 文章的正文当改写来源，别再 no-transcript 硬失败。
+  const mineSource = transcript || resolveArticles(doc)
+    .map((a) => `${a.title || ""}\n${a.body || ""}`.trim()).filter(Boolean).join("\n\n").trim();
+  if (!mineSource) return { ok: false, reason: "no-transcript" };
 
   const styleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
   // styleV 缺省（重写：POST /agent/restyle 只带 stem）→ 用当前文风 head，即"按原挖矿逻辑重挖"
@@ -802,12 +809,28 @@ export async function restyleArticle(env, scope, stem, styleV) {
   const modelCfg = await loadModelConfig(env);
   const turnId = `${Date.now()}-${stem.slice(-8)}`;
 
-  // Same mining core as the scheduled mine — natural pass then a force retry for thin
-  // recordings — so restyle can never again drift from runMine.
-  const articles = await mineVariant(env, {
-    transcript, styleText, photos, cacheMode: "transcript", modelCfg, scope, stem, turnId,
-    metaExtra: { restyle: v }, debitExtra: { restyle: v },
-  });
+  // 图片流水线产物（无转写、doc.vision/plan 在）→ 复用观察与立意，只重跑写作+审稿。
+  // 换文风不换立意；照片只在审稿阶段重新入场核对误读。失败静默落回下方 mineVariant。
+  let articles = null;
+  if (modelCfg.imagePipeline && !transcript && doc.vision && doc.plan && photos.length) {
+    try {
+      const factPack = await buildFactPack(env, { scope, stem, photos });
+      const callModel = makeStageCaller(env, { modelCfg, scope, stem, turnId });
+      const r = await rewriteFromVision({
+        photos, factPack, vision: doc.vision, plan: doc.plan, styleText,
+        provider: modelCfg.provider, model: modelCfg.model, callModel,
+      });
+      if (r.articles.length) articles = r.articles;
+    } catch (_) { articles = null; }
+  }
+  if (!articles) {
+    // Same mining core as the scheduled mine — natural pass then a force retry for thin
+    // recordings — so restyle can never again drift from runMine.
+    articles = await mineVariant(env, {
+      transcript: mineSource, styleText, photos, cacheMode: "transcript", modelCfg, scope, stem, turnId,
+      metaExtra: { restyle: v }, debitExtra: { restyle: v },
+    });
+  }
   if (!articles.length) return { ok: false, reason: "no-article" };
 
   // 文风版本 = per-article 字段（不再往 body 塞注释——隐形行会让第N行编号错位）
@@ -816,6 +839,9 @@ export async function restyleArticle(env, scope, stem, styleV) {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),
     transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: modelCfg.model,
+    // 流水线元数据随版本继承——下次 restyle 还能继续复用观察与立意
+    ...(doc.vision ? { vision: doc.vision } : {}),
+    ...(doc.plan ? { plan: doc.plan } : {}),
   };
   await writeArticle(audioKey, newDoc, env);          // appends a new version, head moves to it
   await notifyStatus(scope, stem, "ready", env);
@@ -1044,25 +1070,49 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       // 才落回原来的 .empty(no-speech)。
       const photos = await gatherPhotos(audioKey, allKeys, env, log);
       if (photos.length) {
-        log("无语音但有照片,改走看图模式", { count: photos.length });
+        log("无语音但有照片,改走看图模式", { count: photos.length, pipeline: !!modelCfg.imagePipeline });
         await notifyStatus(scope, stem, "mining", env);
-        const styleText = (await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+        // 和正常语音挖矿一样：文风文本进 prompt，articles[i].style 打 head 版本号
+        //（不打的话 iOS chip 显示「选风格」，看起来像没用文风）。
+        const imgStyleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
+        const styleText = (imgStyleDoc ? resolveStyle(imgStyleDoc) : await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+        const imgHeadV = imgStyleDoc && Number.isInteger(imgStyleDoc.head) ? imgStyleDoc.head : null;
         const turnId = `${Date.now()}-${stem.slice(-8)}`;
-        const arts = await mineVariant(env, {
-          transcript: "", styleText, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
-          systemOverride: IMAGE_ONLY_SYSTEM, noForce: true, photoInstr: "",
-          metaExtra: { source: "image" }, log,
-        });
+
+        // 流水线（modelCfg.imagePipeline，缺省关）：观察→立意→写作→审稿。
+        // 任何失败回退下方现行单发 —— 质量下限就是今天的行为。
+        let arts = [], pipe = null;
+        if (modelCfg.imagePipeline) {
+          try {
+            pipe = await mineImageOnly(env, { scope, stem, photos, styleText, modelCfg, turnId, log });
+            arts = pipe.articles;
+            if (pipe.lowQuality) log("流水线质量门未过,交付较高一版", { overall: pipe.quality && pipe.quality.overall });
+          } catch (e) {
+            pipe = null;
+            log("流水线失败,回退单发", { error: String((e && e.message) || e).slice(0, 200) });
+          }
+        }
+        if (!arts.length) {
+          pipe = null;
+          arts = await mineVariant(env, {
+            transcript: "", styleText, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
+            systemOverride: IMAGE_ONLY_SYSTEM, noForce: true, photoInstr: "",
+            metaExtra: { source: "image" }, log,
+          });
+        }
         if (arts.length) {
           const doc = {
             schema: 2, id: stem, sourceAudio: leaf,
             createdAt: uploaded[audioKey] || new Date().toISOString(),
-            transcript: "", srt: "", articles: arts, status: "ready", model: modelCfg.model,
+            transcript: "", srt: "",
+            articles: imgHeadV ? arts.map((a) => ({ ...a, style: imgHeadV })) : arts,
+            status: "ready", model: modelCfg.model,
+            ...(pipe ? { vision: pipe.vision, plan: pipe.plan, quality: pipe.quality } : {}),
           };
           await writeArticle(audioKey, doc, env);
           await notifyStatus(scope, stem, "ready", env);
           try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
-          log("看图写入完成", { articles: arts.length });
+          log("看图写入完成", { articles: arts.length, pipeline: !!pipe });
           result = "mined";
           return "mined";
         }
