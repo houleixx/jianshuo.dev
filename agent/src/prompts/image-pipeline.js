@@ -157,7 +157,9 @@ export function buildStagePayload({
     };
   }
 
-  // anthropic
+  // anthropic —— 注意不发 temperature：claude-opus-4.8 起该参数被 API 拒收
+  //（400 "temperature is deprecated for this model"，eval run image-gate-01 实锤）。
+  // 阶段温度只对 openai-compat 生效；Anthropic 侧用 prompt 措辞控制发挥度。
   let content;
   if (!withPhotos) {
     content = text;
@@ -170,7 +172,7 @@ export function buildStagePayload({
     }
   }
   const payload = {
-    model, max_tokens, temperature,
+    model, max_tokens,
     system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content }],
   };
