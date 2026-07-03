@@ -32,6 +32,7 @@ import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
 import { callAnthropic, anthropicFetch, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
+import { loadUIConfig } from "./ui-config.js";
 export { AnthropicRelay } from "./relay.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
@@ -841,6 +842,17 @@ export default {
       if (!scope) return new Response("unauthorized", { status: 401 });
 
       return proxyVolcAsrWebSocket(request, env);
+    }
+
+    // ── /agent/ui-config ── 长按菜单等 UI 配置（任意有效用户 token）。解析出的
+    // scope v1 未用，为将来 per-user 配置合并预留。内置缺省 + R2 覆盖见 ui-config.js。
+    if (url.pathname === "/agent/ui-config") {
+      if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const scope = await resolveScope(tok, env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
+      const cfg = await loadUIConfig(env);
+      return new Response(JSON.stringify(cfg), { headers: { "content-type": "application/json" } });
     }
 
     // ── /agent/mine/trigger ── kick the miner (any authenticated user or admin) ──
