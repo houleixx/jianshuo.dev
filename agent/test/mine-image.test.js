@@ -280,3 +280,77 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     expect(env.FILES._store.has(`${SCOPE}style/s1.json`)).toBe(true);             // 语料保留，补够再提
   });
 });
+
+// ── imagePipeline 开关（四阶段流水线）────────────────────────────────────────────
+
+const CFG_PIPE = { ...MODEL_CFG, imagePipeline: true };
+const REL2 = PHOTO_REL;
+const PIPE_CANNED = {
+  observe: { images: [{ key: REL2, caption: "拿铁", confidence: 0.9 }], timeline: "", clusters: [], repeated_entities: [] },
+  plan: { candidates: [], selected: "A", rejected_because: "", thesis: "t", title_options: [], sections: [], image_role_map: {} },
+  write: { articles: [{ title: "初稿", body: `x\n\n[[photo:${REL2}]]` }] },
+  review: { articles: [{ title: "流水线终稿", body: `y\n\n[[photo:${REL2}]]` }], quality: { faithfulness: 90, on_theme: 90, structure: 90, overall: 90 }, issues: [] },
+};
+// anthropic 依调用次序回放 observe→plan→write→review；其余路由同 makeFetch。
+function makePipelineFetch({ failFirstLlm = false } = {}) {
+  const calls = []; const seq = ["observe", "plan", "write", "review"]; let llmN = 0;
+  const fn = async (url, init = {}) => {
+    const u = String(url);
+    calls.push({ url: u, method: (init.method || "GET").toUpperCase(), body: init.body });
+    const withHeader = (code, body) => ({ ok: true, status: 200, headers: { get: (k) => (k.toLowerCase() === "x-api-status-code" ? code : "logid") }, json: async () => body, text: async () => JSON.stringify(body ?? {}) });
+    if (u.includes("openspeech.bytedance.com") && u.endsWith("/submit")) return withHeader("20000000", {});
+    if (u.includes("openspeech.bytedance.com") && u.endsWith("/query")) return withHeader("20000000", { result: { text: "", utterances: [] }, audio_info: { duration: 1000 } });
+    if (u.includes("api.anthropic.com")) {
+      llmN++;
+      if (failFirstLlm && llmN === 1) return { ok: false, status: 500, json: async () => ({}), text: async () => "boom" };
+      // failFirstLlm：observe 失败后流水线整体放弃，后续唯一一次 LLM 是回退的单发
+      const stage = failFirstLlm ? undefined : seq[llmN - 1];
+      const body = stage ? PIPE_CANNED[stage] : { articles: [{ title: "单发回退", body: `z\n\n[[photo:${REL2}]]` }] };
+      return { ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: JSON.stringify(body) }], usage: {} }), text: async () => "" };
+    }
+    if (u.includes("/files/api/")) return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+    return { ok: false, status: 404, json: async () => ({}), text: async () => "no route" };
+  };
+  fn.calls = calls;
+  return fn;
+}
+
+describe("mineOneAudio: imagePipeline 开关", () => {
+  it("开关开：走四阶段流水线，doc 带 vision/plan/quality，文章来自终审稿", async () => {
+    const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
+    const fetchSpy = makePipelineFetch();
+    vi.stubGlobal("fetch", fetchSpy);
+    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env, CFG_PIPE);
+    expect(r).toBe("mined");
+    expect(fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com")).length).toBe(4);
+    const put = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
+    const doc = JSON.parse(put.body);
+    expect(doc.articles[0].title).toBe("流水线终稿");
+    expect(doc.vision.images[0].key).toBe(REL2);
+    expect(doc.plan.thesis).toBe("t");
+    expect(doc.quality.overall).toBe(90);
+  });
+  it("开关开但流水线首调失败：回退单发，doc 无 vision，文章照写", async () => {
+    const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
+    const fetchSpy = makePipelineFetch({ failFirstLlm: true });
+    vi.stubGlobal("fetch", fetchSpy);
+    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env, CFG_PIPE);
+    expect(r).toBe("mined");
+    // 1 次失败的 observe + 1 次回退单发 = 2 次 LLM；回退侧文章按 seq 之外的分支给出
+    expect(fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com")).length).toBe(2);
+    const put = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
+    const doc = JSON.parse(put.body);
+    expect(doc.vision).toBeUndefined();
+    expect(doc.articles.length).toBe(1);
+  });
+  it("开关关：行为与现行一致（1 次单发调用，doc 无 vision）", async () => {
+    const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
+    const fetchSpy = makeFetch({ transcriptText: "", articles: [{ title: "旧路径", body: `w\n\n[[photo:${REL2}]]` }] });
+    vi.stubGlobal("fetch", fetchSpy);
+    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env, MODEL_CFG);
+    expect(r).toBe("mined");
+    expect(fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com")).length).toBe(1);
+    const put = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
+    expect(JSON.parse(put.body).vision).toBeUndefined();
+  });
+});

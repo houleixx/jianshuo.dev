@@ -26,6 +26,7 @@ import {
   MINE_DEFAULT_STYLE as DEFAULT_STYLE,
   IMAGE_ONLY_SYSTEM,
 } from "./prompts/mine.js";
+import { mineImageOnly, rewriteFromVision, buildFactPack, makeStageCaller } from "./image-mine.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
 const MIN_CHARS          = 20;
@@ -1050,7 +1051,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       // 才落回原来的 .empty(no-speech)。
       const photos = await gatherPhotos(audioKey, allKeys, env, log);
       if (photos.length) {
-        log("无语音但有照片,改走看图模式", { count: photos.length });
+        log("无语音但有照片,改走看图模式", { count: photos.length, pipeline: !!modelCfg.imagePipeline });
         await notifyStatus(scope, stem, "mining", env);
         // 和正常语音挖矿一样：文风文本进 prompt，articles[i].style 打 head 版本号
         //（不打的话 iOS chip 显示「选风格」，看起来像没用文风）。
@@ -1058,11 +1059,28 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         const styleText = (imgStyleDoc ? resolveStyle(imgStyleDoc) : await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
         const imgHeadV = imgStyleDoc && Number.isInteger(imgStyleDoc.head) ? imgStyleDoc.head : null;
         const turnId = `${Date.now()}-${stem.slice(-8)}`;
-        const arts = await mineVariant(env, {
-          transcript: "", styleText, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
-          systemOverride: IMAGE_ONLY_SYSTEM, noForce: true, photoInstr: "",
-          metaExtra: { source: "image" }, log,
-        });
+
+        // 流水线（modelCfg.imagePipeline，缺省关）：观察→立意→写作→审稿。
+        // 任何失败回退下方现行单发 —— 质量下限就是今天的行为。
+        let arts = [], pipe = null;
+        if (modelCfg.imagePipeline) {
+          try {
+            pipe = await mineImageOnly(env, { scope, stem, photos, styleText, modelCfg, turnId, log });
+            arts = pipe.articles;
+            if (pipe.lowQuality) log("流水线质量门未过,交付较高一版", { overall: pipe.quality && pipe.quality.overall });
+          } catch (e) {
+            pipe = null;
+            log("流水线失败,回退单发", { error: String((e && e.message) || e).slice(0, 200) });
+          }
+        }
+        if (!arts.length) {
+          pipe = null;
+          arts = await mineVariant(env, {
+            transcript: "", styleText, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
+            systemOverride: IMAGE_ONLY_SYSTEM, noForce: true, photoInstr: "",
+            metaExtra: { source: "image" }, log,
+          });
+        }
         if (arts.length) {
           const doc = {
             schema: 2, id: stem, sourceAudio: leaf,
@@ -1070,11 +1088,12 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
             transcript: "", srt: "",
             articles: imgHeadV ? arts.map((a) => ({ ...a, style: imgHeadV })) : arts,
             status: "ready", model: modelCfg.model,
+            ...(pipe ? { vision: pipe.vision, plan: pipe.plan, quality: pipe.quality } : {}),
           };
           await writeArticle(audioKey, doc, env);
           await notifyStatus(scope, stem, "ready", env);
           try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
-          log("看图写入完成", { articles: arts.length });
+          log("看图写入完成", { articles: arts.length, pipeline: !!pipe });
           result = "mined";
           return "mined";
         }
