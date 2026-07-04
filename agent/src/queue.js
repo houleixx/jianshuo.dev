@@ -141,7 +141,7 @@ export class ArticleQueue {
     }
     if (res && res.ok) {
       this.store.markDone(row.id, res.reply || "");
-      this.broadcast({ type: "updated", id: row.id, article: res.article });
+      this.broadcast({ type: "updated", id: row.id, article: res.article, stems: res.stems || [] });
       if (res.reply) this.broadcast({ type: "reply", id: row.id, text: res.reply, ok: true });
     } else {
       const msg = (res && res.error) || "操作没完成";

@@ -484,6 +484,7 @@ export async function deleteArticleFiles(env, scope, stem) {
     `${scope}${stem}.m4a`,
     `${scope}articles/${stem}.empty`,
     `${scope}articles/${stem}.asr.json`,
+    `${scope}articles/${stem}.tags`,
   ];
   for (const k of keys) { try { await env.FILES.delete(k); } catch {} }
 }

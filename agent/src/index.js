@@ -409,7 +409,8 @@ export class LibraryAgent extends Agent {
     if (res.ok && !res.hadError) {
       try { await this.env.FILES.put(doneKey, JSON.stringify({ at: Date.now(), reply: res.reply || "" })); } catch {}
     }
-    return { ok: res.ok, reply: res.reply, error: res.hadError ? (res.reply || "操作没完成") : undefined, article: null };
+    return { ok: res.ok, reply: res.reply, error: res.hadError ? (res.reply || "操作没完成") : undefined,
+             article: null, stems: res.stems || [] };
   }
 
   async onMessage(connection, message) {
@@ -468,7 +469,8 @@ export class LibraryAgent extends Agent {
     // 把队列里那条暂存 running 的行收尾，避免 recover() 把已解决的 pending 再翻回来重问。
     try { this._queue.store.markDone(id, "已删除"); } catch {}
     connection.send(JSON.stringify({ type: "reply", id, text: "已删除", ok: true }));
-    this.broadcast(JSON.stringify({ type: "updated", id, article: null })); // 客户端据此刷新列表
+    this.broadcast(JSON.stringify({ type: "updated", id, article: null,
+                                    stems: actions.map((a) => a.stem).filter(Boolean) })); // 客户端据此按 stem 清缓存并刷新列表
   }
 
   // One Anthropic Messages call WITH tools. Returns a result object

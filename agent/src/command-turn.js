@@ -12,6 +12,22 @@ const COMMAND_SYSTEM = [
   "换风格重写用 restyle_article；归类/打标签用 tag_article（去掉标签则加 remove:true）；调整文风用 write_style。只做用户要求的操作。",
 ].join("");
 
+/// Which article stems a command turn actually touched — from the successful
+/// tool runs (tag_article stems / restyle_article stem / merge_articles newStem).
+/// Rides on the `updated` WS push so the app can invalidate exactly those rows'
+/// caches instead of blind-refreshing into stale titles/tags.
+export function affectedStems(toolRuns = []) {
+  const out = new Set();
+  for (const t of toolRuns) {
+    if (!t || !t.ok) continue;
+    const a = t.input || {}, r = t.result || {};
+    if (Array.isArray(a.stems)) for (const s of a.stems) out.add(String(s));
+    if (typeof a.stem === "string") out.add(a.stem);
+    if (typeof r.newStem === "string") out.add(r.newStem);
+  }
+  return [...out];
+}
+
 export async function runCommandTurn({ env, scope, token, origin, turnId, instruction, refs = [], callClaude, idemKey }) {
   const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
   const refLines = refs.map((r) => `第${r.n}篇 → stem=${r.stem}｜标题：${r.title}`).join("\n") || "（列表为空）";
@@ -38,5 +54,6 @@ export async function runCommandTurn({ env, scope, token, origin, turnId, instru
   const summary = (result.finalText || "").trim();
   const didAct = (result.calledTools || []).some((n) => COMMAND_TERMINAL.has(n));
   const reply = summary || (result.hadError ? "操作没完成" : (didAct ? "好了" : ""));
-  return { ok: !result.hadError, reply, pending: result.pending || [], toolRuns: result.toolRuns || [], hadError: !!result.hadError };
+  return { ok: !result.hadError, reply, pending: result.pending || [], toolRuns: result.toolRuns || [],
+           stems: affectedStems(result.toolRuns), hadError: !!result.hadError };
 }

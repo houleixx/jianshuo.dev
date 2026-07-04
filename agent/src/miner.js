@@ -638,6 +638,24 @@ async function writeArticle(audioKey, doc, env) {
   await apiPut(`articles/${adminArticlePath(audioKey)}`, JSON.stringify(doc), "application/json", env);
 }
 
+// 录音从某个标签页发起时，App 先放好 articles/<stem>.tags 侧车（["标签", …]）。
+// 首次成文前消费它：返回标签数组并删除侧车——只生效一次，之后用户语音删掉的
+// 标签不会被 re-mine / restyle 复活。Best-effort：侧车坏/读失败返回 []，不阻塞成文。
+export async function consumePendingTags(audioKey, env) {
+  try {
+    const tagsKey = articleKeyFor(audioKey).replace(/\.json$/, ".tags");
+    const side = await env.FILES.get(tagsKey);
+    if (!side) return [];
+    let tags = [];
+    try {
+      const parsed = JSON.parse(await side.text());
+      if (Array.isArray(parsed)) tags = parsed.map(String).filter(Boolean);
+    } catch (_) {}
+    await env.FILES.delete(tagsKey);
+    return [...new Set(tags)];
+  } catch (_) { return []; }
+}
+
 async function writeSrt(audioKey, srt, env) {
   await apiPut(`articles/${adminArticlePath(audioKey)}/srt`, srt, "text/plain", env);
 }
@@ -832,6 +850,8 @@ export async function restyleArticle(env, scope, stem, styleV) {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),
     transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: modelCfg.model,
+    // 标签是 doc 级元数据，重写必须原样带上——PUT 是整体替换，漏了就把标签吃掉
+    ...(Array.isArray(doc.tags) && doc.tags.length ? { tags: doc.tags } : {}),
     // 流水线元数据随版本继承——下次 restyle 还能继续复用观察与立意
     ...(doc.vision ? { vision: doc.vision } : {}),
     ...(doc.plan ? { plan: doc.plan } : {}),
@@ -1090,12 +1110,14 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
           });
         }
         if (arts.length) {
+          const pendingTags = await consumePendingTags(audioKey, env);
           const doc = {
             schema: 2, id: stem, sourceAudio: leaf,
             createdAt: uploaded[audioKey] || new Date().toISOString(),
             transcript: "", srt: "",
             articles: imgHeadV ? arts.map((a) => ({ ...a, style: imgHeadV })) : arts,
             status: "ready", model: modelCfg.model,
+            ...(pendingTags.length ? { tags: pendingTags } : {}),
             ...(pipe ? { vision: pipe.vision, plan: pipe.plan, quality: pipe.quality } : {}),
           };
           await writeArticle(audioKey, doc, env);
@@ -1178,10 +1200,12 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // version and moves head, so after the loop head = the LAST variant (newest), and
     // undo/redo walks the others. No photos array — [[photo:<key>]] markers in the body
     // are the sole source of truth for which photos appear and where.
+    const pendingTags = await consumePendingTags(audioKey, env);
     const baseDoc = {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
       transcript, srt, status: "ready", model: modelCfg.model,
+      ...(pendingTags.length ? { tags: pendingTags } : {}),
     };
     for (const arts of variants) await writeArticle(audioKey, { ...baseDoc, articles: arts }, env);
     if (srt) await writeSrt(audioKey, srt, env);

@@ -891,24 +891,30 @@ export async function onRequest(context) {
         allObjects.push(...listed.objects);
         cursor = listed.truncated ? listed.cursor : null;
       } while (cursor);
+      // Read the docs in parallel batches — the old sequential loop was O(N)
+      // round-trips and took seconds at ~100 articles.
+      const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json'));
       const articles = [];
-      for (const o of allObjects) {
-        if (!o.key.endsWith('.json')) continue;
-        const s = o.key.slice(prefix.length, -'.json'.length);
-        const obj = await env.FILES.get(o.key);
-        if (!obj) continue;
-        let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
-        const currentArticles = resolveArticles(doc);
-        const entry = {
-          stem: s,
-          title: currentArticles[0]?.title || '(无题)',
-          head: doc.head || 1,
-          createdAt: doc.createdAt || 0,
-          updatedAt: doc.updatedAt || 0,
-          count: currentArticles.length,
-        };
-        if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
-        articles.push(entry);
+      const BATCH = 20;
+      for (let i = 0; i < jsonObjects.length; i += BATCH) {
+        const entries = await Promise.all(jsonObjects.slice(i, i + BATCH).map(async (o) => {
+          const s = o.key.slice(prefix.length, -'.json'.length);
+          const obj = await env.FILES.get(o.key);
+          if (!obj) return null;
+          let doc; try { doc = JSON.parse(await obj.text()); } catch { return null; }
+          const currentArticles = resolveArticles(doc);
+          const entry = {
+            stem: s,
+            title: currentArticles[0]?.title || '(无题)',
+            head: doc.head || 1,
+            createdAt: doc.createdAt || 0,
+            updatedAt: doc.updatedAt || 0,
+            count: currentArticles.length,
+          };
+          if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
+          return entry;
+        }));
+        articles.push(...entries.filter(Boolean));
       }
       articles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       return json({ articles });
@@ -984,6 +990,7 @@ export async function onRequest(context) {
         env.FILES.delete(`${prefix}.srt`),
         env.FILES.delete(`${prefix}.empty`),
         env.FILES.delete(`${prefix}.blocked`),
+        env.FILES.delete(`${prefix}.tags`),
       ]);
       return json({ ok: true });
     }

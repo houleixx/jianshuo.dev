@@ -61,6 +61,17 @@ describe("GET /articles — list", () => {
     expect(body.articles.map((a) => a.stem)).toEqual(["s2", "s1"]);
   });
 
+  it("DELETE /articles/<stem> also removes the .tags sidecar", async () => {
+    const context = ctx("DELETE", "s1");
+    seedArticle(context.env, "s1");
+    context.env.FILES._store.set("users/u/articles/s1.tags", JSON.stringify(["创业"]));
+    context.params.path = ["articles", "u", "s1"];
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(200);
+    expect(context.env.FILES._store.has("users/u/articles/s1.tags")).toBe(false);
+    expect(context.env.FILES._store.has("users/u/articles/s1.json")).toBe(false);
+  });
+
   it("list summary carries tags when present, omits when absent", async () => {
     const context = ctx("GET", "");
     seedArticle(context.env, "s1", { createdAt: 1000, tags: ["创业"] });
