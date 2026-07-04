@@ -60,6 +60,16 @@ describe("GET /articles — list", () => {
     expect(resp.status).toBe(200);
     expect(body.articles.map((a) => a.stem)).toEqual(["s2", "s1"]);
   });
+
+  it("list summary carries tags when present, omits when absent", async () => {
+    const context = ctx("GET", "");
+    seedArticle(context.env, "s1", { createdAt: 1000, tags: ["创业"] });
+    seedArticle(context.env, "s2", { createdAt: 2000 });
+    context.params.path = ["articles", "u"];
+    const body = await (await onRequest(context)).json();
+    expect(body.articles.find((a) => a.stem === "s1").tags).toEqual(["创业"]);
+    expect("tags" in body.articles.find((a) => a.stem === "s2")).toBe(false);
+  });
 });
 
 // ── read ────────────────────────────────────────────────────────────────────

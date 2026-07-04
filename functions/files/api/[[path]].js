@@ -899,14 +899,16 @@ export async function onRequest(context) {
         if (!obj) continue;
         let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
         const currentArticles = resolveArticles(doc);
-        articles.push({
+        const entry = {
           stem: s,
           title: currentArticles[0]?.title || '(无题)',
           head: doc.head || 1,
           createdAt: doc.createdAt || 0,
           updatedAt: doc.updatedAt || 0,
           count: currentArticles.length,
-        });
+        };
+        if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
+        articles.push(entry);
       }
       articles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       return json({ articles });

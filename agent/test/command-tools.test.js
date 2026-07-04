@@ -114,3 +114,79 @@ describe("tool defs are valid Anthropic tool schemas (no extra keys)", () => {
     }
   });
 });
+
+describe("tag_article", () => {
+  const ORIGIN = "https://jianshuo.dev";
+  function putBody(fetchSpy, stem) {
+    const call = fetchSpy.mock.calls.find(([u, o]) => o?.method === "PUT" && String(u).includes(`/files/api/articles/${stem}`));
+    return call ? JSON.parse(call[1].body) : null;
+  }
+
+  it("打标签：去重追加到 doc.tags，经 Files API PUT 写回", async () => {
+    const env = { FILES: memFiles({ [`${SCOPE}articles/A.json`]: art("A", "甲", "正文", { tags: ["旧类"] }) }) };
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    const r = await runTool("tag_article", { stems: ["A"], tag: "创业" }, { env, scope: SCOPE, token: "tk", origin: ORIGIN });
+    expect(r).toEqual({ ok: true, tagged: 1, tag: "创业" });
+    expect(putBody(fetchSpy, "A").tags).toEqual(["旧类", "创业"]);
+    // 重复打同一标签不产生重复项
+    fetchSpy.mockClear();
+    await runTool("tag_article", { stems: ["A"], tag: "旧类" }, { env, scope: SCOPE, token: "tk", origin: ORIGIN });
+    expect(putBody(fetchSpy, "A").tags).toEqual(["旧类"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("schema-3 文档打标签不吃掉正文：PUT 带上当前 head 版本的 articles", async () => {
+    const doc3 = JSON.stringify({ schema: 3, createdAt: 1, transcript: "tx", head: 2, versions: [
+      { v: 1, savedAt: 1, source: "mine", articles: [{ title: "旧", body: "旧文" }] },
+      { v: 2, savedAt: 2, source: "agent", articles: [{ title: "新", body: "新文" }] },
+    ] });
+    const env = { FILES: memFiles({ [`${SCOPE}articles/C.json`]: doc3 }) };
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    const r = await runTool("tag_article", { stems: ["C"], tag: "创业" }, { env, scope: SCOPE, token: "tk", origin: ORIGIN });
+    expect(r.ok).toBe(true);
+    expect(putBody(fetchSpy, "C").tags).toEqual(["创业"]);
+    expect(putBody(fetchSpy, "C").articles).toEqual([{ title: "新", body: "新文" }]);
+    vi.unstubAllGlobals();
+  });
+
+  it("remove=true 移除标签；删空后 tags 字段整个消失", async () => {
+    const env = { FILES: memFiles({
+      [`${SCOPE}articles/A.json`]: art("A", "甲", "正文", { tags: ["甲类", "乙类"] }),
+      [`${SCOPE}articles/B.json`]: art("B", "乙", "正文", { tags: ["甲类"] }),
+    }) };
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    const r = await runTool("tag_article", { stems: ["A", "B"], tag: "甲类", remove: true },
+      { env, scope: SCOPE, token: "tk", origin: ORIGIN });
+    expect(r).toEqual({ ok: true, untagged: 2, tag: "甲类" });
+    expect(putBody(fetchSpy, "A").tags).toEqual(["乙类"]);
+    expect("tags" in putBody(fetchSpy, "B")).toBe(false);   // 删空 → 字段消失
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("tags 读取（list_articles / read_article）", () => {
+  it("list_articles 带出 tags；无 tag 的条目不带该字段", async () => {
+    const env = { FILES: memFiles({
+      [`${SCOPE}articles/A.json`]: art("A", "甲", "正文", { tags: ["创业"] }),
+      [`${SCOPE}articles/B.json`]: art("B", "乙", "正文"),
+    }) };
+    const r = await runTool("list_articles", {}, { env, scope: SCOPE });
+    const a = r.articles.find((x) => x.stem === "A");
+    const b = r.articles.find((x) => x.stem === "B");
+    expect(a.tags).toEqual(["创业"]);
+    expect("tags" in b).toBe(false);
+  });
+
+  it("read_article 带出 tags", async () => {
+    const env = { FILES: memFiles({ [`${SCOPE}articles/A.json`]: art("A", "甲", "正文", { tags: ["创业", "东京"] }) }) };
+    const r = await runTool("read_article", { stem: "A" }, { env, scope: SCOPE });
+    expect(r.tags).toEqual(["创业", "东京"]);
+    // 无 tag 的文章不带该字段
+    const env2 = { FILES: memFiles({ [`${SCOPE}articles/B.json`]: art("B", "乙", "正文") }) };
+    const r2 = await runTool("read_article", { stem: "B" }, { env: env2, scope: SCOPE });
+    expect("tags" in r2).toBe(false);
+  });
+});

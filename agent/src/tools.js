@@ -51,7 +51,9 @@ register(
       if (!obj) continue;
       let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
       const title = resolveArticles(doc)[0]?.title || "(无题)";
-      out.push({ stem, title, createdAt: doc.createdAt || 0 });
+      const entry = { stem, title, createdAt: doc.createdAt || 0 };
+      if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
+      out.push(entry);
     }
     out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     return { articles: out.slice(0, 30) };
@@ -66,7 +68,9 @@ register(
     if (!obj) return { error: "not_found" };
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
     const articles = resolveArticles(doc).map((a) => ({ title: a.title, body: a.body }));
-    return { transcript: doc.transcript || "", articles };
+    const out = { transcript: doc.transcript || "", articles };
+    if (Array.isArray(doc.tags) && doc.tags.length) out.tags = doc.tags;
+    return out;
   }
 );
 
@@ -486,22 +490,29 @@ export async function deleteArticleFiles(env, scope, stem) {
 
 register(
   { name: "tag_article",
-    description: "给一篇或多篇文章打标签/归类。stems 是文章数组，tag 是标签名。",
-    input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, tag: { type: "string" } }, required: ["stems", "tag"], additionalProperties: false } },
-  async ({ stems, tag }, { env, scope, token, origin }) => {
+    description: "给一篇或多篇文章打标签/归类；remove 为 true 时改为移除该标签。stems 是文章数组，tag 是标签名。",
+    input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, tag: { type: "string" }, remove: { type: "boolean" } }, required: ["stems", "tag"], additionalProperties: false } },
+  async ({ stems, tag, remove }, { env, scope, token, origin }) => {
     if (!Array.isArray(stems) || !stems.length || !tag) return { error: "bad_args" };
     for (const stem of stems) {
       if (badStem(stem)) return { error: "bad_stem" };
       const obj = await env.FILES.get(`${scope}articles/${stem}.json`);
       if (!obj) continue;
       let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
-      doc.tags = Array.from(new Set([...(doc.tags || []), String(tag)]));
+      doc.tags = remove
+        ? (doc.tags || []).filter((t) => t !== String(tag))
+        : Array.from(new Set([...(doc.tags || []), String(tag)]));
+      if (!doc.tags.length) delete doc.tags;
+      // Schema-3 docs keep content in versions[head], not top-level `articles` —
+      // but writeArticleDoc takes newDoc.articles as the new version's content.
+      // Carry the current articles or tagging would append an empty version.
+      doc.articles = resolveArticles(doc);
       const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
         method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(doc),
       });
       if (!resp.ok) return { error: `upload_failed_${resp.status}` };
     }
-    return { ok: true, tagged: stems.length, tag };
+    return remove ? { ok: true, untagged: stems.length, tag } : { ok: true, tagged: stems.length, tag };
   }
 );
 
