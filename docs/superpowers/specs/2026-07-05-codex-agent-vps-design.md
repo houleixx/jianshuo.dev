@@ -98,9 +98,29 @@
   sudo 白名单内的命令可执行（systemctl status）、白名单外被拒（如 useradd）、
   断开取消、密码错 401、手机 Safari 可用
 
+## 追加功能：workspace 文件桥（2026-07-05，用户批准 A 档「上传+下载都要」）
+
+给「人」一个进出 workspace 的口子——上传文件让 agent 处理、下载 agent 生成的文件。
+不扩大权限面（agent 在 workspace 本来就能读写），只是把这个目录对网页开放读写。
+
+**三个接口**（加进现有 node 服务，认证继续靠 Caddy）：
+- `POST /api/upload`（multipart/form-data）→ 写进 `WORKSPACE/<净化后的 basename>`，返回 `{name, size}`
+- `GET /api/files` → 列 workspace 顶层文件 `[{name, size, mtime}]`（不递归子目录）
+- `GET /api/files/<name>` → 下载单个文件（`Content-Disposition: attachment`）
+
+**安全边界**（这三接口直接碰磁盘，是新的攻击面）：
+- 文件名一律取 `basename` 并按白名单（`[\w.\- 一-龥]`）过滤，空名/`.`/`..` 拒绝；
+- 落地路径必须 `resolve` 后仍以 `WORKSPACE + sep` 开头，否则 400（杜绝路径穿越）；
+- 只在 workspace 顶层平铺；单文件上限 **50MB**（1GB 小机）；
+- 纯逻辑（文件名净化 + 安全 join）抽成 `files.ts` 单独单测。
+
+**UI**：聊天页顶栏加 📎 区——拖拽/选择上传 + 可折叠文件列表（每项大小 + 下载）。
+上传完气泡提示「已上传 X，可以让 Codex 处理了」。
+
 ## 明确不做
 
 - 多用户 / 分享（订阅 ToS 单用户）
 - `codex proto` 常驻协议模式、审批交互（approval 一律走沙箱策略，不弹窗）
 - 会话列表 / 历史浏览（只有当前会话 + 新会话按钮，YAGNI）
-- 碰 paint 服务的任何代码（只共享 CODEX_HOME 目录权限）
+- 碰 paint 服务的任何代码
+- 文件桥：递归子目录、批量打包下载、断点续传（YAGNI）
