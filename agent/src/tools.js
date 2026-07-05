@@ -6,7 +6,7 @@ import { resolveStyle, parseStyleMarkdown, readStyleText, readStyleDoc } from ".
 import { applyArticleEdits } from "./linenum.js";
 import { imageCostUY } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
-import { restyleArticle } from "./miner.js";
+import { restyleArticle, ensurePhotoMarkers } from "./miner.js";
 import { silentM4aBytes } from "./silent-m4a.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
@@ -430,14 +430,17 @@ register(
       parts.push(`《${a.title || "(无题)"}》\n${a.body || ""}`);
     }
     const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
-    const system = `你是${"王建硕"}的写作助手。把用户给的几篇文章揉成一篇连贯的新文章：去重、顺逻辑、保持下面这套写作风格。第一行只写标题（不加书名号/引号），其余为正文。\n\n【写作风格】\n${style}`.trim();
+    const system = `你是${"王建硕"}的写作助手。把用户给的几篇文章揉成一篇连贯的新文章：去重、顺逻辑、保持下面这套写作风格。第一行只写标题（不加书名号/引号），其余为正文。\n原文里的 [[photo:…]] 照片标记必须全部保留到合并稿：key 一字不改、独占一行、放到语义对应的段落处，一张都不能丢。\n\n【写作风格】\n${style}`.trim();
     const user = `${guidance ? `合并侧重：${guidance}\n\n` : ""}请把以下 ${parts.length} 篇合并成一篇：\n\n${parts.join("\n\n---\n\n")}`;
     const resp = await callClaude({ system, messages: [{ role: "user", content: user }] });
     const text = (resp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
     if (!text) return { error: "empty_merge" };
     const nl = text.indexOf("\n");
     const title = (nl === -1 ? text : text.slice(0, nl)).trim().slice(0, 40) || "合并文章";
-    const body = (nl === -1 ? "" : text.slice(nl + 1)).trim();
+    let body = (nl === -1 ? "" : text.slice(nl + 1)).trim();
+    // 保底：源文章里的每个照片标记都必须活着走进合并稿（prompt 之外的硬保证）。
+    body = ensurePhotoMarkers(
+      parts.map((p) => ({ body: p })), [{ title, body }])[0].body;
     // 确定性 stem：从稳定的 idemKey（队列行 id）派生，重跑同一 turn 不会造出第二篇。
     // 无 idemKey（旧调用）退回墙钟 mergedStem()。
     const stem = "VoiceDrop-merged-" + String(ctx.idemKey || mergedStem()).replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);

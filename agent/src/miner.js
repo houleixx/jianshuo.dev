@@ -788,6 +788,33 @@ export function resolveStyleVersion(styleDoc, styleV) {
   return (styleDoc && Number.isInteger(styleDoc.head)) ? styleDoc.head : null;
 }
 
+// ── 照片标记保底 ────────────────────────────────────────────────────────────────
+// LLM 改写（restyle / merge）绝不允许丢照片。prompt 已经要求保留，这里是不靠模型
+// 自觉的程序化兜底：凡是源文章里出现过、新稿里没有的 [[photo:key]]，按原顺序补到
+// 新稿最后一篇的末尾（独占一行）。位置可能不完美，但照片一定都在。
+const PHOTO_MARKER_RE = /\[\[photo:([^\]]+)\]\]/g;
+
+export function photoKeysIn(articles) {
+  const keys = [];
+  for (const a of articles || []) {
+    for (const m of String(a?.body || "").matchAll(PHOTO_MARKER_RE)) {
+      if (!keys.includes(m[1])) keys.push(m[1]);
+    }
+  }
+  return keys;
+}
+
+export function ensurePhotoMarkers(sourceArticles, newArticles) {
+  if (!Array.isArray(newArticles) || !newArticles.length) return newArticles;
+  const have = new Set(photoKeysIn(newArticles));
+  const missing = photoKeysIn(sourceArticles).filter((k) => !have.has(k));
+  if (!missing.length) return newArticles;
+  const out = newArticles.map((a) => ({ ...a }));
+  const last = out[out.length - 1];
+  last.body = `${String(last.body || "").replace(/\s+$/, "")}\n\n${missing.map((k) => `[[photo:${k}]]`).join("\n\n")}\n`;
+  return out;
+}
+
 export async function restyleArticle(env, scope, stem, styleV) {
   const articleKey = `${scope}articles/${stem}.json`;
   const obj = await env.FILES.get(articleKey);
@@ -843,6 +870,9 @@ export async function restyleArticle(env, scope, stem, styleV) {
     });
   }
   if (!articles.length) return { ok: false, reason: "no-article" };
+
+  // 保底：原 head 版本里的每一张照片都必须活着走出改写（prompt 之外的硬保证）。
+  articles = ensurePhotoMarkers(resolveArticles(doc), articles);
 
   // 文风版本 = per-article 字段（不再往 body 塞注释——隐形行会让第N行编号错位）
   const tagged = articles.map((a) => ({ ...a, style: v }));
