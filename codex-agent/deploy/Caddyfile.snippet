@@ -1,0 +1,11 @@
+codex.jianshuo.dev {
+	encode gzip
+
+	basic_auth {
+		wjs REPLACE_WITH_BCRYPT_HASH
+	}
+
+	reverse_proxy 127.0.0.1:8789 {
+		flush_interval -1
+	}
+}

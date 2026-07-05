@@ -1,0 +1,31 @@
+[Unit]
+Description=codex-agent - Codex subscription web chat
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=codex-agent
+Group=codex-agent
+WorkingDirectory=/opt/codex-agent
+Environment=NODE_ENV=production
+Environment=HOME=/opt/codex-agent
+# 与 paint 共用同一份订阅凭证（组权限共享，见 provision.sh）。绝不拷贝这份文件。
+Environment=CODEX_HOME=/opt/paint/.codex
+EnvironmentFile=-/opt/codex-agent/.env
+ExecStart=/usr/bin/node /opt/codex-agent/dist/server.js
+Restart=always
+RestartSec=3
+
+# B 档权限：允许 sudo 白名单（所以不能开 NoNewPrivileges/RestrictSUIDSGID），
+# 写权限限定在自身目录、共享凭证、/etc/caddy（管 Caddy 配置用）
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/codex-agent /opt/paint/.codex /etc/caddy
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
