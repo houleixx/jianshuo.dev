@@ -251,13 +251,13 @@ register(
 // Shared paint-job POST for both edit_photo (oldKey present → edit mode with
 // image_url) and new_photo (no oldKey → generate mode, no image_url). Returns
 // the fetch Response, or null on network failure (caller checks status).
-async function postPaintJob(ctx, { prompt, newKey, oldKey }) {
+async function postPaintJob(ctx, { prompt, newKey, oldKey, size }) {
   const { env, scope, articleKey, origin, editId } = ctx;
   const paintBase = env.PAINT_BASE || "https://paint.jianshuo.dev";
   const meta = { scope, newKey, articleKey, editId: editId || null };
   const body = {
     prompt,
-    size: "1024x1024",
+    size: typeof size === "string" && /^\d{2,4}x\d{2,4}$/.test(size) ? size : "1024x1024",
     format: "jpeg",
     callback_url: `${origin}/agent/paint-callback`,
     callback_token: env.PAINT_CALLBACK_TOKEN,
@@ -346,12 +346,13 @@ register(
       properties: {
         prompt: { type: "string", description: "图像生成指令，完整清晰，例如：一张扁平插画风格的城市夜景，暖色调，简洁留白。" },
         after_line: { type: "integer", description: "插到当前正文第 N 行之后；0 = 插到正文最前面。" },
+        size: { type: "string", description: "图片尺寸「宽x高」，按用途选比例：缺省 1024x1024 方图；公众号题图等 2.45:1 横幅用 1568x640；竖幅插画用 1024x1536。指令里提到横幅/竖幅/比例时必须带上对应尺寸。" },
       },
       required: ["prompt", "after_line"],
       additionalProperties: false,
     },
   },
-  async ({ prompt, after_line }, ctx) => {
+  async ({ prompt, after_line, size }, ctx) => {
     const { env, scope, articleKey, articleIndex } = ctx;
     if (!prompt) return { error: "missing_prompt" };
 
@@ -379,7 +380,7 @@ register(
     const werr = await putArticleDoc(doc, ctx);
     if (werr) return werr;
 
-    const resp = await postPaintJob(ctx, { prompt, newKey }); // generate: no oldKey
+    const resp = await postPaintJob(ctx, { prompt, newKey, size }); // generate: no oldKey
 
     if (!resp || resp.status !== 202) {
       // 回退：撤掉插入的新图 marker，保持文档与"没有在跑的任务"一致

@@ -134,6 +134,21 @@ describe("new_photo tool", () => {
     expect(calls.paint).toBe(null);
   });
 
+  it("passes a valid size through (题图横幅), defaults/falls back to 1024x1024", async () => {
+    const ctx = await makeCtx();
+    let calls = stubFetch();
+    await runTool("new_photo", { prompt: "题图", after_line: 0, size: "1568x640" }, ctx);
+    expect(calls.paint.body.size).toBe("1568x640");
+
+    calls = stubFetch();
+    await runTool("new_photo", { prompt: "x", after_line: 0 }, ctx);
+    expect(calls.paint.body.size).toBe("1024x1024");
+
+    calls = stubFetch();
+    await runTool("new_photo", { prompt: "x", after_line: 0, size: "huge; DROP" }, ctx);
+    expect(calls.paint.body.size).toBe("1024x1024");
+  });
+
   it("reverts the inserted marker when paint submit fails (non-202)", async () => {
     const ctx = await makeCtx();
     const calls = stubFetch({ paintStatus: 500 });
