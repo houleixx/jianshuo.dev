@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>题图 Prompt 调优台</title>
+<style>
+  :root {
+    --ink: #1f2430; --sub: #6b7280; --line: #e5e7eb; --bg: #fafaf8; --card: #ffffff;
+    --accent: #b45309; --accent-soft: #fef3e2; --ok: #15803d; --bad: #b91c1c;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 15px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--ink); background: var(--bg); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: var(--sub); font-size: 13px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; color: var(--sub); font-weight: 600; margin-bottom: 10px; letter-spacing: .02em; }
+  select, textarea, input[type=text], input[type=password] {
+    width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+    font: inherit; color: var(--ink); background: #fff;
+  }
+  textarea { min-height: 220px; resize: vertical; line-height: 1.7; }
+  button {
+    border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 14px;
+    font: inherit; font-size: 14px; cursor: pointer; color: var(--ink);
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { opacity: .9; color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .article { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
+  .article:hover { border-color: var(--accent); }
+  .article.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .article .t { font-weight: 600; font-size: 14px; }
+  .article .s { color: var(--sub); font-size: 12.5px; margin-top: 2px; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .shot { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+  .shot img { width: 100%; display: block; }
+  .shot .meta { padding: 8px 10px; font-size: 12px; color: var(--sub); border-top: 1px solid var(--line); }
+  .shot .meta b { color: var(--ink); }
+  .shot.pending .ph { display: flex; align-items: center; justify-content: center; height: 160px;
+    background: linear-gradient(120deg, #f3eee4, #ece4d6); color: #8a7b60; font-size: 13px; }
+  .status { font-size: 13px; margin-left: 4px; }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
+  .pill { display: inline-block; font-size: 11.5px; color: var(--accent); background: var(--accent-soft);
+    border-radius: 99px; padding: 1px 9px; margin-left: 6px; vertical-align: 1px; }
+  .muted { color: var(--sub); font-size: 12.5px; }
+  #tokenCard input { max-width: 420px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>题图 Prompt 调优台</h1>
+  <p class="sub">线上 prompt 自动拉取（无需复制粘贴）→ 选一篇真实文章 → paint 出真图对比 → 满意后一键上线（写 R2 覆盖，立即生效）。</p>
+
+  <div class="card" id="tokenCard">
+    <h2>管理 Token（FILES_TOKEN，仅存本机 localStorage）</h2>
+    <div class="row">
+      <input type="password" id="token" placeholder="Bearer token">
+      <button onclick="saveToken()">保存并加载</button>
+      <span class="status" id="tokenStatus"></span>
+    </div>
+  </div>
+
+  <div class="grid" id="main" style="display:none">
+    <div>
+      <div class="card">
+        <h2>线上 Prompt <span class="pill" id="liveTag"></span></h2>
+        <select id="promptSel" onchange="pickPrompt()"></select>
+        <textarea id="editor" placeholder="prompt 内容" oninput="dirty()"></textarea>
+        <div class="row">
+          <button class="primary" id="shipBtn" onclick="ship()">上线这版</button>
+          <button onclick="revert()">还原为线上版</button>
+          <span class="status" id="shipStatus"></span>
+        </div>
+        <p class="muted" style="margin-top:8px">改动即为「候选版」；出图测试用的是编辑框里的当前内容。</p>
+      </div>
+
+      <div class="card">
+        <h2>真实文章（最近挖出的）</h2>
+        <div id="articles" class="muted">加载中…</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>出图测试</h2>
+        <div class="row">
+          <label class="muted">尺寸 <input type="text" id="size" value="1536x1024" style="width:110px"></label>
+          <button class="primary" id="genBtn" onclick="generate()">用当前候选版 + 选中文章出图</button>
+          <span class="status" id="genStatus"></span>
+        </div>
+        <p class="muted" style="margin-top:8px">注：这里把「指令 + 文章标题/开头」直接交给 gpt-image-2，近似产线效果（产线会先经编辑 agent 蒸馏一步）。</p>
+      </div>
+      <div class="gallery" id="gallery"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const LS = "prompt-lab-token";
+let prompts = [], current = null, articles = [], selArticle = null, runSeq = 0;
+
+const $ = (id) => document.getElementById(id);
+const auth = () => ({ Authorization: "Bearer " + localStorage.getItem(LS) });
+const api = async (path, opts = {}) => {
+  const r = await fetch(path, { ...opts, headers: { "content-type": "application/json", ...auth(), ...(opts.headers || {}) } });
+  if (r.status === 401) throw new Error("token 无效");
+  return r.json();
+};
+
+async function boot() {
+  if (!localStorage.getItem(LS)) return;
+  try {
+    const { prompts: ps } = await api("/agent/prompt-registry");
+    prompts = ps;
+    $("tokenCard").style.display = "none";
+    $("main").style.display = "";
+    $("promptSel").innerHTML = ps.map((p, i) => `<option value="${i}">${p.label}</option>`).join("");
+    const cover = ps.findIndex((p) => p.id.endsWith(".wechat-cover"));
+    $("promptSel").value = cover >= 0 ? cover : 0;
+    pickPrompt();
+    loadArticles();
+  } catch (e) {
+    $("tokenCard").style.display = "";
+    $("tokenStatus").textContent = e.message; $("tokenStatus").className = "status bad";
+  }
+}
+
+function saveToken() {
+  localStorage.setItem(LS, $("token").value.trim());
+  boot();
+}
+
+function pickPrompt() {
+  current = prompts[+$("promptSel").value];
+  $("editor").value = current.instruction;
+  $("liveTag").textContent = current.id;
+  dirty();
+}
+
+function dirty() {
+  const changed = current && $("editor").value !== current.instruction;
+  $("shipBtn").disabled = !changed;
+  $("shipStatus").textContent = changed ? "候选版（未上线）" : "与线上一致";
+  $("shipStatus").className = "status" + (changed ? "" : " ok");
+}
+
+function revert() { $("editor").value = current.instruction; dirty(); }
+
+async function ship() {
+  $("shipStatus").textContent = "上线中…"; $("shipStatus").className = "status";
+  try {
+    const r = await api("/agent/prompt-registry", { method: "PUT", body: JSON.stringify({ id: current.id, instruction: $("editor").value }) });
+    if (!r.ok) throw new Error(r.error || "失败");
+    current.instruction = $("editor").value;
+    $("shipStatus").textContent = "已上线 ✓（写入 R2 覆盖，立即生效）"; $("shipStatus").className = "status ok";
+    $("shipBtn").disabled = true;
+  } catch (e) { $("shipStatus").textContent = e.message; $("shipStatus").className = "status bad"; }
+}
+
+async function loadArticles() {
+  try {
+    const { articles: as } = await api("/agent/prompt-lab/articles?limit=10");
+    articles = as;
+    $("articles").innerHTML = as.length ? as.map((a, i) =>
+      `<div class="article" id="art${i}" onclick="pickArticle(${i})">
+         <div class="t">${esc(a.title)}</div>
+         <div class="s">${esc(a.snippet)}${a.photos ? ` · ${a.photos} 图` : ""}</div>
+       </div>`).join("") : "没有文章";
+    if (as.length) pickArticle(0);
+  } catch (e) { $("articles").textContent = "文章加载失败：" + e.message; }
+}
+
+function pickArticle(i) {
+  selArticle = articles[i];
+  articles.forEach((_, j) => $("art" + j).classList.toggle("sel", j === i));
+}
+
+function composePrompt() {
+  const body = selArticle.body.replace(/\[\[photo:[^\]]*\]\]/g, "").replace(/\s+/g, " ").trim().slice(0, 400);
+  return `${$("editor").value}\n\n文章标题：${selArticle.title}\n文章开头：${body}`;
+}
+
+async function generate() {
+  if (!selArticle) { alert("先选一篇文章"); return; }
+  const n = ++runSeq;
+  const changed = $("editor").value !== current.instruction;
+  const shot = document.createElement("div");
+  shot.className = "shot pending";
+  shot.innerHTML = `<div class="ph">生成中…约 1 分钟</div>
+    <div class="meta"><b>#${n}</b> ${changed ? "候选版" : "线上版"} · ${esc(selArticle.title)}</div>`;
+  $("gallery").prepend(shot);
+  $("genStatus").textContent = "";
+  try {
+    const { job_id, error } = await api("/agent/prompt-lab/paint", {
+      method: "POST",
+      body: JSON.stringify({ prompt: composePrompt(), size: $("size").value.trim() }),
+    });
+    if (!job_id) throw new Error(error || "提交失败");
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 4000));
+      const st = await api("/agent/prompt-lab/paint/" + job_id);
+      if (st.status === "done" || st.result_url) {
+        shot.className = "shot";
+        shot.querySelector(".ph").outerHTML = `<a href="${st.result_url}" target="_blank"><img src="${st.result_url}"></a>`;
+        return;
+      }
+      if (st.status === "failed" || st.status === "error") throw new Error(st.error || "生成失败");
+    }
+    throw new Error("超时");
+  } catch (e) {
+    shot.querySelector(".ph").textContent = "✗ " + e.message;
+  }
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+boot();
+</script>
+</body>
+</html>

@@ -33,6 +33,8 @@ import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MI
 import { silentM4aBytes } from "./silent-m4a.js";
 import { callAnthropic, anthropicFetch, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
 import { loadUIConfig } from "./ui-config.js";
+import { handlePromptRegistry } from "./prompt-registry.js";
+import { handlePromptLab } from "./prompt-lab.js";
 export { AnthropicRelay } from "./relay.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
@@ -850,6 +852,17 @@ export default {
       if (!scope) return new Response("unauthorized", { status: 401 });
 
       return proxyVolcAsrWebSocket(request, env);
+    }
+
+    // ── /agent/prompt-registry ── 线上 prompt 注册表（管理 token）。GET 打平列出
+    // ui-config 生效版里的全部叶子指令；PUT 改一条并写回 R2 覆盖文件=零部署上线。
+    if (url.pathname === "/agent/prompt-registry") {
+      return handlePromptRegistry(request, env);
+    }
+
+    // ── /agent/prompt-lab/* ── 题图调优桥接页后端：文章列表 + paint 出图代理（管理 token）──
+    if (url.pathname.startsWith("/agent/prompt-lab/")) {
+      return handlePromptLab(request, env, url);
     }
 
     // ── /agent/ui-config ── 长按菜单等 UI 配置（任意有效用户 token）。解析出的
