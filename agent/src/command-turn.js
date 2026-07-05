@@ -28,7 +28,7 @@ export function affectedStems(toolRuns = []) {
   return [...out];
 }
 
-export async function runCommandTurn({ env, scope, token, origin, turnId, instruction, refs = [], callClaude, idemKey }) {
+export async function runCommandTurn({ env, scope, token, origin, turnId, instruction, refs = [], callClaude, idemKey, history = [] }) {
   const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
   const refLines = refs.map((r) => `第${r.n}篇 → stem=${r.stem}｜标题：${r.title}`).join("\n") || "（列表为空）";
   const systemBlocks = [
@@ -46,8 +46,10 @@ export async function runCommandTurn({ env, scope, token, origin, turnId, instru
   // ctx 带 callClaude —— merge_articles 需要内部再调一次 Claude 做揉合成。
   // idemKey（稳定的队列行 id）让 merge_articles 派生确定性 stem，重跑不会造第二篇。
   const ctx = { env, scope, token, origin, turnId, callClaude, refs, idemKey };
+  // history = 最近几轮 (指令, 回复)，让「把它们合并」「刚才那篇再改回去」这类
+  // 指代有着落——和单篇编辑 DO 同一套 buildHistoryMessages 产物。
   const result = await runAgentLoop({
-    callClaude, ctx, system: systemBlocks, userContent,
+    callClaude, ctx, system: systemBlocks, userContent, history,
     tools: toolDefsFor(COMMAND_TOOL_NAMES), terminalTools: COMMAND_TERMINAL,
   });
 

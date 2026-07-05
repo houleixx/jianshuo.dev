@@ -26,6 +26,27 @@ describe("runCommandTurn", () => {
     expect(sawUser).toContain("把③和④合并");
   });
 
+  it("history 前置在本轮指令之前（跨轮上下文）", async () => {
+    let sawMessages = null;
+    const callClaude = vi.fn(async ({ messages }) => {
+      sawMessages = messages;
+      return { content: [{ type: "text", text: "好" }], usage: {} };
+    });
+    const env = { FILES: { async get() { return null; } } };
+    const history = [
+      { role: "user", content: "把第2篇归到创业" },
+      { role: "assistant", content: "已归类到「创业」" },
+    ];
+    const r = await runCommandTurn({
+      env, scope: "users/x/", token: "tk", origin: "https://jianshuo.dev", turnId: "T3",
+      instruction: "刚才那篇的标签去掉", refs: [{ n: 2, stem: "S2", title: "二" }], callClaude, history,
+    });
+    expect(r.ok).toBe(true);
+    expect(sawMessages[0]).toEqual(history[0]);              // 历史在最前
+    expect(sawMessages[1]).toEqual(history[1]);
+    expect(JSON.stringify(sawMessages[2])).toContain("刚才那篇的标签去掉");  // 本轮殿后
+  });
+
   it("透传工具 pending（破坏性删除待确认）", async () => {
     const callClaude = vi.fn(async () => ({ content: [
       { type: "text", text: "要删第②篇吗" },

@@ -389,9 +389,15 @@ export class LibraryAgent extends Agent {
     const callClaude = this._makeLoggedCall({ turnId, scope, stem: "", instruction: row.text, model });
     // refs 走 queue 的 images 列（客户端发来的编号清单 [{n,stem,title}]，见 onMessage）。
     const refs = row.images ? (() => { try { return JSON.parse(row.images); } catch { return []; } })() : [];
+    // 带上最近几轮对话（同单篇编辑 DO），模型才接得住「刚才那两篇」「再来一次」。
+    let history = [];
+    try {
+      const rows = this.sql`SELECT instruction, reply FROM history ORDER BY id DESC LIMIT 100`;
+      history = buildHistoryMessages([...rows].reverse(), { maxTurns: HISTORY_MAX_TURNS });
+    } catch (_) {}
     const res = await runCommandTurn({
       env: this.env, scope, token, origin: "https://jianshuo.dev", turnId,
-      instruction: row.text, refs, callClaude, idemKey: row.id,
+      instruction: row.text, refs, callClaude, idemKey: row.id, history,
     });
 
     // 破坏性 pending → 存起来、发 confirm，不落地。confirm 卡要列全 res.pending 里
