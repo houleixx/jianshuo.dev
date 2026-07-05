@@ -26,7 +26,7 @@ export function buildArgs(job: Job, outPath: string): string[] {
   return [...globals, "images", "generate", ...common, ...fmt, ...sizeQuality, ...comp];
 }
 
-export function parseResult(stdout: string): { ok: boolean; error?: { code: string; message: string } } {
+export function parseResult(stdout: string): { ok: boolean; error?: { code: string; message: string; detail?: unknown } } {
   const start = stdout.indexOf("{");
   const end = stdout.lastIndexOf("}");
   if (start === -1 || end === -1 || end < start) return { ok: false, error: { code: "parse_error", message: "no JSON on stdout" } };

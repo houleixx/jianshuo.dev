@@ -10,6 +10,11 @@ import { deliver, type CallbackPayload } from "./callback.js";
 
 const EXT: Record<string, string> = { png: "png", jpeg: "jpg", webp: "webp" };
 
+// OpenAI 输出端内容过滤会概率性扣下已生成的图（响应正常结束但没有图片项，
+// 同一 prompt 重跑大概率就过）——这类错误自动重试一次。
+const RETRYABLE = new Set(["missing_image_result"]);
+const MAX_ATTEMPTS = 2;
+
 export class Worker {
   private queue: string[] = [];
   private active = 0;
@@ -47,13 +52,51 @@ export class Worker {
       args = buildArgs(job, outPath);
     } catch (e: any) {
       if (job.inputPath) await unlink(job.inputPath).catch(() => {});
-      await this.fail(job, { code: "invalid_argument", message: e?.message ?? "bad args" });
+      await this.fail(job, { code: "invalid_argument", message: e?.message ?? "bad args" }, 0);
       return;
     }
 
     await this.store.update(id, { status: "running", startedAt: new Date().toISOString(), percent: 0 });
     this.hub.publish(id, "progress", { percent: 0, phase: "queued" });
 
+    let attempts = 0;
+    let ok = false;
+    let bytes = 0;
+    let error: { code: string; message: string; detail?: unknown } | undefined;
+    while (attempts < MAX_ATTEMPTS) {
+      attempts++;
+      ({ ok, bytes, error } = await this.attempt(id, args, outPath));
+      if (ok || !RETRYABLE.has(error?.code ?? "")) break;
+      if (attempts < MAX_ATTEMPTS) {
+        await this.store.update(id, { percent: 0 });
+        this.hub.publish(id, "progress", { percent: 0, phase: "retrying" });
+      }
+    }
+
+    // 输入文件要等重试全部结束再清（edit 的第二次尝试还要用它）
+    if (job.inputPath) await unlink(job.inputPath).catch(() => {});
+
+    if (!ok) {
+      await this.fail(job, error ?? { code: "unknown", message: "generation failed" }, attempts);
+      return;
+    }
+
+    const done = await this.store.update(id, {
+      status: "done", percent: 100, doneAt: new Date().toISOString(), attempts,
+      resultPath: outPath, format: ext === "jpg" ? "jpeg" : ext, bytes,
+      size: job.params.size,
+    });
+    const resultUrl = `${this.cfg.publicBaseUrl}/results/${id}.${ext}`;
+    this.hub.publish(id, "done", { result_url: resultUrl, bytes, format: done.format, size: done.size });
+    await this.maybeCallback(done, "done", resultUrl, null);
+  }
+
+  /** 跑一次 CLI：spawn → 进度转发 → 解析结果 → 校验产物文件 */
+  private async attempt(
+    id: string,
+    args: string[],
+    outPath: string,
+  ): Promise<{ ok: boolean; bytes: number; error?: { code: string; message: string; detail?: unknown } }> {
     const env = { ...process.env };
     if (this.cfg.codexHome) env.CODEX_HOME = this.cfg.codexHome;
 
@@ -85,28 +128,15 @@ export class Worker {
         result.error = { code: "no_output", message: "engine reported ok but no output file" };
       }
     }
-
-    if (job.inputPath) await unlink(job.inputPath).catch(() => {});
-
-    if (!ok) {
-      await this.fail(job, result.error ?? { code: "unknown", message: "generation failed" });
-      return;
-    }
-
-    const done = await this.store.update(id, {
-      status: "done", percent: 100, doneAt: new Date().toISOString(),
-      resultPath: outPath, format: ext === "jpg" ? "jpeg" : ext, bytes,
-      size: job.params.size,
-    });
-    const resultUrl = `${this.cfg.publicBaseUrl}/results/${id}.${ext}`;
-    this.hub.publish(id, "done", { result_url: resultUrl, bytes, format: done.format, size: done.size });
-    await this.maybeCallback(done, "done", resultUrl, null);
+    return { ok, bytes, error: result.error };
   }
 
-  private async fail(job: Job, error: { code: string; message: string }): Promise<void> {
-    const failed = await this.store.update(job.id, { status: "failed", error, doneAt: new Date().toISOString() });
-    this.hub.publish(job.id, "failed", { error });
-    await this.maybeCallback(failed, "failed", null, error);
+  private async fail(job: Job, error: { code: string; message: string; detail?: unknown }, attempts: number): Promise<void> {
+    // detail 留在 job JSON 里做诊断留痕；对外（事件/回调）只给 code/message
+    const failed = await this.store.update(job.id, { status: "failed", error, attempts, doneAt: new Date().toISOString() });
+    const publicError = { code: error.code, message: error.message };
+    this.hub.publish(job.id, "failed", { error: publicError });
+    await this.maybeCallback(failed, "failed", null, publicError);
   }
 
   private async maybeCallback(

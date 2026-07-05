@@ -52,7 +52,56 @@ test("worker marks failed on engine error", async () => {
   await store.create(job("f1", { prompt: "please FAIL" }));
   worker.enqueue("f1");
   await waitFor(async () => (await store.get("f1"))?.status === "failed");
-  assert.equal((await store.get("f1"))?.error?.code, "http_error");
+  const j = await store.get("f1");
+  assert.equal(j?.error?.code, "http_error");
+  assert.equal(j?.attempts, 1); // http_error 不可重试，只跑一次
+});
+
+test("missing_image_result 重试一次后成功", async () => {
+  const { store, worker, cfg } = await setup();
+  await store.create(job("r1", { prompt: "a FLAKY cat" }));
+  worker.enqueue("r1");
+  await waitFor(async () => (await store.get("r1"))?.status === "done");
+  const j = await store.get("r1");
+  assert.equal(j?.attempts, 2);
+  assert.equal(j?.percent, 100);
+  assert.equal(await readFile(join(cfg.resultsDir, "r1.png"), "utf8"), "FAKEPNGDATA");
+});
+
+test("missing_image_result 重试后仍失败：留痕 detail + attempts", async () => {
+  const { store, worker } = await setup();
+  await store.create(job("r2", { prompt: "ALWAYSMISSING" }));
+  worker.enqueue("r2");
+  await waitFor(async () => (await store.get("r2"))?.status === "failed");
+  const j = await store.get("r2");
+  assert.equal(j?.error?.code, "missing_image_result");
+  assert.equal(j?.attempts, 2);
+  // 失败留痕：CLI 返回的 detail 原样存进 job JSON，下次诊断不用猜
+  assert.deepEqual((j?.error as any)?.detail, { response_id: "resp_stub", output_text: "stub refusal text" });
+});
+
+test("重试失败的回调 error 只带 code/message，不带 detail", async () => {
+  const { store, worker } = await setup();
+  const { createServer } = await import("node:http");
+  const received: any[] = [];
+  const srv = createServer((req, res) => {
+    let b = "";
+    req.on("data", (c) => (b += c));
+    req.on("end", () => { received.push(JSON.parse(b)); res.writeHead(200); res.end(); });
+  });
+  await new Promise<void>((r) => srv.listen(0, r));
+  const port = (srv.address() as any).port;
+
+  await store.create(job("r3", { prompt: "ALWAYSMISSING", callbackUrl: `http://127.0.0.1:${port}/cb` }));
+  worker.enqueue("r3");
+  await waitFor(async () => received.length > 0);
+  srv.close();
+
+  assert.equal(received[0].status, "failed");
+  assert.deepEqual(received[0].error, {
+    code: "missing_image_result",
+    message: "The response did not include an image_generation_call result.",
+  });
 });
 
 test("worker fires callback on done", async () => {

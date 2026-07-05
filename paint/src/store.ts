@@ -21,7 +21,9 @@ export interface Job {
   bytes?: number;
   size?: string;
   percent: number;
-  error?: { code: string; message: string } | null;
+  /** detail 是失败留痕（CLI 返回的原始 detail），只进 job JSON，不进回调 */
+  error?: { code: string; message: string; detail?: unknown } | null;
+  attempts?: number;
   callbackUrl?: string;
   callbackToken?: string;
   callbackMeta?: unknown;

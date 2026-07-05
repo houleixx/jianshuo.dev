@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // 打桩版 gpt-image-2-skill：不联网。--out 写个假文件，stderr 吐 JSONL 进度，
 // stdout 吐 --json 信封。prompt 含 "FAIL" 则返回错误信封 + 退出码 1。
-import { writeFileSync } from "node:fs";
+// prompt 含 "FLAKY"：第一次调用报 missing_image_result，第二次成功（用 out 旁的
+// marker 文件记次数）。prompt 含 "ALWAYSMISSING"：每次都报 missing_image_result。
+import { writeFileSync, existsSync } from "node:fs";
 
 const args = process.argv.slice(2);
 const outIdx = args.indexOf("--out");
@@ -16,6 +18,29 @@ process.stderr.write(JSON.stringify({ data: { percent: 95, phase: "request_compl
 if (prompt.includes("FAIL")) {
   process.stdout.write(JSON.stringify({ ok: false, error: { code: "http_error", message: "stub failure" } }));
   process.exit(1);
+}
+
+const missing = {
+  ok: false,
+  error: {
+    code: "missing_image_result",
+    message: "The response did not include an image_generation_call result.",
+    detail: { response_id: "resp_stub", output_text: "stub refusal text" },
+  },
+};
+
+if (prompt.includes("ALWAYSMISSING")) {
+  process.stdout.write(JSON.stringify(missing));
+  process.exit(1);
+}
+
+if (prompt.includes("FLAKY")) {
+  const marker = out + ".flaky-marker";
+  if (!existsSync(marker)) {
+    writeFileSync(marker, "1");
+    process.stdout.write(JSON.stringify(missing));
+    process.exit(1);
+  }
 }
 
 if (out) writeFileSync(out, "FAKEPNGDATA");
