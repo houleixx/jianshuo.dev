@@ -14,7 +14,10 @@ Spec：`docs/superpowers/specs/2026-07-05-codex-agent-vps-design.md`
 
 - 零运行时依赖（devDeps 只有 typescript + @types/node），照 `claude-agent/` 的架子
 - 端口 **8789**（lab 8787、paint 8788 已占）
-- 沙箱：`-s workspace-write` + `-c sandbox_workspace_write.network_access=true`，工作区 `/opt/codex-agent/workspace`
+- 沙箱（2026-07-05 修订，用户选 B 档「写代码+管 VPS」）：CLI 层 `-s danger-full-access`；
+  防线在 OS 层——非特权用户 + sudoers 白名单（systemctl restart/status/reload 指定服务、
+  journalctl、caddy reload）+ systemd `ProtectSystem=strict`（可写：自身目录、共享凭证、/etc/caddy），
+  **去掉** `NoNewPrivileges`/`RestrictSUIDSGID`（否则 sudo 不可用）。工作目录 `/opt/codex-agent/workspace`
 - `CODEX_HOME=/opt/paint/.codex`，通过 `codexauth` 组共享，**禁止拷贝 auth.json**
 - 并发闸：同时最多 1 个 codex 进程，排队超时 60s
 - 订阅 ToS 单用户：basic_auth 用户 `wjs`，独立新密码，存 iCloud「账户和密码」
@@ -89,7 +92,7 @@ import assert from "node:assert/strict";
 import { buildArgs, translate } from "../src/codex.ts";
 
 const WS = "/opt/codex-agent/workspace";
-const FLAGS = ["--json", "-s", "workspace-write", "-C", WS, "-c", "sandbox_workspace_write.network_access=true"];
+const FLAGS = ["--json", "-s", "danger-full-access", "-C", WS];
 
 test("buildArgs 新会话：exec + flags + prompt 收尾", () => {
   assert.deepEqual(buildArgs("你好", null, WS), ["exec", ...FLAGS, "你好"]);
@@ -158,12 +161,8 @@ Expected: FAIL，`Cannot find module '../src/codex.ts'`
 const MAX_OUTPUT_CHARS = 8000;
 
 export function buildArgs(message: string, threadId: string | null, workspace: string): string[] {
-  const flags = [
-    "--json",
-    "-s", "workspace-write",
-    "-C", workspace,
-    "-c", "sandbox_workspace_write.network_access=true",
-  ];
+  // danger-full-access：防线不在 CLI 沙箱，在 OS 层（非特权用户 + sudoers 白名单 + systemd 沙箱）
+  const flags = ["--json", "-s", "danger-full-access", "-C", workspace];
   if (threadId) return ["exec", "resume", threadId, message, ...flags];
   return ["exec", ...flags, message];
 }
@@ -638,7 +637,7 @@ git commit -m "feat(codex-agent): SSE 服务 + 会话映射落盘 + 单进程并
 </head>
 <body>
 <header>
-  <h1>Codex <small>· workspace-write · Tokyo VPS</small></h1>
+  <h1>Codex <small>· Tokyo VPS</small></h1>
   <button id="newchat" type="button">新会话</button>
 </header>
 <div id="log"></div>
@@ -768,14 +767,14 @@ ExecStart=/usr/bin/node /opt/codex-agent/dist/server.js
 Restart=always
 RestartSec=3
 
-NoNewPrivileges=yes
+# B 档权限：允许 sudo 白名单（所以不能开 NoNewPrivileges/RestrictSUIDSGID），
+# 写权限限定在自身目录、共享凭证、/etc/caddy（管 Caddy 配置用）
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/opt/codex-agent /opt/paint/.codex
+ReadWritePaths=/opt/codex-agent /opt/paint/.codex /etc/caddy
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
-RestrictSUIDSGID=yes
 LockPersonality=yes
 
 [Install]
@@ -829,6 +828,13 @@ chmod g+s /opt/paint/.codex
 echo "▸ dirs"
 mkdir -p /opt/codex-agent/workspace
 chown -R codex-agent:codex-agent /opt/codex-agent
+
+echo "▸ sudoers 白名单（管 VPS 的爆炸半径就是这几行）"
+cat > /etc/sudoers.d/codex-agent <<'EOF'
+codex-agent ALL=(root) NOPASSWD: /usr/bin/systemctl restart paint, /usr/bin/systemctl restart claude-agent, /usr/bin/systemctl restart codex-agent, /usr/bin/systemctl restart caddy, /usr/bin/systemctl reload caddy, /usr/bin/systemctl status *, /usr/bin/journalctl *
+EOF
+chmod 440 /etc/sudoers.d/codex-agent
+visudo -cf /etc/sudoers.d/codex-agent
 
 echo "▸ systemd unit"
 install -m 644 "$HERE/codex-agent.service" /etc/systemd/system/codex-agent.service
@@ -891,7 +897,7 @@ VPS 上录一条真实事件流，对照 fixture 校准解析：
 
 ```bash
 ssh root@66.42.45.128 'sudo -u codex-agent CODEX_HOME=/opt/paint/.codex \
-  codex exec --json -s workspace-write -C /opt/codex-agent/workspace "只回答：1+1=?" ' \
+  codex exec --json -s danger-full-access -C /opt/codex-agent/workspace "只回答：1+1=?" ' \
   > codex-agent/test/fixtures/real-events.jsonl
 ```
 
@@ -906,7 +912,8 @@ ssh root@66.42.45.128 'sudo -u codex-agent CODEX_HOME=/opt/paint/.codex \
 - [ ] 新会话问答（「介绍一下你自己」）
 - [ ] 续聊上下文（「我刚才问了什么」）
 - [ ] 跑命令写文件（「在工作区建一个 hello.txt 写入当前日期」→ 命令卡片 + 文件卡片）
-- [ ] 区外写被拒（「往 /etc/hosts 追加一行」→ 应失败/被沙箱挡）
+- [ ] sudo 白名单内可执行（「看一下 paint 服务状态」→ systemctl status 卡片）
+- [ ] 白名单外被拒（「useradd 一个用户」→ 应报无权限）
 - [ ] 「新会话」按钮后上下文清空
 - [ ] paint 服务不受影响：`curl -s https://paint.jianshuo.dev/健康检查` + 出一张图（凭证共享后两服务都能用）
 - [ ] 手机 Safari 可用、键盘不遮输入框

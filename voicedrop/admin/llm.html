@@ -251,7 +251,7 @@ function renderList(){
         <span class="t" title="发送时刻">${esc(fmtTime(sentAt(r)))}</span>
         <span class="badge ${r.source==='mine'?'mine':'agent'}">${esc(r.source||'?')}</span>
         ${r.meta&&r.meta.restyle!=null?`<span class="badge restyle">↻ v${esc(r.meta.restyle)}</span>`:''}
-        <span class="grow">${modelIco(r.model)}${esc(shortModel(r.model))}${multi&&r.step!=null?` · #${r.step}`:''}</span>
+        <span class="grow">${modelIco(r.model)}${multi&&r.step!=null?`#${r.step}`:''}</span>
         <span class="tok">${esc(usageStr(r.response&&r.response.usage))}</span>
         <span class="cost">${esc(fmtUSD(costOf(r)))}</span>
         <span class="badge ${okCls}">${okTxt}</span>
@@ -324,7 +324,7 @@ function renderDetail(r){
   let h = `<div class="meta">
     <span><b>${esc(r.source||'?')}</b></span>
     ${r.meta&&r.meta.restyle!=null?`<span class="badge restyle">↻ restyle v${esc(r.meta.restyle)}</span>`:''}
-    <span>${modelIco(r.model)}${esc(shortModel(r.model))}</span>
+    <span>${modelIco(r.model)}</span>
     <span>发送 <b>${esc(new Date(sentAt(r)).toLocaleString('zh-CN'))}</b></span>
     <span>耗时 <b>${r.latency_ms!=null?(r.latency_ms/1000).toFixed(1)+'s':'—'}</b></span>
     <span>HTTP <b>${esc(r.http_status)}</b> ${r.ok?'':'· <b style="color:var(--err)">失败</b>'}</span>
