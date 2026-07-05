@@ -35,14 +35,21 @@
 与 lab.jianshuo.dev 的对应关系：同一台 VPS、同一套「Caddy 网关 + 本地端口 + systemd
 非特权用户 + .env」模式；lab 用 8787，paint 用 8788，本服务用 **8789**。
 
-## 凭证共享（关键约束）
+## 凭证（关键约束，2026-07-05 实施时二次修订）
 
-Codex 订阅的 refresh token 是**单点轮换**的：任何一份拷贝在别处刷新后，其余拷贝立即作废
-（2026-07-05 已实测：本机 `~/.codex/auth.json` 即被 VPS 的刷新踢掉，报 `refresh_token_reused`）。
+两条实机教训叠加决定了最终方案——**codex-agent 用独立的 `codex login` 会话**
+（`CODEX_HOME=/opt/codex-agent/.codex`）：
 
-因此：**绝不拷贝 auth.json**。建系统组 `codexauth`，把 `/opt/paint/.codex` 目录设为
-该组可读写（setgid 保持组继承），`paint` 和 `codex-agent` 两个用户都入组，
-两个服务的 `CODEX_HOME` 都指向这同一个目录——谁触发 401 刷新，新 token 都写回同一份文件。
+1. **绝不拷贝 auth.json**：refresh token 单点轮换，拷贝在别处刷新后其余立即作废
+   （实测：本机 `~/.codex/auth.json` 被 VPS paint 的刷新踢掉，报 `refresh_token_reused`）。
+2. **也不能与 paint 共享同一份文件**（原设计的 codexauth 组方案作废）：
+   gpt-image-2-skill 写的 `last_refresh` 是 epoch 数字，codex CLI 只认 RFC3339
+   （实测报 `input contains invalid characters at line 4 column 30`）——schema 互不兼容，
+   谁刷新谁弄坏对方。
+
+独立登录 = 独立 refresh token 链，与 paint 互不干扰。登录方式（headless VPS）：
+`ssh -t -L 1455:localhost:1455 root@VPS "sudo -u codex-agent CODEX_HOME=/opt/codex-agent/.codex HOME=/opt/codex-agent codex login"`，
+本机浏览器完成 OAuth，回调经端口转发落回 VPS。
 
 订阅 ToS 为单用户：访问密码只归本人，不分享。
 

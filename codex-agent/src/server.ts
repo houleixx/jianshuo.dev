@@ -105,8 +105,10 @@ async function handleChat(res: ServerResponse, payload: any): Promise<void> {
   }
 
   const threadId = sessions[chatId] ?? null;
+  // stdin 必须 ignore：codex exec 见到管道 stdin 会等 EOF（实机验证过会挂住）
   const child = spawn(CODEX_BIN, [...ARGS_PREFIX, ...buildArgs(message, threadId, WORKSPACE)], {
     env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
   });
 
   let stderrTail = "";

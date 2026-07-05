@@ -6,8 +6,9 @@
 const MAX_OUTPUT_CHARS = 8000;
 
 export function buildArgs(message: string, threadId: string | null, workspace: string): string[] {
-  // danger-full-access：防线不在 CLI 沙箱，在 OS 层（非特权用户 + sudoers 白名单 + systemd 沙箱）
-  const flags = ["--json", "-s", "danger-full-access", "-C", workspace];
+  // danger-full-access：防线不在 CLI 沙箱，在 OS 层（非特权用户 + sudoers 白名单 + systemd 沙箱）。
+  // --skip-git-repo-check：工作区不是 git repo，exec 模式不加这个会拒绝启动（实机验证）。
+  const flags = ["--json", "-s", "danger-full-access", "-C", workspace, "--skip-git-repo-check"];
   if (threadId) return ["exec", "resume", threadId, message, ...flags];
   return ["exec", ...flags, message];
 }

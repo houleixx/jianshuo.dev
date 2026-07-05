@@ -8,19 +8,18 @@ echo "▸ codex CLI"
 command -v codex >/dev/null || npm i -g @openai/codex
 codex --version
 
-echo "▸ user + group"
+echo "▸ user"
 id -u codex-agent >/dev/null 2>&1 || useradd --system --home /opt/codex-agent --shell /usr/sbin/nologin codex-agent
-getent group codexauth >/dev/null || groupadd --system codexauth
-usermod -aG codexauth paint
-usermod -aG codexauth codex-agent
 
-echo "▸ 共享 CODEX_HOME 组权限（/opt/paint/.codex，谁刷新 token 都写回这一份）"
-chgrp -R codexauth /opt/paint/.codex
-chmod -R g+rwX /opt/paint/.codex
-chmod g+s /opt/paint/.codex
+# 注意（2026-07-05 实机教训）：不要和 paint 共享 /opt/paint/.codex——
+# gpt-image-2-skill 写的 auth.json（last_refresh 为 epoch 数字）codex CLI 解析不了
+# （它要 RFC3339），谁刷新谁弄坏对方。codex-agent 用自己的独立登录：
+#   ssh -t -L 1455:localhost:1455 root@VPS \
+#     "sudo -u codex-agent CODEX_HOME=/opt/codex-agent/.codex HOME=/opt/codex-agent codex login"
+#   然后在本机浏览器完成 OAuth（回调经端口转发落回 VPS）。
 
 echo "▸ dirs"
-mkdir -p /opt/codex-agent/workspace
+mkdir -p /opt/codex-agent/workspace /opt/codex-agent/.codex
 chown -R codex-agent:codex-agent /opt/codex-agent
 
 echo "▸ sudoers 白名单（管 VPS 的爆炸半径就是这几行）"

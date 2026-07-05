@@ -10,8 +10,10 @@ Group=codex-agent
 WorkingDirectory=/opt/codex-agent
 Environment=NODE_ENV=production
 Environment=HOME=/opt/codex-agent
-# 与 paint 共用同一份订阅凭证（组权限共享，见 provision.sh）。绝不拷贝这份文件。
-Environment=CODEX_HOME=/opt/paint/.codex
+# 独立登录会话（2026-07-05 修订：paint 的 gpt-image-2-skill 与 codex CLI 对
+# auth.json 的 last_refresh 字段格式互不兼容——epoch vs RFC3339，不能共享文件。
+# 独立 codex login 有自己的 refresh token 链，与 paint 互不踢）。
+Environment=CODEX_HOME=/opt/codex-agent/.codex
 EnvironmentFile=-/opt/codex-agent/.env
 ExecStart=/usr/bin/node /opt/codex-agent/dist/server.js
 Restart=always
@@ -22,7 +24,7 @@ RestartSec=3
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/opt/codex-agent /opt/paint/.codex /etc/caddy
+ReadWritePaths=/opt/codex-agent /etc/caddy
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
 LockPersonality=yes
