@@ -5,8 +5,9 @@
 // - prompt 含 "FAIL" → turn.failed + 退出码 1
 // - prompt 含 "SLOW" → 出结果前睡 300ms（测并发闸用）
 const args = process.argv.slice(2);
-const isResume = args[0] === "exec" && args[1] === "resume";
-const threadId = isResume ? args[2] : "t-fake-0001";
+const ri = args.indexOf("resume"); // resume 在 flags 之后（与真实 CLI 一致）
+const isResume = ri > 0;
+const threadId = isResume ? args[ri + 1] : "t-fake-0001";
 const positional = args.filter(
   (a, i) => !a.startsWith("-") && !["exec", "resume"].includes(a) && !/^(-s|-C|-c)$/.test(args[i - 1] ?? ""),
 );

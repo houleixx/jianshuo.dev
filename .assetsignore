@@ -7,3 +7,4 @@ claude-agent/
 # Claude Code worktree storage — git worktrees (each with its own node_modules) live here.
 .claude/
 paint/
+codex-agent/

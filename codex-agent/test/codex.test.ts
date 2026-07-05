@@ -9,8 +9,8 @@ test("buildArgs 新会话：exec + flags + prompt 收尾", () => {
   assert.deepEqual(buildArgs("你好", null, WS), ["exec", ...FLAGS, "你好"]);
 });
 
-test("buildArgs 续聊：exec resume <id> <prompt> + flags", () => {
-  assert.deepEqual(buildArgs("继续", "t-123", WS), ["exec", "resume", "t-123", "继续", ...FLAGS]);
+test("buildArgs 续聊：flags 在 resume 子命令之前（resume 不认后置 flag，实机验证）", () => {
+  assert.deepEqual(buildArgs("继续", "t-123", WS), ["exec", ...FLAGS, "resume", "t-123", "继续"]);
 });
 
 test("translate: thread.started → session(threadId)", () => {

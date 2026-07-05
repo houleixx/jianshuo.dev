@@ -8,8 +8,10 @@ const MAX_OUTPUT_CHARS = 8000;
 export function buildArgs(message: string, threadId: string | null, workspace: string): string[] {
   // danger-full-access：防线不在 CLI 沙箱，在 OS 层（非特权用户 + sudoers 白名单 + systemd 沙箱）。
   // --skip-git-repo-check：工作区不是 git repo，exec 模式不加这个会拒绝启动（实机验证）。
+  // flags 必须放在 resume 子命令之前——resume 不认后置的 exec 级 flag
+  //（实机报 unexpected argument '-s'，和 paint 的 --provider 是同一类坑）。
   const flags = ["--json", "-s", "danger-full-access", "-C", workspace, "--skip-git-repo-check"];
-  if (threadId) return ["exec", "resume", threadId, message, ...flags];
+  if (threadId) return ["exec", ...flags, "resume", threadId, message];
   return ["exec", ...flags, message];
 }
 
