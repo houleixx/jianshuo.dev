@@ -5,7 +5,8 @@ import {
   writeStyleDoc, setStyleHead, STYLE_MAX_VERSIONS,
   readProfileName, mergeProfile,
   styleLabel,
-  DEFAULT_STYLE, ensureStyleSeeded, isDefaultSeed,
+  DEFAULT_STYLE, XHS_STYLE, WECHAT_STYLE, PRESET_STYLES,
+  seedPresetDoc, ensureStyleSeeded, isDefaultSeed,
 } from "../../functions/lib/style-store.js";
 
 const KEY = "users/u/CLAUDE.json";
@@ -207,33 +208,49 @@ describe("DEFAULT_STYLE — canonical 默认王建硕风格（mine.js re-export 
   });
 });
 
-describe("ensureStyleSeeded — 懒种子默认文风为 v1", () => {
-  it("无 CLAUDE.json / 无 legacy → 种 v1（source=default），isDefaultSeed=true", async () => {
+describe("seedPresetDoc — 三预设种子", () => {
+  it("三版 v1/v2/v3、head=1、source 全 preset、时间戳落位", () => {
+    const doc = seedPresetDoc(1234);
+    expect(doc.head).toBe(1);
+    expect(doc.versions.map((e) => e.v)).toEqual([1, 2, 3]);
+    expect(doc.versions.map((e) => e.source)).toEqual(["preset", "preset", "preset"]);
+    expect(doc.versions.map((e) => e.style)).toEqual([DEFAULT_STYLE, XHS_STYLE, WECHAT_STYLE]);
+    expect(doc.versions.every((e) => e.savedAt === 1234)).toBe(true);
+    expect(doc.createdAt).toBe(1234);
+    expect(doc.updatedAt).toBe(1234);
+  });
+  it("PRESET_STYLES 顺序 = 王建硕 / 小红书 / 公众号", () => {
+    expect(PRESET_STYLES.map((p) => p.name)).toEqual(["王建硕", "小红书", "公众号"]);
+    expect(PRESET_STYLES[0].style).toBe(DEFAULT_STYLE);
+  });
+});
+
+describe("ensureStyleSeeded — 新用户种三预设，存量不动", () => {
+  it("无 CLAUDE.json / 无 legacy → 种三版、head=1、生效=王建硕、isDefaultSeed=true", async () => {
     const env = fakeEnv({});
     const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    expect(doc.versions.map((e) => e.v)).toEqual([1, 2, 3]);
     expect(doc.head).toBe(1);
-    expect(doc.versions).toHaveLength(1);
-    expect(doc.versions[0]).toMatchObject({ v: 1, source: "default", style: DEFAULT_STYLE });
+    expect(resolveStyle(doc)).toBe(DEFAULT_STYLE);         // 开局生效 = 王建硕
     expect(isDefaultSeed(doc)).toBe(true);
-    // 已落库
+    // 已落库为三预设
     expect(resolveStyle(JSON.parse(env.FILES._store.get(KEY)))).toBe(DEFAULT_STYLE);
   });
 
-  it("幂等：再调一次不产生 v2", async () => {
+  it("幂等：再调一次还是那三版，不叠加", async () => {
     const env = fakeEnv({});
     await ensureStyleSeeded(env, KEY, LEGACY);
     const doc = await ensureStyleSeeded(env, KEY, LEGACY);
-    expect(doc.head).toBe(1);
-    expect(doc.versions).toHaveLength(1);
+    expect(doc.versions.map((e) => e.v)).toEqual([1, 2, 3]);
   });
 
-  it("已有 CLAUDE.json → 原样返回，不被默认覆盖", async () => {
+  it("已有 CLAUDE.json → 原样返回，不被三预设覆盖", async () => {
     const env = fakeEnv({});
     await writeStyleDoc(env, KEY, "我自己的文风", "app");   // head 1, source app
     const doc = await ensureStyleSeeded(env, KEY, LEGACY);
-    expect(doc.head).toBe(1);
-    expect(doc.versions[0]).toMatchObject({ source: "app", style: "我自己的文风" });
-    expect(isDefaultSeed(doc)).toBe(false);                 // source 非 default
+    expect(doc.versions).toHaveLength(1);
+    expect(resolveStyle(doc)).toBe("我自己的文风");
+    expect(isDefaultSeed(doc)).toBe(false);
   });
 
   it("遗留 CLAUDE.md 有文风 → 不种，返回 null，CLAUDE.json 仍不存在", async () => {
@@ -243,18 +260,35 @@ describe("ensureStyleSeeded — 懒种子默认文风为 v1", () => {
     expect(env.FILES._store.has(KEY)).toBe(false);
   });
 
-  it("isDefaultSeed：种 v1 后编辑成 v2 → false", async () => {
-    const env = fakeEnv({});
-    await ensureStyleSeeded(env, KEY, LEGACY);              // v1 default
-    const doc = await writeStyleDoc(env, KEY, "改成我的", "app"); // v2
-    expect(doc.head).toBe(2);
-    expect(isDefaultSeed(doc)).toBe(false);
-  });
-
-  it("遗留 CLAUDE.md 文风为空白 → 仍种 v1", async () => {
+  it("遗留 CLAUDE.md 文风为空白 → 仍种三预设", async () => {
     const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\n   \n" });
     const doc = await ensureStyleSeeded(env, KEY, LEGACY);
     expect(doc).not.toBeNull();
-    expect(doc.versions[0].source).toBe("default");
+    expect(doc.versions.map((e) => e.v)).toEqual([1, 2, 3]);
+    expect(doc.versions[0].source).toBe("preset");
+  });
+});
+
+describe("isDefaultSeed — 未编辑的三预设种子", () => {
+  it("刚种的三预设 → true", async () => {
+    const env = fakeEnv({});
+    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    expect(isDefaultSeed(doc)).toBe(true);
+  });
+  it("编辑后（多一版 source 非 preset）→ false", async () => {
+    const env = fakeEnv({});
+    await ensureStyleSeeded(env, KEY, LEGACY);
+    const doc = await writeStyleDoc(env, KEY, "改成我的", "app"); // v4 source app
+    expect(isDefaultSeed(doc)).toBe(false);
+  });
+  it("切了 head（切到小红书 v2）→ false", async () => {
+    const env = fakeEnv({});
+    await ensureStyleSeeded(env, KEY, LEGACY);
+    const doc = await setStyleHead(env, KEY, 2);
+    expect(isDefaultSeed(doc)).toBe(false);
+  });
+  it("null / 空 → false", () => {
+    expect(isDefaultSeed(null)).toBe(false);
+    expect(isDefaultSeed({})).toBe(false);
   });
 });
