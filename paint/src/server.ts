@@ -249,7 +249,8 @@ function publicJob(j: Job, cfg: Config) {
     prompt: j.prompt,
     result_url: j.status === "done" && ext ? `${cfg.publicBaseUrl}/results/${j.id}.${ext}` : null,
     format: j.format ?? null, size: j.size ?? null, bytes: j.bytes ?? null,
-    error: j.error ?? null, created_at: j.createdAt, done_at: j.doneAt ?? null,
+    error: j.error ?? null, attempts: j.attempts ?? null,
+    created_at: j.createdAt, done_at: j.doneAt ?? null,
   };
 }
 

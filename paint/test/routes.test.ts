@@ -51,6 +51,7 @@ test("full generate flow: submit → poll done → fetch result", async () => {
     status = j.status;
     if (status === "done" || status === "failed") {
       if (status === "done") {
+        assert.equal(j.attempts, 1); // API 暴露 attempts，供诊断
         const img = await fetch(`${base}${new URL(j.result_url).pathname}`);
         assert.equal(img.status, 200);
         assert.equal(await img.text(), "FAKEPNGDATA");
