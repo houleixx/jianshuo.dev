@@ -28,6 +28,17 @@
   form button { border:0; background:var(--accent); color:#fff; border-radius:10px; padding:0 18px; font-size:14px; cursor:pointer }
   form button:disabled { opacity:.5 }
   textarea:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px }
+  /* 文件桥 */
+  #files { border-bottom:1px solid var(--line); background:var(--card) }
+  #files summary { list-style:none; cursor:pointer; padding:8px 16px; font-size:13px; color:var(--ink2); display:flex; align-items:center; gap:8px }
+  #files summary::-webkit-details-marker { display:none }
+  #files summary .up { margin-left:auto; border:1px solid var(--line); border-radius:8px; padding:3px 10px; font-size:12.5px; color:var(--ink) }
+  #drop { padding:10px 16px 14px; display:flex; flex-direction:column; gap:6px }
+  #drop.drag { background:var(--accent); background:color-mix(in srgb, var(--accent) 8%, transparent) }
+  .frow { display:flex; align-items:center; gap:10px; font-size:13px; padding:4px 0 }
+  .frow a { color:var(--accent); text-decoration:none; margin-left:auto; font-size:12.5px }
+  .frow .sz { color:var(--ink2); font-size:12px; font-variant-numeric:tabular-nums }
+  .fempty { color:var(--ink2); font-size:12.5px }
 </style>
 </head>
 <body>
@@ -35,6 +46,13 @@
   <h1>Codex <small>· Tokyo VPS</small></h1>
   <button id="newchat" type="button">新会话</button>
 </header>
+<details id="files">
+  <summary>📎 工作区文件 <span class="up" id="pick">上传</span></summary>
+  <div id="drop">
+    <div id="flist" class="fempty">还没有文件</div>
+  </div>
+  <input type="file" id="finput" multiple hidden>
+</details>
 <div id="log"></div>
 <form id="f">
   <textarea id="t" placeholder="给 Codex 发消息…" required></textarea>
@@ -51,6 +69,50 @@ const setStatus = (t) => { if (!statusEl) statusEl = add(el("div","status")); st
 const clearStatus = () => { if (statusEl) { statusEl.remove(); statusEl = null; } };
 
 document.getElementById("newchat").onclick = () => { chatId = null; log.innerHTML = ""; statusEl = null; ta.focus(); };
+
+// --- 文件桥：上传 / 列表 / 下载 ---
+const filesBox = document.getElementById("files"), flist = document.getElementById("flist"),
+      finput = document.getElementById("finput"), drop = document.getElementById("drop");
+const fmtSize = (n) => n < 1024 ? n + " B" : n < 1048576 ? (n/1024).toFixed(1) + " KB" : (n/1048576).toFixed(1) + " MB";
+
+async function refreshFiles() {
+  try {
+    const list = await (await fetch("/api/files")).json();
+    if (!list.length) { flist.className = "fempty"; flist.textContent = "还没有文件"; return; }
+    flist.className = ""; flist.innerHTML = "";
+    for (const f of list) {
+      const row = el("div","frow");
+      row.appendChild(el("span",null,f.name));
+      row.appendChild(el("span","sz",fmtSize(f.size)));
+      const a = el("a",null,"下载"); a.href = "/api/files/" + encodeURIComponent(f.name); a.download = f.name;
+      row.appendChild(a);
+      flist.appendChild(row);
+    }
+  } catch { /* 忽略 */ }
+}
+
+async function uploadFiles(fileList) {
+  filesBox.open = true;
+  for (const file of fileList) {
+    const fd = new FormData(); fd.append("file", file);
+    setStatus(`上传 ${file.name}…`);
+    try {
+      const res = await fetch("/api/upload", { method:"POST", body: fd });
+      if (!res.ok) { clearStatus(); add(el("div","error", `上传 ${file.name} 失败：${await res.text()}`)); continue; }
+      const { name } = await res.json();
+      clearStatus();
+      add(el("div","status", `已上传 ${name}，可以让 Codex 处理了`));
+    } catch (err) { clearStatus(); add(el("div","error","上传失败：" + err.message)); }
+  }
+  refreshFiles();
+}
+
+document.getElementById("pick").onclick = (e) => { e.preventDefault(); finput.click(); };
+finput.onchange = () => { if (finput.files.length) uploadFiles(finput.files); finput.value = ""; };
+["dragover","dragenter"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", (e) => { if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files); });
+filesBox.addEventListener("toggle", () => { if (filesBox.open) refreshFiles(); });
 
 const on = {
   chat: (d) => { chatId = d.chatId; },
@@ -98,6 +160,7 @@ form.onsubmit = async (e) => {
     clearStatus(); add(el("div","error","连接断了：" + err.message));
   } finally {
     clearStatus(); sendBtn.disabled = false; ta.focus();
+    if (filesBox.open) refreshFiles(); // agent 可能刚在工作区造了文件
   }
 };
 ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
