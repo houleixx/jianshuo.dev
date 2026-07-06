@@ -35,6 +35,7 @@ import { callAnthropic, anthropicFetch, RELAY_INSTANCE, RELAY_LOCATION_HINT } fr
 import { loadUIConfigFor } from "./ui-config.js";
 import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
+import { xhsPack } from "./xhs.js";
 import { handlePromptLab } from "./prompt-lab.js";
 export { AnthropicRelay } from "./relay.js";
 
@@ -915,6 +916,21 @@ export default {
       }
       const r = await restyleArticle(env, scope, stem, styleV);
       return new Response(JSON.stringify(r), { status: r.ok ? 200 : 422, headers: { "content-type": "application/json" } });
+    }
+
+    // ── /agent/xhs-pack ── 「分享到小红书」内容包：文章 → 小红书文案 + 图片 key ──
+    // Body {stem}。一次 Claude 调用，按 token 实价扣算力（best-effort）。App 拿到
+    // 包后写剪贴板 + 弹 ShareSheet，发布动作由用户在小红书 App 里完成。
+    if (url.pathname === "/agent/xhs-pack") {
+      if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const scope = await resolveScope(tok, env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const stem = typeof body.stem === "string" ? body.stem : "";
+      if (!stem || stem.includes("/") || stem.includes("..")) return J({ error: "bad-request" }, 400);
+      const r = await xhsPack(env, scope, stem);
+      return J(r, r.ok ? 200 : r.error === "not_found" ? 404 : 422);
     }
 
     // ── /agent/style/extract ── distill the collected 风格数据集 (「接受分享」
