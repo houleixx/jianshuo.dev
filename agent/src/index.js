@@ -26,7 +26,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
-import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS } from "./usage.js";
+import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH } from "./usage.js";
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
 import { handleMintRoutes } from "./mint.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
@@ -705,7 +705,9 @@ export async function handleUsageRoute(url, request, env) {
     if (!env.USAGE) return J({ entries: [], degraded: true });
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10) || 50, 200);
     const rows = await getLedger(env.USAGE, scope, limit);
-    return J({ entries: rows.map((e) => ({ ts: e.ts, kind: e.kind, reason: e.reason,
+    // reason 出口翻译成中文（老 App 直接显示 reason 字段 → 无需发版即全中文）；
+    // 英文码保留在 reason_code，给需要程序判断的新客户端用。
+    return J({ entries: rows.map((e) => ({ ts: e.ts, kind: e.kind, reason: reasonZH(e.reason), reason_code: e.reason,
       suanli: r1(uyToSuanli(e.amount_uy)), yuan: r2(uyToYuan(e.amount_uy)),
       balance_suanli: r1(uyToSuanli(e.balance_uy)), detail: e.detail ? JSON.parse(e.detail) : null })) });
   }
