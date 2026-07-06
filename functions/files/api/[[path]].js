@@ -249,14 +249,15 @@ export async function onRequest(context) {
     }
 
     // The whole user prefix, re-listing until empty (R2 lists max 1000 per call).
-    // Round cap so a stuck delete can never spin the loop forever.
+    // MUST delete as an array — R2 bulk delete takes up to 1000 keys as ONE
+    // operation. Per-key deletes blew the Pages Function subrequest budget on a
+    // large account (913 objects → invocation killed mid-loop, 246 keys left,
+    // found 2026-07-06). Round cap so a stuck delete can never spin forever.
     let objects = 0;
     for (let round = 0; round < 100; round++) {
       const listed = await env.FILES.list({ prefix: scope, limit: 1000 });
       if (!listed.objects.length) break;
-      await mapLimit(listed.objects, 32, async (o) => {
-        await env.FILES.delete(o.key).catch(() => {});
-      });
+      await env.FILES.delete(listed.objects.map((o) => o.key));
       objects += listed.objects.length;
       if (!listed.truncated && listed.objects.length < 1000) break;
     }

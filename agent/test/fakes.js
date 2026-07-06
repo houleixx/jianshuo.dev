@@ -12,7 +12,7 @@ export function fakeEnv(seed = {}) {
     },
     async put(key, value) { store.set(key, typeof value === "string" ? value : String(value)); },
     async head(key) { return store.has(key) ? {} : null; },
-    async delete(key) { store.delete(key); },
+    async delete(key) { (Array.isArray(key) ? key : [key]).forEach((k) => store.delete(k)); },
     async list({ prefix = "", limit = 1000 } = {}) {
       const objects = [...store.keys()]
         .filter((k) => k.startsWith(prefix))
