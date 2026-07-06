@@ -78,7 +78,7 @@ describe("edit_photo tool", () => {
   });
 
   it("rejects when balance < imageCostUY (no paint call)", async () => {
-    const ctx = await makeCtx({ grantSuanli: 1 }); // < 4.2
+    const ctx = await makeCtx({ grantSuanli: 1 }); // < 1.8
     const calls = stubFetch();
     const r = await runTool("edit_photo", { key: OLD, prompt: "x" }, ctx);
     expect(r.error).toContain("算力不足");
@@ -127,7 +127,7 @@ describe("new_photo tool", () => {
   });
 
   it("rejects when balance < imageCostUY (no paint call)", async () => {
-    const ctx = await makeCtx({ grantSuanli: 1 }); // < 4.2
+    const ctx = await makeCtx({ grantSuanli: 1 }); // < 1.8
     const calls = stubFetch();
     const r = await runTool("new_photo", { prompt: "x", after_line: 0 }, ctx);
     expect(r.error).toContain("算力不足");

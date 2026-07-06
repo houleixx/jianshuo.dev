@@ -4,7 +4,7 @@
 import { resolveArticles } from "../../functions/lib/article-store.js";
 import { resolveStyle, parseStyleMarkdown, readStyleText, readStyleDoc } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
-import { imageCostUY } from "./usage.js";
+import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
 import { restyleArticle, ensurePhotoMarkers } from "./miner.js";
 import { silentM4aBytes } from "./silent-m4a.js";
@@ -299,7 +299,7 @@ register(
 
     const now = Date.now();
     const bal = await ensureAccount(env.USAGE, scope, now);
-    if (bal < imageCostUY()) return { error: "算力不足，生成一张图 4.2 算力，请充值" };
+    if (bal < imageCostUY()) return { error: `算力不足，生成一张图 ${IMAGE_SUANLI} 算力，请充值` };
 
     const obj = await env.FILES.get(articleKey);
     if (!obj) return { error: "not_found" };
@@ -358,7 +358,7 @@ register(
 
     const now = Date.now();
     const bal = await ensureAccount(env.USAGE, scope, now);
-    if (bal < imageCostUY()) return { error: "算力不足，生成一张图 4.2 算力，请充值" };
+    if (bal < imageCostUY()) return { error: `算力不足，生成一张图 ${IMAGE_SUANLI} 算力，请充值` };
 
     const obj = await env.FILES.get(articleKey);
     if (!obj) return { error: "not_found" };

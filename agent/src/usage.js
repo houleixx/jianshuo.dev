@@ -38,7 +38,7 @@ export function asrCostUY(seconds) {
 }
 
 // 图片编辑（gpt-image-2 via paint）单价：按算力计价，避免 FX 漂移。
-export const IMAGE_SUANLI = 4.2;
+export const IMAGE_SUANLI = 1.8;
 export function imageCostUY() { return suanliToUY(IMAGE_SUANLI); }
 
 export function gateDecision(balanceUY, durationSec) {
