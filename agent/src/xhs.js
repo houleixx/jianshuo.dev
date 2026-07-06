@@ -8,6 +8,14 @@ import { resolveArticles } from "../../functions/lib/article-store.js";
 import { readStyleText } from "../../functions/lib/style-store.js";
 
 const MODEL = "claude-sonnet-4-6";
+const TAG_MODEL = "claude-haiku-4-5";   // 直通模式只出标签，用便宜快的
+
+// 正文不超过这个字数就「直通」：原文照发，不走改写（用户的短文本来就是合格的
+// 小红书笔记，改写既慢又贵还看不出区别）；超过才压缩到小红书 1000 字上限内。
+export const XHS_DIRECT_MAX = 1000;
+
+export const XHS_TAGS_SYSTEM = `给这篇文章生成 3–5 个小红书话题标签：要具体、能被搜到，不要「生活/分享/日常」这种空词，不带 # 号。
+只输出一个 JSON 对象：{"tags": ["…", "…"]}，不要输出任何其它文字。`;
 
 export const XHS_SYSTEM = `你是这篇文章作者本人的小红书编辑。把给你的文章改写成一篇小红书笔记。
 
@@ -28,56 +36,93 @@ export function extractPhotoKeys(body) {
   return keys;
 }
 
-function parsePackJson(text) {
+function parseJsonLoose(text) {
   const raw = String(text || "").replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "");
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start < 0 || end <= start) return null;
-  let j; try { j = JSON.parse(raw.slice(start, end + 1)); } catch { return null; }
+  try { return JSON.parse(raw.slice(start, end + 1)); } catch { return null; }
+}
+
+function normalizeTags(tags) {
+  return Array.isArray(tags) ? tags.map((t) => String(t).replace(/^#/, "").trim()).filter(Boolean).slice(0, 5) : [];
+}
+
+function parsePackJson(text) {
+  const j = parseJsonLoose(text);
+  if (!j) return null;
   const title = String(j.title || "").trim();
   const body = String(j.body || "").trim();
   if (!title || !body) return null;
-  const tags = Array.isArray(j.tags) ? j.tags.map((t) => String(t).replace(/^#/, "").trim()).filter(Boolean).slice(0, 5) : [];
-  return { title, body, tags };
+  return { title, body, tags: normalizeTags(j.tags) };
 }
 
-// 生成一篇文章的小红书内容包。返回 {ok, title, body, tags, photoKeys} 或 {error}。
-// 计费：按 token 实价扣算力（best-effort，同 style-extract 口径，失败不阻断响应）。
+// 删掉正文里的 [[photo:…]] 标记行，压掉多余空行。
+export function stripPhotoMarkers(body) {
+  return String(body || "").replace(/\[\[photo:[^\]]+\]\]/g, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// 一次 Claude 调用 + 日志 + best-effort 扣费（同 style-extract 口径）。
+async function loggedCall(env, scope, stem, kind, reqBody) {
+  const t0 = Date.now();
+  const r = await callAnthropic(env, reqBody);
+  await writeLlmLog(env, {
+    ts: t0, source: "agent", user_scope: scope, model: reqBody.model,
+    latency_ms: Date.now() - t0, http_status: r.status, ok: r.ok,
+    via: r.via, ...(r.colo ? { colo: r.colo } : {}),
+    step: 0, request: reqBody, response: r.ok ? r.json : undefined,
+    error: r.ok ? undefined : r.errorText,
+    meta: { kind, stem },
+  });
+  if (r.ok) {
+    try {
+      if (env.USAGE) {
+        const u = r.json.usage || {};
+        await ensureAccount(env.USAGE, scope, Date.now());
+        const cost = claudeCostUY(reqBody.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens);
+        await debit(env.USAGE, scope, cost, kind, { stem }, Date.now());
+      }
+    } catch (_) {}
+  }
+  return r;
+}
+
+// 生成一篇文章的小红书内容包。返回 {ok, mode, title, body, tags, photoKeys} 或 {error}。
+// 直通（正文 ≤ XHS_DIRECT_MAX 字）：原文照发，只用便宜模型出标签（标签失败不拦路）；
+// 超长：sonnet 压缩改写到小红书 1000 字上限内。
 export async function xhsPack(env, scope, stem) {
   const obj = await env.FILES.get(`${scope}articles/${stem}.json`);
   if (!obj) return { error: "not_found" };
   let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
   const art = resolveArticles(doc)[0];
   if (!art || !(art.body || "").trim()) return { error: "empty_article" };
+  const photoKeys = extractPhotoKeys(art.body);
+  const cleaned = stripPhotoMarkers(art.body);
+  const title = String(art.title || "(无题)").trim();
+
+  if ([...cleaned].length <= XHS_DIRECT_MAX) {
+    let tags = [];
+    const reqBody = {
+      model: TAG_MODEL, max_tokens: 300, system: XHS_TAGS_SYSTEM,
+      messages: [{ role: "user", content: `文章标题：${title}\n\n文章正文：\n${cleaned}` }],
+    };
+    const r = await loggedCall(env, scope, stem, "xhs-tags", reqBody);
+    if (r.ok) {
+      const text = (r.json.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+      const j = parseJsonLoose(text);
+      if (j) tags = normalizeTags(j.tags);
+    }
+    return { ok: true, mode: "direct", title: [...title].slice(0, 20).join(""), body: cleaned, tags, photoKeys };
+  }
 
   const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
-  const user = `${style ? `<style>\n${style}\n</style>\n\n` : ""}文章标题：${art.title || "(无题)"}\n\n文章正文：\n${art.body}`;
-
+  const user = `${style ? `<style>\n${style}\n</style>\n\n` : ""}文章标题：${title}\n\n文章正文：\n${art.body}`;
   const reqBody = { model: MODEL, max_tokens: 1600, system: XHS_SYSTEM, messages: [{ role: "user", content: user }] };
-  const t0 = Date.now();
-  const r = await callAnthropic(env, reqBody);
-  await writeLlmLog(env, {
-    ts: t0, source: "agent", user_scope: scope, model: MODEL,
-    latency_ms: Date.now() - t0, http_status: r.status, ok: r.ok,
-    via: r.via, ...(r.colo ? { colo: r.colo } : {}),
-    step: 0, request: reqBody, response: r.ok ? r.json : undefined,
-    error: r.ok ? undefined : r.errorText,
-    meta: { kind: "xhs-pack", stem },
-  });
+  const r = await loggedCall(env, scope, stem, "xhs-pack", reqBody);
   if (!r.ok) return { error: "llm_failed", detail: `HTTP ${r.status}` };
 
   const text = (r.json.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
   const pack = parsePackJson(text);
   if (!pack) return { error: "bad_llm_output" };
-
-  try {
-    if (env.USAGE) {
-      const u = r.json.usage || {};
-      await ensureAccount(env.USAGE, scope, Date.now());
-      const cost = claudeCostUY(MODEL, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens);
-      await debit(env.USAGE, scope, cost, "xhs-pack", { stem }, Date.now());
-    }
-  } catch (_) {}
-
-  return { ok: true, ...pack, photoKeys: extractPhotoKeys(art.body) };
+  return { ok: true, mode: "rewrite", ...pack, photoKeys };
 }
