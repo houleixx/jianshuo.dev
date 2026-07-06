@@ -62,11 +62,11 @@ describe("maybeAutoShareCommunity", () => {
     expect(await maybeAutoShareCommunity(AUDIO, e)).toBeNull();
   });
 
-  it("no CLAUDE.md → author falls back to 匿名", async () => {
+  it("no CLAUDE.md → author falls back to ID 前 6 位大写", async () => {
     const e = env({ [`${SCOPE}CONFIG.json`]: JSON.stringify({ autoShareCommunity: true }) });
     const shareId = await maybeAutoShareCommunity(AUDIO, e);
     const post = JSON.parse(await (await e.FILES.get(`community/${shareId}.json`)).text());
-    expect(post.author).toBe("匿名");
+    expect(post.author).toBe("ABC");
   });
 
   it("re-share (re-mine) preserves firstSharedAt and replyTo, same shareId", async () => {

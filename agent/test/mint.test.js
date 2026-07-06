@@ -114,11 +114,11 @@ describe("POST /agent/feed", () => {
     expect(gd.feed_id).toBe(row.id);
     // 账单明细快照：作者看到哪篇+谁投的；投币者看到哪篇+作者是谁
     expect(gd.title).toBe("t1");
-    expect(gd.from).toBe("匿名"); // 投币者没设置名字
+    expect(gd.from).toBe("FEEDER"); // 没设置名字 → ID 前 6 位大写
     const fled = await getLedger(db, FEEDER, 10);
     const cur = JSON.parse(fled.find((e) => e.reason === "feed_curator").detail);
     expect(cur.title).toBe("t1");
-    expect(cur.author).toBe("作者甲");
+    expect(cur.author).toBe("AUTHOR"); // 显示名走 readProfileName，share 快照不再使用
     // mint 行也带标题快照
     expect(JSON.parse(row.detail).title).toBe("t1");
   });

@@ -77,8 +77,9 @@ export async function handleMintRoutes(url, request, env) {
     if (!artObj) return J({ error: "article gone" }, 404);
     let title = "";
     try { title = (resolveArticles(JSON.parse(await artObj.text()))[0] || {}).title || ""; } catch {}
-    const authorName = post.author || "匿名";
-    const feederName = (await readProfileName(env, feeder).catch(() => "")) || "匿名";
+    // 显示名走 readProfileName（兜底策略含在内），不再依赖 share 快照里的 author
+    const authorName = await readProfileName(env, post.owner);
+    const feederName = await readProfileName(env, feeder);
 
     const now = Date.now();
     // 保险丝：当日(UTC)已发放超 5×日池 → 暂停投币。有机流量摸不到这条线，

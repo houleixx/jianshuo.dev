@@ -174,12 +174,13 @@ export async function writeStyleDoc(env, styleKey, style, source = "unknown") {
 // Lives at doc.profile, OUTSIDE the version history: changing the name should NOT
 // mint a new style version. Only the 文风 (style) is versioned.
 
-// The current profile name, "" if none. SINGLE SOURCE OF TRUTH for "who is the
-// author" — the share endpoint, miner, and mint all import this. Takes the user
-// scope ("users/<sub>/") only; the storage keys (CLAUDE.json / legacy CLAUDE.md)
-// are this module's private convention — callers never spell them out.
-// CLAUDE.json's profile.name wins; falls back to the legacy CLAUDE.md
-//「# 我的名字」section so existing users keep their name.
+// The user's display name — SINGLE SOURCE OF TRUTH for "who is the author";
+// the share endpoint, miner, and mint all import this. Takes the user scope
+// ("users/<sub>/") only; storage keys (CLAUDE.json / legacy CLAUDE.md) and the
+// no-name fallback are this module's private convention — callers never spell
+// them out and never need a `|| "匿名"` of their own.
+// 顺序：CLAUDE.json profile.name → legacy CLAUDE.md「# 我的名字」→
+// 身份 ID 前 6 位大写（如 "AE209A"，来自 users/anon-<hash>/ 的 hash）。
 export async function readProfileName(env, scope) {
   const doc = await readStyleDoc(env, scope + "CLAUDE.json");
   const n = doc && doc.profile && doc.profile.name;
@@ -189,7 +190,8 @@ export async function readProfileName(env, scope) {
     const m = (await legacy.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/);
     if (m && m[1].trim()) return m[1].trim();
   }
-  return "";
+  const id = String(scope).replace(/^users\//, "").replace(/^anon-/, "").replace(/\/+$/, "");
+  return id.slice(0, 6).toUpperCase() || "匿名";
 }
 
 // Shallow-merge `patch` into doc.profile WITHOUT touching versions/head (so a name

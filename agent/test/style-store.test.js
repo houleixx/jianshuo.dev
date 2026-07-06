@@ -187,8 +187,8 @@ describe("profile — non-versioned name (changing it must NOT mint a style vers
     expect(await readProfileName(env, SCOPE)).toBe("王建硕");
   });
 
-  it("readProfileName: '' when neither exists", async () => {
-    expect(await readProfileName(fakeEnv({}), SCOPE)).toBe("");
+  it("readProfileName: 无名兜底 = ID 前 6 位大写", async () => {
+    expect(await readProfileName(fakeEnv({}), SCOPE)).toBe("U");
   });
 });
 
