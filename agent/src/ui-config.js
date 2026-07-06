@@ -62,3 +62,48 @@ export async function loadUIConfig(env) {
   } catch { /* 坏数据回退内置 */ }
   return DEFAULT_UI_CONFIG;
 }
+
+// ── 每用户稀疏覆盖 ────────────────────────────────────────────────────────────
+// users/<sub>/ui-config.json 存 { overrides: { "<叶子路径id>": "自定义指令" } }。
+// 叶子路径 id 与 prompt-registry 的 flattenPrompts 同规则（页.交互.节点[.父].叶子）。
+// 只按条目覆盖 instruction；空串/非串一律忽略 = 回落缺省。坏文件当没有，绝不影响菜单。
+
+export async function loadUserOverrides(env, scope) {
+  if (!scope || !scope.startsWith("users/")) return {};
+  try {
+    const o = await env.FILES.get(`${scope}ui-config.json`);
+    if (!o) return {};
+    const doc = JSON.parse(await o.text());
+    const src = doc && typeof doc === "object" ? doc.overrides : null;
+    if (!src || typeof src !== "object") return {};
+    const out = {};
+    for (const [k, v] of Object.entries(src)) {
+      if (typeof v === "string" && v.trim()) out[k] = v;
+    }
+    return out;
+  } catch { return {}; }
+}
+
+export function applyUserOverrides(cfg, overrides) {
+  if (!overrides || !Object.keys(overrides).length) return cfg;
+  const next = JSON.parse(JSON.stringify(cfg));
+  for (const [page, interactions] of Object.entries(next.pages || {})) {
+    for (const [interaction, nodes] of Object.entries(interactions || {})) {
+      for (const [node, spec] of Object.entries(nodes || {})) {
+        const walk = (item, idPrefix) => {
+          const id = `${idPrefix}.${item.id}`;
+          if (typeof item.instruction === "string" && typeof overrides[id] === "string") item.instruction = overrides[id];
+          for (const c of item.children || []) walk(c, id);
+        };
+        for (const item of (spec.groups || []).flat()) walk(item, `${page}.${interaction}.${node}`);
+      }
+    }
+  }
+  return next;
+}
+
+/// 某个用户的最终生效配置：内置缺省 ← 全局 R2 覆盖 ← 该用户稀疏覆盖。
+export async function loadUIConfigFor(env, scope) {
+  const base = await loadUIConfig(env);
+  return applyUserOverrides(base, await loadUserOverrides(env, scope));
+}

@@ -32,7 +32,8 @@ import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
 import { callAnthropic, anthropicFetch, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
-import { loadUIConfig } from "./ui-config.js";
+import { loadUIConfigFor } from "./ui-config.js";
+import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { handlePromptLab } from "./prompt-lab.js";
 export { AnthropicRelay } from "./relay.js";
@@ -865,14 +866,23 @@ export default {
       return handlePromptLab(request, env, url);
     }
 
-    // ── /agent/ui-config ── 长按菜单等 UI 配置（任意有效用户 token）。解析出的
-    // scope v1 未用，为将来 per-user 配置合并预留。内置缺省 + R2 覆盖见 ui-config.js。
+    // ── /agent/ui-config/custom ── 该用户的指令自定义（iOS 设置页）：GET 列条目，
+    // PUT 写/删单条稀疏覆盖（空 = 恢复缺省）。存 users/<sub>/ui-config.json。
+    if (url.pathname === "/agent/ui-config/custom") {
+      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const scope = await resolveScope(tok, env);
+      if (!scope || !scope.startsWith("users/")) return new Response("unauthorized", { status: 401 });
+      return handleUIConfigCustom(request, env, scope);
+    }
+
+    // ── /agent/ui-config ── 长按菜单等 UI 配置（任意有效用户 token）。返回该用户的
+    // 最终生效版：内置缺省 ← 全局 R2 覆盖 ← 每用户稀疏覆盖（见 ui-config.js）。
     if (url.pathname === "/agent/ui-config") {
       if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
       const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
       const scope = await resolveScope(tok, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
-      const cfg = await loadUIConfig(env);
+      const cfg = await loadUIConfigFor(env, scope);
       return new Response(JSON.stringify(cfg), { headers: { "content-type": "application/json" } });
     }
 
