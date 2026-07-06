@@ -6,7 +6,7 @@ import { hmacSign, b64url } from "../../functions/lib/auth.js";
 import { balanceUY, getLedger } from "../src/usage_store.js";
 import {
   SIGNUP_GRANT_UY, DAILY_POOL_UY, FUSE_MULT, POOL_7D_UY, SEED_COINS_UC,
-  uyToSuanli,
+  FEED_GRANT_EXPIRE_DAYS, DAY_MS, uyToSuanli,
 } from "../src/usage.js";
 
 const SECRET = "test-secret";
@@ -20,8 +20,17 @@ const AUTHOR = "users/anon-author11/";
 const FEEDER = "users/anon-feeder22/";
 const SHARE1 = "shareaaaaaa1";
 const SHARE2 = "shareaaaaaa2";
+const SHARE3 = "shareaaaaaa3";
 const ART1 = `${AUTHOR}articles/a1.json`;
 const ART2 = `${AUTHOR}articles/a2.json`;
+const ART3 = `${AUTHOR}articles/a3.json`;
+
+// 手工插一行 mint（模拟历史事件/其他玩法），只填价格与保险丝在乎的列。
+function insertMint(db, { kind = "feed", subject = "x", actor = "someone", benef = "z", coinsUC = 0, actorUY = 0, benefUY = 0, ts }) {
+  db.prepare(
+    "INSERT INTO mint (kind,subject_key,actor_sub,beneficiary_sub,coins_uc,price_uy,actor_uy,beneficiary_uy,ts) VALUES (?,?,?,?,?,1,?,?,?)"
+  ).bind(kind, subject, actor, benef, coinsUC, actorUY, benefUY, ts).run();
+}
 
 let db, env;
 beforeEach(() => {
@@ -29,8 +38,10 @@ beforeEach(() => {
   env = fakeEnv({
     [`community/${SHARE1}.json`]: JSON.stringify({ schema: 2, shareId: SHARE1, owner: AUTHOR, articleKey: ART1 }),
     [`community/${SHARE2}.json`]: JSON.stringify({ schema: 2, shareId: SHARE2, owner: AUTHOR, articleKey: ART2 }),
+    [`community/${SHARE3}.json`]: JSON.stringify({ schema: 2, shareId: SHARE3, owner: AUTHOR, articleKey: ART3 }),
     [ART1]: JSON.stringify({ articles: [{ title: "t1", body: "b" }] }),
     [ART2]: JSON.stringify({ articles: [{ title: "t2", body: "b" }] }),
+    [ART3]: JSON.stringify({ articles: [{ title: "t3", body: "b" }] }),
   });
   env.USAGE = db;
   env.SESSION_SECRET = SECRET;
@@ -148,6 +159,76 @@ describe("POST /agent/feed", () => {
     const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
     expect(r.status).toBe(503);
     expect((await r.json()).error).toBe("pool_exhausted");
+  });
+});
+
+// ── 经济不变量（未来加玩法/改公式时的护栏）──────────────────────────────────
+describe("经济不变量", () => {
+  it("价格分母跨 kind 共用：其他玩法铸的币同样稀释投币价格", async () => {
+    // 别的玩法（如公众号点赞）昨天铸了 70 币 → 分母 72.5 → 142.5，作者到手约减半
+    insertMint(db, { kind: "mp_like", subject: "mp:url:2026-07-05", actor: null, coinsUC: 70e6, ts: Date.now() - DAY_MS });
+    const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    const j = await r.json();
+    expect(j.suanli.author).toBeGreaterThan(180); // 14000×2/142.5 ≈ 196.5
+    expect(j.suanli.author).toBeLessThan(220);
+  });
+
+  it("7 天窗口：8 天前的铸币滑出分母；70 币底座永不滑出", async () => {
+    insertMint(db, { subject: "ancient", coinsUC: 1000e6, ts: Date.now() - 8 * DAY_MS });
+    const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    // 旧币不算 → 和冷启动完全一致（底座仍在，价格仍封顶）
+    expect(Math.round((await r.json()).suanli.author)).toBe(386);
+  });
+
+  it("保险丝只算当天(UTC)：昨天的大额发放不触发熔断", async () => {
+    const yesterday = Date.now() - (Date.now() % DAY_MS) - 1;
+    insertMint(db, { subject: "big-yesterday", actorUY: FUSE_MULT * DAILY_POOL_UY * 10, ts: yesterday });
+    const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    expect((await r.json()).ok).toBe(true);
+  });
+
+  it("保险丝阈值：恰好等于 5×日池仍放行（严格大于才熔断）", async () => {
+    insertMint(db, { subject: "at-limit", actorUY: FUSE_MULT * DAILY_POOL_UY, ts: Date.now() });
+    const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    expect((await r.json()).ok).toBe(true);
+  });
+
+  it("同对第 3 篇起 ×0.5（端到端）", async () => {
+    await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE2 });
+    const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE3 });
+    const j = await r.json();
+    expect(j.discount).toBe(0.5);
+    expect(j.coins).toEqual({ author: 1, feeder: 0.25 });
+  });
+
+  it("投币所得算力 90 天过期（白送的钱不留永久负债）", async () => {
+    const before = Date.now();
+    await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    const buckets = db.prepare(
+      "SELECT source, expires_at FROM bucket WHERE source IN ('feed_author','feed_curator')"
+    ).bind().all().results;
+    expect(buckets.length).toBe(2);
+    for (const b of buckets) {
+      expect(b.expires_at).toBeGreaterThanOrEqual(before + FEED_GRANT_EXPIRE_DAYS * DAY_MS);
+      expect(b.expires_at).toBeLessThan(before + (FEED_GRANT_EXPIRE_DAYS + 1) * DAY_MS);
+    }
+  });
+
+  it("坏输入一律 4xx 且不入账：非法 share_id / 非 JSON body / legacy 老帖", async () => {
+    const tok = await makeToken(FEEDER);
+    expect((await post("/agent/feed", tok, { share_id: "short" })).status).toBe(400);
+    // legacy schema-1 帖（无 articleKey/owner，内容内联）不可投
+    env.FILES._store.set("community/legacy000001.json", JSON.stringify({ shareId: "legacy000001", content: "inline" }));
+    expect((await post("/agent/feed", tok, { share_id: "legacy000001" })).status).toBe(400);
+    // body 不是 JSON
+    const raw = await handleMintRoutes(
+      new URL("https://jianshuo.dev/agent/feed"),
+      new Request("https://jianshuo.dev/agent/feed", { method: "POST", headers: { Authorization: `Bearer ${tok}` }, body: "not-json" }),
+      env,
+    );
+    expect(raw.status).toBe(400);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM mint").bind().first().n).toBe(0);
   });
 });
 

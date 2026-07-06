@@ -59,6 +59,32 @@ export const CAMPAIGN_EXPIRE_DAYS = 90;   // 活动赠送默认 3 个月
 export const SUB_GRANT_SUANLI = 200;      // 包月发放（P3 用，先定义集中管理）
 export const expiryAfterDays = (now, days) => now + days * DAY_MS;
 
+// ── 账本 action 的中文名（单一真源）─────────────────────────────────────────
+// DB 的 ledger.reason 永远存英文码（editCount 等按码查询，是稳定标识）；
+// 翻译只发生在 /agent/usage/ledger 出口 → 新老 App、网页、skill 全部即刻中文。
+export const REASON_ZH = {
+  "signup":        "注册赠送",
+  "asr":           "语音转写",
+  "mine":          "挖文章",
+  "edit":          "语音修改",
+  "image-edit":    "图片编辑",
+  "style-extract": "文风蒸馏",
+  "xhs-pack":      "小红书分享",
+  "xhs-tags":      "小红书分享",
+  "feed_author":   "收到投币",
+  "feed_curator":  "投币奖励",
+  "subscription":  "包月发放",
+  "monthly":       "包月发放",
+  "migrated":      "余额迁移",
+  "overdraft":     "透支",
+};
+export function reasonZH(reason) {
+  if (!reason) return reason;
+  if (REASON_ZH[reason]) return REASON_ZH[reason];
+  if (reason.startsWith("campaign:")) return "活动赠送";
+  return reason; // 未知码原样透出，别让新玩法悄悄显示成错误中文
+}
+
 // ── 投币 / 铸币（社区互助扩散池）───────────────────────────────────────────
 // 固定池 + 相对份额：payout_uy = coins_uc × POOL_7D_UY ÷ (SEED + 近7天铸币 + 本次)。
 // SEED 70 币是价格分母的永久底座（不随 7 天窗口滑出）：冷启动/低活跃期价格

@@ -9,6 +9,8 @@ vi.mock("agents", () => ({
 }));
 import { fakeD1, usageSql } from "./fakes.js";
 import { handleUsageRoute } from "../src/index.js";
+import { grantBucket, debit } from "../src/usage_store.js";
+import { anonScopeFromToken } from "../../functions/lib/auth.js";
 
 const SQL = usageSql();
 function req(path, { method = "GET", token } = {}) {
@@ -22,6 +24,30 @@ describe("usage routes", () => {
     expect(r.status).toBe(200);
     const body = await r.json();
     expect(Math.round(body.suanli)).toBe(500);
+  });
+  it("ledger 出口把 reason 翻成中文，reason_code 保留英文码，DB 不动", async () => {
+    const db = fakeD1(SQL);
+    const env = { USAGE: db, SESSION_SECRET: "" };
+    const tok = "anon_unittesttoken_abcdefghijklmnop";
+    const scope = await anonScopeFromToken(tok);
+    // 造几笔不同 action 的流水（走真实 grant/debit 路径；grantBucket 会先触发 signup）
+    await grantBucket(db, scope, 1000, "feed_author", null, 1);
+    await grantBucket(db, scope, 500, "campaign:manual-topup", null, 2);
+    await debit(db, scope, 300, "image-edit", null, 3);
+    await debit(db, scope, 200, "xhs-pack", null, 4);
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/ledger"),
+      req("/agent/usage/ledger", { token: tok }), env);
+    const { entries } = await r.json();
+    const byCode = Object.fromEntries(entries.map((e) => [e.reason_code, e.reason]));
+    expect(byCode["signup"]).toBe("注册赠送");
+    expect(byCode["feed_author"]).toBe("收到投币");
+    expect(byCode["campaign:manual-topup"]).toBe("活动赠送");
+    expect(byCode["image-edit"]).toBe("图片编辑");
+    expect(byCode["xhs-pack"]).toBe("小红书分享");
+    // DB 里存的还是英文码（稳定标识不动）
+    const raw = db.prepare("SELECT DISTINCT reason FROM ledger").bind().all().results.map((x) => x.reason);
+    expect(raw).toContain("feed_author");
+    expect(raw).not.toContain("收到投币");
   });
   it("non-usage path returns null (delegates to normal dispatch)", async () => {
     const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/edit"), req("/agent/edit"), {});
