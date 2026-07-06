@@ -103,7 +103,11 @@ const ARTICLES_SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        properties: { title: { type: "string" }, body: { type: "string" } },
+        properties: {
+          title: { type: "string" },
+          body: { type: "string" },
+          questions: { type: "array", items: { type: "string" }, maxItems: 3 },
+        },
         required: ["title", "body"],
         additionalProperties: false,
       },
@@ -405,6 +409,10 @@ function buildSrt(utterances) {
 
 // ── Article JSON parsing ───────────────────────────────────────────────────────
 
+// 追问只许走 "questions" 字段；prompt 已禁止写进正文，这里是不靠模型自觉的
+// 程序化兜底（ensurePhotoMarkers 同款原则）：正文尾部的「——追问——」节一律剥掉。
+const ZHUIWEN_SECTION_RE = /\n+[ \t]*——追问——[ \t]*\n[\s\S]*$/;
+
 export function parseArticles(text) {
   let t = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
   const i = t.indexOf("{"), j = t.lastIndexOf("}");
@@ -413,7 +421,31 @@ export function parseArticles(text) {
   const arts = Array.isArray(obj) ? obj : (obj.articles || []);
   return arts
     .filter(a => typeof a === "object" && (a.body || "").trim())
-    .map(a => ({ title: (a.title || TITLE_FALLBACK).trim(), body: (a.body || "").trim() }));
+    .map(a => {
+      const questions = (Array.isArray(a.questions) ? a.questions : [])
+        .map(q => String(q || "").trim()).filter(Boolean).slice(0, 3);
+      return {
+        title: (a.title || TITLE_FALLBACK).trim(),
+        body: (a.body || "").replace(ZHUIWEN_SECTION_RE, "").trim(),
+        ...(questions.length ? { questions } : {}),
+      };
+    });
+}
+
+// 把模型按篇给出的 questions 收进 doc 顶层 sidecar（{id, articleIndex, text,
+// status, createdAt}），并从 article 对象上摘掉该字段——追问不进版本内容、不进
+// 正文，发布/分享/合并的每个出口天然不带它。
+export function extractFollowups(articles, now = Date.now()) {
+  const questions = [];
+  const cleaned = (articles || []).map((a, ai) => {
+    const { questions: qs, ...rest } = a || {};
+    (Array.isArray(qs) ? qs : []).forEach((t, qi) => {
+      const text = String(t || "").trim();
+      if (text) questions.push({ id: `q${now}-${ai}-${qi}`, articleIndex: ai, text, status: "pending", createdAt: now });
+    });
+    return rest;
+  });
+  return { articles: cleaned, questions };
 }
 
 // ── Photos ────────────────────────────────────────────────────────────────────
@@ -676,12 +708,18 @@ async function writeBlocked(audioKey, reason, env) {
 // derivation, same pointer shape — so the post is byte-identical to a manual share:
 // the app detects it as 已分享, a re-mine updates the same post in place, and 取消分享
 // still works. Best-effort: never blocks or fails mining (caller wraps in try/catch).
+// 用户 CONFIG.json（autoShareCommunity / noFollowups / …）——存储细节收口在这，
+// 调用方只传 scope。读不到/坏 JSON 一律回空对象，调用方按默认值走。
+export async function readUserConfig(env, scope) {
+  const obj = await env.FILES.get(scope + "CONFIG.json");
+  if (!obj) return {};
+  try { return JSON.parse(await obj.text()) || {}; } catch { return {}; }
+}
+
 export async function maybeAutoShareCommunity(srcKey, env, log = () => {}) {
   if (!env.SESSION_SECRET) return null;            // can't derive shareId without it
   const scope = userPrefix(srcKey);                // users/<sub>/
-  const cfgObj = await env.FILES.get(scope + "CONFIG.json");
-  if (!cfgObj) return null;
-  let cfg; try { cfg = JSON.parse(await cfgObj.text()); } catch { return null; }
+  const cfg = await readUserConfig(env, scope);
   if (cfg.autoShareCommunity !== true) return null;
 
   const articleKey = articleKeyFor(srcKey);        // users/<sub>/articles/<stem>.json
@@ -874,12 +912,17 @@ export async function restyleArticle(env, scope, stem, styleV) {
   // 保底：原 head 版本里的每一张照片都必须活着走出改写（prompt 之外的硬保证）。
   articles = ensurePhotoMarkers(resolveArticles(doc), articles);
 
+  // 重挖出的新稿带新一轮追问，整体替换旧 sidecar（追问只属于当前这版正文）。
+  const { articles: cleanedArts, questions } = extractFollowups(articles);
+  const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
+
   // 文风版本 = per-article 字段（不再往 body 塞注释——隐形行会让第N行编号错位）
-  const tagged = articles.map((a) => ({ ...a, style: v }));
+  const tagged = cleanedArts.map((a) => ({ ...a, style: v }));
   const newDoc = {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),
     transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: modelCfg.model,
+    ...(followupsOn && questions.length ? { questions } : {}),
     // 标签是 doc 级元数据，重写必须原样带上——PUT 是整体替换，漏了就把标签吃掉
     ...(Array.isArray(doc.tags) && doc.tags.length ? { tags: doc.tags } : {}),
     // 流水线元数据随版本继承——下次 restyle 还能继续复用观察与立意
@@ -1141,11 +1184,14 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         }
         if (arts.length) {
           const pendingTags = await consumePendingTags(audioKey, env);
+          // 看图模式不追问（没有口述可回答），但统一过 extractFollowups 摘掉字段，
+          // 防止 questions 混进版本内容。
+          const { articles: imgCleaned } = extractFollowups(arts);
           const doc = {
             schema: 2, id: stem, sourceAudio: leaf,
             createdAt: uploaded[audioKey] || new Date().toISOString(),
             transcript: "", srt: "",
-            articles: imgHeadV ? arts.map((a) => ({ ...a, style: imgHeadV })) : arts,
+            articles: imgHeadV ? imgCleaned.map((a) => ({ ...a, style: imgHeadV })) : imgCleaned,
             status: "ready", model: modelCfg.model,
             ...(pendingTags.length ? { tags: pendingTags } : {}),
             ...(pipe ? { vision: pipe.vision, plan: pipe.plan, quality: pipe.quality } : {}),
@@ -1231,13 +1277,19 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // undo/redo walks the others. No photos array — [[photo:<key>]] markers in the body
     // are the sole source of truth for which photos appear and where.
     const pendingTags = await consumePendingTags(audioKey, env);
+    // 追问开关：CONFIG.noFollowups=true 的用户不落 questions sidecar。
+    const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
     const baseDoc = {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
       transcript, srt, status: "ready", model: modelCfg.model,
       ...(pendingTags.length ? { tags: pendingTags } : {}),
     };
-    for (const arts of variants) await writeArticle(audioKey, { ...baseDoc, articles: arts }, env);
+    // 每次 PUT 整体替换 doc 元数据，最后一个 variant（= head）的 questions 生效。
+    for (const arts of variants) {
+      const { articles: cleaned, questions } = extractFollowups(arts);
+      await writeArticle(audioKey, { ...baseDoc, articles: cleaned, ...(followupsOn && questions.length ? { questions } : {}) }, env);
+    }
     if (srt) await writeSrt(audioKey, srt, env);
     await notifyStatus(scope, stem, "ready", env);
     try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
@@ -1307,10 +1359,13 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
       return (result = "empty");
     }
 
+    const { articles: cleaned, questions } = extractFollowups(articles);
+    const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
     const doc = {
       schema: 2, id: stem, sourceText: leaf,
       createdAt: uploaded[textKey] || new Date().toISOString(),
-      transcript: text, srt: "", articles, status: "ready", model: modelCfg.model,
+      transcript: text, srt: "", articles: cleaned, status: "ready", model: modelCfg.model,
+      ...(followupsOn && questions.length ? { questions } : {}),
     };
     await writeArticle(textKey, doc, env);
     await notifyStatus(scope, stem, "ready", env);

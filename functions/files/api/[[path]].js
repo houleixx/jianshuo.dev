@@ -19,7 +19,7 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
+import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
 import { shareIdFor, communityKey, reportKey, isShareId } from "../../lib/community-store.js";
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken } from "../../lib/auth.js";
@@ -1025,6 +1025,17 @@ export async function onRequest(context) {
       const doc = await setHead(env, key, newHead);
       if (!doc) return json({ error: 'version not found' }, 404);
       return json({ ok: true, head: doc.head });
+    }
+
+    // PATCH /articles/<stem>/question — 追问状态（answered/skipped），元数据写，不铸版本
+    if (request.method === 'PATCH' && subaction === 'question') {
+      let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
+      const qid = typeof body.id === 'string' ? body.id : '';
+      const status = typeof body.status === 'string' ? body.status : '';
+      if (!qid || !status) return json({ error: 'id and status required' }, 400);
+      const doc = await setQuestionStatus(env, key, qid, status);
+      if (!doc) return json({ error: 'question not found' }, 404);
+      return json({ ok: true, questions: doc.questions });
     }
 
     // PUT /articles/<stem>/srt — write SRT sidecar

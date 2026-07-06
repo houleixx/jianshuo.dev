@@ -5,7 +5,9 @@ describe("prompts/mine.js 文本外置", () => {
   it("MINE_SYSTEM 开头不变", () => {
     expect(MINE_SYSTEM.startsWith("你是这段录音的录制者，在写自己的公众号文章。")).toBe(true);
     expect(MINE_SYSTEM).toContain("只用转写里出现的事实，绝不编造、不脑补");
-    expect(MINE_SYSTEM).toContain('{"articles": [{"title": "标题", "body": "正文 markdown"}, ...]}');
+    expect(MINE_SYSTEM).toContain('{"articles": [{"title": "标题", "body": "正文 markdown", "questions": ["问题", …]}, ...]}');
+    expect(MINE_SYSTEM).toContain("绝不写进 body 正文");
+    expect(MINE_SYSTEM).not.toContain('{"articles": [{"title": "标题", "body": "正文 markdown"}, ...]}');
   });
   it("MINE_SYSTEM_FORCE 不变", () => {
     expect(MINE_SYSTEM_FORCE.startsWith("把下面的口述转写整理成一篇短文")).toBe(true);

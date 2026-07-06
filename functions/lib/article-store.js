@@ -96,6 +96,23 @@ export async function setHead(env, key, newHead) {
   return doc;
 }
 
+// ── 追问 sidecar ────────────────────────────────────────────────────────────────
+// doc.questions = [{id, articleIndex, text, status: pending|answered|skipped,
+// createdAt}] —— 非版本化元数据，与 transcript/tags 同级。正文、versions[]、
+// 发布/分享/社区/小红书各出口都不含追问；undo/redo 也不会让它起死回生。
+// 改状态 = 元数据写，不铸版本（同 setHead 的道理）。
+export async function setQuestionStatus(env, key, id, status) {
+  if (!["pending", "answered", "skipped"].includes(status)) return null;
+  const current = await readArticleDoc(env, key);
+  if (!current || !Array.isArray(current.questions)) return null;
+  if (!current.questions.some((q) => q && q.id === id)) return null;
+  const questions = current.questions.map((q) =>
+    q && q.id === id ? { ...q, status, ...(status === "answered" ? { answeredAt: Date.now() } : {}) } : q);
+  const doc = { ...current, questions, updatedAt: Date.now() };
+  await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  return doc;
+}
+
 // ── Current-articles resolution — SINGLE SOURCE OF TRUTH ──────────────────────
 // Every reader of an article doc must agree on "what is the current article
 // list": the Files API (read/list/relay), the agent worker, the public share
