@@ -553,8 +553,8 @@ export async function onRequest(context) {
     }
     const kw = await checkArticlesShareable(articles, env);
     if (kw.flagged) return json({ error: 'content_flagged', term: kw.term }, 403);
-    // Author = profile.name (CLAUDE.json) → legacy CLAUDE.md「# 我的名字」→ 匿名.
-    const author = (await readProfileName(env, scope + 'CLAUDE.json', scope + 'CLAUDE.md')) || '匿名';
+    // Author = readProfileName 内部封装 profile 存储细节，只给 scope。
+    const author = (await readProfileName(env, scope)) || '匿名';
     const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
     const communityKey = `community/${shareId}.json`;
     let replyTo = null;

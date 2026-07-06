@@ -175,14 +175,16 @@ export async function writeStyleDoc(env, styleKey, style, source = "unknown") {
 // mint a new style version. Only the 文风 (style) is versioned.
 
 // The current profile name, "" if none. SINGLE SOURCE OF TRUTH for "who is the
-// author" — both the share endpoint and the miner import this (was duplicated
-// inline regex). CLAUDE.json's profile.name wins; falls back to the legacy
-// CLAUDE.md「# 我的名字」section so existing users keep their name.
-export async function readProfileName(env, styleKey, legacyKey) {
-  const doc = await readStyleDoc(env, styleKey);
+// author" — the share endpoint, miner, and mint all import this. Takes the user
+// scope ("users/<sub>/") only; the storage keys (CLAUDE.json / legacy CLAUDE.md)
+// are this module's private convention — callers never spell them out.
+// CLAUDE.json's profile.name wins; falls back to the legacy CLAUDE.md
+//「# 我的名字」section so existing users keep their name.
+export async function readProfileName(env, scope) {
+  const doc = await readStyleDoc(env, scope + "CLAUDE.json");
   const n = doc && doc.profile && doc.profile.name;
   if (typeof n === "string" && n.trim()) return n.trim();
-  const legacy = await env.FILES.get(legacyKey);
+  const legacy = await env.FILES.get(scope + "CLAUDE.md");
   if (legacy) {
     const m = (await legacy.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/);
     if (m && m[1].trim()) return m[1].trim();

@@ -78,7 +78,7 @@ export async function handleMintRoutes(url, request, env) {
     let title = "";
     try { title = (resolveArticles(JSON.parse(await artObj.text()))[0] || {}).title || ""; } catch {}
     const authorName = post.author || "匿名";
-    const feederName = (await readProfileName(env, feeder + "CLAUDE.json", feeder + "CLAUDE.md").catch(() => "")) || "匿名";
+    const feederName = (await readProfileName(env, feeder).catch(() => "")) || "匿名";
 
     const now = Date.now();
     // 保险丝：当日(UTC)已发放超 5×日池 → 暂停投币。有机流量摸不到这条线，

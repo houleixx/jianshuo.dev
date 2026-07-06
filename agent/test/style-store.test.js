@@ -9,6 +9,7 @@ import {
   seedPresetDoc, ensureStyleSeeded, isDefaultSeed,
 } from "../../functions/lib/style-store.js";
 
+const SCOPE = "users/u/";
 const KEY = "users/u/CLAUDE.json";
 const LEGACY = "users/u/CLAUDE.md";
 
@@ -178,16 +179,16 @@ describe("profile — non-versioned name (changing it must NOT mint a style vers
 
   it("readProfileName: profile.name (CLAUDE.json) wins", async () => {
     const env = fakeEnv({ [KEY]: JSON.stringify(seedDoc([{ v: 1, savedAt: 1, source: "app", style: "x" }], 1, { profile: { name: "JSON名" } })) });
-    expect(await readProfileName(env, KEY, LEGACY)).toBe("JSON名");
+    expect(await readProfileName(env, SCOPE)).toBe("JSON名");
   });
 
   it("readProfileName: falls back to the legacy CLAUDE.md「# 我的名字」", async () => {
     const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\nx" });
-    expect(await readProfileName(env, KEY, LEGACY)).toBe("王建硕");
+    expect(await readProfileName(env, SCOPE)).toBe("王建硕");
   });
 
   it("readProfileName: '' when neither exists", async () => {
-    expect(await readProfileName(fakeEnv({}), KEY, LEGACY)).toBe("");
+    expect(await readProfileName(fakeEnv({}), SCOPE)).toBe("");
   });
 });
 

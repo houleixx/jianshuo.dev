@@ -684,9 +684,8 @@ export async function maybeAutoShareCommunity(srcKey, env, log = () => {}) {
   if (cfg.autoShareCommunity !== true) return null;
 
   const articleKey = articleKeyFor(srcKey);        // users/<sub>/articles/<stem>.json
-  // author — profile.name (CLAUDE.json) → legacy CLAUDE.md「# 我的名字」→ 匿名.
-  // Same single source as the share endpoint (readProfileName).
-  const author = (await readProfileName(env, scope + "CLAUDE.json", scope + "CLAUDE.md")) || "匿名";
+  // author — readProfileName 内部封装 profile 存储细节，只给 scope。
+  const author = (await readProfileName(env, scope)) || "匿名";
 
   const shareId = (await hmacSign("community:" + articleKey, env.SESSION_SECRET)).slice(0, 12);
   const communityKey = `community/${shareId}.json`;
