@@ -64,38 +64,58 @@ export async function loadUIConfig(env) {
 }
 
 // ── 每用户稀疏覆盖 ────────────────────────────────────────────────────────────
-// users/<sub>/ui-config.json 存 { overrides: { "<叶子路径id>": "自定义指令" } }。
-// 叶子路径 id 与 prompt-registry 的 flattenPrompts 同规则（页.交互.节点[.父].叶子）。
-// 只按条目覆盖 instruction；空串/非串一律忽略 = 回落缺省。坏文件当没有，绝不影响菜单。
+// users/<sub>/ui-config.json 存：
+//   { overrides: { "<叶子路径id>": { instruction?: "…", label?: "新名字" } },
+//     hidden: ["<叶子路径id>", …] }
+// 兼容旧格式（overrides 值为纯字符串 = 只覆盖 instruction）。叶子路径 id 与
+// prompt-registry 的 flattenPrompts 同规则。空串一律忽略 = 回落缺省；hidden 的
+// 叶子从菜单里滤掉（空掉的 submenu 由客户端渲染器跳过）。坏文件当没有。
 
 export async function loadUserOverrides(env, scope) {
-  if (!scope || !scope.startsWith("users/")) return {};
+  const empty = { overrides: {}, hidden: [] };
+  if (!scope || !scope.startsWith("users/")) return empty;
   try {
     const o = await env.FILES.get(`${scope}ui-config.json`);
-    if (!o) return {};
+    if (!o) return empty;
     const doc = JSON.parse(await o.text());
-    const src = doc && typeof doc === "object" ? doc.overrides : null;
-    if (!src || typeof src !== "object") return {};
-    const out = {};
-    for (const [k, v] of Object.entries(src)) {
-      if (typeof v === "string" && v.trim()) out[k] = v;
+    if (!doc || typeof doc !== "object") return empty;
+    const overrides = {};
+    for (const [k, v] of Object.entries(doc.overrides && typeof doc.overrides === "object" ? doc.overrides : {})) {
+      if (typeof v === "string") { if (v.trim()) overrides[k] = { instruction: v }; continue; }
+      if (!v || typeof v !== "object") continue;
+      const entry = {};
+      if (typeof v.instruction === "string" && v.instruction.trim()) entry.instruction = v.instruction;
+      if (typeof v.label === "string" && v.label.trim()) entry.label = v.label.trim();
+      if (Object.keys(entry).length) overrides[k] = entry;
     }
-    return out;
-  } catch { return {}; }
+    const hidden = Array.isArray(doc.hidden) ? [...new Set(doc.hidden.filter((h) => typeof h === "string" && h))] : [];
+    return { overrides, hidden };
+  } catch { return empty; }
 }
 
-export function applyUserOverrides(cfg, overrides) {
-  if (!overrides || !Object.keys(overrides).length) return cfg;
+export function applyUserOverrides(cfg, user) {
+  const { overrides = {}, hidden = [] } = user || {};
+  if (!Object.keys(overrides).length && !hidden.length) return cfg;
   const next = JSON.parse(JSON.stringify(cfg));
+  const hide = new Set(hidden);
   for (const [page, interactions] of Object.entries(next.pages || {})) {
     for (const [interaction, nodes] of Object.entries(interactions || {})) {
       for (const [node, spec] of Object.entries(nodes || {})) {
         const walk = (item, idPrefix) => {
           const id = `${idPrefix}.${item.id}`;
-          if (typeof item.instruction === "string" && typeof overrides[id] === "string") item.instruction = overrides[id];
+          const ov = overrides[id];
+          if (ov && typeof item.instruction === "string") {
+            if (ov.instruction) item.instruction = ov.instruction;
+            if (ov.label) item.label = ov.label;
+          }
+          if (item.children) item.children = item.children.filter((c) => !hide.has(`${id}.${c.id}`));
           for (const c of item.children || []) walk(c, id);
         };
-        for (const item of (spec.groups || []).flat()) walk(item, `${page}.${interaction}.${node}`);
+        for (const spec2 of [spec]) {
+          spec2.groups = (spec2.groups || []).map((g) =>
+            g.filter((item) => !hide.has(`${page}.${interaction}.${node}.${item.id}`)));
+          for (const item of spec2.groups.flat()) walk(item, `${page}.${interaction}.${node}`);
+        }
       }
     }
   }
