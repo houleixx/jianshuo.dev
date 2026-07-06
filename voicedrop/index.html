@@ -20,6 +20,7 @@
   @keyframes vdfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
   @keyframes vdslide{0%{opacity:0;transform:translateY(-8px)}100%{opacity:1;transform:translateY(0)}}
   @keyframes vdring{0%{transform:scale(.6);opacity:.55}100%{transform:scale(1.45);opacity:0}}
+  @media(max-width:640px){.vd-navlinks{display:none!important}}
 </style>
 </head>
 <body>
@@ -35,10 +36,12 @@
         <span style="font:600 18px -apple-system;letter-spacing:-.01em">VoiceDrop</span>
       </div>
       <nav style="display:flex;align-items:center;gap:26px">
+        <span class="vd-navlinks" style="display:flex;align-items:center;gap:26px">
         <a href="#features" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">功能</a>
         <a href="#privacy" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">隐私</a>
         <a href="#support" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">支持</a>
         <a href="/voicedrop/developer/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">开发者</a>
+        </span>
         <a href="#download" style="font:600 13px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:9px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(216,89,59,.26);text-decoration:none;white-space:nowrap">下载</a>
       </nav>
     </div>
