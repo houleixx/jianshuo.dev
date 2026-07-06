@@ -15,6 +15,8 @@
 //     ledger.detail.feed_id 对账补发（与 grantBucket 既有 known-limitation 同级）。
 
 import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
+import { resolveArticles } from "../../functions/lib/article-store.js";
+import { readProfileName } from "../../functions/lib/style-store.js";
 import { grantBucket } from "./usage_store.js";
 import {
   POOL_7D_UY, DAILY_POOL_UY, SEED_COINS_UC, FEED_AUTHOR_UC, FEED_FEEDER_UC,
@@ -70,7 +72,13 @@ export async function handleMintRoutes(url, request, env) {
     let post; try { post = JSON.parse(await postObj.text()); } catch { return J({ error: "bad share" }, 500); }
     if (!post.owner || !post.articleKey) return J({ error: "not feedable" }, 400); // legacy schema-1
     if (post.owner === feeder) return J({ error: "cannot_feed_own" }, 400);
-    if (!(await env.FILES.head(post.articleKey))) return J({ error: "article gone" }, 404);
+    // 读活文章（存在性检查 + 标题快照进账单明细，让「收到投币/投币奖励」看得出是哪篇）
+    const artObj = await env.FILES.get(post.articleKey);
+    if (!artObj) return J({ error: "article gone" }, 404);
+    let title = "";
+    try { title = (resolveArticles(JSON.parse(await artObj.text()))[0] || {}).title || ""; } catch {}
+    const authorName = post.author || "匿名";
+    const feederName = (await readProfileName(env, feeder + "CLAUDE.json", feeder + "CLAUDE.md").catch(() => "")) || "匿名";
 
     const now = Date.now();
     // 保险丝：当日(UTC)已发放超 5×日池 → 暂停投币。有机流量摸不到这条线，
@@ -97,14 +105,17 @@ export async function handleMintRoutes(url, request, env) {
     ).bind(
       post.articleKey, shareId, feeder, post.owner,
       q.authorUC + q.feederUC, q.priceUY, q.actorUY, q.beneficiaryUY,
-      q.disc < 1 ? JSON.stringify({ disc: q.disc }) : null, now,
+      JSON.stringify({ ...(q.disc < 1 ? { disc: q.disc } : {}), title }), now,
     ).run();
     if (!ins.meta || ins.meta.changes !== 1) return J({ ok: true, already: true });
     const feedId = ins.meta.last_row_id;
 
     const exp = expiryAfterDays(now, FEED_GRANT_EXPIRE_DAYS);
-    await grantBucket(env.USAGE, post.owner, q.beneficiaryUY, "feed_author", exp, now, { feed_id: feedId, share_id: shareId });
-    await grantBucket(env.USAGE, feeder, q.actorUY, "feed_curator", exp, now, { feed_id: feedId, share_id: shareId });
+    // 账单明细快照：作者那笔看得到「哪篇 + 谁投的」，投币者那笔看得到「哪篇 + 作者是谁」
+    await grantBucket(env.USAGE, post.owner, q.beneficiaryUY, "feed_author", exp, now,
+      { feed_id: feedId, share_id: shareId, title, from: feederName });
+    await grantBucket(env.USAGE, feeder, q.actorUY, "feed_curator", exp, now,
+      { feed_id: feedId, share_id: shareId, title, author: authorName });
 
     return J({
       ok: true,

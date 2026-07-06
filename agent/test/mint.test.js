@@ -36,7 +36,7 @@ let db, env;
 beforeEach(() => {
   db = fakeD1(usageSql());
   env = fakeEnv({
-    [`community/${SHARE1}.json`]: JSON.stringify({ schema: 2, shareId: SHARE1, owner: AUTHOR, articleKey: ART1 }),
+    [`community/${SHARE1}.json`]: JSON.stringify({ schema: 2, shareId: SHARE1, owner: AUTHOR, articleKey: ART1, author: "作者甲" }),
     [`community/${SHARE2}.json`]: JSON.stringify({ schema: 2, shareId: SHARE2, owner: AUTHOR, articleKey: ART2 }),
     [`community/${SHARE3}.json`]: JSON.stringify({ schema: 2, shareId: SHARE3, owner: AUTHOR, articleKey: ART3 }),
     [ART1]: JSON.stringify({ articles: [{ title: "t1", body: "b" }] }),
@@ -110,7 +110,17 @@ describe("POST /agent/feed", () => {
     expect(await balanceUY(db, FEEDER, now)).toBe(SIGNUP_GRANT_UY + row.actor_uy);
     const led = await getLedger(db, AUTHOR, 10);
     const grant = led.find((e) => e.reason === "feed_author");
-    expect(JSON.parse(grant.detail).feed_id).toBe(row.id);
+    const gd = JSON.parse(grant.detail);
+    expect(gd.feed_id).toBe(row.id);
+    // 账单明细快照：作者看到哪篇+谁投的；投币者看到哪篇+作者是谁
+    expect(gd.title).toBe("t1");
+    expect(gd.from).toBe("匿名"); // 投币者没设置名字
+    const fled = await getLedger(db, FEEDER, 10);
+    const cur = JSON.parse(fled.find((e) => e.reason === "feed_curator").detail);
+    expect(cur.title).toBe("t1");
+    expect(cur.author).toBe("作者甲");
+    // mint 行也带标题快照
+    expect(JSON.parse(row.detail).title).toBe("t1");
   });
 
   it("幂等：同一人同一篇第二次投 → already，不重复付款", async () => {
