@@ -71,8 +71,8 @@ export function fakeD1(migrationSql) {
   };
 }
 
-// 读取 usage 相关全部迁移（0001 + 0002），供 fakeD1 建一个有 bucket 表的库。
+// 读取 usage 相关全部迁移（0001 + 0002 + 0003），供 fakeD1 建一个全表的库。
 export function usageSql() {
   const f = (name) => readFileSync(fileURLToPath(new URL("../migrations/" + name, import.meta.url)), "utf8");
-  return f("0001_usage.sql") + "\n" + f("0002_buckets.sql");
+  return f("0001_usage.sql") + "\n" + f("0002_buckets.sql") + "\n" + f("0003_mint.sql");
 }

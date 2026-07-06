@@ -28,7 +28,8 @@ export async function balanceUY(db, userSub, now) {
 }
 
 // 发放一个桶：写 bucket + 更新 account 统计/缓存 + 记 grant 流水。
-export async function grantBucket(db, userSub, amountUY, source, expiresAt, now) {
+// detail（可选）原样 JSON 进 ledger.detail——投币用它带 feed_id/share_id 供对账。
+export async function grantBucket(db, userSub, amountUY, source, expiresAt, now, detail = null) {
   await ensureAccount(db, userSub, now);
   await db.prepare(
     "INSERT INTO bucket (user_sub,amount_uy,remaining_uy,source,created_at,expires_at) VALUES (?,?,?,?,?,?)"
@@ -37,7 +38,7 @@ export async function grantBucket(db, userSub, amountUY, source, expiresAt, now)
   const up = db.prepare("UPDATE account SET granted_uy=granted_uy+?, balance_uy=?, updated_at=? WHERE user_sub=?")
     .bind(amountUY, bal, now, userSub);
   const led = db.prepare("INSERT INTO ledger (user_sub,ts,kind,amount_uy,reason,detail,balance_uy) VALUES (?,?,?,?,?,?,?)")
-    .bind(userSub, now, "grant", amountUY, source, null, bal);
+    .bind(userSub, now, "grant", amountUY, source, detail ? JSON.stringify(detail) : null, bal);
   // NOTE (known limitation): the bucket mutation above and this account+ledger write
   // are two separate D1 batches (balanceUY must be read between them). Balance stays
   // correct because buckets are the source of truth; a crash here can drop this
