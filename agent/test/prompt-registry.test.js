@@ -9,12 +9,13 @@ const COVER_ID = "voice-editor.longpress.text.insert.wechat-cover";
 describe("flattenPrompts — ui-config 叶子指令打平", () => {
   const prompts = flattenPrompts(DEFAULT_UI_CONFIG);
 
-  it("11 条叶子：6 图片风格 + 4 改写 + 1 题图，id 是层级路径", () => {
-    expect(prompts.length).toBe(11);
+  it("12 条叶子：6 图片风格 + 4 改写 + 1 题图 + 1 卡通解释图，id 是层级路径", () => {
+    expect(prompts.length).toBe(12);
     const ids = prompts.map((p) => p.id);
     expect(ids).toContain("voice-editor.longpress.image.style.cartoon");
     expect(ids).toContain("voice-editor.longpress.text.rewrite.concise");
     expect(ids).toContain(COVER_ID);
+    expect(ids).toContain("voice-editor.longpress.text.insert.cartoon-explainer");
   });
 
   it("label 带父菜单前缀，instruction 原样", () => {
@@ -25,7 +26,7 @@ describe("flattenPrompts — ui-config 叶子指令打平", () => {
 });
 
 describe("updatePrompt — 只改目标叶子，深拷贝不动原对象", () => {
-  it("改题图指令，其余 10 条不变", () => {
+  it("改题图指令，其余 11 条不变", () => {
     const next = updatePrompt(DEFAULT_UI_CONFIG, COVER_ID, "新版题图指令");
     const before = flattenPrompts(DEFAULT_UI_CONFIG);
     const after = flattenPrompts(next);
@@ -63,7 +64,7 @@ describe("handlePromptRegistry — 管理 token 门禁 + R2 覆盖写回", () =>
     const res = await handlePromptRegistry(req("GET", { token: ADMIN }), envWith());
     expect(res.status).toBe(200);
     const { prompts } = await res.json();
-    expect(prompts.length).toBe(11);
+    expect(prompts.length).toBe(12);
     expect(prompts.find((p) => p.id === COVER_ID).instruction).toContain("2.45:1");
   });
 

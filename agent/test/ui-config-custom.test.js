@@ -51,11 +51,11 @@ describe("applyUserOverrides — 改文本/改名/隐藏", () => {
     expect(flattenPrompts(DEFAULT_UI_CONFIG).find((p) => p.id === COVER_ID).label).toBe("插入图片 · 公众号题图");
   });
 
-  it("hidden 叶子从菜单里消失，其余 10 条还在", () => {
+  it("hidden 叶子从菜单里消失，其余 11 条还在", () => {
     const next = applyUserOverrides(DEFAULT_UI_CONFIG, { overrides: {}, hidden: [OIL_ID] });
     const ids = flattenPrompts(next).map((p) => p.id);
     expect(ids).not.toContain(OIL_ID);
-    expect(ids.length).toBe(10);
+    expect(ids.length).toBe(11);
   });
 
   it("空覆盖 = 原样返回", () => {
@@ -79,12 +79,12 @@ describe("loadUIConfigFor — 三层：内置 ← 全局 R2 ← 用户", () => {
 });
 
 describe("handleUIConfigCustom — GET 列表 / PUT 全量单条", () => {
-  it("GET：11 条带 customLabel/hidden 状态", async () => {
+  it("GET：12 条带 customLabel/hidden 状态", async () => {
     const env = fakeEnv({ [KEY]: JSON.stringify({
       overrides: { [COVER_ID]: { instruction: "自定义题图", label: "头图" } }, hidden: [OIL_ID],
     }) });
     const { items } = await (await handleUIConfigCustom(req("GET"), env, SCOPE)).json();
-    expect(items.length).toBe(11);
+    expect(items.length).toBe(12);
     const cover = items.find((i) => i.id === COVER_ID);
     expect(cover.override).toBe("自定义题图");
     expect(cover.customLabel).toBe("头图");
