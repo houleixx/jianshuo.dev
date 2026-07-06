@@ -106,7 +106,9 @@ const ARTICLES_SCHEMA = {
         properties: {
           title: { type: "string" },
           body: { type: "string" },
-          questions: { type: "array", items: { type: "string" }, maxItems: 3 },
+          // 注意：Anthropic output_config 的 schema 不支持 maxItems（线上 400）——
+          // 上限 3 条由 prompt 约定 + parseArticles 的 slice(0,3) 双重保证。
+          questions: { type: "array", items: { type: "string" } },
         },
         required: ["title", "body"],
         additionalProperties: false,
