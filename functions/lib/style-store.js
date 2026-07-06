@@ -20,6 +20,11 @@
 
 export const STYLE_MAX_VERSIONS = 10;
 
+// 存储键 —— 本模块的私有约定，调用方一律只传 scope（"users/<sub>/"），
+// 永远不自己拼 CLAUDE.json / CLAUDE.md（readProfileName 同款封装原则）。
+const styleKeyFor  = (scope) => scope + "CLAUDE.json";
+const legacyKeyFor = (scope) => scope + "CLAUDE.md";
+
 // The default 王建硕 writing style — canonical single source. Seeded as v1 of the
 // 3-preset chain by ensureStyleSeeded() on first use, and re-exported by
 // agent/src/prompts/mine.js as MINE_DEFAULT_STYLE (the generation-time fallback),
@@ -73,15 +78,13 @@ export function seedPresetDoc(now) {
 // seeding when a legacy CLAUDE.md already holds 文风 (don't clobber an old user —
 // callers fall back to their existing legacy-read path). Otherwise writes v1
 // (source "default") and returns the new doc.
-export async function ensureStyleSeeded(env, styleKey, legacyKey) {
-  const doc = await readStyleDoc(env, styleKey);
+export async function ensureStyleSeeded(env, scope) {
+  const doc = await readStyleDoc(env, scope);
   if (doc) return doc;
-  if (legacyKey) {
-    const legacy = await env.FILES.get(legacyKey);
-    if (legacy && parseStyleMarkdown(await legacy.text()).trim()) return null;
-  }
+  const legacy = await readLegacyStyleMd(env, scope);
+  if (legacy && parseStyleMarkdown(legacy).trim()) return null;
   const seeded = seedPresetDoc(Date.now());
-  await env.FILES.put(styleKey, JSON.stringify(seeded), { httpMetadata: { contentType: "application/json" } });
+  await env.FILES.put(styleKeyFor(scope), JSON.stringify(seeded), { httpMetadata: { contentType: "application/json" } });
   return seeded;
 }
 
@@ -104,10 +107,17 @@ export function isDefaultSeed(doc) {
 export function styleLabel(v) { return `风格 v${v}`; }                          // "风格 v8"
 
 // Read the versioned CLAUDE.json doc (schema-3). Returns null if absent/corrupt.
-export async function readStyleDoc(env, styleKey) {
-  const obj = await env.FILES.get(styleKey);
+export async function readStyleDoc(env, scope) {
+  const obj = await env.FILES.get(styleKeyFor(scope));
   if (!obj) return null;
   try { return JSON.parse(await obj.text()); } catch { return null; }
+}
+
+// 原始 legacy CLAUDE.md 文本（null=没有）。给需要同时拿 文风+名字 的读者
+// （如 Files API 的 legacy 显示分支）——键名仍不外泄。
+export async function readLegacyStyleMd(env, scope) {
+  const legacy = await env.FILES.get(legacyKeyFor(scope));
+  return legacy ? await legacy.text() : null;
 }
 
 // The current 文风 text from a schema-3 doc, "" if none. SINGLE SOURCE OF TRUTH
@@ -134,19 +144,19 @@ export function parseStyleMarkdown(md) {
 
 // Effective 文风 text for any reader: CLAUDE.json first, else the legacy
 // CLAUDE.md's 文风 section. "" if neither exists.
-export async function readStyleText(env, styleKey, legacyKey) {
-  const doc = await readStyleDoc(env, styleKey);
+export async function readStyleText(env, scope) {
+  const doc = await readStyleDoc(env, scope);
   if (doc) return resolveStyle(doc);
-  const legacy = await env.FILES.get(legacyKey);
-  if (legacy) return parseStyleMarkdown(await legacy.text());
+  const legacy = await readLegacyStyleMd(env, scope);
+  if (legacy) return parseStyleMarkdown(legacy);
   return "";
 }
 
 // Versioned write (mirrors writeArticleDoc). Bases the version chain on the
 // existing CLAUDE.json only — a legacy CLAUDE.md is never folded into history, so
 // the first JSON write starts a fresh v1. source: "app" | "agent" | "mine".
-export async function writeStyleDoc(env, styleKey, style, source = "unknown") {
-  const current = await readStyleDoc(env, styleKey);
+export async function writeStyleDoc(env, scope, style, source = "unknown") {
+  const current = await readStyleDoc(env, scope);
 
   let versions, head, createdAt;
   if (current && Array.isArray(current.versions) && current.head) {
@@ -166,7 +176,7 @@ export async function writeStyleDoc(env, styleKey, style, source = "unknown") {
   // Carry forward non-versioned top-level fields (profile = name + future identity
   // fields). Writing a new STYLE version must never drop the profile.
   if (current && current.profile) doc.profile = current.profile;
-  await env.FILES.put(styleKey, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  await env.FILES.put(styleKeyFor(scope), JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
   return doc;
 }
 
@@ -182,12 +192,12 @@ export async function writeStyleDoc(env, styleKey, style, source = "unknown") {
 // 顺序：CLAUDE.json profile.name → legacy CLAUDE.md「# 我的名字」→
 // 身份 ID 前 6 位大写（如 "AE209A"，来自 users/anon-<hash>/ 的 hash）。
 export async function readProfileName(env, scope) {
-  const doc = await readStyleDoc(env, scope + "CLAUDE.json");
+  const doc = await readStyleDoc(env, scope);
   const n = doc && doc.profile && doc.profile.name;
   if (typeof n === "string" && n.trim()) return n.trim();
-  const legacy = await env.FILES.get(scope + "CLAUDE.md");
+  const legacy = await readLegacyStyleMd(env, scope);
   if (legacy) {
-    const m = (await legacy.text()).match(/#\s*我的名字\s*\n+([^\n#]+)/);
+    const m = legacy.match(/#\s*我的名字\s*\n+([^\n#]+)/);
     if (m && m[1].trim()) return m[1].trim();
   }
   const id = String(scope).replace(/^users\//, "").replace(/^anon-/, "").replace(/\/+$/, "");
@@ -196,21 +206,21 @@ export async function readProfileName(env, scope) {
 
 // Shallow-merge `patch` into doc.profile WITHOUT touching versions/head (so a name
 // change creates no style version). Lazily creates a minimal doc if none exists.
-export async function mergeProfile(env, styleKey, patch) {
-  const base = (await readStyleDoc(env, styleKey)) ||
+export async function mergeProfile(env, scope, patch) {
+  const base = (await readStyleDoc(env, scope)) ||
     { schema: 3, head: 0, versions: [], createdAt: Date.now() };
   const doc = { ...base, profile: { ...(base.profile || {}), ...patch }, updatedAt: Date.now() };
-  await env.FILES.put(styleKey, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  await env.FILES.put(styleKeyFor(scope), JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
   return doc;
 }
 
 // Move the head pointer only — no new version written (undo/redo).
 // Returns the updated doc, or null if key not found or newHead out of range.
-export async function setStyleHead(env, styleKey, newHead) {
-  const current = await readStyleDoc(env, styleKey);
+export async function setStyleHead(env, scope, newHead) {
+  const current = await readStyleDoc(env, scope);
   if (!current || !Array.isArray(current.versions)) return null;
   if (!current.versions.find((e) => e.v === newHead)) return null;
   const doc = { ...current, head: newHead, updatedAt: Date.now() };
-  await env.FILES.put(styleKey, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  await env.FILES.put(styleKeyFor(scope), JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
   return doc;
 }

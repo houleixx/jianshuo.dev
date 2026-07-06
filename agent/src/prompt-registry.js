@@ -9,6 +9,7 @@
 //
 // 两个方法都只认管理 token（Bearer FILES_TOKEN）。桥接页与 /agent 同源不需要
 // CORS；prompt.jianshuo.dev 是独立源，故放行该 Origin 以便优化器直连。
+import { bearerToken } from "../../functions/lib/auth.js";
 import { loadUIConfig } from "./ui-config.js";
 
 const ALLOWED_ORIGIN = "https://prompt.jianshuo.dev";
@@ -66,7 +67,7 @@ export async function handlePromptRegistry(request, env) {
   const headers = corsHeaders(request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
 
-  const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const tok = bearerToken(request);
   if (!env.FILES_TOKEN || tok !== env.FILES_TOKEN) {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers });
   }

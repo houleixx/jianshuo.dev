@@ -5,7 +5,7 @@
 // the injected callClaude.
 
 import { runAgentLoop } from "./loop.js";
-import { resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { inlineNumberedBody } from "./linenum.js";
 
 const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo", "new_photo"];
@@ -48,14 +48,14 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   if (articles.length <= 1) {
     varLines.push(
       "当前文章（你正在编辑这一篇）。正文每行开头的「第N行 / 图M」就是用户此刻在屏幕上看到的号——他说「第N行 / 图M」严格按这个号定位，别自己数行。这些号只用来定位、不属于正文，改完别写进输出：",
-      `标题：${target?.title || "（无题）"}`,
+      `标题：${target?.title || TITLE_FALLBACK}`,
       inlineNumberedBody(target?.body || "") || "（正文为空）",
       "",
     );
   } else {
     varLines.push(
       `共 ${articles.length} 篇，你正在编辑第 ${idx + 1} 篇。下面这篇带「第N行 / 图M」号，用户说的「第N行 / 图M」都指它——严格按号定位、别数行；号只用来定位、不属于正文，改完别写进输出：`,
-      `【第 ${idx + 1} 篇 · 正在编辑】标题：${target?.title || "（无题）"}`,
+      `【第 ${idx + 1} 篇 · 正在编辑】标题：${target?.title || TITLE_FALLBACK}`,
       inlineNumberedBody(target?.body || "") || "（正文为空）",
       "",
       "其余文章（仅供合并 / 参考，不用按行号定位）：",

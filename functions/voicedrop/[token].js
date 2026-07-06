@@ -8,7 +8,8 @@
 // mapping (e.g. "privacy") falls through to the static assets, so it never
 // shadows /voicedrop/ or /voicedrop/privacy/.
 
-import { resolveArticles } from "../lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles } from "../lib/article-store.js";
+import { communityKey, reportKey } from "../lib/community-store.js";
 
 export async function onRequest(context) {
   const { params, env } = context;
@@ -27,10 +28,10 @@ export async function onRequest(context) {
   if (map) {
     key = await map.text();
   } else {
-    const cm = await env.FILES.get(`community/${id}.json`);
+    const cm = await env.FILES.get(communityKey(id));
     if (cm) {
       // A reported (taken-down) post must not stay publicly viewable (Apple 1.2).
-      if (await env.FILES.head(`community/reports/${id}.json`)) {
+      if (await env.FILES.head(reportKey(id))) {
         return html(page('已不可用', '<p class="muted">这篇分享已被移除。</p>'), 404);
       }
       try { key = JSON.parse(await cm.text()).articleKey || null; } catch { /* fallthrough */ }
@@ -65,7 +66,7 @@ export async function onRequest(context) {
   const photoURIs = buildPhotoURLs(key, shown.map((a) => a.body || ''), doc.photos);
 
   const bodyHtml = shown.map((a) =>
-    `<article><h1>${esc(a.title || '无题')}</h1>${renderPhotos(mdToHtml(a.body || ''), photoURIs)}</article>`
+    `<article><h1>${esc(a.title || TITLE_FALLBACK)}</h1>${renderPhotos(mdToHtml(a.body || ''), photoURIs)}</article>`
   ).join('<hr/>');
 
   // Share-card image = the FIRST photo THIS section references, as an ABSOLUTE URL

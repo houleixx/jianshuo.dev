@@ -54,28 +54,28 @@ describe("parseStyleMarkdown — legacy CLAUDE.md", () => {
 describe("readStyleText — CLAUDE.json first, legacy CLAUDE.md fallback", () => {
   it("reads the resolved style from CLAUDE.json when present", async () => {
     const env = fakeEnv({ [KEY]: JSON.stringify(seedDoc([{ v: 1, savedAt: 1, source: "app", style: "JSON 文风" }], 1)) });
-    expect(await readStyleText(env, KEY, LEGACY)).toBe("JSON 文风");
+    expect(await readStyleText(env, SCOPE)).toBe("JSON 文风");
   });
   it("falls back to the legacy CLAUDE.md 文风 section when CLAUDE.json is absent", async () => {
     const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\n回退文风" });
-    expect(await readStyleText(env, KEY, LEGACY)).toBe("回退文风");
+    expect(await readStyleText(env, SCOPE)).toBe("回退文风");
   });
   it("prefers CLAUDE.json even when a legacy CLAUDE.md also exists", async () => {
     const env = fakeEnv({
       [KEY]: JSON.stringify(seedDoc([{ v: 1, savedAt: 1, source: "app", style: "JSON 胜出" }], 1)),
       [LEGACY]: "# 我的文风\n旧的",
     });
-    expect(await readStyleText(env, KEY, LEGACY)).toBe("JSON 胜出");
+    expect(await readStyleText(env, SCOPE)).toBe("JSON 胜出");
   });
   it("returns '' when neither exists", async () => {
-    expect(await readStyleText(fakeEnv({}), KEY, LEGACY)).toBe("");
+    expect(await readStyleText(fakeEnv({}), SCOPE)).toBe("");
   });
 });
 
 describe("writeStyleDoc — versioned write", () => {
   it("first write creates schema-3 v1", async () => {
     const env = fakeEnv({});
-    const doc = await writeStyleDoc(env, KEY, "第一版", "app");
+    const doc = await writeStyleDoc(env, SCOPE, "第一版", "app");
     expect(doc.schema).toBe(3);
     expect(doc.head).toBe(1);
     expect(doc.versions).toHaveLength(1);
@@ -86,8 +86,8 @@ describe("writeStyleDoc — versioned write", () => {
 
   it("second write appends v2 and moves head", async () => {
     const env = fakeEnv({});
-    await writeStyleDoc(env, KEY, "v1", "app");
-    const doc = await writeStyleDoc(env, KEY, "v2", "agent");
+    await writeStyleDoc(env, SCOPE, "v1", "app");
+    const doc = await writeStyleDoc(env, SCOPE, "v2", "agent");
     expect(doc.head).toBe(2);
     expect(doc.versions.map((e) => e.style)).toEqual(["v1", "v2"]);
     expect(doc.versions[1].source).toBe("agent");
@@ -95,7 +95,7 @@ describe("writeStyleDoc — versioned write", () => {
 
   it("does NOT seed history from a legacy CLAUDE.md — first JSON write is v1", async () => {
     const env = fakeEnv({ [LEGACY]: "# 我的文风\n老的" });
-    const doc = await writeStyleDoc(env, KEY, "新的", "app");
+    const doc = await writeStyleDoc(env, SCOPE, "新的", "app");
     expect(doc.head).toBe(1);
     expect(doc.versions).toHaveLength(1);
     expect(doc.versions[0].style).toBe("新的");
@@ -103,18 +103,18 @@ describe("writeStyleDoc — versioned write", () => {
 
   it("writing after an undo truncates future versions before appending", async () => {
     const env = fakeEnv({});
-    await writeStyleDoc(env, KEY, "v1", "app");   // head 1
-    await writeStyleDoc(env, KEY, "v2", "app");   // head 2
-    await setStyleHead(env, KEY, 1);              // undo to v1
-    const doc = await writeStyleDoc(env, KEY, "v1b", "app"); // branch off v1
+    await writeStyleDoc(env, SCOPE, "v1", "app");   // head 1
+    await writeStyleDoc(env, SCOPE, "v2", "app");   // head 2
+    await setStyleHead(env, SCOPE, 1);              // undo to v1
+    const doc = await writeStyleDoc(env, SCOPE, "v1b", "app"); // branch off v1
     expect(doc.head).toBe(2);
     expect(doc.versions.map((e) => e.style)).toEqual(["v1", "v1b"]); // v2 dropped
   });
 
   it("prunes to STYLE_MAX_VERSIONS oldest-first", async () => {
     const env = fakeEnv({});
-    for (let i = 1; i <= STYLE_MAX_VERSIONS + 3; i++) await writeStyleDoc(env, KEY, `v${i}`, "app");
-    const doc = await readStyleDoc(env, KEY);
+    for (let i = 1; i <= STYLE_MAX_VERSIONS + 3; i++) await writeStyleDoc(env, SCOPE, `v${i}`, "app");
+    const doc = await readStyleDoc(env, SCOPE);
     expect(doc.versions).toHaveLength(STYLE_MAX_VERSIONS);
     expect(doc.head).toBe(STYLE_MAX_VERSIONS + 3);
     expect(doc.versions[doc.versions.length - 1].style).toBe(`v${STYLE_MAX_VERSIONS + 3}`);
@@ -124,17 +124,17 @@ describe("writeStyleDoc — versioned write", () => {
 describe("setStyleHead — undo/redo pointer move", () => {
   it("moves head to a valid version without adding one", async () => {
     const env = fakeEnv({});
-    await writeStyleDoc(env, KEY, "v1", "app");
-    await writeStyleDoc(env, KEY, "v2", "app");
-    const doc = await setStyleHead(env, KEY, 1);
+    await writeStyleDoc(env, SCOPE, "v1", "app");
+    await writeStyleDoc(env, SCOPE, "v2", "app");
+    const doc = await setStyleHead(env, SCOPE, 1);
     expect(doc.head).toBe(1);
     expect(doc.versions).toHaveLength(2);
     expect(resolveStyle(doc)).toBe("v1");
   });
   it("returns null for an out-of-range head", async () => {
     const env = fakeEnv({});
-    await writeStyleDoc(env, KEY, "v1", "app");
-    expect(await setStyleHead(env, KEY, 99)).toBeNull();
+    await writeStyleDoc(env, SCOPE, "v1", "app");
+    expect(await setStyleHead(env, SCOPE, 99)).toBeNull();
   });
   it("returns null when the doc is missing", async () => {
     expect(await setStyleHead(fakeEnv({}), KEY, 1)).toBeNull();
@@ -144,8 +144,8 @@ describe("setStyleHead — undo/redo pointer move", () => {
 describe("profile — non-versioned name (changing it must NOT mint a style version)", () => {
   it("mergeProfile sets name without touching versions/head", async () => {
     const env = fakeEnv({});
-    await writeStyleDoc(env, KEY, "文风v1", "app");          // head 1
-    const doc = await mergeProfile(env, KEY, { name: "王建硕" });
+    await writeStyleDoc(env, SCOPE, "文风v1", "app");          // head 1
+    const doc = await mergeProfile(env, SCOPE, { name: "王建硕" });
     expect(doc.profile).toEqual({ name: "王建硕" });
     expect(doc.head).toBe(1);                                // no new version
     expect(doc.versions).toHaveLength(1);
@@ -154,7 +154,7 @@ describe("profile — non-versioned name (changing it must NOT mint a style vers
 
   it("mergeProfile lazily creates a minimal doc when none exists", async () => {
     const env = fakeEnv({});
-    const doc = await mergeProfile(env, KEY, { name: "小明" });
+    const doc = await mergeProfile(env, SCOPE, { name: "小明" });
     expect(doc.profile.name).toBe("小明");
     expect(doc.versions).toEqual([]);
     expect(doc.head).toBe(0);
@@ -162,18 +162,18 @@ describe("profile — non-versioned name (changing it must NOT mint a style vers
 
   it("writeStyleDoc PRESERVES an existing profile across a style write", async () => {
     const env = fakeEnv({});
-    await mergeProfile(env, KEY, { name: "王建硕" });          // profile only, no version
-    const doc = await writeStyleDoc(env, KEY, "新文风", "app");
+    await mergeProfile(env, SCOPE, { name: "王建硕" });          // profile only, no version
+    const doc = await writeStyleDoc(env, SCOPE, "新文风", "app");
     expect(doc.profile).toEqual({ name: "王建硕" });          // survived the style write
     expect(resolveStyle(doc)).toBe("新文风");
   });
 
   it("setStyleHead preserves the profile", async () => {
     const env = fakeEnv({});
-    await writeStyleDoc(env, KEY, "v1", "app");
-    await writeStyleDoc(env, KEY, "v2", "app");
-    await mergeProfile(env, KEY, { name: "阿王" });
-    const doc = await setStyleHead(env, KEY, 1);
+    await writeStyleDoc(env, SCOPE, "v1", "app");
+    await writeStyleDoc(env, SCOPE, "v2", "app");
+    await mergeProfile(env, SCOPE, { name: "阿王" });
+    const doc = await setStyleHead(env, SCOPE, 1);
     expect(doc.profile.name).toBe("阿王");
   });
 
@@ -229,7 +229,7 @@ describe("seedPresetDoc — 三预设种子", () => {
 describe("ensureStyleSeeded — 新用户种三预设，存量不动", () => {
   it("无 CLAUDE.json / 无 legacy → 种三版、head=1、生效=王建硕、isDefaultSeed=true", async () => {
     const env = fakeEnv({});
-    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    const doc = await ensureStyleSeeded(env, SCOPE);
     expect(doc.versions.map((e) => e.v)).toEqual([1, 2, 3]);
     expect(doc.head).toBe(1);
     expect(resolveStyle(doc)).toBe(DEFAULT_STYLE);         // 开局生效 = 王建硕
@@ -240,15 +240,15 @@ describe("ensureStyleSeeded — 新用户种三预设，存量不动", () => {
 
   it("幂等：再调一次还是那三版，不叠加", async () => {
     const env = fakeEnv({});
-    await ensureStyleSeeded(env, KEY, LEGACY);
-    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    await ensureStyleSeeded(env, SCOPE);
+    const doc = await ensureStyleSeeded(env, SCOPE);
     expect(doc.versions.map((e) => e.v)).toEqual([1, 2, 3]);
   });
 
   it("已有 CLAUDE.json → 原样返回，不被三预设覆盖", async () => {
     const env = fakeEnv({});
-    await writeStyleDoc(env, KEY, "我自己的文风", "app");   // head 1, source app
-    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    await writeStyleDoc(env, SCOPE, "我自己的文风", "app");   // head 1, source app
+    const doc = await ensureStyleSeeded(env, SCOPE);
     expect(doc.versions).toHaveLength(1);
     expect(resolveStyle(doc)).toBe("我自己的文风");
     expect(isDefaultSeed(doc)).toBe(false);
@@ -256,14 +256,14 @@ describe("ensureStyleSeeded — 新用户种三预设，存量不动", () => {
 
   it("遗留 CLAUDE.md 有文风 → 不种，返回 null，CLAUDE.json 仍不存在", async () => {
     const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\n老用户的文风" });
-    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    const doc = await ensureStyleSeeded(env, SCOPE);
     expect(doc).toBeNull();
     expect(env.FILES._store.has(KEY)).toBe(false);
   });
 
   it("遗留 CLAUDE.md 文风为空白 → 仍种三预设", async () => {
     const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\n   \n" });
-    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    const doc = await ensureStyleSeeded(env, SCOPE);
     expect(doc).not.toBeNull();
     expect(doc.versions.map((e) => e.v)).toEqual([1, 2, 3]);
     expect(doc.versions[0].source).toBe("preset");
@@ -273,19 +273,19 @@ describe("ensureStyleSeeded — 新用户种三预设，存量不动", () => {
 describe("isDefaultSeed — 未编辑的三预设种子", () => {
   it("刚种的三预设 → true", async () => {
     const env = fakeEnv({});
-    const doc = await ensureStyleSeeded(env, KEY, LEGACY);
+    const doc = await ensureStyleSeeded(env, SCOPE);
     expect(isDefaultSeed(doc)).toBe(true);
   });
   it("编辑后（多一版 source 非 preset）→ false", async () => {
     const env = fakeEnv({});
-    await ensureStyleSeeded(env, KEY, LEGACY);
-    const doc = await writeStyleDoc(env, KEY, "改成我的", "app"); // v4 source app
+    await ensureStyleSeeded(env, SCOPE);
+    const doc = await writeStyleDoc(env, SCOPE, "改成我的", "app"); // v4 source app
     expect(isDefaultSeed(doc)).toBe(false);
   });
   it("切了 head（切到小红书 v2）→ false", async () => {
     const env = fakeEnv({});
-    await ensureStyleSeeded(env, KEY, LEGACY);
-    const doc = await setStyleHead(env, KEY, 2);
+    await ensureStyleSeeded(env, SCOPE);
+    const doc = await setStyleHead(env, SCOPE, 2);
     expect(isDefaultSeed(doc)).toBe(false);
   });
   it("null / 空 → false", () => {

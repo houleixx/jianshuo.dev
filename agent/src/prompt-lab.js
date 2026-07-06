@@ -5,7 +5,8 @@
 // GET  /agent/prompt-lab/articles?limit=N → { articles: [{key, title, snippet, photos, uploaded}] }
 // POST /agent/prompt-lab/paint            → body {prompt, size?} 转发 paint /api/jobs，回 {job_id}
 // GET  /agent/prompt-lab/paint/<jobId>    → 转发 paint 任务状态（含 result_url）
-import { readArticleDoc, withTopLevelArticles } from "../../functions/lib/article-store.js";
+import { bearerToken } from "../../functions/lib/auth.js";
+import { TITLE_FALLBACK, readArticleDoc, withTopLevelArticles } from "../../functions/lib/article-store.js";
 
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
@@ -24,7 +25,7 @@ async function listArticles(env, limit) {
       const body = String(a.body || "");
       out.push({
         key: o.key,
-        title: String(a.title || "(无题)"),
+        title: String(a.title || TITLE_FALLBACK),
         snippet: body.replace(/\[\[photo:[^\]]*\]\]/g, "").replace(/\s+/g, " ").trim().slice(0, 120),
         body,
         photos: (body.match(/\[\[photo:[^\]]*\]\]/g) || []).length,
@@ -36,7 +37,7 @@ async function listArticles(env, limit) {
 }
 
 export async function handlePromptLab(request, env, url) {
-  const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const tok = bearerToken(request);
   if (!env.FILES_TOKEN || tok !== env.FILES_TOKEN) return J({ error: "unauthorized" }, 401);
 
   if (url.pathname === "/agent/prompt-lab/articles" && request.method === "GET") {

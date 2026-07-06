@@ -6,6 +6,12 @@
 // "verbatim" in both places — a drift here would be a security bug. Keep them
 // HERE only; both import from this module. Do not re-inline.
 
+// Strip the "Bearer " prefix off a request's Authorization header ("" if absent).
+// SINGLE SOURCE for token extraction — was hand-inlined ~28x across workers.
+export function bearerToken(request) {
+  return (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+}
+
 export function sanitizeSeg(s) {
   return String(s).replace(/[^A-Za-z0-9._-]/g, "_");
 }

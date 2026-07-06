@@ -17,8 +17,9 @@ import { callAnthropic } from "./anthropic.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { resolveArticles } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
+import { shareIdFor, communityKey } from "../../functions/lib/community-store.js";
 import { distillStyle, buildStyleIntroArticle, buildInsufficientCorpusArticle, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import {
   MINE_SYSTEM as SYSTEM,
@@ -412,7 +413,7 @@ export function parseArticles(text) {
   const arts = Array.isArray(obj) ? obj : (obj.articles || []);
   return arts
     .filter(a => typeof a === "object" && (a.body || "").trim())
-    .map(a => ({ title: (a.title || "(无题)").trim(), body: (a.body || "").trim() }));
+    .map(a => ({ title: (a.title || TITLE_FALLBACK).trim(), body: (a.body || "").trim() }));
 }
 
 // ── Photos ────────────────────────────────────────────────────────────────────
@@ -687,18 +688,18 @@ export async function maybeAutoShareCommunity(srcKey, env, log = () => {}) {
   // author — readProfileName 内部封装存储细节与无名兜底，只给 scope。
   const author = await readProfileName(env, scope);
 
-  const shareId = (await hmacSign("community:" + articleKey, env.SESSION_SECRET)).slice(0, 12);
-  const communityKey = `community/${shareId}.json`;
+  const shareId = await shareIdFor(articleKey, env.SESSION_SECRET);
+  const postKey = communityKey(shareId);
   // Preserve firstSharedAt + replyTo when re-sharing (re-mine), exactly like the endpoint.
   let firstSharedAt = Date.now();
   let replyTo = null;
-  const existing = await env.FILES.get(communityKey);
+  const existing = await env.FILES.get(postKey);
   if (existing) {
     try { const ep = JSON.parse(await existing.text()); firstSharedAt = ep.firstSharedAt || firstSharedAt; replyTo = ep.replyTo || null; } catch {}
   }
   const post = { schema: 2, shareId, owner: scope, articleKey, author, firstSharedAt,
                  ...(replyTo ? { replyTo } : {}) };
-  await env.FILES.put(communityKey, JSON.stringify(post), { httpMetadata: { contentType: "application/json" } });
+  await env.FILES.put(postKey, JSON.stringify(post), { httpMetadata: { contentType: "application/json" } });
   log("自动分享到 VD社区", { shareId });
   return shareId;
 }
@@ -826,7 +827,7 @@ export async function restyleArticle(env, scope, stem, styleV) {
     .map((a) => `${a.title || ""}\n${a.body || ""}`.trim()).filter(Boolean).join("\n\n").trim();
   if (!mineSource) return { ok: false, reason: "no-transcript" };
 
-  const styleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
+  const styleDoc = await readStyleDoc(env, scope);
   // styleV 缺省（重写：POST /agent/restyle 只带 stem）→ 用当前文风 head，即"按原挖矿逻辑重挖"
   const v = resolveStyleVersion(styleDoc, styleV);
   const entry = styleDoc && Array.isArray(styleDoc.versions) ? styleDoc.versions.find((e) => e.v === v) : null;
@@ -987,7 +988,7 @@ async function mineStyleExtract(task, audioKey, env, modelCfg, log) {
 
   const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
   const style = await distillStyle(samples, makeTaskClaude(env, modelCfg.model, usage));
-  await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
+  await writeStyleDoc(env, scope, style, "share-extract");
   const { title, body } = buildStyleIntroArticle(style, samples);
   await writeReadyArticle(title, body);
 
@@ -1112,8 +1113,8 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         await notifyStatus(scope, stem, "mining", env);
         // 和正常语音挖矿一样：文风文本进 prompt，articles[i].style 打 head 版本号
         //（不打的话 iOS chip 显示「选风格」，看起来像没用文风）。
-        const imgStyleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
-        const styleText = (imgStyleDoc ? resolveStyle(imgStyleDoc) : await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+        const imgStyleDoc = await readStyleDoc(env, scope);
+        const styleText = (imgStyleDoc ? resolveStyle(imgStyleDoc) : await readStyleText(env, scope)).trim();
         const imgHeadV = imgStyleDoc && Number.isInteger(imgStyleDoc.head) ? imgStyleDoc.head : null;
         const turnId = `${Date.now()}-${stem.slice(-8)}`;
 
@@ -1182,9 +1183,9 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // Lazy-seed the default 王建硕 style as v1 on first mine (no-op if the user
     // already has a style; skips legacy CLAUDE.md users). After this the first
     // article is tagged 风格 v1 and the user owns an editable baseline.
-    await ensureStyleSeeded(env, scope + "CLAUDE.json", scope + "CLAUDE.md");
-    const styleDoc = await readStyleDoc(env, scope + "CLAUDE.json");
-    const claudeMd  = (styleDoc ? resolveStyle(styleDoc) : await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+    await ensureStyleSeeded(env, scope);
+    const styleDoc = await readStyleDoc(env, scope);
+    const claudeMd  = (styleDoc ? resolveStyle(styleDoc) : await readStyleText(env, scope)).trim();
     const headV     = (styleDoc && styleDoc.head) ? styleDoc.head : null;
     const picks = (styleDoc && styleDoc.profile && Array.isArray(styleDoc.profile.styles) ? styleDoc.profile.styles : [])
       .map((v) => ({ v, style: ((styleDoc.versions || []).find((e) => e.v === v) || {}).style }))
@@ -1288,7 +1289,7 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
     await notifyStatus(scope, stem, "mining", env);
 
     // 文风走 CLAUDE.json（schema-3），回退老 CLAUDE.md 的「# 我的文风」段。
-    const claudeMd = (await readStyleText(env, scope + "CLAUDE.json", scope + "CLAUDE.md")).trim();
+    const claudeMd = (await readStyleText(env, scope)).trim();
     if (claudeMd) log("文风", { chars: claudeMd.length });
 
     const turnId = `${Date.now()}-${stem.slice(-8)}`;

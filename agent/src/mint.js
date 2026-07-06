@@ -14,8 +14,9 @@
 //     绝无重复付款。极小概率「事件已记、grant 前崩」= 少付一笔，可由
 //     ledger.detail.feed_id 对账补发（与 grantBucket 既有 known-limitation 同级）。
 
-import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
+import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
 import { resolveArticles } from "../../functions/lib/article-store.js";
+import { isShareId, communityKey } from "../../functions/lib/community-store.js";
 import { readProfileName } from "../../functions/lib/style-store.js";
 import { grantBucket } from "./usage_store.js";
 import {
@@ -50,7 +51,7 @@ async function sumCoins7d(db, now) {
 export async function handleMintRoutes(url, request, env) {
   if (url.pathname !== "/agent/feed" && url.pathname !== "/agent/feed/state") return null;
   if (!env.USAGE) return J({ error: "usage-unavailable" }, 503);
-  const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  const tok = bearerToken(request);
   try {
 
   // ── POST /agent/feed {share_id} ── 投币：铸币 + 双边即时到账 ─────────────
@@ -66,8 +67,8 @@ export async function handleMintRoutes(url, request, env) {
 
     const body = await request.json().catch(() => ({}));
     const shareId = String(body.share_id || "");
-    if (!/^[A-Za-z0-9_-]{12}$/.test(shareId)) return J({ error: "bad share_id" }, 400);
-    const postObj = await env.FILES.get(`community/${shareId}.json`);
+    if (!isShareId(shareId)) return J({ error: "bad share_id" }, 400);
+    const postObj = await env.FILES.get(communityKey(shareId));
     if (!postObj) return J({ error: "share not found" }, 404);
     let post; try { post = JSON.parse(await postObj.text()); } catch { return J({ error: "bad share" }, 500); }
     if (!post.owner || !post.articleKey) return J({ error: "not feedable" }, 400); // legacy schema-1
@@ -138,7 +139,7 @@ export async function handleMintRoutes(url, request, env) {
 
     const body = await request.json().catch(() => ({}));
     const ids = (Array.isArray(body.share_ids) ? body.share_ids : [])
-      .map(String).filter((s) => /^[A-Za-z0-9_-]{12}$/.test(s)).slice(0, 200);
+      .map(String).filter(isShareId).slice(0, 200);
     const states = {};
     if (ids.length) {
       const ph = ids.map(() => "?").join(",");

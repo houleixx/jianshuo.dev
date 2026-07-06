@@ -19,9 +19,10 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-import { readArticleDoc, writeArticleDoc, setHead, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
-import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed } from "../../lib/style-store.js";
-import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken } from "../../lib/auth.js";
+import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
+import { shareIdFor, communityKey, reportKey, isShareId } from "../../lib/community-store.js";
+import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
+import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
 
 export async function onRequest(context) {
@@ -61,7 +62,7 @@ export async function onRequest(context) {
     }
     const now = Date.now();
     if (!scope) {
-      const callerAnon = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      const callerAnon = bearerToken(request);
       scope = (await anonScopeFromToken(callerAnon)) || `users/${sanitizeSeg(sub)}/`;
       await env.FILES.put(linkKey, JSON.stringify({ scope, linkedAt: now }),
         { httpMetadata: { contentType: 'application/json' } });
@@ -146,8 +147,7 @@ export async function onRequest(context) {
   }
 
   // ---- Authenticate every other route ----
-  const authHeader = request.headers.get('Authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '') || url.searchParams.get('token') || '';
+  const token = bearerToken(request) || url.searchParams.get('token') || '';
 
   let scope = null; // null = unauthorized, '' = admin/full bucket, 'users/<id>/' = user
   let readonly = false;
@@ -228,7 +228,7 @@ export async function onRequest(context) {
           const p = JSON.parse(await obj.text());
           if (p.owner !== scope) return;
           await env.FILES.delete(o.key);
-          await env.FILES.delete(`community/reports/${p.shareId}.json`).catch(() => {});
+          await env.FILES.delete(reportKey(p.shareId)).catch(() => {});
           communityPosts++;
         } catch {}
       });
@@ -555,20 +555,20 @@ export async function onRequest(context) {
     if (kw.flagged) return json({ error: 'content_flagged', term: kw.term }, 403);
     // Author = readProfileName 内部封装存储细节与无名兜底，只给 scope。
     const author = await readProfileName(env, scope);
-    const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
-    const communityKey = `community/${shareId}.json`;
+    const shareId = await shareIdFor(articleKey, env.SESSION_SECRET);
+    const postKey = communityKey(shareId);
     let replyTo = null;
     try { const body = await request.clone().json(); replyTo = (body && body.replyTo) || null; } catch {}
     let firstSharedAt = Date.now();
     let existingReplyTo = null;
-    const existing = await env.FILES.get(communityKey);
+    const existing = await env.FILES.get(postKey);
     if (existing) {
       try { const ep = JSON.parse(await existing.text()); firstSharedAt = ep.firstSharedAt || firstSharedAt; existingReplyTo = ep.replyTo || null; } catch {}
     }
     if (!replyTo) replyTo = existingReplyTo;
     const post = { schema: 2, shareId, owner: scope, articleKey, author, firstSharedAt,
                    ...(replyTo ? { replyTo } : {}) };
-    await env.FILES.put(communityKey, JSON.stringify(post), { httpMetadata: { contentType: 'application/json' } });
+    await env.FILES.put(postKey, JSON.stringify(post), { httpMetadata: { contentType: 'application/json' } });
     return json({ ok: true, shareId });
   }
 
@@ -616,8 +616,8 @@ export async function onRequest(context) {
     // Same Apple-verified gate as share: editing the shared space needs accountability.
     if (!apple) return json({ error: 'needs_apple_signin' }, 403);
     const shareId = segments[2] || '';
-    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
-    const key = `community/${shareId}.json`;
+    if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
+    const key = communityKey(shareId);
     const obj = await env.FILES.get(key);
     if (!obj) return json({ ok: true });
     let owner = null;
@@ -632,10 +632,10 @@ export async function onRequest(context) {
   // The owner reviews + removes/restores at /voicedrop/admin/reports.
   if (request.method === 'POST' && action === 'community' && sub2 === 'report') {
     const shareId = segments[2] || '';
-    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
-    if (!(await env.FILES.head(`community/${shareId}.json`))) return json({ error: 'not found' }, 404);
+    if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
+    if (!(await env.FILES.head(communityKey(shareId)))) return json({ error: 'not found' }, 404);
     let reason = ''; try { const b = await request.clone().json(); reason = (b && b.reason) || ''; } catch {}
-    const rk = `community/reports/${shareId}.json`;
+    const rk = reportKey(shareId);
     let rec = { shareId, status: 'pending', firstAt: Date.now(), reporters: [] };
     const ex = await env.FILES.get(rk);
     if (ex) { try { rec = { ...rec, ...JSON.parse(await ex.text()), status: 'pending' }; } catch {} }
@@ -656,7 +656,7 @@ export async function onRequest(context) {
       let rec = null; try { rec = JSON.parse(await (await env.FILES.get(o.key)).text()); } catch {}
       if (!rec || rec.status !== 'pending') continue;
       let title = '', author = '', body = '', gone = false;
-      const pObj = await env.FILES.get(`community/${shareId}.json`);
+      const pObj = await env.FILES.get(communityKey(shareId));
       if (!pObj) gone = true;
       else try {
         const p = JSON.parse(await pObj.text());
@@ -675,22 +675,22 @@ export async function onRequest(context) {
   if (request.method === 'POST' && action === 'community' && sub2 === 'resolve') {
     if (scope !== '') return json({ error: 'admin only' }, 403);
     const shareId = segments[2] || '';
-    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
+    if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
     let act = 'restore'; try { const b = await request.clone().json(); act = (b && b.action) || 'restore'; } catch {}
     if (act === 'remove') {
-      await env.FILES.delete(`community/${shareId}.json`).catch(() => {});
-      await env.FILES.delete(`community/reports/${shareId}.json`).catch(() => {});
+      await env.FILES.delete(communityKey(shareId)).catch(() => {});
+      await env.FILES.delete(reportKey(shareId)).catch(() => {});
       return json({ ok: true, removed: true });
     }
-    await env.FILES.delete(`community/reports/${shareId}.json`).catch(() => {});
+    await env.FILES.delete(reportKey(shareId)).catch(() => {});
     return json({ ok: true, restored: true });
   }
 
   // Get one community post — reads the live article and merges with pointer metadata.
   if (request.method === 'GET' && action === 'community' && sub2 === 'get') {
     const shareId = segments[2] || '';
-    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
-    const obj = await env.FILES.get(`community/${shareId}.json`);
+    if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
+    const obj = await env.FILES.get(communityKey(shareId));
     if (!obj) return json({ error: 'not found' }, 404);
     let p; try { p = JSON.parse(await obj.text()); } catch { return json({ error: 'bad post' }, 500); }
     // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
@@ -698,7 +698,7 @@ export async function onRequest(context) {
     let title = p.title || articles[0]?.title || '';
     let legacyPhotos = p.photos;   // legacy [[photo:N]] resolution; new posts have none
     if (p.articleKey) {
-      const live = await liveDocForPointer(`community/${shareId}.json`, p);
+      const live = await liveDocForPointer(communityKey(shareId), p);
       if (!live) return json({ error: 'not found' }, 404);   // orphan (reaped) or mid-regeneration
       articles = resolveArticles(live).map(a => ({ title: a.title, body: a.body }));
       title = articles[0]?.title ?? title;
@@ -717,8 +717,8 @@ export async function onRequest(context) {
     if (!scope || !env.SESSION_SECRET) return json({ shared: false });
     const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
     if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) return json({ shared: false });
-    const shareId = (await hmacSign('community:' + articleKey, env.SESSION_SECRET)).slice(0, 12);
-    const exists = await env.FILES.head(`community/${shareId}.json`);
+    const shareId = await shareIdFor(articleKey, env.SESSION_SECRET);
+    const exists = await env.FILES.head(communityKey(shareId));
     return json({ shared: !!exists, shareId: exists ? shareId : undefined });
   }
 
@@ -726,7 +726,7 @@ export async function onRequest(context) {
   // List posts that are responses to `shareId`, oldest-first.
   if (request.method === 'GET' && action === 'community' && sub2 === 'replies') {
     const shareId = segments[2] || '';
-    if (!/^[0-9A-Za-z_-]{1,32}$/.test(shareId)) return json({ error: 'bad id' }, 400);
+    if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
     const objs = listed.objects.filter(x => /^community\/[^/]+\.json$/.test(x.key));
     const results = await mapLimit(objs, 32, async (o) => {
@@ -795,8 +795,6 @@ export async function onRequest(context) {
       styleScope = scope;
       subaction = sub2;
     }
-    const styleKey = `${styleScope}CLAUDE.json`;
-    const legacyKey = `${styleScope}CLAUDE.md`;
 
     if (request.method === 'GET' && !subaction) {
       // `name` is additive (from doc.profile) — old clients decode only `style` and ignore it.
@@ -808,12 +806,11 @@ export async function onRequest(context) {
       // (a read shouldn't write) nor pre-freeze the default for users who never
       // touched their style — so the admin-targeted path is a plain read.
       const doc = scope
-        ? await ensureStyleSeeded(env, styleKey, legacyKey)
-        : await readStyleDoc(env, styleKey);
+        ? await ensureStyleSeeded(env, styleScope)
+        : await readStyleDoc(env, styleScope);
       if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', styles: (doc.profile && doc.profile.styles) || [], head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0, default: isDefaultSeed(doc) });
-      const legacy = await env.FILES.get(legacyKey);
-      if (legacy) {
-        const md = await legacy.text();
+      const md = await readLegacyStyleMd(env, styleScope);
+      if (md) {
         const m = md.match(/#\s*我的名字\s*\n+([^\n#]+)/);
         return json({ style: parseStyleMarkdown(md), name: (m && m[1].trim()) || '', head: 0, legacy: true });
       }
@@ -821,7 +818,7 @@ export async function onRequest(context) {
     }
 
     if (request.method === 'GET' && subaction === 'history') {
-      const doc = await readStyleDoc(env, styleKey);
+      const doc = await readStyleDoc(env, styleScope);
       if (!doc) return json({ error: 'not found' }, 404);
       return json({ head: doc.head, versions: doc.versions || [] });
     }
@@ -841,8 +838,8 @@ export async function onRequest(context) {
       // profile fields → no version; style → a new version. profile survives the style
       // write (writeStyleDoc carries it forward), so doing profile first is safe.
       let head;
-      if (hasProfile) { head = (await mergeProfile(env, styleKey, profilePatch)).head; }
-      if (style.trim()) { head = (await writeStyleDoc(env, styleKey, style, source)).head; }
+      if (hasProfile) { head = (await mergeProfile(env, styleScope, profilePatch)).head; }
+      if (style.trim()) { head = (await writeStyleDoc(env, styleScope, style, source)).head; }
       return json({ ok: true, head: head ?? 0 });
     }
 
@@ -850,7 +847,7 @@ export async function onRequest(context) {
       let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
       const newHead = typeof body.head === 'number' ? body.head : null;
       if (!newHead) return json({ error: 'head required' }, 400);
-      const doc = await setStyleHead(env, styleKey, newHead);
+      const doc = await setStyleHead(env, styleScope, newHead);
       if (!doc) return json({ error: 'version not found' }, 404);
       return json({ ok: true, head: doc.head });
     }
@@ -977,7 +974,7 @@ export async function onRequest(context) {
           const currentArticles = resolveArticles(doc);
           const entry = {
             stem: s,
-            title: currentArticles[0]?.title || '(无题)',
+            title: currentArticles[0]?.title || TITLE_FALLBACK,
             head: doc.head || 1,
             createdAt: doc.createdAt || 0,
             updatedAt: doc.updatedAt || 0,

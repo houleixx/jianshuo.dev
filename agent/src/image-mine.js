@@ -4,7 +4,7 @@
 // 任一阶段失败向上抛 —— miner.js 捕获后回退现行 IMAGE_ONLY_SYSTEM 单发（质量下限=旧行为）。
 // 设计 spec：docs/superpowers/specs/2026-07-03-image-only-mine-pipeline-design.md
 
-import { resolveArticles } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
 import { buildStagePayload, parseStageJson, QUALITY_GATE, MAX_RECENT_TITLES } from "./prompts/image-pipeline.js";
 import { writeLlmLog } from "./llmlog.js";
 import { callAnthropic } from "./anthropic.js";
@@ -70,7 +70,7 @@ export async function buildFactPack(env, { scope, stem, photos }) {
 
 const normalizeArticles = (arts) => (arts || [])
   .filter((a) => a && typeof a === "object" && (a.body || "").trim())
-  .map((a) => ({ title: (a.title || "(无题)").trim(), body: (a.body || "").trim() }));
+  .map((a) => ({ title: (a.title || TITLE_FALLBACK).trim(), body: (a.body || "").trim() }));
 
 // 写作 + 审稿一轮（plan 固定）。restyle 复用观察结果时也走这里——换文风不换立意。
 export async function rewriteFromVision({ photos, factPack, vision, plan, styleText, provider = "anthropic", model, callModel }) {

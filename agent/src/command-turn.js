@@ -29,7 +29,7 @@ export function affectedStems(toolRuns = []) {
 }
 
 export async function runCommandTurn({ env, scope, token, origin, turnId, instruction, refs = [], callClaude, idemKey, history = [] }) {
-  const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
+  const style = (await readStyleText(env, scope).catch(() => "")) || "";
   const refLines = refs.map((r) => `第${r.n}篇 → stem=${r.stem}｜标题：${r.title}`).join("\n") || "（列表为空）";
   const systemBlocks = [
     { type: "text", text: COMMAND_SYSTEM, cache_control: { type: "ephemeral" } },

@@ -9,6 +9,9 @@
 // Undo = move head to head-1 (setHead). No new version written.
 // Redo = move head to head+1 (setHead). No new version written.
 // New edit = truncate versions after head, append v=head+1, head++.
+// 文章无标题时的统一显示值 —— 单一真源（曾漂移出 "（无题）"/"无题" 两个变体）。
+export const TITLE_FALLBACK = "(无题)";
+
 
 export const MAX_VERSIONS = 10;
 
@@ -34,7 +37,7 @@ function migrateToV3(doc) {
   // (Mirrors the v1 fallback in every resolveArticles across the Files/share/agent code.)
   const currentArticles = (Array.isArray(doc.articles) && doc.articles.length)
     ? doc.articles
-    : (doc.body ? [{ title: doc.title || "(无题)", body: doc.body }] : []);
+    : (doc.body ? [{ title: doc.title || TITLE_FALLBACK, body: doc.body }] : []);
   const currentEntry = {
     v: latestV,
     savedAt: doc.updatedAt || 0,
@@ -107,7 +110,7 @@ export function resolveArticles(doc) {
     if (cv && Array.isArray(cv.articles) && cv.articles.length) return cv.articles;
   }
   if (Array.isArray(doc.articles) && doc.articles.length) return doc.articles;
-  if (doc.body) return [{ title: doc.title || "(无题)", body: doc.body }];
+  if (doc.body) return [{ title: doc.title || TITLE_FALLBACK, body: doc.body }];
   return [];
 }
 

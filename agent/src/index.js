@@ -20,7 +20,7 @@ import { runCommandTurn } from "./command-turn.js";
 import { runMine, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
-import { verifySession, anonScopeFromToken } from "../../functions/lib/auth.js";
+import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
 import { buildBroadcastMessage, createPairing, verifyPairing, completePairing, resolveMatchingScopes, genDistinctCodes, CODE_TTL_MS } from "./devicelink.js";
 import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
@@ -139,7 +139,7 @@ export class ArticleEditor extends Agent {
   onConnect(connection, ctx) {
     const key = ctx.request.headers.get("x-vd-article-key");
     const scope = ctx.request.headers.get("x-vd-scope");
-    const token = (ctx.request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    const token = bearerToken(ctx.request);
     const set = (k, v) => { if (v) this.sql`INSERT INTO config (k, v) VALUES (${k}, ${v}) ON CONFLICT(k) DO UPDATE SET v = excluded.v`; };
     set("articleKey", key);
     set("scope", scope);
@@ -342,7 +342,7 @@ export class LibraryAgent extends Agent {
   // token-derived scope as a header. Persist it (no articleKey — library-level).
   onConnect(connection, ctx) {
     const scope = ctx.request.headers.get("x-vd-scope");
-    const token = (ctx.request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    const token = bearerToken(ctx.request);
     const set = (k, v) => { if (v) this.sql`INSERT INTO config (k, v) VALUES (${k}, ${v}) ON CONFLICT(k) DO UPDATE SET v = excluded.v`; };
     set("scope", scope);
     set("token", token);
@@ -678,14 +678,13 @@ export class LinkBroker {
 // Usage route helpers
 // ---------------------------------------------------------------------------
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
-const bearer = (req) => (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
 const r1 = (n) => Math.round(n * 10) / 10;
 const r2 = (n) => Math.round(n * 100) / 100;
 
 export async function handleUsageRoute(url, request, env) {
   if (!url.pathname.startsWith("/agent/usage/")) return null;
   try {
-  const tok = bearer(request);
+  const tok = bearerToken(request);
   const isAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
 
   if (url.pathname === "/agent/usage/balance" && request.method === "GET") {
@@ -767,7 +766,7 @@ export default {
     // ENAM relay DO (colo + a 1-token call each), so a geo-block regression is
     // diagnosable in one curl instead of by fishing llmlogs.
     if (url.pathname === "/agent/llm-health") {
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       if (!env.FILES_TOKEN || tok !== env.FILES_TOKEN) return new Response("unauthorized", { status: 401 });
       const ping = { model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [{ role: "user", content: "hi" }] };
       const trace = await fetch("https://www.cloudflare.com/cdn-cgi/trace").then((r) => r.text()).catch(() => "");
@@ -800,8 +799,7 @@ export default {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });
       }
-      const auth = request.headers.get("Authorization") || "";
-      const token = auth.replace(/^Bearer\s+/i, "");
+      const token = bearerToken(request);
       const scope = await resolveScope(token, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
 
@@ -822,7 +820,7 @@ export default {
     // ── /agent/command ── 库级语音指令 agent（每用户一个 DO，无 stem）───────────
     if (url.pathname === "/agent/command") {
       if (request.headers.get("Upgrade") !== "websocket") return new Response("expected websocket", { status: 426 });
-      const token = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const token = bearerToken(request);
       const scope = await resolveScope(token, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
       const agent = await getAgentByName(env.LibraryAgent, sanitizeName(scope + ":command"));
@@ -836,8 +834,7 @@ export default {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });
       }
-      const auth = request.headers.get("Authorization") || "";
-      const token = auth.replace(/^Bearer\s+/i, "");
+      const token = bearerToken(request);
       const scope = await resolveScope(token, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
 
@@ -851,8 +848,7 @@ export default {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("expected websocket", { status: 426 });
       }
-      const auth = request.headers.get("Authorization") || "";
-      const token = auth.replace(/^Bearer\s+/i, "");
+      const token = bearerToken(request);
       const scope = await resolveScope(token, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
 
@@ -873,7 +869,7 @@ export default {
     // ── /agent/ui-config/custom ── 该用户的指令自定义（iOS 设置页）：GET 列条目，
     // PUT 写/删单条稀疏覆盖（空 = 恢复缺省）。存 users/<sub>/ui-config.json。
     if (url.pathname === "/agent/ui-config/custom") {
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       const scope = await resolveScope(tok, env);
       if (!scope || !scope.startsWith("users/")) return new Response("unauthorized", { status: 401 });
       return handleUIConfigCustom(request, env, scope);
@@ -883,7 +879,7 @@ export default {
     // 最终生效版：内置缺省 ← 全局 R2 覆盖 ← 每用户稀疏覆盖（见 ui-config.js）。
     if (url.pathname === "/agent/ui-config") {
       if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       const scope = await resolveScope(tok, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
       const cfg = await loadUIConfigFor(env, scope);
@@ -893,7 +889,7 @@ export default {
     // ── /agent/mine/trigger ── kick the miner (any authenticated user or admin) ──
     if (url.pathname === "/agent/mine/trigger") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       const isAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
       const scope   = isAdmin ? "admin" : await resolveScope(tok, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
@@ -908,7 +904,7 @@ export default {
     // the article's versions[] (otherwise it just patchHead's — free). User token scoped.
     if (url.pathname === "/agent/restyle") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       const scope = await resolveScope(tok, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
       const body = await request.json().catch(() => ({}));
@@ -926,7 +922,7 @@ export default {
     // 包后写剪贴板 + 弹 ShareSheet，发布动作由用户在小红书 App 里完成。
     if (url.pathname === "/agent/xhs-pack") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       const scope = await resolveScope(tok, env);
       if (!scope) return J({ error: "unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -943,7 +939,7 @@ export default {
     // billing never blocks or fails the response.
     if (url.pathname === "/agent/style/extract") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       const scope = await resolveScope(tok, env);
       if (!scope) return J({ error: "unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -1002,7 +998,7 @@ export default {
       // seconds later (user refreshes 我的录音).
       const distillAndWrite = async () => {
         const style = await distillStyle(samples, claude);
-        await writeStyleDoc(env, `${scope}CLAUDE.json`, style, "share-extract");
+        await writeStyleDoc(env, scope, style, "share-extract");
         // 写作风格介绍文章（固定 stem，覆盖上一篇）— article JSON 先于 .m4a → miner skip。
         try {
           const { title, body: introBody } = buildStyleIntroArticle(style, samples);
@@ -1044,7 +1040,7 @@ export default {
     // ── /agent/paint-callback ── paint 出图完成回调：验 token → 幂等 → 写 R2 (+扣费) ──
     if (url.pathname === "/agent/paint-callback") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       if (!env.PAINT_CALLBACK_TOKEN || tok !== env.PAINT_CALLBACK_TOKEN) return new Response("unauthorized", { status: 401 });
       const body = await request.json().catch(() => null);
       const m = body && body.callback_meta;
@@ -1076,7 +1072,7 @@ export default {
     // ── /agent/notify ── mine.py notifies about processing state ───────────
     if (url.pathname === "/agent/notify") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const adminToken = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const adminToken = bearerToken(request);
       if (!env.FILES_TOKEN || adminToken !== env.FILES_TOKEN) {
         return new Response("unauthorized", { status: 401 });
       }
@@ -1095,7 +1091,7 @@ export default {
     // ── /agent/link/* ── device-link pairing (new device logs into old account) ──
     if (url.pathname === "/agent/link/start") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       if (!(await resolveScope(tok, env))) return new Response("unauthorized", { status: 401 });
       const { prefix, pubkey } = await request.json().catch(() => ({}));
       if (!/^[0-9a-fA-F]{6}$/.test(prefix || "") || !pubkey) return new Response("bad request", { status: 400 });
@@ -1129,7 +1125,7 @@ export default {
 
     if (url.pathname === "/agent/link/verify") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       if (!(await resolveScope(tok, env))) return new Response("unauthorized", { status: 401 });
       const { pairingId, code } = await request.json().catch(() => ({}));
       if (!/^[0-9a-f]{32}$/.test(pairingId || "") || !/^\d{4}$/.test(code || "")) return new Response("bad request", { status: 400 });
@@ -1152,7 +1148,7 @@ export default {
 
     if (url.pathname === "/agent/link/complete") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       const caller = await resolveScope(tok, env);
       if (!caller) return new Response("unauthorized", { status: 401 });
       const { pairingId, blob } = await request.json().catch(() => ({}));
@@ -1167,7 +1163,7 @@ export default {
 
     if (url.pathname === "/agent/link/cancel") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
-      const tok = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+      const tok = bearerToken(request);
       const caller = await resolveScope(tok, env);
       if (!caller) return new Response("unauthorized", { status: 401 });
       const { pairingId } = await request.json().catch(() => ({}));

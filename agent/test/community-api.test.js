@@ -48,9 +48,9 @@ function schema3(title, extra = {}) {
 
 describe("GET community/get/<id>", () => {
   it("legacy schema-1 inline post (no articleKey) is read verbatim, markers + photos kept", async () => {
-    const context = reqCtx("GET", ["community", "get", "leg1"]);
-    context.env.FILES._store.set("community/leg1.json", JSON.stringify({
-      schema: 1, shareId: "leg1", author: "王建硕", title: "老帖标题",
+    const context = reqCtx("GET", ["community", "get", "leg100000001"]);
+    context.env.FILES._store.set("community/leg100000001.json", JSON.stringify({
+      schema: 1, shareId: "leg100000001", author: "王建硕", title: "老帖标题",
       articles: [{ title: "老帖标题", body: "正文 [[photo:1]]" }],
       photos: ["photos/s/a.jpg"], firstSharedAt: 3000,
     }));
@@ -63,10 +63,10 @@ describe("GET community/get/<id>", () => {
   });
 
   it("schema-2 pointer resolves the LIVE article (edits show immediately)", async () => {
-    const context = reqCtx("GET", ["community", "get", "ptr1"]);
+    const context = reqCtx("GET", ["community", "get", "ptr100000001"]);
     context.env.FILES._store.set("users/u/articles/s1.json", schema3("Live标题"));
-    context.env.FILES._store.set("community/ptr1.json", JSON.stringify({
-      schema: 2, shareId: "ptr1", owner: "users/u/",
+    context.env.FILES._store.set("community/ptr100000001.json", JSON.stringify({
+      schema: 2, shareId: "ptr100000001", owner: "users/u/",
       articleKey: "users/u/articles/s1.json", author: "作者", firstSharedAt: 5000,
     }));
     const body = await (await onRequest(context)).json();
@@ -76,13 +76,13 @@ describe("GET community/get/<id>", () => {
   });
 
   it("schema-2 pointer to a legacy v1 source doc still renders", async () => {
-    const context = reqCtx("GET", ["community", "get", "ptrv1"]);
+    const context = reqCtx("GET", ["community", "get", "ptrv10000001"]);
     // The SOURCE article is the original v1 shape (top-level title/body, no versions).
     context.env.FILES._store.set("users/u/articles/old.json", JSON.stringify({
       version: 1, title: "V1帖", body: "v1 正文",
     }));
-    context.env.FILES._store.set("community/ptrv1.json", JSON.stringify({
-      schema: 2, shareId: "ptrv1", owner: "users/u/",
+    context.env.FILES._store.set("community/ptrv10000001.json", JSON.stringify({
+      schema: 2, shareId: "ptrv10000001", owner: "users/u/",
       articleKey: "users/u/articles/old.json", author: "作者", firstSharedAt: 6000,
     }));
     const body = await (await onRequest(context)).json();
@@ -91,9 +91,9 @@ describe("GET community/get/<id>", () => {
   });
 
   it("404s when the pointer's source article was deleted (orphan)", async () => {
-    const context = reqCtx("GET", ["community", "get", "gone"]);
-    context.env.FILES._store.set("community/gone.json", JSON.stringify({
-      schema: 2, shareId: "gone", owner: "users/u/",
+    const context = reqCtx("GET", ["community", "get", "gone00000001"]);
+    context.env.FILES._store.set("community/gone00000001.json", JSON.stringify({
+      schema: 2, shareId: "gone00000001", owner: "users/u/",
       articleKey: "users/u/articles/missing.json", author: "x", firstSharedAt: 1,
     }));
     expect((await onRequest(context)).status).toBe(404);
@@ -107,27 +107,27 @@ describe("GET community/list", () => {
     const context = reqCtx("GET", ["community", "list"]);
     const env = context.env;
     // schema-1 legacy inline post (older)
-    env.FILES._store.set("community/leg.json", JSON.stringify({
-      schema: 1, shareId: "leg", author: "A", title: "老帖",
+    env.FILES._store.set("community/leg000000001.json", JSON.stringify({
+      schema: 1, shareId: "leg000000001", author: "A", title: "老帖",
       articles: [{ title: "老帖", body: "x" }], firstSharedAt: 3000,
     }));
     // schema-2 live pointer (newer)
     env.FILES._store.set("users/u/articles/s1.json", schema3("新帖"));
-    env.FILES._store.set("community/ptr.json", JSON.stringify({
-      schema: 2, shareId: "ptr", owner: "users/u/",
+    env.FILES._store.set("community/ptr000000001.json", JSON.stringify({
+      schema: 2, shareId: "ptr000000001", owner: "users/u/",
       articleKey: "users/u/articles/s1.json", author: "B", firstSharedAt: 5000,
     }));
     // orphan: source article + audio both gone → reaped + dropped
-    env.FILES._store.set("community/orphan.json", JSON.stringify({
-      schema: 2, shareId: "orphan", owner: "users/u/",
+    env.FILES._store.set("community/orphan000001.json", JSON.stringify({
+      schema: 2, shareId: "orphan000001", owner: "users/u/",
       articleKey: "users/u/articles/gone.json", author: "C", firstSharedAt: 9000,
     }));
 
     const body = await (await onRequest(context)).json();
-    expect(body.posts.map((p) => p.shareId)).toEqual(["ptr", "leg"]);  // newest-first, orphan gone
+    expect(body.posts.map((p) => p.shareId)).toEqual(["ptr000000001", "leg000000001"]);  // newest-first, orphan gone
     expect(body.posts[0].title).toBe("新帖");   // schema-2 title read live
     expect(body.posts[1].title).toBe("老帖");   // schema-1 title from stored copy
-    expect(env.FILES._store.has("community/orphan.json")).toBe(false); // self-healed
+    expect(env.FILES._store.has("community/orphan000001.json")).toBe(false); // self-healed
   });
 });
 
@@ -187,27 +187,27 @@ describe("POST community/share — write gate", () => {
 
 describe("POST community/unshare — owner only", () => {
   function seedPost(env) {
-    env.FILES._store.set("community/p1.json", JSON.stringify({
-      schema: 2, shareId: "p1", owner: "users/u/",
+    env.FILES._store.set("community/p10000000001.json", JSON.stringify({
+      schema: 2, shareId: "p10000000001", owner: "users/u/",
       articleKey: "users/u/articles/s1.json", author: "王建硕", firstSharedAt: 1,
     }));
   }
 
   it("a non-owner Apple user gets 403 and the post stays", async () => {
     const token = await session("users/other/");
-    const context = reqCtx("POST", ["community", "unshare", "p1"], { token });
+    const context = reqCtx("POST", ["community", "unshare", "p10000000001"], { token });
     seedPost(context.env);
     const resp = await onRequest(context);
     expect(resp.status).toBe(403);
-    expect(context.env.FILES._store.has("community/p1.json")).toBe(true);
+    expect(context.env.FILES._store.has("community/p10000000001.json")).toBe(true);
   });
 
   it("the owner deletes their own post", async () => {
     const token = await session("users/u/");
-    const context = reqCtx("POST", ["community", "unshare", "p1"], { token });
+    const context = reqCtx("POST", ["community", "unshare", "p10000000001"], { token });
     seedPost(context.env);
     const resp = await onRequest(context);
     expect(resp.status).toBe(200);
-    expect(context.env.FILES._store.has("community/p1.json")).toBe(false);
+    expect(context.env.FILES._store.has("community/p10000000001.json")).toBe(false);
   });
 });

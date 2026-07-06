@@ -1,8 +1,8 @@
 // VoiceDrop agent tools — general primitives the article-editing agent composes.
 // Each handler takes (args, ctx) where ctx = {env, scope, articleKey, token, origin}.
 
-import { resolveArticles } from "../../functions/lib/article-store.js";
-import { resolveStyle, parseStyleMarkdown, readStyleText, readStyleDoc } from "../../functions/lib/style-store.js";
+import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
+import { readStyleText, readStyleDoc } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
 import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
@@ -50,7 +50,7 @@ register(
       const obj = await env.FILES.get(prefix + stem + ".json");
       if (!obj) continue;
       let doc; try { doc = JSON.parse(await obj.text()); } catch { continue; }
-      const title = resolveArticles(doc)[0]?.title || "(无题)";
+      const title = resolveArticles(doc)[0]?.title || TITLE_FALLBACK;
       const entry = { stem, title, createdAt: doc.createdAt || 0 };
       if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
       out.push(entry);
@@ -87,7 +87,7 @@ register(
     // 未来新字段），只覆盖模型真正改的 title/body。白名单会在每次编辑时静默丢新字段。
     doc.articles = articles.map((a, i) => ({
       ...(prev[i] || {}),
-      title: String(a.title || "(无题)"), body: String(a.body || ""),
+      title: String(a.title || TITLE_FALLBACK), body: String(a.body || ""),
     }));
     delete doc.title; delete doc.body; // collapse any v1 remnants
     // Stamp the instruction id that produced this doc — drives crash-safe
@@ -177,7 +177,7 @@ register(
     // other article verbatim and keep each article's wechatMediaId.
     doc.articles = articles.map((a, i) => ({
       ...a, // 继承一切字段（style / wechatMediaId / …），只覆盖改动
-      title: String((i === idx ? newTitle : a.title) || "(无题)"),
+      title: String((i === idx ? newTitle : a.title) || TITLE_FALLBACK),
       body: String(i === idx ? newBody : (a.body || "")),
     }));
     delete doc.title; delete doc.body; // collapse any v1 remnants
@@ -193,10 +193,7 @@ register(
   // 段仅作读回退。返回的是文风正文（不含名字——名字暂留老 CLAUDE.md，另行管理）。
   { name: "read_style", description: "读取用户的写作文风（文风正文）。调整文风前先读出来。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   async (_args, { env, scope }) => {
-    const obj = await env.FILES.get(scope + "CLAUDE.json");
-    if (obj) { try { return { style: resolveStyle(JSON.parse(await obj.text())) }; } catch {} }
-    const legacy = await env.FILES.get(scope + "CLAUDE.md");
-    return { style: legacy ? parseStyleMarkdown(await legacy.text()) : "" };
+    return { style: await readStyleText(env, scope) };
   }
 );
 
@@ -316,7 +313,7 @@ register(
     const newMarker = `[[photo:${newKey}]]`;
     const swap = (b) => String(b).split(marker).join(newMarker);
     doc.articles = articles.map((a, i) => ({
-      ...a, title: String(a.title || "(无题)"), body: i === idx ? swap(a.body) : String(a.body || ""),
+      ...a, title: String(a.title || TITLE_FALLBACK), body: i === idx ? swap(a.body) : String(a.body || ""),
     }));
     delete doc.title; delete doc.body;
     const werr = await putArticleDoc(doc, ctx);
@@ -374,7 +371,7 @@ register(
 
     const origBodies = articles.map((a) => String(a.body || ""));
     doc.articles = articles.map((a, i) => ({
-      ...a, title: String(a.title || "(无题)"), body: i === idx ? r.body : String(a.body || ""),
+      ...a, title: String(a.title || TITLE_FALLBACK), body: i === idx ? r.body : String(a.body || ""),
     }));
     delete doc.title; delete doc.body;
     const werr = await putArticleDoc(doc, ctx);
@@ -385,7 +382,7 @@ register(
     if (!resp || resp.status !== 202) {
       // 回退：撤掉插入的新图 marker，保持文档与"没有在跑的任务"一致
       const revert = articles.map((a, i) => ({
-        ...a, title: String(a.title || "(无题)"), body: origBodies[i],
+        ...a, title: String(a.title || TITLE_FALLBACK), body: origBodies[i],
       }));
       await putArticleDoc({ ...doc, articles: revert }, ctx);
       return { error: "图片服务提交失败" };
@@ -428,9 +425,9 @@ register(
       if (!obj) return { error: `not_found:${stem}` };
       let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: `bad_article:${stem}` }; }
       const a = resolveArticles(doc)[0] || {};
-      parts.push(`《${a.title || "(无题)"}》\n${a.body || ""}`);
+      parts.push(`《${a.title || TITLE_FALLBACK}》\n${a.body || ""}`);
     }
-    const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
+    const style = (await readStyleText(env, scope).catch(() => "")) || "";
     const system = `你是${"王建硕"}的写作助手。把用户给的几篇文章揉成一篇连贯的新文章：去重、顺逻辑、保持下面这套写作风格。第一行只写标题（不加书名号/引号），其余为正文。\n原文里的 [[photo:…]] 照片标记必须全部保留到合并稿：key 一字不改、独占一行、放到语义对应的段落处，一张都不能丢。\n\n【写作风格】\n${style}`.trim();
     const user = `${guidance ? `合并侧重：${guidance}\n\n` : ""}请把以下 ${parts.length} 篇合并成一篇：\n\n${parts.join("\n\n---\n\n")}`;
     const resp = await callClaude({ system, messages: [{ role: "user", content: user }] });
@@ -448,7 +445,7 @@ register(
     // 幂等：这篇已存在（上次跑到一半被驱逐后重跑）→ 直接返回已有的，不再造第二篇。
     if (await env.FILES.head(`${scope}articles/${stem}.json`)) return { ok: true, newStem: stem, title: "(已合并)", merged: stems.length };
     // 合并用的就是当前文风 head 的风格文本，所以新文章的 style 字段也打 head 的版本号。
-    const headV = await readStyleDoc(env, `${scope}CLAUDE.json`).then((d) => (d && Number.isInteger(d.head) ? d.head : null)).catch(() => null);
+    const headV = await readStyleDoc(env, scope).then((d) => (d && Number.isInteger(d.head) ? d.head : null)).catch(() => null);
     const w = await writeStandaloneArticle(ctx, stem, title, body, headV);
     if (w.error) return w;
     return { ok: true, newStem: stem, title, merged: stems.length };

@@ -4,7 +4,7 @@ import { callAnthropic } from "./anthropic.js";
 import { writeLlmLog } from "./llmlog.js";
 import { claudeCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
-import { resolveArticles } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
 import { readStyleText } from "../../functions/lib/style-store.js";
 
 const MODEL = "claude-sonnet-4-6";
@@ -98,7 +98,7 @@ export async function xhsPack(env, scope, stem) {
   if (!art || !(art.body || "").trim()) return { error: "empty_article" };
   const photoKeys = extractPhotoKeys(art.body);
   const cleaned = stripPhotoMarkers(art.body);
-  const title = String(art.title || "(无题)").trim();
+  const title = String(art.title || TITLE_FALLBACK).trim();
 
   if ([...cleaned].length <= XHS_DIRECT_MAX) {
     let tags = [];
@@ -115,7 +115,7 @@ export async function xhsPack(env, scope, stem) {
     return { ok: true, mode: "direct", title: [...title].slice(0, 20).join(""), body: cleaned, tags, photoKeys };
   }
 
-  const style = (await readStyleText(env, `${scope}CLAUDE.json`, `${scope}CLAUDE.md`).catch(() => "")) || "";
+  const style = (await readStyleText(env, scope).catch(() => "")) || "";
   const user = `${style ? `<style>\n${style}\n</style>\n\n` : ""}文章标题：${title}\n\n文章正文：\n${art.body}`;
   const reqBody = { model: MODEL, max_tokens: 1600, system: XHS_SYSTEM, messages: [{ role: "user", content: user }] };
   const r = await loggedCall(env, scope, stem, "xhs-pack", reqBody);
