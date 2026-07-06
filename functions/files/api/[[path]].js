@@ -197,6 +197,77 @@ export async function onRequest(context) {
     return json({ scope });
   }
 
+  // ── Delete account (Apple 5.1.1(v)) ──────────────────────────────────────
+  // POST account/delete — permanently erases the calling user, whether they are
+  // an anonymous identity or Apple-signed-in (both are "accounts" to App Review):
+  //   1. their community posts (owner == scope) + those posts' report markers,
+  //   2. public share links (shares/<id>) resolving into their scope,
+  //   3. every object under users/<sub>/ (recordings, articles, photos, settings),
+  //   4. the Sign-in-with-Apple binding (links/apple-<sub>.json).
+  // Irreversible. The client then discards its tokens/local data, so the next
+  // launch starts a brand-new empty identity. Admin and read-only tokens can't
+  // call this (read-only is already 403'd above).
+  if (request.method === 'POST' && action === 'account' && sub2 === 'delete') {
+    if (!scope) return json({ error: 'admin token cannot delete an account' }, 400);
+
+    // Grab the Apple binding before the scope (and its ACCOUNT.json) is wiped.
+    let appleSub = null;
+    try {
+      const acct = await env.FILES.get(`${scope}ACCOUNT.json`);
+      if (acct) appleSub = JSON.parse(await acct.text()).appleSub || null;
+    } catch {}
+
+    let communityPosts = 0;
+    {
+      const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
+      const posts = listed.objects.filter((o) => /^community\/[^/]+\.json$/.test(o.key));
+      await mapLimit(posts, 16, async (o) => {
+        try {
+          const obj = await env.FILES.get(o.key);
+          if (!obj) return;
+          const p = JSON.parse(await obj.text());
+          if (p.owner !== scope) return;
+          await env.FILES.delete(o.key);
+          await env.FILES.delete(`community/reports/${p.shareId}.json`).catch(() => {});
+          communityPosts++;
+        } catch {}
+      });
+    }
+
+    let shareLinks = 0;
+    {
+      const listed = await env.FILES.list({ prefix: 'shares/', limit: 1000 });
+      await mapLimit(listed.objects, 16, async (o) => {
+        try {
+          const obj = await env.FILES.get(o.key);
+          if (!obj) return;
+          if (!(await obj.text()).trim().startsWith(scope)) return;
+          await env.FILES.delete(o.key);
+          shareLinks++;
+        } catch {}
+      });
+    }
+
+    // The whole user prefix, re-listing until empty (R2 lists max 1000 per call).
+    // Round cap so a stuck delete can never spin the loop forever.
+    let objects = 0;
+    for (let round = 0; round < 100; round++) {
+      const listed = await env.FILES.list({ prefix: scope, limit: 1000 });
+      if (!listed.objects.length) break;
+      await mapLimit(listed.objects, 32, async (o) => {
+        await env.FILES.delete(o.key).catch(() => {});
+      });
+      objects += listed.objects.length;
+      if (!listed.truncated && listed.objects.length < 1000) break;
+    }
+
+    if (appleSub) {
+      await env.FILES.delete(`links/apple-${sanitizeSeg(appleSub)}.json`).catch(() => {});
+    }
+
+    return json({ ok: true, deleted: { objects, communityPosts, shareLinks } });
+  }
+
   // Mint a 24 h read-only articles link for the current user's scope.
   if (request.method === 'GET' && action === 'token' && sub2 === 'articles') {
     if (!scope) return json({ error: 'admin cannot use this endpoint' }, 403);
