@@ -13,17 +13,20 @@ export const INTERVIEWER_INSTRUCTIONS =
   "你是一位老练的媒体采访者。你认真听、真正理解对方说的核心。只用一句话、不超过 5 秒的简短追问，" +
   "扣住他刚说的关键点，目的是帮他更容易接着往下说。绝不打断、不评论、不总结、不寒暄、不重复他的话。语气自然、克制。";
 
-// mint 请求体。turn_detection 用 server_vad 但 create_response:false——只借它的
-// speech_started/stopped 事件，何时发 response.create 由 app 控制（限流）。
-// 注意：/v1/realtime/client_secrets 的确切嵌套随 OpenAI 演进，部署前用真 curl 核实（见 plan Task 4）。
+// mint 的 session 配置（真源自 2026-07-07 对 live /v1/realtime/client_secrets 的 curl 核实）。
+// 端点收 { session: <此对象> }；audio.*.format 必须是对象 {type,rate}，不是字符串。
+// turn_detection 用 server_vad 但 create_response:false——只借它的 speech_started/stopped
+// 事件，何时发 response.create 由 app 控制（限流）。
+const PCM24 = { type: "audio/pcm", rate: 24000 };
 export function buildSessionConfig() {
   return {
+    type: "realtime",
     model: "gpt-realtime-2.1",
     instructions: INTERVIEWER_INSTRUCTIONS,
     output_modalities: ["audio"],
     audio: {
-      input:  { format: "pcm16", turn_detection: { type: "server_vad", silence_duration_ms: 500, create_response: false, interrupt_response: false } },
-      output: { format: "pcm16", voice: "cedar" },
+      input:  { format: PCM24, turn_detection: { type: "server_vad", silence_duration_ms: 500, create_response: false, interrupt_response: false } },
+      output: { format: PCM24, voice: "cedar" },
     },
     reasoning: { effort: "low" },
   };
@@ -42,7 +45,7 @@ export async function handleRealtimeRoute(url, request, env) {
       resp = await globalThis.fetch("https://api.openai.com/v1/realtime/client_secrets", {
         method: "POST",
         headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify(buildSessionConfig()),
+        body: JSON.stringify({ session: buildSessionConfig() }),
       });
     } catch { resp = null; }
     if (!resp || !resp.ok) {
@@ -51,10 +54,13 @@ export async function handleRealtimeRoute(url, request, env) {
     }
     let data;
     try { data = await resp.json(); } catch { return J({ error: "openai-bad-response" }, 502); }
-    if (!data.client_secret) return J({ error: "openai-bad-response" }, 502);
+    // 核实过的响应形状：secret 在顶层 value，session_id 在 session.id（非顶层 client_secret/id）。
+    const clientSecret = data.value ?? null;
+    const sessionId = data.session?.id ?? data.id ?? null;
+    if (!clientSecret) return J({ error: "openai-bad-response" }, 502);
     // 审计日志：每次 mint 记 scope + session_id，便于事后发现异常（用户定：先上+审计，不做限流）。
-    console.log("[realtime] mint", JSON.stringify({ scope, session_id: data.id ?? null, at: Date.now() }));
-    return J({ client_secret: data.client_secret, expires_at: data.expires_at ?? null, session_id: data.id ?? null });
+    console.log("[realtime] mint", JSON.stringify({ scope, session_id: sessionId, at: Date.now() }));
+    return J({ client_secret: clientSecret, expires_at: data.expires_at ?? null, session_id: sessionId });
   }
 
   if (url.pathname === "/agent/realtime/usage" && request.method === "POST") {

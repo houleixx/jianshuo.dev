@@ -29,7 +29,8 @@ describe("POST /agent/realtime/session", () => {
   it("mint：用 OPENAI_API_KEY 调 client_secrets 并透传凭证", async () => {
     globalThis.fetch = fakeFetch({
       "POST https://api.openai.com/v1/realtime/client_secrets": () =>
-        ({ ok: true, status: 200, body: { id: "sess_abc", client_secret: { value: "ek_xyz", expires_at: 1234 }, expires_at: 1234 } }),
+        // 核实过的真实响应形状：顶层 value = secret，session.id = 会话 id，expires_at 顶层。
+        ({ ok: true, status: 200, body: { value: "ek_xyz", expires_at: 1234, session: { id: "sess_abc" } } }),
     });
     const env = { SESSION_SECRET: "", OPENAI_API_KEY: "sk-test" };
     const r = await handleRealtimeRoute(U("/agent/realtime/session"), req("/agent/realtime/session"), env);
@@ -40,6 +41,12 @@ describe("POST /agent/realtime/session", () => {
     // 断言确实带了 Bearer OPENAI_API_KEY
     const call = globalThis.fetch.calls.find((c) => c.url.includes("/realtime/client_secrets"));
     expect(call.headers.Authorization).toBe("Bearer sk-test");
+    // 核实过的请求形状：{session:{...}}，model 在 session 内，audio.*.format 是对象。
+    const sent = JSON.parse(call.body);
+    expect(sent.session.model).toBe("gpt-realtime-2.1");
+    expect(sent.session.type).toBe("realtime");
+    expect(sent.session.audio.input.format).toEqual({ type: "audio/pcm", rate: 24000 });
+    expect(sent.session.audio.input.turn_detection.create_response).toBe(false);
   });
   it("无 token → 401", async () => {
     const r = await handleRealtimeRoute(U("/agent/realtime/session"), req("/agent/realtime/session", { token: null }), { SESSION_SECRET: "" });
