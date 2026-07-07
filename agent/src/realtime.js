@@ -52,6 +52,8 @@ export async function handleRealtimeRoute(url, request, env) {
     let data;
     try { data = await resp.json(); } catch { return J({ error: "openai-bad-response" }, 502); }
     if (!data.client_secret) return J({ error: "openai-bad-response" }, 502);
+    // 审计日志：每次 mint 记 scope + session_id，便于事后发现异常（用户定：先上+审计，不做限流）。
+    console.log("[realtime] mint", JSON.stringify({ scope, session_id: data.id ?? null, at: Date.now() }));
     return J({ client_secret: data.client_secret, expires_at: data.expires_at ?? null, session_id: data.id ?? null });
   }
 
