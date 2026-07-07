@@ -37,6 +37,27 @@ export function asrCostUY(seconds) {
   return Math.ceil(((seconds || 0) / 3600) * ASR_RMB_PER_HOUR * 1e6);
 }
 
+// OpenAI Realtime (gpt-realtime-2.1) 官方费率，USD per token。跟官方更新只改这里。
+export const REALTIME_PRICE = {
+  audio_in:        32 / 1e6,
+  audio_in_cached: 0.40 / 1e6,
+  audio_out:       64 / 1e6,
+  text_in:         4 / 1e6,
+  text_in_cached:  0.40 / 1e6,
+  text_out:        24 / 1e6,
+};
+
+// usage: { audio_in, audio_in_cached, audio_out, text_in, text_in_cached, text_out }（token 数）
+// → 微元(UY)，与 claudeCostUY 同式：ceil(usd × FX × 1e6)。缺字段/非法 → 0。
+export function realtimeCostUY(usage = {}) {
+  const p = REALTIME_PRICE;
+  const n = (k) => { const v = Number(usage && usage[k]); return Number.isFinite(v) && v > 0 ? v : 0; };
+  const usd =
+    n("audio_in") * p.audio_in + n("audio_in_cached") * p.audio_in_cached + n("audio_out") * p.audio_out +
+    n("text_in") * p.text_in + n("text_in_cached") * p.text_in_cached + n("text_out") * p.text_out;
+  return Math.ceil(usd * FX * 1e6);
+}
+
 // 图片编辑（gpt-image-2 via paint）单价：按算力计价，避免 FX 漂移。
 export const IMAGE_SUANLI = 1.8;
 export function imageCostUY() { return suanliToUY(IMAGE_SUANLI); }
@@ -77,6 +98,7 @@ export const REASON_ZH = {
   "monthly":       "包月发放",
   "migrated":      "余额迁移",
   "overdraft":     "透支",
+  "realtime":      "AI 采访",
 };
 export function reasonZH(reason) {
   if (!reason) return reason;
