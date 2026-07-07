@@ -38,6 +38,7 @@ import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { xhsPack } from "./xhs.js";
 import { handlePromptLab } from "./prompt-lab.js";
+import { handleRealtimeRoute } from "./realtime.js";
 import { REVISE_SYSTEM, EDIT_SYSTEM as SYSTEM } from "./prompts/edit.js";
 export { AnthropicRelay } from "./relay.js";
 
@@ -1192,6 +1193,9 @@ export default {
 
     { const r = await handleUsageRoute(url, request, env); if (r) return r; }
 
+    const rt = await handleRealtimeRoute(url, request, env);
+    if (rt) return rt;
+
     return new Response("not found", { status: 404 });
   },
 
@@ -1204,7 +1208,7 @@ export default {
 
 // Resolve a writable scope from an app token. Read-only temp tokens are rejected
 // (editing requires write). Returns 'users/<sub>/' or null.
-async function resolveScope(token, env) {
+export async function resolveScope(token, env) {
   if (!token) return null;
   if (env.FILES_TOKEN && token === env.FILES_TOKEN) return null; // admin has no single scope here
   if (env.SESSION_SECRET) {
