@@ -12,6 +12,7 @@
 //   R2_ACCESS_KEY_ID       R2 S3-compatible access key
 //   R2_SECRET_ACCESS_KEY   R2 S3-compatible secret key
 
+import { loadPrompts } from "./prompts/loader.js";
 import { writeLlmLog } from "./llmlog.js";
 import { callAnthropic } from "./anthropic.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
@@ -600,10 +601,12 @@ export function buildMinePrompt({
 }
 
 async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system", systemOverride = null, photoInstr = undefined) {
+  const _P = await loadPrompts(env);
   const payload = buildMinePrompt({
     transcript, styleText: claudeMd, photos, force, cacheMode,
     provider: modelCfg.provider, model: modelCfg.model,
-    ...(systemOverride ? { systemPrompt: systemOverride } : {}),
+    systemPrompt: systemOverride || _P["mine.system"],
+    forcePrompt: _P["mine.force"],
     // Explicit "" (image-only vision path) must win over buildMinePrompt's PHOTO_INSTR
     // default; omitted (undefined) leaves every other caller's behavior unchanged.
     ...(photoInstr !== undefined ? { photoInstr } : {}),
