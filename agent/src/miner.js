@@ -28,6 +28,7 @@ import {
   MINE_DEFAULT_STYLE as DEFAULT_STYLE,
   IMAGE_ONLY_SYSTEM,
 } from "./prompts/mine.js";
+import { MOD_CATEGORIES, buildModerationSystem } from "./prompts/moderation.js";
 import { mineImageOnly, rewriteFromVision, buildFactPack, makeStageCaller } from "./image-mine.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
@@ -638,12 +639,12 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
 // flag (no second LLM call) and refuses to publish a flagged article. Anthropic
 // (haiku) regardless of the mining provider, so moderation stays reliable + cheap.
 // Fail-open on any infra error (don't block legit content) — report/block still cover it.
-const MOD_CATEGORIES = "色情或露骨性内容、暴力血腥、仇恨或歧视、骚扰或欺凌、违法内容(毒品/武器/诈骗等)、自残或自杀、未成年人不当内容";
+// MOD_CATEGORIES / buildModerationSystem now live in ./prompts/moderation.js (imported above).
 export async function moderateArticles(articles, env) {
   if (!env.CLAUDE_API_KEY) return { flagged: false, skipped: "no-key" };
   const text = (articles || []).map(a => `${a.title || ""}\n${a.body || ""}`).join("\n\n").trim().slice(0, 16000);
   if (!text) return { flagged: false };
-  const system = `你是面向公开社区的内容安全审核员。判断下面这篇用户生成的中文文章，是否含有不适合公开展示的内容（${MOD_CATEGORIES}）。正常的观点表达、商业、生活、科技、情绪宣泄一律视为安全(false)；只有明确违规才标记 true。只输出 JSON，不要解释：{"flagged":true|false,"categories":["命中的类别"]}`;
+  const system = buildModerationSystem();
   try {
     const r = await callAnthropic(env, { model: "claude-haiku-4-5-20251001", max_tokens: 200,
       system, messages: [{ role: "user", content: text }] });

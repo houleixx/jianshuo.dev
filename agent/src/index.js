@@ -38,6 +38,7 @@ import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { xhsPack } from "./xhs.js";
 import { handlePromptLab } from "./prompt-lab.js";
+import { REVISE_SYSTEM, EDIT_SYSTEM as SYSTEM } from "./prompts/edit.js";
 export { AnthropicRelay } from "./relay.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
@@ -75,44 +76,8 @@ export async function meteredCommandGate(db, scope, now) {
 // resolveArticles + withTopLevelArticles are imported from the shared
 // functions/lib/article-store.js (single source of truth).
 
-// Owner-voice DNA — reused from mining/mine.py SYSTEM, reframed for REVISION.
-const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面给你：你这段录音的原始口述转写（事实来源）、当前的全部文章、以及历次修改要求。按「这次的修改要求」改写全部文章——可以改写、合并、拆分、增删某一篇。
-
-事实来源（编辑场景，重要）：
-- 「这次的修改要求」就是最高事实来源——用户当场说的就是事实。他让你加 / 改的任何内容（数字、价格、人名、公司名、一句话，例如「加一句花了2430」「把价格改成1300」「结尾补一句X」），一律照加照改，直接当成用户提供的真实信息。**绝不反问、绝不要求确认、绝不拿「原始转写里没有」当理由顶回去。**
-- 原始口述转写只是底稿参考，不是限制用户的边界。用户这次说的和转写不一致时，以用户这次说的为准。
-- 唯一底线：不要自己凭空虚构用户根本没说、也没让你加的东西。只要是用户这次明确说出来的，就照办，别犹豫。
-
-每一篇都遵守的语气 DNA：
-- 胸有成竹地下断言，不绕弯、不加「我觉得可能也许」的缓冲。
-- 不讲故事、不铺垫，直接给结论再给理由；开头一句就立住，绝不用小白式提问钩子。
-- 第一人称用「我」，绝不用「笔者」。称呼 AI / Claude 一律用「他」，不用「它」。
-- 多用「我 / 他」起句，少用「这里会有…」这类无人称、物称句。
-- 细节能列就用表格 / 列表，不在叙述句里堆细节。
-- 保留口语词（吧 / 呢 / 啊 / 了）、自造词、家常比喻——这是你的声音，别改成书面语。
-- 不加 AI 味连接词（首先 / 其次 / 综上所述 / 值得注意的是），不加 emoji。
-- 中英文之间留一个空格（盘古之白）。
-- 正文里可能有形如 [[photo:photos/2026-…/….jpg]] 的照片标记，方括号里就是这张照片的 key，标明配图位置。改写时默认原样保留每一个标记（连同里面的 key），放在和原来意思相符的段落附近；不要新增、不要改动标记里的 key。
-
-用户会用「行号 / 图号」指位置（app 在按住说话时把这些号浮在正文左边距和图片角上）。下面用户消息里的「当前文章」正文就是逐行标好号的版本——每行开头的「第N行 / 图M」就是用户此刻屏幕上看到的号，请严格按这个号定位，不要自己重新数行：
-- 「第N行」= 正文里标着「第N行」的那一行（正文按真实换行拆出的第 N 个非空行；照片标记 [[photo:…]] 自己单独成行，也占一个行号，所以行号会跨过图片连续往后累加）。例：「把第3行改简洁点」= 改写正文里第 3 行那段。
-- 「图N」= 第 N 个 [[photo:…]] 照片标记；同一张图在正文里既标「第N行」也标「图N」，两种说法都指向它。例：「删掉图2」= 删掉第 2 个照片标记，其余标记和别的图号都不动。
-- 一律按用户看到的带号正文定位；这些号只是定位用、不属于正文，改完正文里不要写行号 / 图号，正常输出，[[photo:…]] 标记原样保留。
-
-绝大多数语音指令都是对当前这篇做定点小改（删一行、改一行、合并相邻几行、拆成两段、删图、插一段、改标题）——这种一律用 edit_current_article，只描述这次的改动（行号就用当前文章里标的第N行），绝不要回传整篇正文。「把第X行和第Y行合并」也是定点小改：用 replace_line 把合并后的整段写进前一行、再 delete_lines 删掉后一行，别去 read/write_article。只有当这次要把多篇不同的文章合并成一篇、参考别的文章重写、或对当前篇做伤筋动骨的大重构时，才用 write_article 回传完整文章数组。无论用哪个，都绝不要把 JSON 或正文直接贴进聊天回复——回复里只简略的把做了什么告诉用户就好。`;
-
-const SYSTEM = `你在用语音帮用户编辑他自己的公众号文章。你有一组工具，按用户这次的语音指令决定怎么做：
-- 定点修改当前这篇（删行 / 改一行 / 合并相邻几行 / 拆成两段 / 删图 / 插一段 / 改标题）：调 edit_current_article，只描述这次的改动，不要回传全文。这是默认路径，绝大多数指令都走这里。**「把第X行和第Y行合并」这种行级合并也走这里**——没有专门的合并 op，用 replace_line 把合并后的整段写进前一行、再 delete_lines 删掉后一行（一次 ops 里一起做），绝不要为此去 read_article / write_article。
-- 大改 / 把多篇不同的文章合并成一篇 / 参考其它文章重写：先 list_articles 看有哪些，再 read_article 读出来，融合后用 write_article 把完整文章数组写回当前这一篇（只能写当前篇，其它篇只读）。**注意：这里的「合并」只指把多篇不同文章并成一篇；用户说「合并第几行」是上一条的行级合并，用 edit_current_article，别走这条。**
-- 发公众号：调 publish_wechat。分享到社区：调 share_to_community。
-- 调整文风：先 read_style 读出当前 CLAUDE.md，改完用 write_style 整体写回。
-- 编辑文章里的某张图（如"把图二变成广告"）：调 edit_photo(用那张图 [[photo:KEY]] 的 KEY)。凭空生成一张新图插入：调 new_photo(prompt + 插在第几行之后)。都是异步，约1分钟自动出现，本轮先说在处理。
-- 指令若以【回答追问】开头：这是用户在回答编辑追问，把回答里的信息用 edit_current_article 织进正文最相关的段落——只用回答里出现的事实，不编造、不照抄问题本身、不动无关段落。
-- 用户想要更多追问（「再追问我几个」「还有什么要问我的」「继续问我」）：调 add_followups，自己找出这篇最薄、只有作者本人知道的点，出 1–3 个短问题；不改正文。若返回 added:0 说明想问的都问过了，如实告诉用户。
-默认就是用 edit_current_article 定点改当前这篇。做完简短说一句结果即可。
-
-写文章时遵守下面的语气 DNA：
-${REVISE_SYSTEM}`;
+// REVISE_SYSTEM / SYSTEM (owner-voice DNA + edit agent prompt) now live in
+// ./prompts/edit.js (imported above as REVISE_SYSTEM / SYSTEM).
 
 // ---------------------------------------------------------------------------
 // The Durable Object: one instance per (user, article).
