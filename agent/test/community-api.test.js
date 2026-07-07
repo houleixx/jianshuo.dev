@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { onRequest } from "../../functions/files/api/[[path]].js";
 import { fakeEnv } from "./fakes.js";
-import { b64url, hmacSign } from "../../functions/lib/auth.js";
+import { b64url, b64urlToString, hmacSign } from "../../functions/lib/auth.js";
 
 // The VD社区 (community) surface had NO test coverage, yet it carries the most
 // legacy branches in the whole Files API: schema-1 inline posts written by old
@@ -13,10 +13,11 @@ import { b64url, hmacSign } from "../../functions/lib/auth.js";
 const SECRET = "secret";
 
 // Generic request context with an arbitrary bearer token (admin by default).
-function reqCtx(method, segments, { token = "admin", body } = {}) {
-  const env = { ...fakeEnv(), FILES_TOKEN: "admin", SESSION_SECRET: SECRET };
+function reqCtx(method, segments, { token = "admin", body, headers: extraHeaders = {}, env: extraEnv = {} } = {}) {
+  const env = { ...fakeEnv(), FILES_TOKEN: "admin", SESSION_SECRET: SECRET, ...extraEnv };
   const headers = { Authorization: `Bearer ${token}` };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  Object.assign(headers, extraHeaders);
   const request = new Request(`https://jianshuo.dev/files/api/${segments.join("/")}`, {
     method, headers, body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -24,11 +25,15 @@ function reqCtx(method, segments, { token = "admin", body } = {}) {
 }
 
 // A real signed session JWT (matches mintSession: {scope, apple, exp}).
-async function session(scope, { apple = true } = {}) {
+async function session(scope, { apple = true, wechat = false } = {}) {
   const h = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const p = b64url(JSON.stringify({ scope, apple, exp: Math.floor(Date.now() / 1000) + 3600 }));
+  const p = b64url(JSON.stringify({ scope, apple, wechat, exp: Math.floor(Date.now() / 1000) + 3600 }));
   return `${h}.${p}.${await hmacSign(`${h}.${p}`, SECRET)}`;
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // The server's own shareId derivation (HMAC of the article key, first 12 chars).
 async function shareIdFor(articleKey) {
@@ -142,6 +147,17 @@ describe("POST community/share — write gate", () => {
     expect((await resp.json()).error).toBe("needs_apple_signin");
   });
 
+  it("Android anon token → 403 needs_wechat_signin", async () => {
+    const token = "anon_" + "z".repeat(28);
+    const context = reqCtx("POST", ["community", "share", "articles", "s1.json"], {
+      token,
+      headers: { "X-VD-Platform": "android" },
+    });
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(403);
+    expect((await resp.json()).error).toBe("needs_wechat_signin");
+  });
+
   it("admin token → 403 admin cannot share", async () => {
     const context = reqCtx("POST", ["community", "share", "articles", "s1.json"]);
     const resp = await onRequest(context);
@@ -168,6 +184,23 @@ describe("POST community/share — write gate", () => {
     expect(stored.articles).toBeUndefined();      // content is NEVER copied into the post
   });
 
+  it("WeChat session writes a schema-2 POINTER without touching Apple gate", async () => {
+    const token = await session("users/u/", { apple: false, wechat: true });
+    const context = reqCtx("POST", ["community", "share", "articles", "s1.json"], { token });
+    context.env.FILES._store.set("users/u/articles/s1.json", schema3("微信分享标题"));
+    context.env.FILES._store.set("users/u/CLAUDE.md", "# 我的名字\n安卓用户\n");
+
+    const expectedId = await shareIdFor("users/u/articles/s1.json");
+    const body = await (await onRequest(context)).json();
+    expect(body.ok).toBe(true);
+    expect(body.shareId).toBe(expectedId);
+
+    const stored = JSON.parse(context.env.FILES._store.get(`community/${expectedId}.json`));
+    expect(stored.owner).toBe("users/u/");
+    expect(stored.articleKey).toBe("users/u/articles/s1.json");
+    expect(stored.author).toBe("安卓用户");
+  });
+
   it("re-sharing preserves the original firstSharedAt", async () => {
     const token = await session("users/u/");
     const context = reqCtx("POST", ["community", "share", "articles", "s1.json"], { token });
@@ -180,6 +213,46 @@ describe("POST community/share — write gate", () => {
     await onRequest(context);
     const stored = JSON.parse(context.env.FILES._store.get(`community/${id}.json`));
     expect(stored.firstSharedAt).toBe(1234);
+  });
+});
+
+// ── POST auth/wechat — Android sign-in, independent from Apple ───────────────
+
+describe("POST auth/wechat", () => {
+  function stubWechatExchange(body) {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      expect(String(url)).toContain("api.weixin.qq.com/sns/oauth2/access_token");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body,
+      };
+    }));
+  }
+
+  it("binds the current anon scope and mints a WeChat-only session", async () => {
+    stubWechatExchange({ openid: "open-1", unionid: "union-1", access_token: "at" });
+    const anon = "anon_" + "a".repeat(28);
+    const context = reqCtx("POST", ["auth", "wechat"], {
+      token: anon,
+      body: { code: "wx-code", nickname: "安卓用户", avatar: "https://example.com/a.jpg" },
+      env: { WECHAT_OPEN_APP_ID: "wx-app", WECHAT_OPEN_APP_SECRET: "wx-secret" },
+    });
+
+    const resp = await onRequest(context);
+    const body = await resp.json();
+    expect(resp.status).toBe(200);
+    expect(body.scope).toMatch(/^users\/anon-[0-9a-f]{32}\/$/);
+    expect(context.env.FILES._store.has("links/wechat-unionid-union-1.json")).toBe(true);
+
+    const account = JSON.parse(context.env.FILES._store.get(`${body.scope}ACCOUNT.json`));
+    expect(account.wechatUnionid).toBe("union-1");
+    expect(account.wechatOpenid).toBe("open-1");
+    expect(account.name).toBe("安卓用户");
+
+    const sess = JSON.parse(b64urlToString(body.session.split(".")[1]));
+    expect(sess.apple).toBeFalsy();
+    expect(sess.wechat).toBe(true);
   });
 });
 

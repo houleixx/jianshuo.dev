@@ -31,8 +31,10 @@ describe("POST account/delete", () => {
       [`${scope}VoiceDrop-a.m4a`]: "audio",
       [`${scope}articles/VoiceDrop-a.json`]: "{}",
       [`${scope}photos/s/1-abc.jpg`]: "jpg",
-      [`${scope}ACCOUNT.json`]: JSON.stringify({ appleSub: "apple-sub-1" }),
+      [`${scope}ACCOUNT.json`]: JSON.stringify({ appleSub: "apple-sub-1", wechatUnionid: "union-1", wechatOpenid: "open-1" }),
       "links/apple-apple-sub-1.json": JSON.stringify({ scope }),
+      "links/wechat-unionid-union-1.json": JSON.stringify({ scope }),
+      "links/wechat-openid-open-1.json": JSON.stringify({ scope }),
       // community: one post mine (reported), one post someone else's
       "community/mine1.json": JSON.stringify({ schema: 2, shareId: "mine1", owner: scope, articleKey: `${scope}articles/VoiceDrop-a.json` }),
       "community/reports/mine1.json": JSON.stringify({ reporters: ["x"] }),

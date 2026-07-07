@@ -63,7 +63,7 @@ export async function hmacSign(data, secret) {
   return bytesToB64url(new Uint8Array(sig));
 }
 
-// Verify a signed session token "<h>.<p>.<sig>"; returns { scope, apple } or null.
+// Verify a signed session token "<h>.<p>.<sig>"; returns { scope, apple, wechat } or null.
 export async function verifySession(tokenStr, secret) {
   const parts = tokenStr.split(".");
   if (parts.length !== 3) return null;
@@ -74,7 +74,7 @@ export async function verifySession(tokenStr, secret) {
   try { payload = JSON.parse(b64urlToString(p)); } catch { return null; }
   if (!payload.scope) return null;
   if (payload.exp && payload.exp * 1000 < Date.now()) return null;
-  return { scope: payload.scope, apple: !!payload.apple };
+  return { scope: payload.scope, apple: !!payload.apple, wechat: !!payload.wechat };
 }
 
 // The users/anon-<hash>/ scope an anon token maps to.
