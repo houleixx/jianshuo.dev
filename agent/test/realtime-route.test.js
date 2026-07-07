@@ -7,7 +7,12 @@ vi.mock("agents", () => ({
   getAgentByName: async () => ({}),
 }));
 import { handleRealtimeRoute } from "../src/realtime.js";
-import { fakeFetch } from "./fakes.js";
+import { fakeFetch, fakeD1, usageSql } from "./fakes.js";
+import { grantBucket } from "../src/usage_store.js";
+
+// resolveScope("anon_unittesttoken_abcdefghijklmnop", {SESSION_SECRET:""}) 的真值
+// （SESSION_SECRET 为空字符串时走 anonScopeFromToken：sha256hex(token).slice(0,32)）。
+const ANON_SCOPE = "users/anon-bde826325758914dad844b24c3950a01/";
 
 const TOK = "anon_unittesttoken_abcdefghijklmnop";
 const req = (path, { method = "POST", token = TOK, body } = {}) =>
@@ -51,5 +56,36 @@ describe("POST /agent/realtime/session", () => {
   });
   it("非 realtime 前缀 → null", async () => {
     expect(await handleRealtimeRoute(U("/agent/other"), req("/agent/other"), {})).toBeNull();
+  });
+});
+
+describe("POST /agent/realtime/usage", () => {
+  it("按费率扣费：1M text_in = $4 → 扣 ceil(4*7.3*1e6) UY，余额下降", async () => {
+    const db = fakeD1(usageSql());
+    await grantBucket(db, ANON_SCOPE, 1_000_000_000, "test", null, Date.now());
+    const env = { SESSION_SECRET: "", USAGE: db };
+    const r = await handleRealtimeRoute(U("/agent/realtime/usage"),
+      req("/agent/realtime/usage", { body: { session_id: "sess_abc", usage: { text_in: 1_000_000 } } }), env);
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.ok).toBe(true);
+    expect(j.charged_suanli).toBeGreaterThan(0);
+  });
+  it("余额不足也扣（允许为负）", async () => {
+    const env = { SESSION_SECRET: "", USAGE: fakeD1(usageSql()) }; // 空账户
+    const r = await handleRealtimeRoute(U("/agent/realtime/usage"),
+      req("/agent/realtime/usage", { body: { usage: { audio_out: 2_000_000 } } }), env);
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.balance_suanli).toBeLessThan(0); // 透支为负
+  });
+  it("坏 body → 400", async () => {
+    const env = { SESSION_SECRET: "", USAGE: fakeD1(usageSql()) };
+    const r = await handleRealtimeRoute(U("/agent/realtime/usage"), req("/agent/realtime/usage", { body: { nope: 1 } }), env);
+    expect(r.status).toBe(400);
+  });
+  it("无 USAGE 绑定 → 降级 200", async () => {
+    const r = await handleRealtimeRoute(U("/agent/realtime/usage"), req("/agent/realtime/usage", { body: { usage: { text_in: 1 } } }), { SESSION_SECRET: "" });
+    expect(r.status).toBe(200);
   });
 });

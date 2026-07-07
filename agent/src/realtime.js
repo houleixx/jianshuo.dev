@@ -2,8 +2,11 @@
 // OPENAI_API_KEY 只在 worker，向 OpenAI mint 短时 client_secret 下发给 app。
 import { bearerToken } from "../../functions/lib/auth.js";
 import { resolveScope } from "./index.js";
+import { realtimeCostUY, uyToSuanli } from "./usage.js";
+import { ensureAccount, debit, balanceUY } from "./usage_store.js";
 
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
+const r1 = (n) => Math.round(n * 10) / 10;
 
 // 采访员系统提示词（spec D）。app 侧只在 ≥5s 停顿+限流时才 response.create。
 export const INTERVIEWER_INSTRUCTIONS =
@@ -45,6 +48,19 @@ export async function handleRealtimeRoute(url, request, env) {
     if (!resp || !resp.ok) return J({ error: "openai-unavailable", status: resp?.status || 0 }, 502);
     const data = await resp.json();
     return J({ client_secret: data.client_secret ?? null, expires_at: data.expires_at ?? null, session_id: data.id ?? null });
+  }
+
+  if (url.pathname === "/agent/realtime/usage" && request.method === "POST") {
+    let body; try { body = await request.json(); } catch { body = null; }
+    if (!body || typeof body.usage !== "object" || !body.usage) return J({ error: "expected {usage}" }, 400);
+    if (!env.USAGE) return J({ ok: true, degraded: true });
+    const now = Date.now();
+    await ensureAccount(env.USAGE, scope, now);
+    const costUY = realtimeCostUY(body.usage);
+    const detail = { session_id: body.session_id || null, usage: body.usage };
+    await debit(env.USAGE, scope, costUY, "realtime", detail, now); // debit 对 <=0 自动早返回；无桶时开负 overdraft
+    const bal = await balanceUY(env.USAGE, scope, now);
+    return J({ ok: true, charged_suanli: r1(uyToSuanli(costUY)), balance_suanli: r1(uyToSuanli(bal)) });
   }
 
   return J({ error: "not found" }, 404);
