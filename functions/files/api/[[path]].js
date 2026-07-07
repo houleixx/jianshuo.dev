@@ -89,6 +89,59 @@ export async function onRequest(context) {
     return json({ session, scope });
   }
 
+  // ---- Unauthenticated: exchange a WeChat Android login code for a session ----
+  if (request.method === 'POST' && action === 'auth' && sub2 === 'wechat') {
+    if (!env.SESSION_SECRET) return json({ error: 'server misconfigured: no SESSION_SECRET' }, 500);
+    if (!env.WECHAT_OPEN_APP_ID || !env.WECHAT_OPEN_APP_SECRET) {
+      return json({ error: 'server misconfigured: no wechat app credentials' }, 500);
+    }
+    let code = '', nickname = null, avatar = null;
+    try {
+      const body = await request.json();
+      code = (body && body.code) || '';
+      nickname = (body && body.nickname) || null;
+      avatar = (body && body.avatar) || null;
+    } catch {}
+    if (!code) return json({ error: 'missing code' }, 400);
+    let wx;
+    try {
+      wx = await exchangeWechatCode(code, env);
+    } catch (e) {
+      return json({ error: 'invalid wechat code', detail: String(e.message || e) }, 401);
+    }
+    const wechatId = wx.unionid ? `unionid-${wx.unionid}` : `openid-${wx.openid}`;
+    const linkKey = `links/wechat-${sanitizeSeg(wechatId)}.json`;
+    let scope = null;
+    const existing = await env.FILES.get(linkKey);
+    if (existing) {
+      try { scope = JSON.parse(await existing.text()).scope; } catch {}
+    }
+    const now = Date.now();
+    if (!scope) {
+      const callerAnon = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      scope = (await anonScopeFromToken(callerAnon)) || `users/wechat-${sanitizeSeg(wechatId)}/`;
+      await env.FILES.put(linkKey, JSON.stringify({ scope, linkedAt: now }),
+        { httpMetadata: { contentType: 'application/json' } });
+    }
+    {
+      const acctKey = `${scope}ACCOUNT.json`;
+      let acct = {};
+      const acctObj = await env.FILES.get(acctKey);
+      if (acctObj) { try { acct = JSON.parse(await acctObj.text()); } catch {} }
+      acct.wechatOpenid = wx.openid;
+      if (wx.unionid) acct.wechatUnionid = wx.unionid;
+      if (!acct.wechatLinkedAt) acct.wechatLinkedAt = now;
+      if (!acct.linkedAt) acct.linkedAt = now;
+      acct.lastSeenAt = now;
+      if (nickname && !acct.name) acct.name = String(nickname).slice(0, 80);
+      if (avatar) acct.avatar = String(avatar).slice(0, 500);
+      await env.FILES.put(acctKey, JSON.stringify(acct),
+        { httpMetadata: { contentType: 'application/json' } });
+    }
+    const session = await mintWechatSession(scope, env.SESSION_SECRET);
+    return json({ session, scope });
+  }
+
   // ---- Public (no auth): WeChat cover assets in assets/wechat-covers/ ----
   // Non-sensitive cover images, read by the publish relay + the miner to pick a
   // per-article cover by hash. Restricted to that one prefix, GET only.
@@ -152,6 +205,7 @@ export async function onRequest(context) {
   let scope = null; // null = unauthorized, '' = admin/full bucket, 'users/<id>/' = user
   let readonly = false;
   let apple = false; // true only for an Apple-verified session JWT (community write gate)
+  let wechat = false; // true only for a WeChat-verified Android session JWT
   if (env.FILES_TOKEN && token === env.FILES_TOKEN) {
     scope = '';
   } else if (token) {
@@ -160,6 +214,7 @@ export async function onRequest(context) {
       // Signed-in (Sign in with Apple) user — scope is carried in the JWT.
       scope = sess.scope;
       apple = sess.apple;
+      wechat = sess.wechat;
     } else {
       // Try 24 h read-only temp token (issued by GET /token/articles).
       const tempScope = env.SESSION_SECRET ? await verifyTempToken(token, env.SESSION_SECRET) : null;
@@ -203,18 +258,23 @@ export async function onRequest(context) {
   //   1. their community posts (owner == scope) + those posts' report markers,
   //   2. public share links (shares/<id>) resolving into their scope,
   //   3. every object under users/<sub>/ (recordings, articles, photos, settings),
-  //   4. the Sign-in-with-Apple binding (links/apple-<sub>.json).
+  //   4. sign-in bindings (links/apple-<sub>.json, links/wechat-*.json).
   // Irreversible. The client then discards its tokens/local data, so the next
   // launch starts a brand-new empty identity. Admin and read-only tokens can't
   // call this (read-only is already 403'd above).
   if (request.method === 'POST' && action === 'account' && sub2 === 'delete') {
     if (!scope) return json({ error: 'admin token cannot delete an account' }, 400);
 
-    // Grab the Apple binding before the scope (and its ACCOUNT.json) is wiped.
-    let appleSub = null;
+    // Grab identity bindings before the scope (and its ACCOUNT.json) is wiped.
+    let appleSub = null, wechatUnionid = null, wechatOpenid = null;
     try {
       const acct = await env.FILES.get(`${scope}ACCOUNT.json`);
-      if (acct) appleSub = JSON.parse(await acct.text()).appleSub || null;
+      if (acct) {
+        const parsed = JSON.parse(await acct.text());
+        appleSub = parsed.appleSub || null;
+        wechatUnionid = parsed.wechatUnionid || null;
+        wechatOpenid = parsed.wechatOpenid || null;
+      }
     } catch {}
 
     let communityPosts = 0;
@@ -264,6 +324,12 @@ export async function onRequest(context) {
 
     if (appleSub) {
       await env.FILES.delete(`links/apple-${sanitizeSeg(appleSub)}.json`).catch(() => {});
+    }
+    if (wechatUnionid) {
+      await env.FILES.delete(`links/wechat-unionid-${sanitizeSeg(wechatUnionid)}.json`).catch(() => {});
+    }
+    if (wechatOpenid) {
+      await env.FILES.delete(`links/wechat-openid-${sanitizeSeg(wechatOpenid)}.json`).catch(() => {});
     }
 
     return json({ ok: true, deleted: { objects, communityPosts, shareLinks } });
@@ -535,7 +601,7 @@ export async function onRequest(context) {
     // Community write gate: posting to the shared space requires an Apple-verified
     // identity (accountability). A bare anon/temp token gets 403 needs_apple_signin,
     // which the app catches -> presents the Apple sheet -> binds -> retries the share.
-    if (!apple) return json({ error: 'needs_apple_signin' }, 403);
+    if (!apple && !wechat) return json({ error: signinRequiredError(request) }, 403);
     const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
     if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) {
       return json({ error: 'not shareable' }, 400);
@@ -614,7 +680,7 @@ export async function onRequest(context) {
   if (request.method === 'POST' && action === 'community' && sub2 === 'unshare') {
     if (!scope) return json({ error: 'unauthorized' }, 403);
     // Same Apple-verified gate as share: editing the shared space needs accountability.
-    if (!apple) return json({ error: 'needs_apple_signin' }, 403);
+    if (!apple && !wechat) return json({ error: signinRequiredError(request) }, 403);
     const shareId = segments[2] || '';
     if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
     const key = communityKey(shareId);
@@ -1145,6 +1211,29 @@ async function verifyAppleIdentityToken(idToken, expectedAud) {
   return { sub: payload.sub, email: payload.email || null };
 }
 
+async function exchangeWechatCode(code, env) {
+  const qs = new URLSearchParams({
+    appid: env.WECHAT_OPEN_APP_ID,
+    secret: env.WECHAT_OPEN_APP_SECRET,
+    code,
+    grant_type: 'authorization_code',
+  });
+  const resp = await fetch(`https://api.weixin.qq.com/sns/oauth2/access_token?${qs.toString()}`);
+  if (!resp.ok) throw new Error(`wechat HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (data.errcode) throw new Error(data.errmsg || `wechat errcode ${data.errcode}`);
+  if (!data.openid) throw new Error('wechat missing openid');
+  return {
+    openid: data.openid,
+    unionid: data.unionid || null,
+  };
+}
+
+function signinRequiredError(request) {
+  const platform = (request.headers.get('X-VD-Platform') || request.headers.get('X-VD-Client') || '').toLowerCase();
+  return platform === 'android' ? 'needs_wechat_signin' : 'needs_apple_signin';
+}
+
 // ---------------------------------------------------------------------------
 // Stateless session JWT (HS256). No KV — verified by HMAC on every request.
 // ---------------------------------------------------------------------------
@@ -1173,6 +1262,14 @@ async function mintSession(scope, apple, secret) {
   const now = Math.floor(Date.now() / 1000);
   const h = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const p = b64url(JSON.stringify({ scope, apple: !!apple, iat: now, exp: now + 365 * 24 * 3600 }));
+  const sig = await hmacSign(`${h}.${p}`, secret);
+  return `${h}.${p}.${sig}`;
+}
+
+async function mintWechatSession(scope, secret) {
+  const now = Math.floor(Date.now() / 1000);
+  const h = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const p = b64url(JSON.stringify({ scope, wechat: true, iat: now, exp: now + 365 * 24 * 3600 }));
   const sig = await hmacSign(`${h}.${p}`, secret);
   return `${h}.${p}.${sig}`;
 }
