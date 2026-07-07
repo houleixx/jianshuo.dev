@@ -113,6 +113,28 @@ export async function setQuestionStatus(env, key, id, status) {
   return doc;
 }
 
+// 追加追问（语音「再追问我几个」→ agent 的 add_followups 工具）：同样是元数据写，
+// 不铸版本。与已有问题按文本去重——问过的（含已答/已跳过）不再问。
+// texts 每次最多收 3 条；返回 { doc, added } 或 null（文章不存在）。
+export async function appendQuestions(env, key, texts, articleIndex = 0) {
+  const current = await readArticleDoc(env, key);
+  if (!current) return null;
+  const existing = Array.isArray(current.questions) ? current.questions : [];
+  const seen = new Set(existing.map((q) => String((q && q.text) || "").trim()));
+  const now = Date.now();
+  const added = [];
+  for (const t of (texts || []).slice(0, 3)) {
+    const text = String(t || "").trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    added.push({ id: `q${now}-${articleIndex}-${existing.length + added.length}`, articleIndex, text, status: "pending", createdAt: now });
+  }
+  if (!added.length) return { doc: current, added: 0 };
+  const doc = { ...current, questions: [...existing, ...added], updatedAt: now };
+  await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  return { doc, added: added.length };
+}
+
 // ── Current-articles resolution — SINGLE SOURCE OF TRUTH ──────────────────────
 // Every reader of an article doc must agree on "what is the current article
 // list": the Files API (read/list/relay), the agent worker, the public share

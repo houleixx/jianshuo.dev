@@ -1,7 +1,7 @@
 // VoiceDrop agent tools — general primitives the article-editing agent composes.
 // Each handler takes (args, ctx) where ctx = {env, scope, articleKey, token, origin}.
 
-import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles, appendQuestions } from "../../functions/lib/article-store.js";
 import { readStyleText, readStyleDoc } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
 import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
@@ -185,6 +185,27 @@ register(
     const err = await putArticleDoc(doc, ctx);
     if (err) return err;
     return { ok: true };
+  }
+);
+
+register(
+  // 追问 sidecar 追加：模型在本回合上下文里（转写 + 全文都在手上）自己出题，
+  // 这里只负责去重落库（元数据写，不铸版本）。App 收到 updated doc 后星标/
+  // 卡片自动接上新题。
+  { name: "add_followups",
+    description: "用户想要更多追问（如「再追问我几个」「还有什么要问我的」）时用：你根据转写和当前文章，找出最薄、只有作者本人才知道的具体信息点（真数字、真名字、真场景、点到没展开的判断），生成 1–3 个短问题传进来，会追加到这篇的追问列表。只问转写里推断不出来的；要短、要具体，像编辑追问作者。不改正文。",
+    input_schema: { type: "object", properties: {
+      questions: { type: "array", items: { type: "string" }, description: "1–3 个新问题" },
+    }, required: ["questions"], additionalProperties: false } },
+  async ({ questions }, ctx) => {
+    const { env, articleKey, articleIndex } = ctx;
+    const texts = (Array.isArray(questions) ? questions : []).map((q) => String(q || "").trim()).filter(Boolean);
+    if (!texts.length) return { error: "empty_questions" };
+    const idx = (Number.isInteger(articleIndex) && articleIndex >= 0) ? articleIndex : 0;
+    const r = await appendQuestions(env, articleKey, texts, idx);
+    if (!r) return { error: "not_found" };
+    // added=0 → 全是问过的（含已答/已跳过），告诉模型别再重复。
+    return { ok: true, added: r.added, total: (r.doc.questions || []).length };
   }
 );
 

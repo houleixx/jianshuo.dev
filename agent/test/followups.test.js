@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { parseArticles, extractFollowups } from "../src/miner.js";
-import { setQuestionStatus } from "../../functions/lib/article-store.js";
+import { setQuestionStatus, appendQuestions } from "../../functions/lib/article-store.js";
 import { onRequest } from "../../functions/files/api/[[path]].js";
+import { runTool } from "../src/tools.js";
 import { fakeEnv } from "./fakes.js";
 
 // ── parseArticles: questions 字段 ───────────────────────────────────────────────
@@ -92,6 +93,50 @@ describe("setQuestionStatus", () => {
     expect(await setQuestionStatus(env, key, "q1", "deleted")).toBeNull();
     expect(await setQuestionStatus(env, key, "nope", "answered")).toBeNull();
     expect(await setQuestionStatus(env, "users/u/articles/none.json", "q1", "answered")).toBeNull();
+  });
+});
+
+// ── appendQuestions：语音「再追问我几个」的追加落库 ─────────────────────────────
+
+describe("appendQuestions", () => {
+  it("追加新题：pending、去重（含已答的不再问）、不铸版本、最多 3 条", async () => {
+    const env = fakeEnv();
+    const key = seed(env, [{ id: "q1", articleIndex: 0, text: "问过的？", status: "answered", createdAt: 1 }]);
+    const r = await appendQuestions(env, key, ["新题一？", "问过的？", "新题二？", "新题三？", "新题四？"], 0);
+    expect(r.added).toBe(2);   // 先截前 3 条再去重：新一/问过的/新二 →「问过的？」被去重
+    const texts = r.doc.questions.map((q) => q.text);
+    expect(texts).toEqual(["问过的？", "新题一？", "新题二？"]);
+    expect(r.doc.questions.slice(1).every((q) => q.status === "pending")).toBe(true);
+    expect(r.doc.head).toBe(1);
+    expect(r.doc.versions.length).toBe(1);
+  });
+
+  it("全是重复 → added 0 不写库；文章不存在 → null", async () => {
+    const env = fakeEnv();
+    const key = seed(env, [{ id: "q1", articleIndex: 0, text: "问过的？", status: "pending", createdAt: 1 }]);
+    const r = await appendQuestions(env, key, ["问过的？"], 0);
+    expect(r.added).toBe(0);
+    expect(await appendQuestions(env, "users/u/articles/none.json", ["x？"], 0)).toBeNull();
+  });
+
+  it("questions 字段原先不存在的老文章也能追加", async () => {
+    const env = fakeEnv();
+    const key = "users/u/articles/s9.json";
+    env.FILES.put(key, JSON.stringify({ schema: 2, head: 1, versions: [{ v: 1, savedAt: 1, source: "mine", articles: [{ title: "t", body: "b" }] }] }));
+    const r = await appendQuestions(env, key, ["第一题？"], 2);
+    expect(r.added).toBe(1);
+    expect(r.doc.questions[0].articleIndex).toBe(2);
+  });
+});
+
+describe("add_followups 工具", () => {
+  it("追加成功并回报 added/total；空问题数组报错", async () => {
+    const env = fakeEnv();
+    const key = seed(env, [{ id: "q1", articleIndex: 0, text: "旧题？", status: "skipped", createdAt: 1 }]);
+    const ctx = { env, scope: "users/u/", articleKey: key, token: "t", origin: "https://jianshuo.dev", articleIndex: 0 };
+    const r = await runTool("add_followups", { questions: ["新题？", "旧题？"] }, ctx);
+    expect(r).toEqual({ ok: true, added: 1, total: 2 });
+    expect(await runTool("add_followups", { questions: ["  "] }, ctx)).toEqual({ error: "empty_questions" });
   });
 });
 
