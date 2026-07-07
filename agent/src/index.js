@@ -26,9 +26,9 @@ import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
-import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH } from "./usage.js";
-import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
-import { handleMintRoutes } from "./mint.js";
+import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
+import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger } from "./usage_store.js";
+import { handleMintRoutes, feedQuote } from "./mint.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
@@ -714,6 +714,50 @@ export async function handleUsageRoute(url, request, env) {
     return J({ accounts: rows.map((a) => ({ user_sub: a.user_sub,
       balance_suanli: r1(uyToSuanli(a.balance_uy)), granted_suanli: r1(uyToSuanli(a.granted_uy)),
       spent_suanli: r1(uyToSuanli(a.spent_uy)), spent_yuan: r2(uyToYuan(a.spent_uy)) })) });
+  }
+
+  // 投喂挖矿账本：mint 表全站聚合（累计挖出/今日池/币价/熔断）+ 每人收益排行 + 最近流水。
+  if (url.pathname === "/agent/usage/admin/mint" && request.method === "GET") {
+    if (!isAdmin) return J({ error: "unauthorized" }, 401);
+    if (!env.USAGE) return J({ summary: {}, board: [], events: [], degraded: true });
+    const now = Date.now();
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "80", 10) || 80, 300);
+    const { summary, today, sum7, board, events } = await mintLedger(env.USAGE, now, limit);
+    const priceUY = feedQuote(sum7, 0).priceUY;   // 当前币价（与 App 报价同口径）
+    return J({
+      summary: {
+        events: summary.events,
+        coins: r1(ucToCoins(summary.coins_uc)),
+        minted_suanli: r1(uyToSuanli(summary.minted_uy)),
+        author_suanli: r1(uyToSuanli(summary.author_uy)),
+        feeder_suanli: r1(uyToSuanli(summary.feeder_uy)),
+        today_suanli: r1(uyToSuanli(today.minted_uy)),
+        today_events: today.events,
+        daily_pool_suanli: DAILY_POOL_SUANLI,
+        price_suanli_per_coin: r1(uyToSuanli(priceUY)),
+        fuse_cap_suanli: r1(uyToSuanli(FUSE_MULT * DAILY_POOL_UY)),
+        fuse_blown: today.minted_uy > FUSE_MULT * DAILY_POOL_UY,
+      },
+      board: board.map((b) => ({
+        user_sub: b.sub,
+        author_suanli: r1(uyToSuanli(b.author_uy)),
+        feeder_suanli: r1(uyToSuanli(b.feeder_uy)),
+        total_suanli: r1(uyToSuanli(b.author_uy + b.feeder_uy)),
+        recv_cnt: b.recv_cnt, feed_cnt: b.feed_cnt,
+      })),
+      events: events.map((e) => {
+        let d = null; try { d = e.detail ? JSON.parse(e.detail) : null; } catch (_) {}
+        return {
+          ts: e.ts, share_id: e.share_id,
+          actor_sub: e.actor_sub, beneficiary_sub: e.beneficiary_sub,
+          title: (d && d.title) || "",
+          coins: r1(ucToCoins(e.coins_uc)),
+          price_suanli_per_coin: r1(uyToSuanli(e.price_uy)),
+          author_suanli: r1(uyToSuanli(e.beneficiary_uy)),
+          feeder_suanli: r1(uyToSuanli(e.actor_uy)),
+        };
+      }),
+    });
   }
 
   return J({ error: "not-found" }, 404);

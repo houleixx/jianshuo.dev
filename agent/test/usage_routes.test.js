@@ -84,6 +84,40 @@ describe("usage routes", () => {
     expect(body.accounts.length).toBe(1);
     expect(Math.round(body.accounts[0].balance_suanli)).toBe(500);
   });
+  it("admin mint 账本汇总收益/排行/流水，且要 FILES_TOKEN", async () => {
+    const db = fakeD1(usageSql());
+    const env = { USAGE: db, FILES_TOKEN: "admintok" };
+    // 两笔投喂：A 投 B《咖啡馆》，C 投 B《一人公司》。作者 B 两笔都收，A/C 各是投币者。
+    const ins = (actor, benef, coins, price, actorUY, benefUY, title, ts) => db.prepare(
+      "INSERT INTO mint (kind,subject_key,share_id,actor_sub,beneficiary_sub,coins_uc,price_uy,actor_uy,beneficiary_uy,detail,ts) " +
+      "VALUES ('feed',?,?,?,?,?,?,?,?,?,?)"
+    ).bind("art/" + benef + "/" + title, "sh" + ts, actor, benef, coins, price, actorUY, benefUY,
+      JSON.stringify({ title }), ts).run();
+    ins("users/anon-A/", "users/anon-B/", 2.5e6, 2e6, 40000, 800000, "咖啡馆", 1000);
+    ins("users/anon-C/", "users/anon-B/", 2.5e6, 2e6, 40000, 800000, "一人公司", 2000);
+
+    const unauth = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/admin/mint"),
+      req("/agent/usage/admin/mint", { token: "nope" }), env);
+    expect(unauth.status).toBe(401);
+
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/admin/mint"),
+      req("/agent/usage/admin/mint", { token: "admintok" }), env);
+    expect(r.status).toBe(200);
+    const b = await r.json();
+    expect(b.summary.events).toBe(2);
+    // 两笔各挖出 (40000+800000) 微元 → 合计 1_680_000 uy → ×23/1e6 = 38.64 算力
+    expect(b.summary.minted_suanli).toBe(Math.round((1680000 * 23 / 1e6) * 10) / 10);
+    // 排行：作者 B 收两笔在最前，投币者 A/C 各一笔
+    expect(b.board[0].user_sub).toBe("users/anon-B/");
+    expect(b.board[0].recv_cnt).toBe(2);
+    expect(b.board[0].feed_cnt).toBe(0);
+    const feeders = b.board.filter((x) => x.feed_cnt === 1).map((x) => x.user_sub).sort();
+    expect(feeders).toEqual(["users/anon-A/", "users/anon-C/"]);
+    // 流水倒序，最新一笔是《一人公司》，带双边算力
+    expect(b.events[0].title).toBe("一人公司");
+    expect(b.events[0].beneficiary_sub).toBe("users/anon-B/");
+    expect(b.events[0].author_suanli).toBeGreaterThan(b.events[0].feeder_suanli);
+  });
   it("admin grant writes a campaign bucket with default 90d expiry and echoes cost", async () => {
     const env = { USAGE: fakeD1(usageSql()), FILES_TOKEN: "admintok" };
     const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/grant"),

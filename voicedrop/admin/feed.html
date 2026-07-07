@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>VoiceDrop · 投喂账本</title>
+<link rel="stylesheet" href="./theme.css"/>
+<script>
+/* Standalone/preview fallback for the helpers the pages use. The production
+   server's /voicedrop/shared.js loads later and overrides these — safe either way. */
+window.$=window.$||function(s,r){return (r||document).querySelector(s);};
+window.esc=window.esc||function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');};
+</script>
+<style>
+.wrap{max-width:1040px;margin:0 auto;padding:26px 22px 90px}
+.sumline{color:var(--muted);font-size:.9rem;margin:0 0 18px}
+.sect{font-size:.82rem;font-weight:700;color:var(--muted);letter-spacing:.03em;
+  margin:26px 0 10px;text-transform:uppercase}
+.sect:first-of-type{margin-top:6px}
+.tablecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);
+  overflow:hidden;box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse}
+thead th{font-size:.74rem;color:var(--muted);font-weight:700;text-align:right;padding:11px 16px;
+  background:var(--bg-soft);border-bottom:1px solid var(--line);letter-spacing:.02em;white-space:nowrap}
+thead th:first-child{text-align:left}
+tbody td{padding:12px 16px;text-align:right;border-bottom:1px solid var(--line2);font-variant-numeric:tabular-nums}
+tbody td:first-child{text-align:left;font-family:var(--fm);color:var(--ink);font-weight:600}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--bg-sunk)}
+.mint{color:var(--ok);font-weight:700}
+.dim{color:var(--muted)}
+.title{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2);font-weight:400}
+.flow{font-family:var(--fm);font-size:.82rem;white-space:nowrap}
+.flow .arr{color:var(--muted);margin:0 5px}
+.rank{color:var(--muted);font-family:var(--fm);font-size:.78rem;width:26px;text-align:right;padding-right:4px !important}
+.fuse-ok{color:var(--ok)}
+.fuse-bad{color:var(--err);font-weight:700}
+@media(max-width:640px){.title{max-width:120px}}
+</style>
+</head>
+<body>
+
+<div id="gate" hidden style="max-width:430px">
+  <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+  <h1>投喂账本</h1>
+  <p>输入 master token 查看大家点投喂挖矿挖出的算力。token 只存在本机浏览器，不上传。</p>
+  <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+  <div class="err" id="gateErr"></div>
+  <button class="btn primary block" id="enter">进入</button>
+</div>
+
+<div id="app" hidden>
+  <nav class="appbar">
+    <div class="appbar-in">
+      <a class="brand" href="./">
+        <svg class="mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdNav" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdNav)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+        <span class="name">VoiceDrop</span><span class="sub">控制台</span>
+      </a>
+      <div class="nav-tabs">
+        <a class="nav-tab" href="./">概览</a>
+        <a class="nav-tab" href="./reports.html">举报审核</a>
+        <a class="nav-tab" href="./usage.html">算力账本</a>
+        <a class="nav-tab active" href="./feed.html">投喂账本</a>
+        <a class="nav-tab" href="./mine.html">挖文日志</a>
+        <a class="nav-tab" href="./llm.html">LLM 日志</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn ghost" id="refresh">刷新</button>
+        <button class="btn ghost" id="logout">退出</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="pagehead">
+      <h1>投喂账本</h1>
+      <span class="tag" id="updated"></span>
+    </div>
+    <div class="cards" id="cards"></div>
+    <p class="sumline" id="sum"></p>
+    <div id="body"></div>
+  </div>
+</div>
+
+<script src="/voicedrop/shared.js"></script>
+<script>
+const TKEY = 'vd_admin_token';            // shared with the rest of /admin — token carries over
+let TOKEN = localStorage.getItem(TKEY) || '';
+const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
+const fmt = (n) => (n==null?0:n).toLocaleString(undefined,{maximumFractionDigits:1});
+// user_sub → 短账户码，跟 usage 页保持一致（去 anon 前缀、大写 8 位）
+const who = (s) => String(s||'').replace('users/anon-','').replace(/\/$/,'').slice(0,8).toUpperCase() || '—';
+const fmtTime = (ts) => { const d=new Date(ts); const p=(n)=>String(n).padStart(2,'0');
+  return `${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+async function load(){
+  $('#body').innerHTML = '<div class="empty-state"><span class="spin"></span> 读取中…</div>';
+  $('#cards').innerHTML=''; $('#sum').textContent='';
+  let data;
+  try {
+    const r = await fetch('https://jianshuo.dev/agent/usage/admin/mint', { headers:{ Authorization:`Bearer ${TOKEN}` }});
+    if(r.status===401 || r.status===403){ logout('token 无效'); return; }
+    if(!r.ok) throw new Error('加载失败 '+r.status);
+    data = await r.json();
+  } catch(e){
+    $('#body').innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; return;
+  }
+
+  const s = data.summary || {};
+  const board = data.board || [];
+  const events = data.events || [];
+
+  $('#updated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
+
+  const pool = s.daily_pool_suanli || 2000;
+  const fuseCls = s.fuse_blown ? 'fuse-bad' : 'fuse-ok';
+  const cards = [
+    ['bal',   fmt(s.minted_suanli), '累计挖出(算力)'],
+    ['',      `${fmt(s.today_suanli)} / ${fmt(pool)}`, `今日池 · ${s.today_events||0} 笔`],
+    ['',      fmt(s.price_suanli_per_coin), '当前币价(算力/币)'],
+    ['spent', (s.events||0).toLocaleString(), '累计投喂(笔)'],
+  ];
+  for(const [c,n,l] of cards)
+    $('#cards').append(el('div','card '+c, `<div class="n">${n}</div><div class="l">${l}</div>`));
+
+  if(!s.events){
+    $('#body').innerHTML='<div class="empty-state">还没有人投喂。等第一枚硬币落进池子。</div>'; return;
+  }
+
+  // ── 收益排行 ──
+  const brows = board.map((b,i)=>`<tr>
+    <td class="rank">${i+1}</td>
+    <td>${esc(who(b.user_sub))}</td>
+    <td class="mint">${fmt(b.total_suanli)}</td>
+    <td>${fmt(b.author_suanli)}</td>
+    <td>${fmt(b.feeder_suanli)}</td>
+    <td class="dim">${b.recv_cnt||0}</td>
+    <td class="dim">${b.feed_cnt||0}</td>
+  </tr>`).join('');
+  const boardCard = `<div class="sect">收益排行 · ${board.length} 账户</div>
+    <div class="tablecard"><table>
+    <thead><tr><th class="rank">#</th><th>账户</th><th>合计(算力)</th><th>作为作者收</th><th>投币奖励</th><th>被投(笔)</th><th>投喂(笔)</th></tr></thead>
+    <tbody>${brows}</tbody></table></div>`;
+
+  // ── 最近投喂流水 ──
+  const erows = events.map(e=>`<tr>
+    <td class="dim" style="font-family:var(--fm);font-size:.8rem">${esc(fmtTime(e.ts))}</td>
+    <td><span class="flow">${esc(who(e.actor_sub))}<span class="arr">→</span>${esc(who(e.beneficiary_sub))}</span></td>
+    <td class="title" title="${esc(e.title||'')}">${esc(e.title||'—')}</td>
+    <td>${fmt(e.coins)}</td>
+    <td class="mint">${fmt(e.author_suanli)}</td>
+    <td>${fmt(e.feeder_suanli)}</td>
+    <td class="dim">${fmt(e.price_suanli_per_coin)}</td>
+  </tr>`).join('');
+  const eventCard = `<div class="sect">最近投喂 · ${events.length} 笔</div>
+    <div class="tablecard"><table>
+    <thead><tr><th>时间</th><th>投币者 → 作者</th><th>文章</th><th>币</th><th>作者得</th><th>投币者得</th><th>币价</th></tr></thead>
+    <tbody>${erows}</tbody></table></div>`;
+
+  $('#body').innerHTML = boardCard + eventCard;
+  $('#sum').innerHTML = `累计挖出 <b>${fmt(s.minted_suanli)}</b> 算力（作者侧 ${fmt(s.author_suanli)} · 投币侧 ${fmt(s.feeder_suanli)}）` +
+    ` · 熔断阈值 <span class="${fuseCls}">${fmt(s.fuse_cap_suanli)}</span> 算力/日` +
+    (s.fuse_blown ? ' · <span class="fuse-bad">⚠ 今日已熔断，投喂暂停</span>' : '');
+}
+
+// ---- gate / boot (mirrors usage/mine) ----
+function showGate(msg){ $('#app').hidden=true; $('#gate').hidden=false; $('#gateErr').textContent=msg||''; $('#tok').focus(); }
+function logout(msg){ TOKEN=''; localStorage.removeItem(TKEY); showGate(msg); }
+function enter(){
+  const v=$('#tok').value.trim();
+  if(!v){ $('#gateErr').textContent='请输入 token'; return; }
+  TOKEN=v; localStorage.setItem(TKEY,v); $('#gate').hidden=true; $('#app').hidden=false; load();
+}
+$('#enter').onclick=enter;
+$('#tok').addEventListener('keydown',e=>{ if(e.key==='Enter')enter(); });
+$('#refresh').onclick=load;
+$('#logout').onclick=()=>logout();
+
+if(TOKEN){ $('#app').hidden=false; load(); } else { showGate(); }
+</script>
+</body>
+</html>
