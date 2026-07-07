@@ -29,6 +29,10 @@ describe("loadPrompts", () => {
     const p = await loadPrompts(env);
     expect(p["mine.system"]).toBe(PROMPT_DEFAULTS["mine.system"]);
   });
+  it("过长 override 忽略，回落默认", async () => {
+    const p = await loadPrompts(seed({ "mine.system": "x".repeat(40001) }));
+    expect(p["mine.system"]).toBe(PROMPT_DEFAULTS["mine.system"]);
+  });
 });
 
 describe("validateOverride", () => {
@@ -36,4 +40,6 @@ describe("validateOverride", () => {
   it("空串拒绝", () => expect(validateOverride("mine.system", "  ")).toBeTruthy());
   it("locked 拒绝", () => expect(validateOverride("mine.imageOnly", "x")).toBeTruthy());
   it("未知 id 拒绝", () => expect(validateOverride("nope", "x")).toBeTruthy());
+  it("过长 instruction 拒绝", () => expect(validateOverride("mine.system", "x".repeat(40001))).toBeTruthy());
+  it("正常长度放行", () => expect(validateOverride("mine.system", "x".repeat(100))).toBeNull());
 });

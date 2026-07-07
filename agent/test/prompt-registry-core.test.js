@@ -35,4 +35,9 @@ describe("prompt-registry core prompts", () => {
     const res = await handlePromptRegistry(req("PUT", { id: "mine.imageOnly", instruction: "x" }), env);
     expect([400, 404]).toContain(res.status);
   });
+  it("PUT 超长 instruction 拒绝 400", async () => {
+    const env = { ...fakeEnv(), FILES_TOKEN: TOK };
+    const res = await handlePromptRegistry(req("PUT", { id: "mine.system", instruction: "x".repeat(40001) }), env);
+    expect(res.status).toBe(400);
+  });
 });
