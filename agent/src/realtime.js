@@ -45,19 +45,27 @@ export async function handleRealtimeRoute(url, request, env) {
         body: JSON.stringify(buildSessionConfig()),
       });
     } catch { resp = null; }
-    if (!resp || !resp.ok) return J({ error: "openai-unavailable", status: resp?.status || 0 }, 502);
-    const data = await resp.json();
-    return J({ client_secret: data.client_secret ?? null, expires_at: data.expires_at ?? null, session_id: data.id ?? null });
+    if (!resp || !resp.ok) {
+      if (resp) { try { console.log("[realtime] client_secrets non-ok", resp.status, await resp.text()); } catch {} }
+      return J({ error: "openai-unavailable", status: resp?.status || 0 }, 502);
+    }
+    let data;
+    try { data = await resp.json(); } catch { return J({ error: "openai-bad-response" }, 502); }
+    if (!data.client_secret) return J({ error: "openai-bad-response" }, 502);
+    return J({ client_secret: data.client_secret, expires_at: data.expires_at ?? null, session_id: data.id ?? null });
   }
 
   if (url.pathname === "/agent/realtime/usage" && request.method === "POST") {
     let body; try { body = await request.json(); } catch { body = null; }
-    if (!body || typeof body.usage !== "object" || !body.usage) return J({ error: "expected {usage}" }, 400);
+    if (!body || typeof body.usage !== "object" || !body.usage || Array.isArray(body.usage)) return J({ error: "expected {usage}" }, 400);
     if (!env.USAGE) return J({ ok: true, degraded: true });
     const now = Date.now();
     await ensureAccount(env.USAGE, scope, now);
     const costUY = realtimeCostUY(body.usage);
-    const detail = { session_id: body.session_id || null, usage: body.usage };
+    const USAGE_KEYS = ["audio_in", "audio_in_cached", "audio_out", "text_in", "text_in_cached", "text_out"];
+    const cleanUsage = {};
+    for (const k of USAGE_KEYS) { const v = Number(body.usage[k]); if (Number.isFinite(v)) cleanUsage[k] = v; }
+    const detail = { session_id: body.session_id || null, usage: cleanUsage };
     await debit(env.USAGE, scope, costUY, "realtime", detail, now); // debit 对 <=0 自动早返回；无桶时开负 overdraft
     const bal = await balanceUY(env.USAGE, scope, now);
     return J({ ok: true, charged_suanli: r1(uyToSuanli(costUY)), balance_suanli: r1(uyToSuanli(bal)) });

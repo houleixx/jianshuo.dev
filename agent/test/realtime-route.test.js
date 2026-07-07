@@ -57,6 +57,21 @@ describe("POST /agent/realtime/session", () => {
   it("非 realtime 前缀 → null", async () => {
     expect(await handleRealtimeRoute(U("/agent/other"), req("/agent/other"), {})).toBeNull();
   });
+  it("OpenAI 200 但缺 client_secret → 502（不返回 200-with-nulls）", async () => {
+    globalThis.fetch = fakeFetch({
+      "POST https://api.openai.com/v1/realtime/client_secrets": () => ({ ok: true, status: 200, body: {} }),
+    });
+    const r = await handleRealtimeRoute(U("/agent/realtime/session"), req("/agent/realtime/session"), { SESSION_SECRET: "", OPENAI_API_KEY: "sk-test" });
+    expect(r.status).toBe(502);
+  });
+  it("OpenAI 200 但 json() 解析失败 → 502", async () => {
+    globalThis.fetch = fakeFetch({
+      // body 用 getter 抛错：json() 惰性访问 r.body 时才触发，模拟解析失败
+      "POST https://api.openai.com/v1/realtime/client_secrets": () => ({ ok: true, status: 200, get body() { throw new Error("bad json"); } }),
+    });
+    const r = await handleRealtimeRoute(U("/agent/realtime/session"), req("/agent/realtime/session"), { SESSION_SECRET: "", OPENAI_API_KEY: "sk-test" });
+    expect(r.status).toBe(502);
+  });
 });
 
 describe("POST /agent/realtime/usage", () => {
@@ -82,6 +97,11 @@ describe("POST /agent/realtime/usage", () => {
   it("坏 body → 400", async () => {
     const env = { SESSION_SECRET: "", USAGE: fakeD1(usageSql()) };
     const r = await handleRealtimeRoute(U("/agent/realtime/usage"), req("/agent/realtime/usage", { body: { nope: 1 } }), env);
+    expect(r.status).toBe(400);
+  });
+  it("body.usage 是数组 → 400", async () => {
+    const env = { SESSION_SECRET: "", USAGE: fakeD1(usageSql()) };
+    const r = await handleRealtimeRoute(U("/agent/realtime/usage"), req("/agent/realtime/usage", { body: { usage: [] } }), env);
     expect(r.status).toBe(400);
   });
   it("无 USAGE 绑定 → 降级 200", async () => {
