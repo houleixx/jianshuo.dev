@@ -710,7 +710,7 @@ async function writeBlocked(audioKey, reason, env) {
 // derivation, same pointer shape — so the post is byte-identical to a manual share:
 // the app detects it as 已分享, a re-mine updates the same post in place, and 取消分享
 // still works. Best-effort: never blocks or fails mining (caller wraps in try/catch).
-// 用户 CONFIG.json（autoShareCommunity / noFollowups / …）——存储细节收口在这，
+// 用户 CONFIG.json（autoShareCommunity / …）——存储细节收口在这，
 // 调用方只传 scope。读不到/坏 JSON 一律回空对象，调用方按默认值走。
 export async function readUserConfig(env, scope) {
   const obj = await env.FILES.get(scope + "CONFIG.json");
@@ -916,7 +916,6 @@ export async function restyleArticle(env, scope, stem, styleV) {
 
   // 重挖出的新稿带新一轮追问，整体替换旧 sidecar（追问只属于当前这版正文）。
   const { articles: cleanedArts, questions } = extractFollowups(articles);
-  const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
 
   // 文风版本 = per-article 字段（不再往 body 塞注释——隐形行会让第N行编号错位）
   const tagged = cleanedArts.map((a) => ({ ...a, style: v }));
@@ -924,7 +923,7 @@ export async function restyleArticle(env, scope, stem, styleV) {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),
     transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: modelCfg.model,
-    ...(followupsOn && questions.length ? { questions } : {}),
+    ...(questions.length ? { questions } : {}),
     // 标签是 doc 级元数据，重写必须原样带上——PUT 是整体替换，漏了就把标签吃掉
     ...(Array.isArray(doc.tags) && doc.tags.length ? { tags: doc.tags } : {}),
     // 流水线元数据随版本继承——下次 restyle 还能继续复用观察与立意
@@ -1279,8 +1278,6 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // undo/redo walks the others. No photos array — [[photo:<key>]] markers in the body
     // are the sole source of truth for which photos appear and where.
     const pendingTags = await consumePendingTags(audioKey, env);
-    // 追问开关：CONFIG.noFollowups=true 的用户不落 questions sidecar。
-    const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
     const baseDoc = {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
@@ -1290,7 +1287,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // 每次 PUT 整体替换 doc 元数据，最后一个 variant（= head）的 questions 生效。
     for (const arts of variants) {
       const { articles: cleaned, questions } = extractFollowups(arts);
-      await writeArticle(audioKey, { ...baseDoc, articles: cleaned, ...(followupsOn && questions.length ? { questions } : {}) }, env);
+      await writeArticle(audioKey, { ...baseDoc, articles: cleaned, ...(questions.length ? { questions } : {}) }, env);
     }
     if (srt) await writeSrt(audioKey, srt, env);
     await notifyStatus(scope, stem, "ready", env);
@@ -1362,12 +1359,11 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
     }
 
     const { articles: cleaned, questions } = extractFollowups(articles);
-    const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
     const doc = {
       schema: 2, id: stem, sourceText: leaf,
       createdAt: uploaded[textKey] || new Date().toISOString(),
       transcript: text, srt: "", articles: cleaned, status: "ready", model: modelCfg.model,
-      ...(followupsOn && questions.length ? { questions } : {}),
+      ...(questions.length ? { questions } : {}),
     };
     await writeArticle(textKey, doc, env);
     await notifyStatus(scope, stem, "ready", env);
