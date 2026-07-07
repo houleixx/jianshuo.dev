@@ -38,7 +38,7 @@ import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { xhsPack } from "./xhs.js";
 import { handlePromptLab } from "./prompt-lab.js";
-import { handleRealtimeRoute } from "./realtime.js";
+import { proxyRealtimeWebSocket } from "./realtime.js";
 import { REVISE_SYSTEM, EDIT_SYSTEM as SYSTEM } from "./prompts/edit.js";
 export { AnthropicRelay } from "./relay.js";
 
@@ -867,6 +867,18 @@ export default {
       return proxyVolcAsrWebSocket(request, env);
     }
 
+    // ── /agent/realtime/relay ── 认证 WS 中转：手机 → 本 worker → OpenAI realtime。
+    // 手机连不了 api.openai.com，worker 在边缘用 OPENAI_API_KEY 连 OpenAI；服务端计费。
+    if (url.pathname === "/agent/realtime/relay") {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("expected websocket", { status: 426 });
+      }
+      const token = bearerToken(request);
+      const scope = await resolveScope(token, env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
+      return proxyRealtimeWebSocket(request, env, scope, ctx);
+    }
+
     // ── /agent/prompt-registry ── 线上 prompt 注册表（管理 token）。GET 打平列出
     // ui-config 生效版里的全部叶子指令；PUT 改一条并写回 R2 覆盖文件=零部署上线。
     if (url.pathname === "/agent/prompt-registry") {
@@ -1192,9 +1204,6 @@ export default {
     { const r = await handleMintRoutes(url, request, env); if (r) return r; }
 
     { const r = await handleUsageRoute(url, request, env); if (r) return r; }
-
-    const rt = await handleRealtimeRoute(url, request, env);
-    if (rt) return rt;
 
     return new Response("not found", { status: 404 });
   },

@@ -1,83 +1,138 @@
-// src/realtime.js — Realtime AI 采访员后端：mint 临时凭证 + usage 计费。
-// OPENAI_API_KEY 只在 worker，向 OpenAI mint 短时 client_secret 下发给 app。
-import { bearerToken } from "../../functions/lib/auth.js";
-import { resolveScope } from "./index.js";
-import { realtimeCostUY, uyToSuanli } from "./usage.js";
-import { ensureAccount, debit, balanceUY } from "./usage_store.js";
-
-const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
-const r1 = (n) => Math.round(n * 10) / 10;
+// src/realtime.js — Realtime AI 采访员后端：WebSocket 中转（手机 → 本 worker → OpenAI）。
+// 手机连不了 api.openai.com，所以手机只连 /agent/realtime/relay，worker 在边缘用
+// OPENAI_API_KEY 连 OpenAI 双向转发（照 asr-proxy proxyVolcAsrWebSocket 先例，无状态 WS 代理）。
+// key 完全不上设备。计费在服务端：中转看穿过的 response.done.usage 累加，关闭时扣算力。
+import { toSendablePayload } from "./asr-proxy.js";
+import { realtimeCostUY } from "./usage.js";
+import { ensureAccount, debit } from "./usage_store.js";
 
 // 采访员系统提示词（spec D）。app 侧只在 ≥5s 停顿+限流时才 response.create。
 export const INTERVIEWER_INSTRUCTIONS =
   "你是一位老练的媒体采访者。你认真听、真正理解对方说的核心。只用一句话、不超过 5 秒的简短追问，" +
   "扣住他刚说的关键点，目的是帮他更容易接着往下说。绝不打断、不评论、不总结、不寒暄、不重复他的话。语气自然、克制。";
 
-// mint 的 session 配置（真源自 2026-07-07 对 live /v1/realtime/client_secrets 的 curl 核实）。
-// 端点收 { session: <此对象> }；audio.*.format 必须是对象 {type,rate}，不是字符串。
-// turn_detection 用 server_vad 但 create_response:false——只借它的 speech_started/stopped
-// 事件，何时发 response.create 由 app 控制（限流）。
 const PCM24 = { type: "audio/pcm", rate: 24000 };
-export function buildSessionConfig() {
+
+// 连上后 worker 注入这条 session.update（服务端掌控 instructions/turn_detection，app 不经手）。
+// turn_detection 用 server_vad 但 create_response:false——只借 speech_started/stopped 事件，
+// 何时 response.create 由 app 控制（限流）。确切被接受的字段以线上首连核实为准。
+export function buildSessionUpdate() {
   return {
-    type: "realtime",
-    model: "gpt-realtime-2.1",
-    instructions: INTERVIEWER_INSTRUCTIONS,
-    output_modalities: ["audio"],
-    audio: {
-      input:  { format: PCM24, turn_detection: { type: "server_vad", silence_duration_ms: 500, create_response: false, interrupt_response: false } },
-      output: { format: PCM24, voice: "cedar" },
+    type: "session.update",
+    session: {
+      instructions: INTERVIEWER_INSTRUCTIONS,
+      output_modalities: ["audio"],
+      audio: {
+        input:  { format: PCM24, turn_detection: { type: "server_vad", silence_duration_ms: 500, create_response: false, interrupt_response: false } },
+        output: { format: PCM24, voice: "cedar" },
+      },
+      reasoning: { effort: "low" },
     },
-    reasoning: { effort: "low" },
   };
 }
 
-export async function handleRealtimeRoute(url, request, env) {
-  if (!url.pathname.startsWith("/agent/realtime/")) return null;
-  const tok = bearerToken(request);
-  const scope = await resolveScope(tok, env);
-  if (!scope) return J({ error: "unauthorized" }, 401);
+// 出站到 OpenAI 的 WS 请求：CF 出站 WS 要 https:// + Upgrade 头（不能 wss://），key 作 Authorization。
+export function buildUpstreamRequest(env) {
+  const headers = new Headers();
+  headers.set("Upgrade", "websocket");
+  headers.set("Authorization", `Bearer ${env.OPENAI_API_KEY}`);
+  // 若线上首连被拒，可能需加 headers.set("OpenAI-Beta", "realtime=v1")；核实后回填。
+  return new Request("https://api.openai.com/v1/realtime?model=gpt-realtime-2.1", { headers });
+}
 
-  if (url.pathname === "/agent/realtime/session" && request.method === "POST") {
-    if (!env.OPENAI_API_KEY) return J({ error: "realtime unavailable" }, 503);
-    let resp;
-    try {
-      resp = await globalThis.fetch("https://api.openai.com/v1/realtime/client_secrets", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ session: buildSessionConfig() }),
-      });
-    } catch { resp = null; }
-    if (!resp || !resp.ok) {
-      if (resp) { try { console.log("[realtime] client_secrets non-ok", resp.status, await resp.text()); } catch {} }
-      return J({ error: "openai-unavailable", status: resp?.status || 0 }, 502);
-    }
-    let data;
-    try { data = await resp.json(); } catch { return J({ error: "openai-bad-response" }, 502); }
-    // 核实过的响应形状：secret 在顶层 value，session_id 在 session.id（非顶层 client_secret/id）。
-    const clientSecret = data.value ?? null;
-    const sessionId = data.session?.id ?? data.id ?? null;
-    if (!clientSecret) return J({ error: "openai-bad-response" }, 502);
-    // 审计日志：每次 mint 记 scope + session_id，便于事后发现异常（用户定：先上+审计，不做限流）。
-    console.log("[realtime] mint", JSON.stringify({ scope, session_id: sessionId, at: Date.now() }));
-    return J({ client_secret: clientSecret, expires_at: data.expires_at ?? null, session_id: sessionId });
+// 从一条 response.done 事件把 usage 累加进 6 档计数（纯函数，可测）。
+// OpenAI realtime usage 结构：response.usage.{input_token_details,output_token_details}，
+// cached 拆在 input_token_details.cached_tokens_details。确切字段名以线上核实为准。
+export function accumulateUsage(acc, respDone) {
+  const u = respDone?.response?.usage;
+  if (!u || typeof u !== "object") return acc;
+  const idt = u.input_token_details || {};
+  const odt = u.output_token_details || {};
+  const cached = idt.cached_tokens_details || {};
+  const n = (x) => { const v = Number(x); return Number.isFinite(v) && v > 0 ? v : 0; };
+  const cAudio = n(cached.audio_tokens), cText = n(cached.text_tokens);
+  acc.audio_in        += Math.max(0, n(idt.audio_tokens) - cAudio);
+  acc.audio_in_cached += cAudio;
+  acc.text_in         += Math.max(0, n(idt.text_tokens) - cText);
+  acc.text_in_cached  += cText;
+  acc.audio_out       += n(odt.audio_tokens);
+  acc.text_out        += n(odt.text_tokens);
+  return acc;
+}
+
+export function newUsageAcc() {
+  return { audio_in: 0, audio_in_cached: 0, audio_out: 0, text_in: 0, text_in_cached: 0, text_out: 0 };
+}
+
+// WS 中转：认证已在调用前（index.js）做完，这里拿到 scope。ctx 用于 waitUntil 计费。
+export async function proxyRealtimeWebSocket(request, env, scope, ctx) {
+  if (!env.OPENAI_API_KEY) return new Response("realtime unavailable", { status: 503 });
+
+  let upstreamResp;
+  try { upstreamResp = await fetch(buildUpstreamRequest(env)); }
+  catch (e) { return new Response(String(e?.message || e), { status: 502 }); }
+
+  const upstream = upstreamResp.webSocket;
+  if (!upstream) {
+    const body = await upstreamResp.text().catch(() => "");
+    console.log("[realtime] upstream upgrade failed", upstreamResp.status, body.slice(0, 300));
+    return new Response(body || "openai ws upgrade failed", { status: upstreamResp.status || 502 });
   }
 
-  if (url.pathname === "/agent/realtime/usage" && request.method === "POST") {
-    let body; try { body = await request.json(); } catch { body = null; }
-    if (!body || typeof body.usage !== "object" || !body.usage || Array.isArray(body.usage)) return J({ error: "expected {usage}" }, 400);
-    if (!env.USAGE) return J({ ok: true, degraded: true });
+  const pair = new WebSocketPair();
+  const [client, server] = Object.values(pair);
+  server.accept();
+  upstream.accept();
+  try { server.binaryType = "arraybuffer"; } catch (_) {}
+  try { upstream.binaryType = "arraybuffer"; } catch (_) {}
+
+  // 注入采访员配置
+  try { upstream.send(JSON.stringify(buildSessionUpdate())); } catch (_) {}
+
+  const usage = newUsageAcc();
+  let billed = false;
+  const settle = () => {
+    if (billed) return; billed = true;
+    if (!env.USAGE) return;
+    const costUY = realtimeCostUY(usage);
+    if (costUY <= 0) return;
     const now = Date.now();
-    await ensureAccount(env.USAGE, scope, now);
-    const costUY = realtimeCostUY(body.usage);
-    const USAGE_KEYS = ["audio_in", "audio_in_cached", "audio_out", "text_in", "text_in_cached", "text_out"];
-    const cleanUsage = {};
-    for (const k of USAGE_KEYS) { const v = Number(body.usage[k]); if (Number.isFinite(v)) cleanUsage[k] = v; }
-    const detail = { session_id: body.session_id || null, usage: cleanUsage };
-    await debit(env.USAGE, scope, costUY, "realtime", detail, now); // debit 对 <=0 自动早返回；无桶时开负 overdraft
-    const bal = await balanceUY(env.USAGE, scope, now);
-    return J({ ok: true, charged_suanli: r1(uyToSuanli(costUY)), balance_suanli: r1(uyToSuanli(bal)) });
-  }
+    const detail = { scope, usage };
+    ctx?.waitUntil?.((async () => {
+      try { await ensureAccount(env.USAGE, scope, now); await debit(env.USAGE, scope, costUY, "realtime", detail, now); } catch (_) {}
+    })());
+  };
 
-  return J({ error: "not found" }, 404);
+  let closed = false;
+  const closeBoth = (code = 1000, reason = "closed") => {
+    if (closed) return;
+    closed = true;
+    settle();
+    try { server.close(code, reason); } catch (_) {}
+    try { upstream.close(code, reason); } catch (_) {}
+  };
+
+  // 逐帧转发（照 asr-proxy：per-direction promise chain 防乱序 + Blob 归一）。
+  const forwarder = (target, watchUsage) => {
+    let chain = Promise.resolve();
+    return (event) => {
+      const data = event.data;
+      if (watchUsage && typeof data === "string") {
+        try { const o = JSON.parse(data); if (o?.type === "response.done") accumulateUsage(usage, o); } catch (_) {}
+      }
+      chain = chain.then(async () => {
+        try { target.send(await toSendablePayload(data)); }
+        catch (_) { closeBoth(1011, "send failed"); }
+      });
+    };
+  };
+  server.addEventListener("message", forwarder(upstream, false));
+  upstream.addEventListener("message", forwarder(server, true));   // 看 upstream 的 response.done 计费
+  server.addEventListener("close", (e) => closeBoth(e.code || 1000, e.reason || "client closed"));
+  upstream.addEventListener("close", (e) => closeBoth(e.code || 1000, e.reason || "upstream closed"));
+  server.addEventListener("error", () => closeBoth(1011, "client error"));
+  upstream.addEventListener("error", () => closeBoth(1011, "upstream error"));
+
+  console.log("[realtime] relay open", JSON.stringify({ scope, at: Date.now() }));
+  return new Response(null, { status: 101, webSocket: client });
 }
