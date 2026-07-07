@@ -10,9 +10,10 @@ import {
 } from "../src/usage.js";
 
 const SECRET = "test-secret";
-async function makeToken(scope, apple = true) {
+async function makeToken(scope, opts = true) {
   const h = b64url(JSON.stringify({ alg: "HS256" }));
-  const p = b64url(JSON.stringify({ scope, apple }));
+  const payload = typeof opts === "boolean" ? { scope, apple: opts } : { scope, ...opts };
+  const p = b64url(JSON.stringify(payload));
   return `${h}.${p}.${await hmacSign(`${h}.${p}`, SECRET)}`;
 }
 
@@ -121,6 +122,14 @@ describe("POST /agent/feed", () => {
     expect(cur.author).toBe("AUTHOR"); // 显示名走 readProfileName，share 快照不再使用
     // mint 行也带标题快照
     expect(JSON.parse(row.detail).title).toBe("t1");
+  });
+
+  it("微信 session 可以投币", async () => {
+    const r = await post("/agent/feed", await makeToken(FEEDER, { apple: false, wechat: true }), { share_id: SHARE1 });
+    const j = await r.json();
+    expect(r.status).toBe(200);
+    expect(j.ok).toBe(true);
+    expect(db.prepare("SELECT actor_sub FROM mint").bind().first().actor_sub).toBe(FEEDER);
   });
 
   it("幂等：同一人同一篇第二次投 → already，不重复付款", async () => {

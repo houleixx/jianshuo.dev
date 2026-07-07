@@ -8,7 +8,7 @@
 //     ledger.detail 带 feed_id 与 mint 行互相对账。
 //   • 价格滞后于总量、支付即时发生：POOL_7D ÷ (70 币永久底座 + 近7天铸币 + 本次)。
 //     底座不滑窗 → 价格永远 ≤ 200 算力/币，冷启动不发散，无需任何结算定时任务。
-//   • 投币需 Apple 实名 session（sess.apple）；匿名 token 返回 needs_apple_signin
+//   • 投币需实名 session（Apple 或 WeChat）；匿名 token 返回登录引导
 //     （与社区分享 write gate 同一约定，App 已会弹 Apple 登录再重试）。
 //   • 写入顺序定死：先 INSERT OR IGNORE 抢唯一键，成功才付钱 → 连点/重试/并发
 //     绝无重复付款。极小概率「事件已记、grant 前崩」= 少付一笔，可由
@@ -26,6 +26,10 @@ import {
 } from "./usage.js";
 
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
+
+function signinRequiredError(request) {
+  return request.headers.get("X-VD-Platform") === "android" ? "needs_wechat_signin" : "needs_apple_signin";
+}
 const r1 = (n) => Math.round(n * 10) / 10;
 
 // 报价（纯函数，可测）：sumUC = 近 7 天已铸微金币，priorPair = 该投币者对该作者的已投次数。
@@ -58,11 +62,11 @@ export async function handleMintRoutes(url, request, env) {
   if (url.pathname === "/agent/feed" && request.method === "POST") {
     const sess = env.SESSION_SECRET ? await verifySession(tok, env.SESSION_SECRET) : null;
     if (!sess || !sess.scope) {
-      // 匿名 token 是有效身份但投币要实名 → 明确引导 Apple 登录而不是笼统 401
-      if (await anonScopeFromToken(tok)) return J({ error: "needs_apple_signin" }, 403);
+      // 匿名 token 是有效身份但投币要实名 → 按平台返回登录引导而不是笼统 401
+      if (await anonScopeFromToken(tok)) return J({ error: signinRequiredError(request) }, 403);
       return J({ error: "unauthorized" }, 401);
     }
-    if (!sess.apple) return J({ error: "needs_apple_signin" }, 403);
+    if (!sess.apple && !sess.wechat) return J({ error: signinRequiredError(request) }, 403);
     const feeder = sess.scope;
 
     const body = await request.json().catch(() => ({}));
