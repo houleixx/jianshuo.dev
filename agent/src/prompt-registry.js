@@ -11,6 +11,8 @@
 // CORS；prompt.jianshuo.dev 是独立源，故放行该 Origin 以便优化器直连。
 import { bearerToken } from "../../functions/lib/auth.js";
 import { loadUIConfig } from "./ui-config.js";
+import { loadPrompts, validateOverride } from "./prompts/loader.js";
+import { PROMPT_META } from "./prompts/catalog.js";
 
 const ALLOWED_ORIGIN = "https://prompt.jianshuo.dev";
 
@@ -74,7 +76,11 @@ export async function handlePromptRegistry(request, env) {
 
   if (request.method === "GET") {
     const cfg = await loadUIConfig(env);
-    return new Response(JSON.stringify({ prompts: flattenPrompts(cfg) }), { headers });
+    const core = await loadPrompts(env);
+    const corePrompts = Object.entries(PROMPT_META)
+      .filter(([, m]) => m.tier === "global")
+      .map(([id, m]) => ({ id, label: m.label, instruction: core[id] }));
+    return new Response(JSON.stringify({ prompts: [...flattenPrompts(cfg), ...corePrompts] }), { headers });
   }
 
   if (request.method === "PUT") {
@@ -83,6 +89,19 @@ export async function handlePromptRegistry(request, env) {
     if (!body || typeof body.id !== "string" || typeof body.instruction !== "string" || !body.instruction.trim()) {
       return new Response(JSON.stringify({ error: "expected {id, instruction}" }), { status: 400, headers });
     }
+
+    if (PROMPT_META[body.id]) {
+      const err = validateOverride(body.id, body.instruction);
+      if (err) return new Response(JSON.stringify({ error: err }), { status: 400, headers });
+      let doc = {};
+      const cur = await env.FILES.get("config/prompts.json");
+      if (cur) { try { doc = JSON.parse(await cur.text()); } catch { doc = {}; } }
+      if (!doc.prompts || typeof doc.prompts !== "object") doc.prompts = {};
+      doc.prompts[body.id] = body.instruction;
+      await env.FILES.put("config/prompts.json", JSON.stringify(doc, null, 2));
+      return new Response(JSON.stringify({ ok: true, id: body.id }), { headers });
+    }
+
     const cfg = await loadUIConfig(env);
     const next = updatePrompt(cfg, body.id, body.instruction);
     if (!next) return new Response(JSON.stringify({ error: "unknown prompt id" }), { status: 404, headers });
