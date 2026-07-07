@@ -8,6 +8,7 @@ import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
 import { restyleArticle, ensurePhotoMarkers } from "./miner.js";
 import { silentM4aBytes } from "./silent-m4a.js";
+import { snapSize } from "./paint-size.js";
 import { MERGE_ARTICLES_DESC, ADD_FOLLOWUPS_DESC, EDIT_PHOTO_DESC, NEW_PHOTO_DESC } from "./prompts/tool-desc.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
@@ -276,7 +277,7 @@ async function postPaintJob(ctx, { prompt, newKey, oldKey, size }) {
   const meta = { scope, newKey, articleKey, editId: editId || null };
   const body = {
     prompt,
-    size: typeof size === "string" && /^\d{2,4}x\d{2,4}$/.test(size) ? size : "1024x1024",
+    size: snapSize(size, "1024x1024"), // 对齐 16 的倍数：paint 拒绝非 16 倍数的宽高
     format: "jpeg",
     callback_url: `${origin}/agent/paint-callback`,
     callback_token: env.PAINT_CALLBACK_TOKEN,

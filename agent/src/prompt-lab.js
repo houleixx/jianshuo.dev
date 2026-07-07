@@ -7,6 +7,7 @@
 // GET  /agent/prompt-lab/paint/<jobId>    → 转发 paint 任务状态（含 result_url）
 import { bearerToken } from "../../functions/lib/auth.js";
 import { TITLE_FALLBACK, readArticleDoc, withTopLevelArticles } from "../../functions/lib/article-store.js";
+import { snapSize } from "./paint-size.js";
 
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
@@ -50,7 +51,7 @@ export async function handlePromptLab(request, env, url) {
   if (url.pathname === "/agent/prompt-lab/paint" && request.method === "POST") {
     const body = await request.json().catch(() => null);
     if (!body || typeof body.prompt !== "string" || !body.prompt.trim()) return J({ error: "expected {prompt}" }, 400);
-    const size = typeof body.size === "string" && /^\d{2,4}x\d{2,4}$/.test(body.size) ? body.size : "1536x1024";
+    const size = snapSize(body.size, "1536x1024"); // 对齐 16 的倍数：paint 拒绝非 16 倍数的宽高
     let resp;
     try {
       resp = await globalThis.fetch(`${paintBase}/api/jobs`, {
