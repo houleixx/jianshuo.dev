@@ -20,6 +20,7 @@ export function buildSessionUpdate() {
   return {
     type: "session.update",
     session: {
+      type: "realtime",
       instructions: INTERVIEWER_INSTRUCTIONS,
       output_modalities: ["audio"],
       audio: {
