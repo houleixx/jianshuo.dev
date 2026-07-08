@@ -17,6 +17,10 @@ export const INTERVIEWER_INSTRUCTIONS =
   "永远不评论、不总结、不重复他的话、不寒暄、不说客套话。拿不准要不要开口时，宁可继续沉默。";
 
 const PCM24 = { type: "audio/pcm", rate: 24000 };
+// 上行改 G.711 μ-law（8 kHz，1 字节/样本）：北京用户到 Cloudflare 的跨境链路扛不住
+// 24kHz PCM16 那 ~600kbps 的持续上行（几秒就断），μ-law 把上行压到 ~85kbps，电话音质
+// 对「听懂内容 + semantic_vad 判断卡没卡住」完全够用。下行（AI 声音）保持 24k PCM 不变。
+const PCMU = { type: "audio/pcmu" };
 
 // 连上后 worker 注入这条 session.update（服务端掌控 instructions/turn_detection，app 不经手）。
 // 2026-07-08：改用 semantic_vad + create_response:true——由 OpenAI 语义判断「说话人是否讲完/卡住」
@@ -32,7 +36,7 @@ export function buildSessionUpdate() {
       instructions: INTERVIEWER_INSTRUCTIONS,
       output_modalities: ["audio"],
       audio: {
-        input:  { format: PCM24, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: false } },
+        input:  { format: PCMU, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: false } },
         output: { format: PCM24, voice: "cedar" },
       },
       reasoning: { effort: "low" },
@@ -113,9 +117,16 @@ export async function proxyRealtimeWebSocket(request, env, scope, ctx) {
   };
 
   let closed = false;
-  const closeBoth = (code = 1000, reason = "closed") => {
+  const openedAt = Date.now();
+  // source 标注断开是哪一段发起的：client=手机↔CF 段（跨境链路问题在这里现形）、
+  // openai=CF↔OpenAI 段、relay=转发失败。北京用户「几秒就断」的取证靠这行日志。
+  const closeBoth = (code = 1000, reason = "closed", source = "relay") => {
     if (closed) return;
     closed = true;
+    console.log("[realtime] relay close", JSON.stringify({
+      scope, source, code, reason: String(reason).slice(0, 120),
+      aliveMs: Date.now() - openedAt, usage,
+    }));
     settle();
     try { server.close(code, reason); } catch (_) {}
     try { upstream.close(code, reason); } catch (_) {}
@@ -137,10 +148,10 @@ export async function proxyRealtimeWebSocket(request, env, scope, ctx) {
   };
   server.addEventListener("message", forwarder(upstream, false));
   upstream.addEventListener("message", forwarder(server, true));   // 看 upstream 的 response.done 计费
-  server.addEventListener("close", (e) => closeBoth(e.code || 1000, e.reason || "client closed"));
-  upstream.addEventListener("close", (e) => closeBoth(e.code || 1000, e.reason || "upstream closed"));
-  server.addEventListener("error", () => closeBoth(1011, "client error"));
-  upstream.addEventListener("error", () => closeBoth(1011, "upstream error"));
+  server.addEventListener("close", (e) => closeBoth(e.code || 1000, e.reason || "client closed", "client"));
+  upstream.addEventListener("close", (e) => closeBoth(e.code || 1000, e.reason || "upstream closed", "openai"));
+  server.addEventListener("error", () => closeBoth(1011, "client error", "client"));
+  upstream.addEventListener("error", () => closeBoth(1011, "upstream error", "openai"));
 
   console.log("[realtime] relay open", JSON.stringify({ scope, at: Date.now() }));
   return new Response(null, { status: 101, webSocket: client });
