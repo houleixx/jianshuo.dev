@@ -566,6 +566,23 @@ export class Miner {
       await this.state.storage.put(key, cur);
       return new Response("ok");
     }
+    // ── voicedrop.cn 备案接入点探活(腾讯云机器随时可能释放/不稳)────────────
+    // */5 cron 每轮报告一次探活结果;连续 ≥2 次失败且 60 分钟内未报过 → 报警。
+    if (url.pathname === "/ops/probe") {
+      const { ok } = await request.json().catch(() => ({ ok: true }));
+      let fails = (await this.state.storage.get("probe:fails")) || 0;
+      fails = ok ? 0 : fails + 1;
+      await this.state.storage.put("probe:fails", fails);
+      let alert = null;
+      if (fails >= 2) {
+        const last = (await this.state.storage.get("probe:alertedAt")) || 0;
+        if (Date.now() - last > 60 * 60 * 1000) {
+          await this.state.storage.put("probe:alertedAt", Date.now());
+          alert = { fails };
+        }
+      }
+      return Response.json({ alert });
+    }
     if (url.pathname === "/ops/check") {
       const nowBucket = Math.floor(Date.now() / 60000);
       const all = await this.state.storage.list({ prefix: "ops:" });
@@ -1271,6 +1288,26 @@ export default {
     const stub = env.Miner.get(env.Miner.idFromName("miner"));
     if (event.cron === "*/5 * * * *") {
       ctx.waitUntil((async () => {
+        // 探活 voicedrop.cn(备案接入点)。挂了 → 推送报警,含回滚提示。
+        try {
+          let ok = false;
+          try {
+            const pr = await fetch("https://voicedrop.cn/", { signal: AbortSignal.timeout(10_000), redirect: "manual" });
+            ok = pr.status < 500;
+          } catch (_) {}
+          const rp = await stub.fetch(new Request("https://miner/ops/probe", { method: "POST", body: JSON.stringify({ ok }) }));
+          const { alert } = await rp.json().catch(() => ({}));
+          if (alert) {
+            console.log("[ops] voicedrop.cn PROBE DOWN", JSON.stringify(alert));
+            if (env.ADMIN_SCOPE) {
+              await sendPush(env, env.ADMIN_SCOPE, {
+                title: "voicedrop.cn 探活失败",
+                body: `连续 ${alert.fails} 次不可达——腾讯云接入点可能挂了。回滚: DNS 改回 CNAME jianshuo-dev.pages.dev(见 infra/voicedrop-cn/README)`,
+                threadId: "ops",
+              });
+            }
+          }
+        } catch (e) { console.log("[ops] probe failed", String(e).slice(0, 120)); }
         try {
           const r = await stub.fetch(new Request("https://miner/ops/check", { method: "POST" }));
           const { alerts = [] } = await r.json().catch(() => ({}));
