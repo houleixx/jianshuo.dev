@@ -141,46 +141,44 @@ function sessionTs(audioKey) {
   return (parts.length >= 5 && parts[0] === "VoiceDrop") ? parts.slice(1, 5).join("-") : null;
 }
 
+// Base user scope, IGNORING any subfolder between the user and the file. The Android
+// app uploads to users/<sub>/upload/VoiceDrop-*.m4a; we want its article to land in the
+// SAME flat place as iOS (users/<sub>/articles/<stem>.json), not a new upload/articles/
+// dir. So both the article key and the admin write path derive from this base scope.
+// "users/<sub>/[dir/…/]file" → "users/<sub>/".
+function baseScope(key) {
+  const p = key.split("/");
+  return (p[0] === "users" && p[1]) ? `users/${p[1]}/` : userPrefix(key);
+}
+
 function articleKeyFor(key) {
-  const parts = key.split("/"); const stem = stemOf(key); parts.pop();
-  return `${parts.join("/")}/articles/${stem}.json`;
+  return `${baseScope(key)}articles/${stemOf(key)}.json`;
 }
 
 function emptyKeyFor(key) {
-  const parts = key.split("/"); const stem = stemOf(key); parts.pop();
-  return `${parts.join("/")}/articles/${stem}.empty`;
+  return `${baseScope(key)}articles/${stemOf(key)}.empty`;
 }
 
 // Pending ASR task sidecar: holds {taskId, logId, submittedAt} between passes so a
 // long transcription RESUMES instead of re-submitting. Distinct from the
 // `.json`/`.empty` markers, so the audio stays "unprocessed" until truly done.
 export function asrTaskKeyFor(key) {
-  const parts = key.split("/"); const stem = stemOf(key); parts.pop();
-  return `${parts.join("/")}/articles/${stem}.asr.json`;
+  return `${baseScope(key)}articles/${stemOf(key)}.asr.json`;
 }
 
 // Per-user 训练风格 corpus entry for a shared style submission. The sample file's
 // existence doubles as the "already collected" marker (skip on the next run).
 function styleSampleKeyFor(key) {
-  return `${userPrefix(key)}style/${stemOf(key)}.json`;
+  return `${baseScope(key)}style/${stemOf(key)}.json`;
 }
 
-// "users/<sub>/VoiceDrop-stem.<ext>" → "<sub>/VoiceDrop-stem"  (admin article API path)
+// "users/<sub>/[dir/]VoiceDrop-stem.<ext>" → "<sub>/VoiceDrop-stem"  (admin article API
+// path). Uses baseScope so an Android upload/ recording writes to the flat article path
+// (<sub>/<stem>) — the admin API can't route a stem under a subfolder anyway.
 function adminArticlePath(key) {
-  const prefix = userPrefix(key);
-  const sub = prefix.startsWith("users/") ? prefix.slice(6, -1) : prefix.slice(0, -1);
+  const s = baseScope(key);
+  const sub = s.startsWith("users/") ? s.slice(6, -1) : s.slice(0, -1);
   return `${sub}/${stemOf(key)}`;
-}
-
-// The admin article HTTP API writes to users/<sub>/articles/<stem>.json and can't
-// handle a stem under a subfolder (e.g. the Android app uploads to
-// users/<sub>/upload/VoiceDrop-*.m4a → adminArticlePath = "<sub>/upload/<stem>" →
-// admin parses stem="upload", subaction="<stem>" → 400 bad request). Such recordings
-// fail every run and, staying "unprocessed", POISON the bounded oldest-first queue and
-// starve directly-uploaded (iOS) recordings. Skip them here until the write path
-// supports subfolders — a directly-uploaded recording yields exactly "<sub>/<stem>".
-function minableViaAdminApi(key) {
-  return adminArticlePath(key).split("/").length === 2;
 }
 
 // Decide whether to mine this recording. too-long ignores balance; otherwise
@@ -1111,7 +1109,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     if (decision === "too-long") { await writeBlocked(audioKey, "too-long", env); return; }
     if (decision === "no-credit") { await writeBlocked(audioKey, "no-credit", env); return; }
     // Drop stale .blocked marker before proceeding (e.g. user topped up)
-    try { await env.FILES.delete(`${userPrefix(audioKey)}articles/${stemOf(audioKey)}.blocked`); } catch (_) {}
+    try { await env.FILES.delete(`${baseScope(audioKey)}articles/${stemOf(audioKey)}.blocked`); } catch (_) {}
 
     // ── ASR (resumable across passes) ───────────────────────────────────────────
     // 0 秒 = 静音占位（图片分享的占位音频，文件名 …-0m0s-…）：没有可转写的语音，直接
@@ -1457,17 +1455,15 @@ export async function runMine(env) {
   const keySet   = new Set(allKeys);
 
   const audios = allKeys.filter(k => classifyKey(k) === "audio");
-  const todo   = audios.filter(a => minableViaAdminApi(a) && !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
+  const todo   = audios.filter(a => !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
   const texts  = allKeys.filter(k => classifyKey(k) === "mine-text")
-                        .filter(t => minableViaAdminApi(t) && !keySet.has(articleKeyFor(t)) && !keySet.has(emptyKeyFor(t)));
+                        .filter(t => !keySet.has(articleKeyFor(t)) && !keySet.has(emptyKeyFor(t)));
   const styles = allKeys.filter(k => classifyKey(k) === "style")
                         .filter(s => !keySet.has(styleSampleKeyFor(s)));
   // Tagged placeholder jobs (e.g. 提取文章风格): a Task<Type> .m4a, processed like audio but
   // dispatched by mineOneAudio→runTask. Marker keys (articles/<stem>.json|.empty) gate reruns.
   const tasks  = allKeys.filter(k => classifyKey(k) === "task")
-                        .filter(a => minableViaAdminApi(a) && !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
-  const skipped = audios.filter(a => !minableViaAdminApi(a) && !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a))).length;
-  if (skipped) console.log(`[mine] SKIPPED ${skipped} subfolder recordings (e.g. Android upload/) — admin article API can't write their stem yet`);
+                        .filter(a => !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
 
   console.log(`[mine] list: ${audios.length} audio · ${texts.length} text · ${styles.length} style · ${tasks.length} task · ${todo.length + texts.length + styles.length + tasks.length} unprocessed (${((Date.now()-t0)/1000).toFixed(1)}s)`);
 
