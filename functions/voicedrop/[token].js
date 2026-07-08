@@ -78,7 +78,9 @@ export async function onRequest(context) {
 
   const og = {
     description: plainExcerpt(stripPhotoMarkers(shown[0].body), 120),
-    url: context.request.url,
+    // 规范链接用真实域名 + 干净短链（经备案接入点反代时 request.url 是
+    // pages.dev/voicedrop/<id>，直接用会让微信卡片指到内部域名）。
+    url: fwdHost ? `${origin}/${id}` : context.request.url,
     image,
   };
   return html(page(title, bodyHtml, og), 200, true);
