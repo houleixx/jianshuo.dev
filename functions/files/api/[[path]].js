@@ -520,7 +520,9 @@ async function handleRequest(context) {
     }
     const id = (await hmacSign('share:' + key, env.SESSION_SECRET)).slice(0, 10);
     await env.FILES.put(`shares/${id}`, key);
-    return json({ url: `${url.origin}/voicedrop/${id}` });
+    // 分享链接用 voicedrop.cn（.cn 域名，微信内打开不弹「非官方网页」提示）根路径
+    // 短链；老的 jianshuo.dev/voicedrop/<id> 继续有效（functions/[token].js 转发）。
+    return json({ url: `https://voicedrop.cn/${id}` });
   }
 
   // On-demand WeChat draft push for ONE mined article. The app calls this when

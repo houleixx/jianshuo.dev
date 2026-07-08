@@ -196,7 +196,7 @@ function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
 export function metaTags(title, og) {
   const t = escAttr(title);
   const d = escAttr(og.description || '把口述，变成文章');
-  const u = escAttr(og.url || 'https://jianshuo.dev/voicedrop/');
+  const u = escAttr(og.url || 'https://voicedrop.cn/voicedrop/');
   const img = og.image ? escAttr(og.image) : '';
   const tags = [
     '<meta property="og:type" content="article"/>',
@@ -256,7 +256,7 @@ footer a{color:#86868b;text-decoration:none}
 </style></head>
 <body><div class="wrap">
 ${inner}
-<footer>由 <a href="https://jianshuo.dev/voicedrop/">VoiceDrop</a> 口述生成</footer>
+<footer>由 <a href="https://voicedrop.cn/voicedrop/">VoiceDrop</a> 口述生成</footer>
 </div></body></html>`;
 }
 
