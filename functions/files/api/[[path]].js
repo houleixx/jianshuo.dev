@@ -26,6 +26,24 @@ import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, 
 import { checkArticlesShareable } from "../../lib/moderation.js";
 
 export async function onRequest(context) {
+  // 报警打点包裹：任何 4xx/5xx 响应 fire-and-forget 通知 voicedrop-agent 的
+  // ops 计数器（分钟桶），worker 的 */5 cron 聚合并按阈值 APNs 报警——
+  // 照片 400 风暴那种「服务端默默拒了几小时」的事故从此有人喊。401 除外
+  //（未登录探测太常见，纯噪声）。打点失败不影响响应。
+  const resp = await handleRequest(context);
+  try {
+    if (resp && resp.status >= 400 && resp.status !== 401) {
+      const route = (Array.isArray(context.params.path) ? context.params.path[0] : context.params.path) || '?';
+      context.waitUntil(fetch('https://jianshuo.dev/agent/ops/tick', {
+        method: 'POST',
+        body: JSON.stringify({ route: `files/${route}`, status: resp.status }),
+      }).catch(() => {}));
+    }
+  } catch (_) {}
+  return resp;
+}
+
+async function handleRequest(context) {
   const { request, env, params } = context;
   const segments = Array.isArray(params.path) ? params.path : [params.path || ''];
   const action = segments[0] || '';

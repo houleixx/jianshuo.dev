@@ -17,6 +17,7 @@ import { writeLlmLog } from "./llmlog.js";
 import { callAnthropic } from "./anthropic.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
+import { sendPush } from "./push.js";
 import { hmacSign } from "../../functions/lib/auth.js";
 import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
@@ -1212,6 +1213,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
           };
           await writeArticle(audioKey, doc, env);
           await notifyStatus(scope, stem, "ready", env);
+          { const t = doc.articles?.[0]?.title; await sendPush(env, scope, { title: "文章已生成", body: t ? `《${t}》挖好了，回来看看` : "你的照片已成文" }); }
           try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
           log("看图写入完成", { articles: arts.length, pipeline: !!pipe });
           result = "mined";
@@ -1304,6 +1306,8 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     }
     if (srt) await writeSrt(audioKey, srt, env);
     await notifyStatus(scope, stem, "ready", env);
+    // APNs：成文是异步的（用户多半已离开 app），推一条让他知道回来看。
+    { const t = variants.at(-1)?.[0]?.title; await sendPush(env, scope, { title: "文章已生成", body: t ? `《${t}》挖好了，回来看看` : "你的录音已成文" }); }
     try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
     log("写入完成", { variants: variants.length });
     result = "mined";
@@ -1380,6 +1384,7 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
     };
     await writeArticle(textKey, doc, env);
     await notifyStatus(scope, stem, "ready", env);
+    { const t = cleaned?.[0]?.title; await sendPush(env, scope, { title: "文章已生成", body: t ? `《${t}》挖好了，回来看看` : "你的分享已成文" }); }
     try { await maybeAutoShareCommunity(textKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
     log("写入完成", { articles: articles.length, titles: articles.map(a => a.title) });
     return (result = "mined");

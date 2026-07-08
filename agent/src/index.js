@@ -17,6 +17,7 @@
 import { Agent, getAgentByName } from "agents";
 import { TOOL_DEFS, deleteArticleFiles } from "./tools.js";
 import { runCommandTurn } from "./command-turn.js";
+import { sendPush } from "./push.js";
 import { runMine, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
@@ -547,7 +548,55 @@ export class Miner {
     this.env   = env;
   }
 
-  async fetch(_request) {
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    // ── ops 错误计数（报警机制）──────────────────────────────────────────────
+    // Pages/Worker 的 4xx/5xx 打点进来按「分钟桶 × 路由|状态」累计；/ops/check
+    // 由 */5 cron 调，聚合最近 15 分钟并按阈值给出报警（同规则 60 分钟静默）。
+    if (url.pathname === "/ops/tick") {
+      const b = await request.json().catch(() => ({}));
+      const route = String(b.route || "?").slice(0, 40);
+      const status = Number(b.status) || 0;
+      const bucket = Math.floor(Date.now() / 60000);
+      const key = `ops:${bucket}`;
+      const cur = (await this.state.storage.get(key)) || {};
+      const k = `${route}|${status}`;
+      cur[k] = (cur[k] || 0) + 1;
+      await this.state.storage.put(key, cur);
+      return new Response("ok");
+    }
+    if (url.pathname === "/ops/check") {
+      const nowBucket = Math.floor(Date.now() / 60000);
+      const all = await this.state.storage.list({ prefix: "ops:" });
+      const agg = {};   // route → {c4, c5, samples}
+      for (const [key, val] of all) {
+        const bucket = Number(key.slice(4));
+        if (bucket < nowBucket - 30) { await this.state.storage.delete(key); continue; }
+        if (bucket < nowBucket - 15) continue;
+        for (const [rk, n] of Object.entries(val)) {
+          const [route, st] = rk.split("|");
+          const cls = Number(st) >= 500 ? "c5" : "c4";
+          agg[route] = agg[route] || { c4: 0, c5: 0 };
+          agg[route][cls] += n;
+        }
+      }
+      const alerts = [];
+      const now = Date.now();
+      for (const [route, { c4, c5 }] of Object.entries(agg)) {
+        for (const [cls, count, threshold] of [["4xx", c4, 20], ["5xx", c5, 5]]) {
+          if (count < threshold) continue;
+          const ruleKey = `opsAlerted:${route}|${cls}`;
+          const last = (await this.state.storage.get(ruleKey)) || 0;
+          if (now - last < 60 * 60 * 1000) continue;   // 60 分钟静默去重
+          await this.state.storage.put(ruleKey, now);
+          alerts.push({ route, cls, count });
+        }
+      }
+      return Response.json({ alerts });
+    }
+
+    // ── 默认：挖矿排队（原行为）─────────────────────────────────────────────
     const existing = await this.state.storage.getAlarm();
     if (!existing) await this.state.storage.setAlarm(Date.now() + 500);
     return new Response("queued", { status: 202 });
@@ -910,6 +959,15 @@ export default {
       return new Response(JSON.stringify(cfg), { headers: { "content-type": "application/json" } });
     }
 
+    // ── /agent/ops/tick ── 服务端错误打点（Pages Functions 4xx/5xx 时 fire-and-forget）──
+    // 无鉴权：只累加计数、无副作用；载荷截断，恶意灌水最多触发一条报警。
+    if (url.pathname === "/agent/ops/tick" && request.method === "POST") {
+      const body = await request.text();
+      const stub = env.Miner.get(env.Miner.idFromName("miner"));
+      ctx.waitUntil(stub.fetch(new Request("https://miner/ops/tick", { method: "POST", body })));
+      return new Response(null, { status: 204 });
+    }
+
     // ── /agent/mine/trigger ── kick the miner (any authenticated user or admin) ──
     if (url.pathname === "/agent/mine/trigger") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
@@ -1208,9 +1266,28 @@ export default {
     return new Response("not found", { status: 404 });
   },
 
-  // CF Cron Trigger: fires the miner on schedule (every 6 hours).
-  async scheduled(_event, env, ctx) {
+  // CF Cron Triggers: 6 小时一次的挖矿兜底 + 每 5 分钟一次的错误报警检查。
+  async scheduled(event, env, ctx) {
     const stub = env.Miner.get(env.Miner.idFromName("miner"));
+    if (event.cron === "*/5 * * * *") {
+      ctx.waitUntil((async () => {
+        try {
+          const r = await stub.fetch(new Request("https://miner/ops/check", { method: "POST" }));
+          const { alerts = [] } = await r.json().catch(() => ({}));
+          for (const a of alerts) {
+            console.log("[ops] ALERT", JSON.stringify(a));
+            if (env.ADMIN_SCOPE) {
+              await sendPush(env, env.ADMIN_SCOPE, {
+                title: `服务端 ${a.cls} 报警`,
+                body: `${a.route} 最近 15 分钟 ${a.cls} × ${a.count}`,
+                threadId: "ops",
+              });
+            }
+          }
+        } catch (e) { console.log("[ops] check failed", String(e).slice(0, 200)); }
+      })());
+      return;
+    }
     ctx.waitUntil(stub.fetch(new Request("https://miner/trigger", { method: "POST" })));
   },
 };
