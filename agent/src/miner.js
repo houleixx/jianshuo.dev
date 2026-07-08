@@ -172,6 +172,17 @@ function adminArticlePath(key) {
   return `${sub}/${stemOf(key)}`;
 }
 
+// The admin article HTTP API writes to users/<sub>/articles/<stem>.json and can't
+// handle a stem under a subfolder (e.g. the Android app uploads to
+// users/<sub>/upload/VoiceDrop-*.m4a → adminArticlePath = "<sub>/upload/<stem>" →
+// admin parses stem="upload", subaction="<stem>" → 400 bad request). Such recordings
+// fail every run and, staying "unprocessed", POISON the bounded oldest-first queue and
+// starve directly-uploaded (iOS) recordings. Skip them here until the write path
+// supports subfolders — a directly-uploaded recording yields exactly "<sub>/<stem>".
+function minableViaAdminApi(key) {
+  return adminArticlePath(key).split("/").length === 2;
+}
+
 // Decide whether to mine this recording. too-long ignores balance; otherwise
 // lazy-create the account (first touch grants 500) then check balance.
 export async function meteredMineGate(db, scope, durationSec, now) {
@@ -1446,15 +1457,17 @@ export async function runMine(env) {
   const keySet   = new Set(allKeys);
 
   const audios = allKeys.filter(k => classifyKey(k) === "audio");
-  const todo   = audios.filter(a => !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
+  const todo   = audios.filter(a => minableViaAdminApi(a) && !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
   const texts  = allKeys.filter(k => classifyKey(k) === "mine-text")
-                        .filter(t => !keySet.has(articleKeyFor(t)) && !keySet.has(emptyKeyFor(t)));
+                        .filter(t => minableViaAdminApi(t) && !keySet.has(articleKeyFor(t)) && !keySet.has(emptyKeyFor(t)));
   const styles = allKeys.filter(k => classifyKey(k) === "style")
                         .filter(s => !keySet.has(styleSampleKeyFor(s)));
   // Tagged placeholder jobs (e.g. 提取文章风格): a Task<Type> .m4a, processed like audio but
   // dispatched by mineOneAudio→runTask. Marker keys (articles/<stem>.json|.empty) gate reruns.
   const tasks  = allKeys.filter(k => classifyKey(k) === "task")
-                        .filter(a => !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
+                        .filter(a => minableViaAdminApi(a) && !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
+  const skipped = audios.filter(a => !minableViaAdminApi(a) && !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a))).length;
+  if (skipped) console.log(`[mine] SKIPPED ${skipped} subfolder recordings (e.g. Android upload/) — admin article API can't write their stem yet`);
 
   console.log(`[mine] list: ${audios.length} audio · ${texts.length} text · ${styles.length} style · ${tasks.length} task · ${todo.length + texts.length + styles.length + tasks.length} unprocessed (${((Date.now()-t0)/1000).toFixed(1)}s)`);
 
