@@ -9,12 +9,14 @@ import { ensureAccount, debit } from "./usage_store.js";
 // 采访员系统提示词（2026-07-08 改为「默认沉默、只在卡住时插一句」——由提示词驱动，
 // 取代原 app 端 5 秒定时逻辑。以后调这段就是调采访员的行为。）
 export const INTERVIEWER_INSTRUCTIONS =
-  "你叫 VoiceDrop。" +
-  "你是一位老练、极其克制的访谈者。绝大多数时候你只是安静倾听，什么都不说。" +
-  "当说话人还在讲述、思考、或只是正常停顿（话还没说完）时，你保持完全沉默，绝不打断、不附和、不接话。" +
-  "只有在一种情况下你才开口：说话人明显卡住了、接不下去了、或长时间停顿下来显然需要引导。" +
-  "这时你用一句简短、自然、不超过 5 秒的问题，扣住他刚讲到的关键点，帮他更容易接着往下说。" +
-  "永远不评论、不总结、不重复他的话、不寒暄、不说客套话。拿不准要不要开口时，宁可继续沉默。";
+  "你叫 VoiceDrop。你是一位老练、克制的访谈者。" +
+  "你的唯一目的：帮讲者说出更多信息，让他口述的内容最终能形成一篇更丰富的文章。" +
+  "讲者还在讲述、思考或正常换气时，你保持完全沉默，绝不打断、不附和、不接话。" +
+  "当讲者停顿超过三秒，或明显卡住接不下去时，你提出一个问题——" +
+  "扣住他刚讲到的关键点，把细节、例子、数字、当时的场景和感受问出来。" +
+  "只给问题，不给提示，不替他补话，不建议他该说什么。" +
+  "你的话要简短：一句话，不超过 5 秒。" +
+  "永远不评论、不总结、不重复他的话、不寒暄、不说客套话。";
 
 const PCM24 = { type: "audio/pcm", rate: 24000 };
 // 上行改 G.711 μ-law（8 kHz，1 字节/样本）：北京用户到 Cloudflare 的跨境链路扛不住
@@ -25,7 +27,8 @@ const PCMU = { type: "audio/pcmu" };
 // 连上后 worker 注入这条 session.update（服务端掌控 instructions/turn_detection，app 不经手）。
 // 2026-07-08：改用 semantic_vad + create_response:true——由 OpenAI 语义判断「说话人是否讲完/卡住」
 // 后自动触发一次回应，何时开口由模型按 instructions 决定，app 不再做 5 秒定时。
-// eagerness:"low" = 更耐心，等说话人真的停下/讲完才判定回合结束，契合「卡住才插话」。
+// eagerness:"medium"（2026-07-08 从 low 上调）= 停顿约几秒即判定回合结束，配合提示词
+// 「停顿超过三秒就提一个问题」；low 太佛系，讲者停半天 AI 也不接。
 // interrupt_response:false = AEC 在设备上把 tap 弄哑（tap 0）故弃用，改 app 侧半双工
 // （AI 说话期间暂停发麦克风）防回声自打断；无真打断，靠半双工避免 AI 说一半被自己掐断。
 // inputFormat 由客户端在 WS URL 上声明（?fmt=pcmu）：新 app 发 μ-law，旧 TestFlight
@@ -39,7 +42,7 @@ export function buildSessionUpdate(inputFormat = PCM24) {
       instructions: INTERVIEWER_INSTRUCTIONS,
       output_modalities: ["audio"],
       audio: {
-        input:  { format: inputFormat, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: false } },
+        input:  { format: inputFormat, turn_detection: { type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: false } },
         output: { format: PCM24, voice: "cedar" },
       },
       reasoning: { effort: "low" },
