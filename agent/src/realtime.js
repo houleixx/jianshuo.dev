@@ -21,7 +21,8 @@ const PCM24 = { type: "audio/pcm", rate: 24000 };
 // 2026-07-08：改用 semantic_vad + create_response:true——由 OpenAI 语义判断「说话人是否讲完/卡住」
 // 后自动触发一次回应，何时开口由模型按 instructions 决定，app 不再做 5 秒定时。
 // eagerness:"low" = 更耐心，等说话人真的停下/讲完才判定回合结束，契合「卡住才插话」。
-// app 侧半双工（AI 说话期间暂停发麦克风）来防回声自打断，故 interrupt_response 关掉。
+// interrupt_response:true = 配合 app 侧 AEC（全双工）——OpenAI 只听到用户，说话人一开口
+// 即可打断 AI（真打断），AI 不会把自己外放的回声当成用户说话去自打断。
 export function buildSessionUpdate() {
   return {
     type: "session.update",
@@ -30,7 +31,7 @@ export function buildSessionUpdate() {
       instructions: INTERVIEWER_INSTRUCTIONS,
       output_modalities: ["audio"],
       audio: {
-        input:  { format: PCM24, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: false } },
+        input:  { format: PCM24, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: true } },
         output: { format: PCM24, voice: "cedar" },
       },
       reasoning: { effort: "low" },
