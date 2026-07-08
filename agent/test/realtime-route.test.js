@@ -55,8 +55,11 @@ describe("buildSessionUpdate", () => {
     expect(typeof u.session.instructions).toBe("string");
     expect(u.session.audio.input.turn_detection.type).toBe("semantic_vad");
     expect(u.session.audio.input.turn_detection.create_response).toBe(true);
-    // 上行 G.711 μ-law（8 kHz）——跨境弱网下把持续上行从 ~600kbps 压到 ~85kbps。
-    expect(u.session.audio.input.format).toEqual({ type: "audio/pcmu" });
+    // 默认 PCM24（旧包兼容）；新 app 在 WS URL 带 ?fmt=pcmu 换 G.711 μ-law
+    //（跨境弱网下把持续上行从 ~600kbps 压到 ~85kbps）。
+    expect(u.session.audio.input.format).toEqual({ type: "audio/pcm", rate: 24000 });
+    expect(buildSessionUpdate({ type: "audio/pcmu" }).session.audio.input.format)
+      .toEqual({ type: "audio/pcmu" });
     expect(u.session.audio.output.voice).toBe("cedar");
   });
 });

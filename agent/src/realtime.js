@@ -28,7 +28,10 @@ const PCMU = { type: "audio/pcmu" };
 // eagerness:"low" = 更耐心，等说话人真的停下/讲完才判定回合结束，契合「卡住才插话」。
 // interrupt_response:false = AEC 在设备上把 tap 弄哑（tap 0）故弃用，改 app 侧半双工
 // （AI 说话期间暂停发麦克风）防回声自打断；无真打断，靠半双工避免 AI 说一半被自己掐断。
-export function buildSessionUpdate() {
+// inputFormat 由客户端在 WS URL 上声明（?fmt=pcmu）：新 app 发 μ-law，旧 TestFlight
+// 包没带参数就保持 PCM24——避免「relay 已切 μ-law、旧包还在发 PCM16 → OpenAI 全听成
+// 噪音」的升级窗口。等所有测试机都到新包后可把默认翻成 PCMU。
+export function buildSessionUpdate(inputFormat = PCM24) {
   return {
     type: "session.update",
     session: {
@@ -36,13 +39,15 @@ export function buildSessionUpdate() {
       instructions: INTERVIEWER_INSTRUCTIONS,
       output_modalities: ["audio"],
       audio: {
-        input:  { format: PCMU, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: false } },
+        input:  { format: inputFormat, turn_detection: { type: "semantic_vad", eagerness: "low", create_response: true, interrupt_response: false } },
         output: { format: PCM24, voice: "cedar" },
       },
       reasoning: { effort: "low" },
     },
   };
 }
+
+export const REALTIME_FORMATS = { PCM24, PCMU };
 
 // 出站到 OpenAI 的 WS 请求：CF 出站 WS 要 https:// + Upgrade 头（不能 wss://），key 作 Authorization。
 export function buildUpstreamRequest(env) {
@@ -100,7 +105,8 @@ export async function proxyRealtimeWebSocket(request, env, scope, ctx) {
   try { upstream.binaryType = "arraybuffer"; } catch (_) {}
 
   // 注入采访员配置
-  try { upstream.send(JSON.stringify(buildSessionUpdate())); } catch (_) {}
+  const fmt = (() => { try { return new URL(request.url).searchParams.get("fmt"); } catch (_) { return null; } })();
+  try { upstream.send(JSON.stringify(buildSessionUpdate(fmt === "pcmu" ? PCMU : PCM24))); } catch (_) {}
 
   const usage = newUsageAcc();
   let billed = false;
