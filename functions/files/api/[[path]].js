@@ -417,23 +417,22 @@ export async function onRequest(context) {
   }
 
   if ((request.method === 'PUT' || request.method === 'POST') && action === 'upload' && name) {
-    // 入口护栏：上传文件名必须是纯 ASCII 且不含 '/'（不允许子目录）。历史上安卓那个
-    // 版本发中文名（VoiceDrop-…-周三-上午.m4a）并塞进 upload/ 子目录，导致文章/标记
-    // 被写到 URL 编码后的 R2 key，而 miner 用解码 key 查存在性 → 永远对不上 → 每轮
-    // 重挖、白烧 token 并堵队列。iOS 早已是 ASCII-only 命名（RecordingName），不受影响。
-    // 从入口挡死非 ASCII / 带子目录的名，从根杜绝这一整类 key 分歧 bug。
-    if (!/^[A-Za-z0-9._-]+$/.test(name)) {
-      const hasSlash = name.includes('/');
-      const badChars = [...new Set(name.match(/[^A-Za-z0-9._-]/g) || [])].join('');
+    // 入口护栏：上传路径的每个字符必须是 ASCII（允许 '/' 分段——照片传
+    // photos/<ts>/<n>.jpg、标签传 articles/<stem>.tags 都是多段路径；2026-07-08
+    // 曾误禁 '/'，把所有照片/标签上传 400 拒掉，教训）。真正要挡的是非 ASCII：
+    // 历史上安卓版本发中文名（VoiceDrop-…-周三-上午.m4a），文章/标记被写到 URL
+    // 编码后的 R2 key，而 miner 用解码 key 查存在性 → 永远对不上 → 每轮重挖。
+    // '..' 由 keyFor 拒绝（路径穿越）。iOS 命名本就 ASCII-only，不受影响。
+    if (!/^[A-Za-z0-9._/-]+$/.test(name)) {
+      const badChars = [...new Set(name.match(/[^A-Za-z0-9._/-]/g) || [])].join('');
       return json({
         error: 'invalid_upload_name',
-        reason: '上传文件名必须是纯 ASCII 且不含 "/"（不允许子目录）。' +
-          (hasSlash ? '文件名里带了 "/"（子目录）。' : '') +
-          (badChars ? `文件名含非 ASCII 字符：${badChars}。` : '') +
-          '否则服务端存 R2 的 key 会因 URL 编码与挖矿检查用的 key 不一致，导致录音无法被处理。',
-        rule: '^[A-Za-z0-9._-]+$',
+        reason: '上传路径只允许 ASCII 字符 [A-Za-z0-9._/-]。' +
+          (badChars ? `当前含非法字符：${badChars}。` : '') +
+          '非 ASCII 文件名会让服务端存 R2 的 key 与挖矿检查用的 key 不一致，导致录音无法被处理。',
+        rule: '^[A-Za-z0-9._/-]+$',
         name,
-        hint: '请改成纯 ASCII 单段文件名（如中文星期/时段换成 Wed/Afternoon），不要放进子目录，直接 PUT 到 /files/api/upload/<ascii-name>.m4a',
+        hint: '请用纯 ASCII 命名（如中文星期/时段换成 Wed/Afternoon）后重新 PUT /files/api/upload/<path>',
       }, 400);
     }
     const key = keyFor(name);
