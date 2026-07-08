@@ -34,7 +34,7 @@ async function apnsJwt(env) {
 
 /// 给某个用户 scope（"users/<sub>/"）推一条通知。尽力而为：任何失败只 console.log,
 /// 绝不向上抛（推送永远不该影响主流程）。410/BadDeviceToken 时清掉失效 token。
-export async function sendPush(env, scope, { title, body, threadId }) {
+export async function sendPush(env, scope, { title, body, threadId, link }) {
   try {
     if (!env.APNS_KEY_P8 || !env.APNS_KEY_ID || !env.APNS_TEAM_ID || !env.FILES) return false;
     const obj = await env.FILES.get(`${scope}push-token.json`);
@@ -50,7 +50,11 @@ export async function sendPush(env, scope, { title, body, threadId }) {
         "apns-push-type": "alert",
         "apns-priority": "10",
       },
-      body: JSON.stringify({ aps: { alert: { title, body }, sound: "default", "thread-id": threadId || "voicedrop" } }),
+      // link = voicedrop:// 深链（如 voicedrop://article/<stem>），app 点按通知时路由过去。
+      body: JSON.stringify({
+        aps: { alert: { title, body }, sound: "default", "thread-id": threadId || "voicedrop" },
+        ...(link ? { link } : {}),
+      }),
     });
     if (resp.status === 410) {
       await env.FILES.delete(`${scope}push-token.json`).catch(() => {});
