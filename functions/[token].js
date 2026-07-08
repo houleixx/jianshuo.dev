@@ -6,7 +6,9 @@
 import { onRequest as sharePage } from "./voicedrop/[token].js";
 
 export async function onRequest(context) {
-  const host = new URL(context.request.url).hostname;
+  // 直连(CF custom domain)看 hostname;经腾讯云备案接入点反代时,到达 Pages 的
+  // Host 是 pages.dev,真实域名在 X-Forwarded-Host。两种形态都认。
+  const host = context.request.headers.get("x-forwarded-host") || new URL(context.request.url).hostname;
   if (host !== "voicedrop.cn" && host !== "www.voicedrop.cn") return context.next();
   // 复用 /voicedrop/<id> 的整套渲染（id 校验 / shares 与社区双解析 / og 标签）。
   return sharePage(context);

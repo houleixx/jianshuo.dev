@@ -72,7 +72,8 @@ export async function onRequest(context) {
   // Share-card image = the FIRST photo THIS section references, as an ABSOLUTE URL
   // (WeChat / X crawlers need a full origin, not the root-relative inline src). No
   // photo → no og:image, so photo-less articles still render as a clean text card.
-  const origin = new URL(context.request.url).origin;
+  const fwdHost = context.request.headers.get('x-forwarded-host');
+  const origin = fwdHost ? `https://${fwdHost}` : new URL(context.request.url).origin;
   const image = photoRefs.length ? origin + photoURIs[photoRefs[0].token] : '';
 
   const og = {
