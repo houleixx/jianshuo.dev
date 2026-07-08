@@ -49,11 +49,12 @@ describe("accumulateUsage", () => {
 });
 
 describe("buildSessionUpdate", () => {
-  it("是 session.update，含采访员 instructions 与 create_response:false", () => {
+  it("是 session.update，含采访员 instructions 与 semantic_vad + create_response:true", () => {
     const u = buildSessionUpdate();
     expect(u.type).toBe("session.update");
     expect(typeof u.session.instructions).toBe("string");
-    expect(u.session.audio.input.turn_detection.create_response).toBe(false);
+    expect(u.session.audio.input.turn_detection.type).toBe("semantic_vad");
+    expect(u.session.audio.input.turn_detection.create_response).toBe(true);
     expect(u.session.audio.input.format).toEqual({ type: "audio/pcm", rate: 24000 });
   });
 });
