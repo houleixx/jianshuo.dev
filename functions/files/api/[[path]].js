@@ -994,7 +994,13 @@ export async function onRequest(context) {
     // segments = ['articles', ...rest]
     // For user token: rest = [stem] or [stem, subaction]
     // For admin token: rest = [sub, stem] or [sub, stem, subaction]
-    const rest = segments.slice(1);
+    // URL-decode each segment — CF Pages leaves params.path percent-encoded, and Android
+    // recordings carry Chinese stems (e.g. VoiceDrop-…-周三-上午). Without decoding, the
+    // article/marker is STORED under the encoded key (…%E5%91%A8…) while the miner's
+    // existence check (env.FILES.head on the decoded key) never matches → the recording
+    // is re-mined every pass, burning ASR+LLM tokens and blocking the queue. Matches the
+    // decodeURIComponent already used by the raw-file handlers above.
+    const rest = segments.slice(1).map((s) => { try { return decodeURIComponent(s); } catch { return s; } });
     let stem, subaction;
 
     if (!scope) {
