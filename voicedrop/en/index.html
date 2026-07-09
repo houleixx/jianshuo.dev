@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="VoiceDrop — 开口说，它自己归档。一句话录下灵感，自动按时间和地点命名，上传到你自己的私有文件中转站，归档 iCloud。极简 iOS 口述备忘 by 王建硕。">
-<meta property="og:title" content="VoiceDrop — 开口说，它自己归档">
-<meta property="og:description" content="一句话录下灵感，自动按时间和地点命名，上传到你自己的私有文件中转站。打开、说、完成——没有第二个动作。">
+<meta name="description" content="VoiceDrop — Speak it, it files itself. Capture an idea in one sentence, auto-named by time and place, uploaded to your own private file relay and archived to iCloud. A minimal iOS voice-first memo app by Jian Shuo Wang.">
+<meta property="og:title" content="VoiceDrop — Speak it, it files itself">
+<meta property="og:description" content="Capture an idea in one sentence, auto-named by time and place, uploaded to your own private file relay. Open, speak, done — there is no second step.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://jianshuo.dev/voicedrop/">
+<meta property="og:url" content="https://jianshuo.dev/voicedrop/en/">
 <link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/">
 <link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/">
 <link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/">
-<title>VoiceDrop — 口述备忘 · jianshuo.dev</title>
+<title>VoiceDrop — Voice Memos · jianshuo.dev</title>
 <style>
   *{box-sizing:border-box}
   body{margin:0;background:#EDE6D9;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased;color:#2A2521}
@@ -27,7 +27,7 @@
 </style>
 </head>
 <body>
-<!-- 开发者文档:/voicedrop/developer/ （API 参考 + wjs-voicedrop 指南） -->
+<!-- Developer docs: /voicedrop/en/developer/ (API reference + wjs-voicedrop guide) -->
 
 <div style="--accent:#D8593B;background:#FAF6EF;overflow-x:hidden">
 
@@ -36,18 +36,18 @@
     <div style="max-width:1160px;margin:0 auto;padding:15px 32px;display:flex;align-items:center;justify-content:space-between">
       <div style="display:flex;align-items:flex-end;gap:9px">
         <span style="display:inline-flex;align-items:flex-end;gap:2.5px;height:24px"><span style="width:3px;height:10px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:18px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:24px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:15px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:8px;background:var(--accent,#D8593B);border-radius:2px"></span></span>
-        <span style="font:600 18px -apple-system;letter-spacing:-.01em">VD口述</span>
+        <span style="font:600 18px -apple-system;letter-spacing:-.01em">VoiceDrop</span>
       </div>
       <nav style="display:flex;align-items:center;gap:26px">
         <span class="vd-navlinks" style="display:flex;align-items:center;gap:26px">
-        <a href="#features" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">功能</a>
-        <a href="#privacy" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">隐私</a>
-        <a href="#support" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">支持</a>
-        <a href="/voicedrop/help/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">帮助</a>
-        <a href="/voicedrop/developer/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">开发者</a>
-        <a href="/voicedrop/en/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">EN</a>
+        <a href="#features" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">Features</a>
+        <a href="#privacy" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">Privacy</a>
+        <a href="#support" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">Support</a>
+        <a href="/voicedrop/en/help/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">Help</a>
+        <a href="/voicedrop/en/developer/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">Developers</a>
         </span>
-        <a href="#download" style="font:600 13px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:9px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(216,89,59,.26);text-decoration:none;white-space:nowrap">下载</a>
+        <a href="/voicedrop/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">中文</a>
+        <a href="#download" style="font:600 13px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:9px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(216,89,59,.26);text-decoration:none;white-space:nowrap">Download</a>
       </nav>
     </div>
   </header>
@@ -57,20 +57,20 @@
     <div style="max-width:1160px;margin:0 auto;padding:72px 32px 80px;display:flex;flex-wrap:wrap;gap:56px;align-items:center">
       <div style="flex:1 1 380px;min-width:300px">
         <div style="display:inline-flex;align-items:center;gap:8px;font:600 11.5px -apple-system;letter-spacing:.04em;color:var(--accent,#D8593B);background:#F6E4DC;border:1px solid #F0D2C6;padding:7px 13px;border-radius:999px;white-space:nowrap">
-          <span style="width:7px;height:7px;border-radius:50%;background:#E5392E;animation:vdpulse 1.8s infinite"></span>iOS · 安卓 · 极简口述备忘
+          <span style="width:7px;height:7px;border-radius:50%;background:#E5392E;animation:vdpulse 1.8s infinite"></span>iOS · Android · Minimal voice memos
         </div>
-        <h1 style="margin:22px 0 0;font:600 56px/1.08 -apple-system;letter-spacing:-.03em">开口说，<br>它自己归档。</h1>
-        <div style="margin-top:14px;font:500 19px -apple-system;color:#A89E8E;letter-spacing:.01em">Speak it, it files itself.</div>
-        <p style="margin:22px 0 0;font:400 17px/1.75 -apple-system;color:#6b5f51;max-width:30em">一句话录下灵感，自动按 <b style="color:#2A2521">时间</b> 和 <b style="color:#2A2521">地点</b> 命名，上传到 <b style="color:#2A2521">你自己</b> 的私有文件中转站。打开、说、完成——没有第二个动作。</p>
+        <h1 style="margin:22px 0 0;font:600 56px/1.08 -apple-system;letter-spacing:-.03em">Speak it,<br>it files itself.</h1>
+        <div style="margin-top:14px;font:500 19px -apple-system;color:#A89E8E;letter-spacing:.01em">Your thoughts, filed by time and place.</div>
+        <p style="margin:22px 0 0;font:400 17px/1.75 -apple-system;color:#6b5f51;max-width:30em">Capture an idea in one sentence. Each memo names itself by <b style="color:#2A2521">time</b> and <b style="color:#2A2521">place</b>, then uploads to a private file relay that <b style="color:#2A2521">you</b> own. Open, speak, done — there is no second step.</p>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin-top:30px">
-          <a href="https://testflight.apple.com/join/PbzFFRS2" style="font:600 16px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:14px 26px;border-radius:9px;box-shadow:0 8px 20px -6px rgba(216,89,59,.5);text-decoration:none">下载 · iOS →</a>
-          <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="font:600 16px -apple-system;color:var(--accent,#D8593B);border:1.5px solid rgba(216,89,59,.45);padding:13px 25px;border-radius:9px;text-decoration:none">下载 · 安卓 APK</a>
-          <a href="#features" style="font:600 14.5px -apple-system;color:var(--accent,#D8593B);border-bottom:1.5px solid rgba(216,89,59,.35);padding-bottom:2px;text-decoration:none">看看它怎么用 ↓</a>
+          <a href="https://testflight.apple.com/join/PbzFFRS2" style="font:600 16px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:14px 26px;border-radius:9px;box-shadow:0 8px 20px -6px rgba(216,89,59,.5);text-decoration:none">Download · iOS →</a>
+          <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="font:600 16px -apple-system;color:var(--accent,#D8593B);border:1.5px solid rgba(216,89,59,.45);padding:13px 25px;border-radius:9px;text-decoration:none">Download · Android APK</a>
+          <a href="#features" style="font:600 14.5px -apple-system;color:var(--accent,#D8593B);border-bottom:1.5px solid rgba(216,89,59,.35);padding-bottom:2px;text-decoration:none">See how it works ↓</a>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:34px">
-          <div style="display:flex;align-items:center;gap:8px;font:500 13px -apple-system;color:#8A8175"><span style="width:5px;height:5px;border-radius:50%;background:#5E8A6A"></span>无广告</div>
-          <div style="display:flex;align-items:center;gap:8px;font:500 13px -apple-system;color:#8A8175"><span style="width:5px;height:5px;border-radius:50%;background:#5E8A6A"></span>无第三方追踪</div>
-          <div style="display:flex;align-items:center;gap:8px;font:500 13px -apple-system;color:#8A8175"><span style="width:5px;height:5px;border-radius:50%;background:#5E8A6A"></span>录音归你自己</div>
+          <div style="display:flex;align-items:center;gap:8px;font:500 13px -apple-system;color:#8A8175"><span style="width:5px;height:5px;border-radius:50%;background:#5E8A6A"></span>No ads</div>
+          <div style="display:flex;align-items:center;gap:8px;font:500 13px -apple-system;color:#8A8175"><span style="width:5px;height:5px;border-radius:50%;background:#5E8A6A"></span>No third-party tracking</div>
+          <div style="display:flex;align-items:center;gap:8px;font:500 13px -apple-system;color:#8A8175"><span style="width:5px;height:5px;border-radius:50%;background:#5E8A6A"></span>Your recordings stay yours</div>
         </div>
       </div>
 
@@ -99,7 +99,7 @@
                   <span style="width:26px;height:26px;border-radius:6px;background:#fff"></span>
                 </div>
               </div>
-              <div style="font:600 13px -apple-system;color:var(--accent,#D8593B)">正在录音 · 0:08</div>
+              <div style="font:600 13px -apple-system;color:var(--accent,#D8593B)">Recording · 0:08</div>
               <div style="margin-top:12px;display:inline-flex;align-items:center;gap:2.5px;height:26px">
                 <span style="width:2.5px;height:9px;background:#EBA89F;border-radius:2px;animation:vdwave 1s ease-in-out infinite"></span><span style="width:2.5px;height:18px;background:var(--accent,#D8593B);border-radius:2px;animation:vdwave 1.1s ease-in-out infinite;animation-delay:.1s"></span><span style="width:2.5px;height:12px;background:#EBA89F;border-radius:2px;animation:vdwave .9s ease-in-out infinite;animation-delay:.2s"></span><span style="width:2.5px;height:24px;background:var(--accent,#D8593B);border-radius:2px;animation:vdwave 1.2s ease-in-out infinite;animation-delay:.05s"></span><span style="width:2.5px;height:15px;background:var(--accent,#D8593B);border-radius:2px;animation:vdwave 1s ease-in-out infinite;animation-delay:.25s"></span><span style="width:2.5px;height:8px;background:#EBA89F;border-radius:2px;animation:vdwave .8s ease-in-out infinite;animation-delay:.15s"></span><span style="width:2.5px;height:20px;background:var(--accent,#D8593B);border-radius:2px;animation:vdwave 1.15s ease-in-out infinite;animation-delay:.3s"></span><span style="width:2.5px;height:11px;background:#EBA89F;border-radius:2px;animation:vdwave .95s ease-in-out infinite;animation-delay:.12s"></span><span style="width:2.5px;height:22px;background:var(--accent,#D8593B);border-radius:2px;animation:vdwave 1.25s ease-in-out infinite;animation-delay:.22s"></span><span style="width:2.5px;height:14px;background:var(--accent,#D8593B);border-radius:2px;animation:vdwave 1.05s ease-in-out infinite;animation-delay:.08s"></span>
               </div>
@@ -107,20 +107,20 @@
 
             <!-- recent list -->
             <div style="background:#fff;border-top:1px solid #ECE3D5;padding:14px 18px 18px">
-              <div style="font:600 10.5px -apple-system;letter-spacing:.14em;color:#A79F93;text-transform:uppercase;margin-bottom:10px">最近 · Recent</div>
+              <div style="font:600 10.5px -apple-system;letter-spacing:.14em;color:#A79F93;text-transform:uppercase;margin-bottom:10px">Recent</div>
               <div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid #F4ECDD">
                 <span style="display:inline-flex;align-items:flex-end;gap:1.5px;height:16px"><span style="width:2px;height:6px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:12px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:16px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:9px;background:#D8B7A8;border-radius:1px"></span></span>
-                <div style="flex:1;min-width:0"><div style="font:600 12.5px -apple-system">06-27 09:14</div><div style="font:400 11px -apple-system;color:#8A8175">上海 · 浦东新区</div></div>
+                <div style="flex:1;min-width:0"><div style="font:600 12.5px -apple-system">06-27 09:14</div><div style="font:400 11px -apple-system;color:#8A8175">Shanghai · Pudong</div></div>
                 <div style="font:500 11px -apple-system;color:#A89E8E;font-variant-numeric:tabular-nums">0:12</div>
               </div>
               <div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid #F4ECDD">
                 <span style="display:inline-flex;align-items:flex-end;gap:1.5px;height:16px"><span style="width:2px;height:10px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:6px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:14px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:8px;background:#D8B7A8;border-radius:1px"></span></span>
-                <div style="flex:1;min-width:0"><div style="font:600 12.5px -apple-system">06-27 08:02</div><div style="font:400 11px -apple-system;color:#8A8175">上海 · 徐汇区</div></div>
+                <div style="flex:1;min-width:0"><div style="font:600 12.5px -apple-system">06-27 08:02</div><div style="font:400 11px -apple-system;color:#8A8175">Shanghai · Xuhui</div></div>
                 <div style="font:500 11px -apple-system;color:#A89E8E;font-variant-numeric:tabular-nums">0:27</div>
               </div>
               <div style="display:flex;align-items:center;gap:11px;padding:9px 0">
                 <span style="display:inline-flex;align-items:flex-end;gap:1.5px;height:16px"><span style="width:2px;height:7px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:13px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:9px;background:#D8B7A8;border-radius:1px"></span><span style="width:2px;height:15px;background:#D8B7A8;border-radius:1px"></span></span>
-                <div style="flex:1;min-width:0"><div style="font:600 12.5px -apple-system">06-26 22:40</div><div style="font:400 11px -apple-system;color:#8A8175">上海 · 静安区</div></div>
+                <div style="flex:1;min-width:0"><div style="font:600 12.5px -apple-system">06-26 22:40</div><div style="font:400 11px -apple-system;color:#8A8175">Shanghai · Jing'an</div></div>
                 <div style="font:500 11px -apple-system;color:#A89E8E;font-variant-numeric:tabular-nums">0:09</div>
               </div>
             </div>
@@ -135,23 +135,23 @@
     <div style="max-width:1160px;margin:0 auto;padding:54px 32px">
       <div style="text-align:center;margin-bottom:38px">
         <div style="font:600 11px -apple-system;letter-spacing:.16em;color:#A79F93;text-transform:uppercase">How it works</div>
-        <h2 style="margin:12px 0 0;font:600 30px -apple-system;letter-spacing:-.01em">三秒钟的事</h2>
+        <h2 style="margin:12px 0 0;font:600 30px -apple-system;letter-spacing:-.01em">A three-second habit</h2>
       </div>
       <div style="display:flex;flex-wrap:wrap;align-items:stretch;justify-content:center;gap:14px">
         <div style="flex:1 1 220px;max-width:300px;text-align:center;padding:24px 20px">
           <div style="width:54px;height:54px;border-radius:14px;background:#F6E4DC;border:1px solid #F0D2C6;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font:600 20px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">1</div>
-          <div style="font:600 18px -apple-system;margin-bottom:7px">打开就录</div>
-          <div style="font:400 14px/1.7 -apple-system;color:#8A8175">点开 App 的那一刻，已经在录音。不必先按什么。</div>
+          <div style="font:600 18px -apple-system;margin-bottom:7px">Open to record</div>
+          <div style="font:400 14px/1.7 -apple-system;color:#8A8175">The moment you open the app, it's already recording. Nothing to press first.</div>
         </div>
         <div style="flex:1 1 220px;max-width:300px;text-align:center;padding:24px 20px">
           <div style="width:54px;height:54px;border-radius:14px;background:#F6E4DC;border:1px solid #F0D2C6;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font:600 20px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">2</div>
-          <div style="font:600 18px -apple-system;margin-bottom:7px">松手即存</div>
-          <div style="font:400 14px/1.7 -apple-system;color:#8A8175">说完停止，自动保存——这一条就算收好了。</div>
+          <div style="font:600 18px -apple-system;margin-bottom:7px">Stop to save</div>
+          <div style="font:400 14px/1.7 -apple-system;color:#8A8175">Stop when you're done and it saves itself — that thought is filed.</div>
         </div>
         <div style="flex:1 1 220px;max-width:300px;text-align:center;padding:24px 20px">
           <div style="width:54px;height:54px;border-radius:14px;background:#F6E4DC;border:1px solid #F0D2C6;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font:600 20px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">3</div>
-          <div style="font:600 18px -apple-system;margin-bottom:7px">自动归档</div>
-          <div style="font:400 14px/1.7 -apple-system;color:#8A8175">按时间地点命名，上传你的中转站、归档 iCloud。</div>
+          <div style="font:600 18px -apple-system;margin-bottom:7px">Archived automatically</div>
+          <div style="font:400 14px/1.7 -apple-system;color:#8A8175">Named by time and place, uploaded to your relay, archived to iCloud.</div>
         </div>
       </div>
     </div>
@@ -161,8 +161,8 @@
   <section id="features" style="background:#FAF6EF">
     <div style="max-width:1160px;margin:0 auto;padding:66px 32px 14px;text-align:center">
       <div style="font:600 11px -apple-system;letter-spacing:.16em;color:#A79F93;text-transform:uppercase">Features</div>
-      <h2 style="margin:12px auto 0;font:600 34px/1.3 -apple-system;letter-spacing:-.015em;max-width:18em">把“记下来”这件事，<br>做到只剩一个动作</h2>
-      <p style="margin:16px auto 0;font:400 16px/1.7 -apple-system;color:#6b5f51;max-width:34em">VoiceDrop 只做一件事，所以每个细节都值得说清楚。下面是它现在就能为你做的四件事。</p>
+      <h2 style="margin:12px auto 0;font:600 34px/1.3 -apple-system;letter-spacing:-.015em;max-width:18em">Capturing a thought,<br>reduced to a single action</h2>
+      <p style="margin:16px auto 0;font:400 16px/1.7 -apple-system;color:#6b5f51;max-width:34em">VoiceDrop does one thing, so every detail is worth spelling out. Here are the four things it does for you today.</p>
     </div>
   </section>
 
@@ -171,25 +171,25 @@
     <div style="max-width:1080px;margin:0 auto;padding:44px 32px;display:flex;flex-wrap:wrap;align-items:center;gap:48px">
       <div style="flex:1 1 330px;min-width:280px">
         <div style="font:700 13px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">01</div>
-        <h3 style="margin:10px 0 0;font:600 27px/1.3 -apple-system;letter-spacing:-.01em">打开就录，松手即存</h3>
-        <div style="margin-top:8px;font:500 14px -apple-system;color:#A89E8E">Open and it's already recording</div>
-        <p style="margin:16px 0 0;font:400 15.5px/1.85 -apple-system;color:#4A443C">没有开始页，没有要先填的标题。点开 App 的那一刻，它已经在录音；说完，松手（停止）即保存。把灵感“收下来”压缩成一个动作，趁它还没溜走。</p>
+        <h3 style="margin:10px 0 0;font:600 27px/1.3 -apple-system;letter-spacing:-.01em">Open and it's already recording</h3>
+        <div style="margin-top:8px;font:500 14px -apple-system;color:#A89E8E">Stop, and it's already saved.</div>
+        <p style="margin:16px 0 0;font:400 15.5px/1.85 -apple-system;color:#4A443C">No start screen, no title to fill in first. The moment you open the app it's recording; when you stop, it's saved. Capturing an idea is compressed into a single action — before it slips away.</p>
         <div style="display:grid;gap:10px;margin-top:22px">
-          <div style="display:flex;gap:11px;align-items:flex-start"><span style="flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent,#D8593B);margin-top:8px"></span><span style="font:400 14px/1.6 -apple-system;color:#6b5f51">零设置，首次打开即可用</span></div>
-          <div style="display:flex;gap:11px;align-items:flex-start"><span style="flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent,#D8593B);margin-top:8px"></span><span style="font:400 14px/1.6 -apple-system;color:#6b5f51">单手就能完成，不打断思路</span></div>
-          <div style="display:flex;gap:11px;align-items:flex-start"><span style="flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent,#D8593B);margin-top:8px"></span><span style="font:400 14px/1.6 -apple-system;color:#6b5f51">说完即存，不必再去“保存”</span></div>
+          <div style="display:flex;gap:11px;align-items:flex-start"><span style="flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent,#D8593B);margin-top:8px"></span><span style="font:400 14px/1.6 -apple-system;color:#6b5f51">Zero setup — works the first time you open it</span></div>
+          <div style="display:flex;gap:11px;align-items:flex-start"><span style="flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent,#D8593B);margin-top:8px"></span><span style="font:400 14px/1.6 -apple-system;color:#6b5f51">One-handed, without breaking your train of thought</span></div>
+          <div style="display:flex;gap:11px;align-items:flex-start"><span style="flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--accent,#D8593B);margin-top:8px"></span><span style="font:400 14px/1.6 -apple-system;color:#6b5f51">Saved the moment you stop — no Save button to find</span></div>
         </div>
       </div>
       <div style="flex:1 1 300px;min-width:260px">
         <div style="background:#fff;border:1px solid #ECE3D5;border-radius:12px;padding:34px 28px;box-shadow:0 6px 24px -12px rgba(140,100,60,.22);text-align:center">
           <div style="display:flex;align-items:center;justify-content:center;gap:14px;font:500 12.5px -apple-system;color:#8A8175">
-            <span>点开</span><span style="color:var(--accent,#D8593B)">→</span><span style="color:var(--accent,#D8593B);font-weight:600">已在录音</span>
+            <span>Open</span><span style="color:var(--accent,#D8593B)">→</span><span style="color:var(--accent,#D8593B);font-weight:600">Already recording</span>
           </div>
           <div style="position:relative;width:120px;height:120px;margin:24px auto 8px">
             <span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:96px;height:96px;border:2px solid rgba(216,89,59,.35);border-radius:50%;animation:vdring 2.6s ease-out infinite"></span>
             <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:88px;height:88px;border-radius:50%;background:var(--accent,#D8593B);box-shadow:0 14px 30px -10px rgba(216,89,59,.65);display:flex;align-items:center;justify-content:center"><span style="width:24px;height:24px;border-radius:6px;background:#fff"></span></div>
           </div>
-          <div style="font:400 13px -apple-system;color:#8A8175">一个按钮，没有第二个</div>
+          <div style="font:400 13px -apple-system;color:#8A8175">One button. There is no second one.</div>
         </div>
       </div>
     </div>
@@ -201,22 +201,22 @@
       <div style="flex:1 1 320px;min-width:280px">
         <div style="background:#fff;border:1px solid #ECE3D5;border-radius:12px;box-shadow:0 6px 24px -12px rgba(140,100,60,.22);overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #F0E8DA">
-            <div style="font:600 13px -apple-system;color:#2A2521">自动命名 · 试一下</div>
-            <button class="vd-btn" onclick="vdAddRec()" style="display:inline-flex;align-items:center;gap:7px;font:600 12.5px -apple-system;color:#fff;background:var(--accent,#D8593B);border:none;border-radius:999px;padding:8px 14px;cursor:pointer;box-shadow:0 4px 12px rgba(216,89,59,.28);transition:transform .1s"><span style="width:8px;height:8px;border-radius:50%;background:#fff"></span>录一条</button>
+            <div style="font:600 13px -apple-system;color:#2A2521">Auto-naming · Try it</div>
+            <button class="vd-btn" onclick="vdAddRec()" style="display:inline-flex;align-items:center;gap:7px;font:600 12.5px -apple-system;color:#fff;background:var(--accent,#D8593B);border:none;border-radius:999px;padding:8px 14px;cursor:pointer;box-shadow:0 4px 12px rgba(216,89,59,.28);transition:transform .1s"><span style="width:8px;height:8px;border-radius:50%;background:#fff"></span>Record one</button>
           </div>
           <div id="vd-recs" style="padding:6px 18px 12px"></div>
         </div>
-        <p style="margin:12px 2px 0;font:400 12px/1.6 -apple-system;color:#A89E8E">＊演示用例：点「录一条」即按当前时间与地点自动命名并归档。</p>
+        <p style="margin:12px 2px 0;font:400 12px/1.6 -apple-system;color:#A89E8E">* Demo: tap "Record one" and a memo is named by the current time and place, then archived.</p>
       </div>
       <div style="flex:1 1 320px;min-width:280px">
         <div style="font:700 13px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">02</div>
-        <h3 style="margin:10px 0 0;font:600 27px/1.3 -apple-system;letter-spacing:-.01em">自动命名：时间 + 地点</h3>
-        <div style="margin-top:8px;font:500 14px -apple-system;color:#A89E8E">Names itself by time &amp; place</div>
-        <p style="margin:16px 0 0;font:400 15.5px/1.85 -apple-system;color:#4A443C">每条录音自动用 <b style="color:#2A2521">录制时间</b> 加上 <b style="color:#2A2521">当时所在的城市与城区</b> 命名，比如「06-27 09:14 · 上海 · 浦东新区」。不用手动起名、不用事后整理——日后一眼就能认出，那条是<b style="color:#2A2521">什么时候、在哪儿</b>录的。</p>
+        <h3 style="margin:10px 0 0;font:600 27px/1.3 -apple-system;letter-spacing:-.01em">Names itself by time &amp; place</h3>
+        <div style="margin-top:8px;font:500 14px -apple-system;color:#A89E8E">No naming, no sorting — ever.</div>
+        <p style="margin:16px 0 0;font:400 15.5px/1.85 -apple-system;color:#4A443C">Every memo is automatically named with the <b style="color:#2A2521">time it was recorded</b> plus the <b style="color:#2A2521">city and district you were in</b> — like "06-27 09:14 · Shanghai · Pudong". No manual naming, no tidying up later — at a glance you'll always know <b style="color:#2A2521">when and where</b> each one was recorded.</p>
         <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:9px">
-          <span style="font:500 12.5px -apple-system;color:#6b5f51;background:#fff;border:1px solid #ECE3D5;border-radius:6px;padding:7px 12px">时间自动带上</span>
-          <span style="font:500 12.5px -apple-system;color:#6b5f51;background:#fff;border:1px solid #ECE3D5;border-radius:6px;padding:7px 12px">城市 · 城区</span>
-          <span style="font:500 12.5px -apple-system;color:#6b5f51;background:#fff;border:1px solid #ECE3D5;border-radius:6px;padding:7px 12px">无需手动整理</span>
+          <span style="font:500 12.5px -apple-system;color:#6b5f51;background:#fff;border:1px solid #ECE3D5;border-radius:6px;padding:7px 12px">Timestamp included</span>
+          <span style="font:500 12.5px -apple-system;color:#6b5f51;background:#fff;border:1px solid #ECE3D5;border-radius:6px;padding:7px 12px">City · District</span>
+          <span style="font:500 12.5px -apple-system;color:#6b5f51;background:#fff;border:1px solid #ECE3D5;border-radius:6px;padding:7px 12px">No manual sorting</span>
         </div>
       </div>
     </div>
@@ -226,9 +226,9 @@
   <section style="background:#FAF6EF;border-top:1px solid #E5DACA">
     <div style="max-width:1080px;margin:0 auto;padding:58px 32px;text-align:center">
       <div style="font:700 13px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">03</div>
-      <h3 style="margin:10px 0 0;font:600 27px/1.3 -apple-system;letter-spacing:-.01em">存进你自己的地方</h3>
-      <div style="margin-top:8px;font:500 14px -apple-system;color:#A89E8E">Your own relay, archived to iCloud</div>
-      <p style="margin:16px auto 0;font:400 15.5px/1.8 -apple-system;color:#4A443C;max-width:34em">录完，自动上传到 <b style="color:#2A2521">你自己</b> 的私有文件中转站，并归档到 <b style="color:#2A2521">iCloud</b>。录音存在你能掌控的地方，不在我们的服务器上堆着。换设备、备份、导出，都顺。</p>
+      <h3 style="margin:10px 0 0;font:600 27px/1.3 -apple-system;letter-spacing:-.01em">Your own relay, archived to iCloud</h3>
+      <div style="margin-top:8px;font:500 14px -apple-system;color:#A89E8E">Stored in a place you control.</div>
+      <p style="margin:16px auto 0;font:400 15.5px/1.8 -apple-system;color:#4A443C;max-width:34em">When you finish recording, each memo uploads automatically to a private file relay that <b style="color:#2A2521">you</b> own, and is archived to <b style="color:#2A2521">iCloud</b>. Your recordings live where you're in control — not piling up on our servers. Switching devices, backing up, exporting — all painless.</p>
 
       <div style="position:relative;max-width:720px;margin:46px auto 0">
         <div style="position:absolute;left:0;right:0;top:34px;height:2px;background:repeating-linear-gradient(90deg,#D9C9B0 0 7px,transparent 7px 14px)"></div>
@@ -236,22 +236,22 @@
         <div style="position:relative;display:flex;justify-content:space-between;gap:12px">
           <div style="flex:1;text-align:center">
             <div style="width:70px;height:70px;border-radius:18px;background:#fff;border:1px solid #ECE3D5;box-shadow:0 6px 18px -10px rgba(140,100,60,.3);display:flex;align-items:center;justify-content:center;margin:0 auto"><span style="display:inline-flex;align-items:flex-end;gap:2px;height:24px"><span style="width:3px;height:9px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:18px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:24px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:13px;background:var(--accent,#D8593B);border-radius:2px"></span></span></div>
-            <div style="margin-top:13px;font:600 14px -apple-system">录音</div>
-            <div style="font:400 12px -apple-system;color:#8A8175;margin-top:3px">说完即生成</div>
+            <div style="margin-top:13px;font:600 14px -apple-system">Recording</div>
+            <div style="font:400 12px -apple-system;color:#8A8175;margin-top:3px">Created when you stop</div>
           </div>
           <div style="flex:1;text-align:center">
-            <div style="width:70px;height:70px;border-radius:18px;background:#fff;border:1px solid #ECE3D5;box-shadow:0 6px 18px -10px rgba(140,100,60,.3);display:flex;align-items:center;justify-content:center;margin:0 auto;font:600 22px -apple-system;color:#C98A3C">你</div>
-            <div style="margin-top:13px;font:600 14px -apple-system">你的私有中转站</div>
-            <div style="font:400 12px -apple-system;color:#8A8175;margin-top:3px">自动上传</div>
+            <div style="width:70px;height:70px;border-radius:18px;background:#fff;border:1px solid #ECE3D5;box-shadow:0 6px 18px -10px rgba(140,100,60,.3);display:flex;align-items:center;justify-content:center;margin:0 auto;font:600 22px -apple-system;color:#C98A3C">You</div>
+            <div style="margin-top:13px;font:600 14px -apple-system">Your private relay</div>
+            <div style="font:400 12px -apple-system;color:#8A8175;margin-top:3px">Auto-uploaded</div>
           </div>
           <div style="flex:1;text-align:center">
             <div style="width:70px;height:70px;border-radius:18px;background:#fff;border:1px solid #ECE3D5;box-shadow:0 6px 18px -10px rgba(140,100,60,.3);display:flex;align-items:center;justify-content:center;margin:0 auto"><span style="width:34px;height:22px;border-radius:11px;background:#EAF1EC;border:1.5px solid #5E8A6A;display:inline-block"></span></div>
-            <div style="margin-top:13px;font:600 14px -apple-system">iCloud 归档</div>
-            <div style="font:400 12px -apple-system;color:#8A8175;margin-top:3px">长期留存</div>
+            <div style="margin-top:13px;font:600 14px -apple-system">iCloud archive</div>
+            <div style="font:400 12px -apple-system;color:#8A8175;margin-top:3px">Kept for the long term</div>
           </div>
         </div>
       </div>
-      <div style="display:inline-flex;align-items:center;gap:9px;margin-top:40px;font:500 13px -apple-system;color:#3C5A47;background:#EAF1EC;border:1px solid #D5E3D9;border-radius:999px;padding:9px 16px"><span style="width:6px;height:6px;border-radius:50%;background:#5E8A6A"></span>你的录音，始终存在你自己的地方</div>
+      <div style="display:inline-flex;align-items:center;gap:9px;margin-top:40px;font:500 13px -apple-system;color:#3C5A47;background:#EAF1EC;border:1px solid #D5E3D9;border-radius:999px;padding:9px 16px"><span style="width:6px;height:6px;border-radius:50%;background:#5E8A6A"></span>Your recordings always live in a place you own</div>
     </div>
   </section>
 
@@ -259,20 +259,20 @@
   <section style="background:#fff;border-top:1px solid #ECE3D5;border-bottom:1px solid #ECE3D5">
     <div style="max-width:1080px;margin:0 auto;padding:54px 32px;text-align:center">
       <div style="font:700 13px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">04</div>
-      <h3 style="margin:10px 0 0;font:600 27px/1.3 -apple-system;letter-spacing:-.01em">干净、克制、不打扰</h3>
-      <p style="margin:16px auto 0;font:400 15.5px/1.8 -apple-system;color:#4A443C;max-width:32em">没有多余按钮，没有广告，没有第三方追踪。它只做一件事——把你随口说的，安静地收好。</p>
+      <h3 style="margin:10px 0 0;font:600 27px/1.3 -apple-system;letter-spacing:-.01em">Clean, restrained, never in your way</h3>
+      <p style="margin:16px auto 0;font:400 15.5px/1.8 -apple-system;color:#4A443C;max-width:32em">No extra buttons, no ads, no third-party tracking. It does one thing — quietly filing whatever you say.</p>
       <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin-top:30px">
         <div style="flex:1 1 200px;max-width:260px;background:#FAF6EF;border:1px solid #ECE3D5;border-radius:10px;padding:22px 18px">
-          <div style="font:600 16px -apple-system;color:#2A2521">没有多余按钮</div>
-          <div style="margin-top:7px;font:400 13.5px/1.65 -apple-system;color:#8A8175">一个录音键，没有要你研究的设置与菜单。</div>
+          <div style="font:600 16px -apple-system;color:#2A2521">No extra buttons</div>
+          <div style="margin-top:7px;font:400 13.5px/1.65 -apple-system;color:#8A8175">One record button. No settings or menus to study.</div>
         </div>
         <div style="flex:1 1 200px;max-width:260px;background:#FAF6EF;border:1px solid #ECE3D5;border-radius:10px;padding:22px 18px">
-          <div style="font:600 16px -apple-system;color:#2A2521">没有广告</div>
-          <div style="margin-top:7px;font:400 13.5px/1.65 -apple-system;color:#8A8175">安静的工具，不卖你的注意力。</div>
+          <div style="font:600 16px -apple-system;color:#2A2521">No ads</div>
+          <div style="margin-top:7px;font:400 13.5px/1.65 -apple-system;color:#8A8175">A quiet tool that doesn't sell your attention.</div>
         </div>
         <div style="flex:1 1 200px;max-width:260px;background:#FAF6EF;border:1px solid #ECE3D5;border-radius:10px;padding:22px 18px">
-          <div style="font:600 16px -apple-system;color:#2A2521">没有第三方追踪</div>
-          <div style="margin-top:7px;font:400 13.5px/1.65 -apple-system;color:#8A8175">不接追踪 SDK，录音是你的事。</div>
+          <div style="font:600 16px -apple-system;color:#2A2521">No third-party tracking</div>
+          <div style="margin-top:7px;font:400 13.5px/1.65 -apple-system;color:#8A8175">No tracking SDKs. Your recordings are your business.</div>
         </div>
       </div>
     </div>
@@ -283,28 +283,28 @@
     <div style="max-width:1080px;margin:0 auto;padding:62px 32px">
       <div style="text-align:center;margin-bottom:34px">
         <div style="font:600 11px -apple-system;letter-spacing:.16em;color:#A79F93;text-transform:uppercase">When to use</div>
-        <h2 style="margin:12px 0 0;font:600 30px -apple-system;letter-spacing:-.01em">什么时候掏出来说一句</h2>
+        <h2 style="margin:12px 0 0;font:600 30px -apple-system;letter-spacing:-.01em">Moments worth one sentence</h2>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:14px">
         <div style="flex:1 1 230px;min-width:210px;background:#fff;border:1px solid #ECE3D5;border-radius:10px;padding:22px 20px;box-shadow:0 4px 16px -12px rgba(140,100,60,.2)">
           <div style="width:34px;height:34px;border-radius:9px;background:#F6E4DC;border:1px solid #F0D2C6;display:flex;align-items:center;justify-content:center;font:600 15px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">01</div>
-          <div style="margin-top:14px;font:600 16px -apple-system">走路、开车时</div>
-          <div style="margin-top:6px;font:400 13.5px/1.7 -apple-system;color:#8A8175">念头一闪，掏出手机说一句，不用停下来打字。</div>
+          <div style="margin-top:14px;font:600 16px -apple-system">Walking or driving</div>
+          <div style="margin-top:6px;font:400 13.5px/1.7 -apple-system;color:#8A8175">A thought flashes by — pull out your phone and say it. No stopping to type.</div>
         </div>
         <div style="flex:1 1 230px;min-width:210px;background:#fff;border:1px solid #ECE3D5;border-radius:10px;padding:22px 20px;box-shadow:0 4px 16px -12px rgba(140,100,60,.2)">
           <div style="width:34px;height:34px;border-radius:9px;background:#F6E4DC;border:1px solid #F0D2C6;display:flex;align-items:center;justify-content:center;font:600 15px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">02</div>
-          <div style="margin-top:14px;font:600 16px -apple-system">会议刚结束</div>
-          <div style="margin-top:6px;font:400 13.5px/1.7 -apple-system;color:#8A8175">趁记忆新鲜，口述几条要点，事后再整理。</div>
+          <div style="margin-top:14px;font:600 16px -apple-system">Right after a meeting</div>
+          <div style="margin-top:6px;font:400 13.5px/1.7 -apple-system;color:#8A8175">While it's fresh, dictate a few key points. Organize them later.</div>
         </div>
         <div style="flex:1 1 230px;min-width:210px;background:#fff;border:1px solid #ECE3D5;border-radius:10px;padding:22px 20px;box-shadow:0 4px 16px -12px rgba(140,100,60,.2)">
           <div style="width:34px;height:34px;border-radius:9px;background:#F6E4DC;border:1px solid #F0D2C6;display:flex;align-items:center;justify-content:center;font:600 15px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">03</div>
-          <div style="margin-top:14px;font:600 16px -apple-system">睡前一句</div>
-          <div style="margin-top:6px;font:400 13.5px/1.7 -apple-system;color:#8A8175">躺下了还在想的那件事，说完安心睡。</div>
+          <div style="margin-top:14px;font:600 16px -apple-system">One line before sleep</div>
+          <div style="margin-top:6px;font:400 13.5px/1.7 -apple-system;color:#8A8175">The thing still on your mind in bed — say it, then sleep easy.</div>
         </div>
         <div style="flex:1 1 230px;min-width:210px;background:#fff;border:1px solid #ECE3D5;border-radius:10px;padding:22px 20px;box-shadow:0 4px 16px -12px rgba(140,100,60,.2)">
           <div style="width:34px;height:34px;border-radius:9px;background:#F6E4DC;border:1px solid #F0D2C6;display:flex;align-items:center;justify-content:center;font:600 15px -apple-system;color:var(--accent,#D8593B);font-variant-numeric:tabular-nums">04</div>
-          <div style="margin-top:14px;font:600 16px -apple-system">灵感来时</div>
-          <div style="margin-top:6px;font:400 13.5px/1.7 -apple-system;color:#8A8175">先收下，别让它溜走——以后按时间地点找得到。</div>
+          <div style="margin-top:14px;font:600 16px -apple-system">When inspiration strikes</div>
+          <div style="margin-top:6px;font:400 13.5px/1.7 -apple-system;color:#8A8175">Catch it before it slips away — you'll find it later by time and place.</div>
         </div>
       </div>
     </div>
@@ -315,26 +315,26 @@
     <div style="max-width:1080px;margin:0 auto;padding:60px 32px;display:flex;flex-wrap:wrap;align-items:center;gap:44px">
       <div style="flex:1 1 340px;min-width:280px">
         <div style="font:600 11px -apple-system;letter-spacing:.16em;color:#E0A94B;text-transform:uppercase">Privacy</div>
-        <h2 style="margin:14px 0 0;font:600 30px/1.3 -apple-system;color:#FAF6EF;letter-spacing:-.01em">你的录音，属于你</h2>
-        <p style="margin:16px 0 0;font:400 15.5px/1.85 -apple-system;color:#C9BFAE;max-width:32em">VoiceDrop 不放广告、不接第三方追踪 SDK。录音自动上传到你自己的私有文件中转站、归档到 iCloud。我们尽量少地碰你的数据——能不经手，就不经手。</p>
-        <a href="/voicedrop/privacy/" style="display:inline-flex;align-items:center;gap:8px;margin-top:24px;font:600 14px -apple-system;color:#2A2521;background:#E0A94B;padding:11px 20px;border-radius:8px;text-decoration:none">阅读隐私政策 →</a>
+        <h2 style="margin:14px 0 0;font:600 30px/1.3 -apple-system;color:#FAF6EF;letter-spacing:-.01em">Your recordings belong to you</h2>
+        <p style="margin:16px 0 0;font:400 15.5px/1.85 -apple-system;color:#C9BFAE;max-width:32em">VoiceDrop shows no ads and ships with no third-party tracking SDKs. Recordings upload automatically to your own private file relay and archive to iCloud. We touch your data as little as possible — whenever we can stay out of the way, we do.</p>
+        <a href="/voicedrop/en/privacy/" style="display:inline-flex;align-items:center;gap:8px;margin-top:24px;font:600 14px -apple-system;color:#2A2521;background:#E0A94B;padding:11px 20px;border-radius:8px;text-decoration:none">Read the Privacy Policy →</a>
       </div>
       <div style="flex:1 1 260px;min-width:240px;display:grid;gap:12px">
         <div style="display:flex;align-items:center;gap:13px;background:rgba(255,255,255,.05);border:1px solid rgba(224,169,75,.28);border-radius:10px;padding:16px 18px">
           <span style="flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:1.5px solid #5E8A6A;display:flex;align-items:center;justify-content:center;color:#7FB08C;font:700 12px -apple-system">✓</span>
-          <span style="font:500 14px -apple-system;color:#E8DECF">无广告</span>
+          <span style="font:500 14px -apple-system;color:#E8DECF">No ads</span>
         </div>
         <div style="display:flex;align-items:center;gap:13px;background:rgba(255,255,255,.05);border:1px solid rgba(224,169,75,.28);border-radius:10px;padding:16px 18px">
           <span style="flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:1.5px solid #5E8A6A;display:flex;align-items:center;justify-content:center;color:#7FB08C;font:700 12px -apple-system">✓</span>
-          <span style="font:500 14px -apple-system;color:#E8DECF">无第三方追踪 SDK</span>
+          <span style="font:500 14px -apple-system;color:#E8DECF">No third-party tracking SDKs</span>
         </div>
         <div style="display:flex;align-items:center;gap:13px;background:rgba(255,255,255,.05);border:1px solid rgba(224,169,75,.28);border-radius:10px;padding:16px 18px">
           <span style="flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:1.5px solid #5E8A6A;display:flex;align-items:center;justify-content:center;color:#7FB08C;font:700 12px -apple-system">✓</span>
-          <span style="font:500 14px -apple-system;color:#E8DECF">录音存你自己的中转站</span>
+          <span style="font:500 14px -apple-system;color:#E8DECF">Recordings live in your own relay</span>
         </div>
         <div style="display:flex;align-items:center;gap:13px;background:rgba(255,255,255,.05);border:1px solid rgba(224,169,75,.28);border-radius:10px;padding:16px 18px">
           <span style="flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:1.5px solid #5E8A6A;display:flex;align-items:center;justify-content:center;color:#7FB08C;font:700 12px -apple-system">✓</span>
-          <span style="font:500 14px -apple-system;color:#E8DECF">归档到你的 iCloud</span>
+          <span style="font:500 14px -apple-system;color:#E8DECF">Archived to your iCloud</span>
         </div>
       </div>
     </div>
@@ -344,9 +344,9 @@
   <section id="support" style="background:#F4ECDD;border-top:1px solid #E5DACA;border-bottom:1px solid #E5DACA">
     <div style="max-width:1080px;margin:0 auto;padding:52px 32px;text-align:center">
       <div style="font:600 11px -apple-system;letter-spacing:.16em;color:#A79F93;text-transform:uppercase">Support</div>
-      <h2 style="margin:12px 0 0;font:600 28px -apple-system;letter-spacing:-.01em">有问题？直接找作者</h2>
-      <p style="margin:14px auto 0;font:400 15px/1.75 -apple-system;color:#6b5f51;max-width:30em">任何问题、建议，或想删除数据，直接邮件联系 <b style="color:#2A2521">jianshuo@hotmail.com</b>。通常一两天内回复——一个人做的小工具，回得慢请多担待。</p>
-      <a href="mailto:jianshuo@hotmail.com" style="display:inline-block;margin-top:22px;font:600 14.5px -apple-system;color:#fff;background:#2A2521;padding:12px 24px;border-radius:8px;text-decoration:none">邮件联系 →</a>
+      <h2 style="margin:12px 0 0;font:600 28px -apple-system;letter-spacing:-.01em">Questions? Email the maker directly</h2>
+      <p style="margin:14px auto 0;font:400 15px/1.75 -apple-system;color:#6b5f51;max-width:30em">For any question, suggestion, or data-deletion request, email <b style="color:#2A2521">jianshuo@hotmail.com</b>. Replies usually come within a day or two — it's a small tool made by one person, so thanks for your patience.</p>
+      <a href="mailto:jianshuo@hotmail.com" style="display:inline-block;margin-top:22px;font:600 14.5px -apple-system;color:#fff;background:#2A2521;padding:12px 24px;border-radius:8px;text-decoration:none">Send an email →</a>
     </div>
   </section>
 
@@ -354,11 +354,11 @@
   <section id="download" style="background:#FAF6EF">
     <div style="max-width:1080px;margin:0 auto;padding:72px 32px;text-align:center">
       <span style="display:inline-flex;align-items:flex-end;gap:3px;height:34px;margin-bottom:20px"><span style="width:4px;height:13px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:4px;height:26px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:4px;height:34px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:4px;height:20px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:4px;height:11px;background:var(--accent,#D8593B);border-radius:2px"></span></span>
-      <h2 style="margin:0;font:600 38px/1.18 -apple-system;letter-spacing:-.02em">打开，说一句，<br>剩下的它来办。</h2>
-      <p style="margin:18px auto 0;font:400 16px/1.7 -apple-system;color:#6b5f51;max-width:26em">免费下载，开口几秒，灵感就安静地收好了。</p>
+      <h2 style="margin:0;font:600 38px/1.18 -apple-system;letter-spacing:-.02em">Open. Say a sentence.<br>It handles the rest.</h2>
+      <p style="margin:18px auto 0;font:400 16px/1.7 -apple-system;color:#6b5f51;max-width:26em">Free to download. A few seconds of speaking, and the idea is quietly filed.</p>
       <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:16px;margin-top:28px">
-        <a href="https://testflight.apple.com/join/PbzFFRS2" style="display:inline-block;font:600 16px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:15px 32px;border-radius:10px;box-shadow:0 10px 26px -8px rgba(216,89,59,.55);text-decoration:none">下载 VoiceDrop · iOS →</a>
-        <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="display:inline-block;font:600 16px -apple-system;color:var(--accent,#D8593B);border:1.5px solid rgba(216,89,59,.45);padding:14px 31px;border-radius:10px;text-decoration:none">下载 · 安卓 APK</a>
+        <a href="https://testflight.apple.com/join/PbzFFRS2" style="display:inline-block;font:600 16px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:15px 32px;border-radius:10px;box-shadow:0 10px 26px -8px rgba(216,89,59,.55);text-decoration:none">Download VoiceDrop · iOS →</a>
+        <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="display:inline-block;font:600 16px -apple-system;color:var(--accent,#D8593B);border:1.5px solid rgba(216,89,59,.45);padding:14px 31px;border-radius:10px;text-decoration:none">Download · Android APK</a>
       </div>
     </div>
   </section>
@@ -371,32 +371,32 @@
         <span style="font:600 15px -apple-system;color:#E8DECF">VoiceDrop</span>
       </div>
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:22px">
-        <a href="/voicedrop/help/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">帮助中心</a>
-        <a href="/voicedrop/community/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">社区</a>
-        <a href="/voicedrop/agent/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">给 Agent 用</a>
-        <a href="/voicedrop/welcome/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">测试群</a>
-        <a href="/voicedrop/developer/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">开发者</a>
-        <a href="/voicedrop/privacy/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">隐私政策</a>
+        <a href="/voicedrop/en/help/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">Help Center</a>
+        <a href="/voicedrop/en/community/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">Community</a>
+        <a href="/voicedrop/en/agent/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">For Agents</a>
+        <a href="/voicedrop/en/welcome/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">Beta Group</a>
+        <a href="/voicedrop/en/developer/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">Developers</a>
+        <a href="/voicedrop/en/privacy/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">Privacy Policy</a>
         <a href="https://jianshuo.dev/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">jianshuo.dev</a>
-        <a href="https://testflight.apple.com/join/PbzFFRS2" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">iOS 下载</a>
-        <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">安卓下载</a>
+        <a href="https://testflight.apple.com/join/PbzFFRS2" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">iOS Download</a>
+        <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">Android Download</a>
       </div>
     </div>
-    <div style="border-top:1px solid #332b22"><div style="max-width:1160px;margin:0 auto;padding:18px 32px;font:400 12px -apple-system;color:#6f6557">Made with care in Shanghai · © 2026 王建硕 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" style="color:#6f6557;text-decoration:none">沪ICP备06019413号-118</a></div></div>
+    <div style="border-top:1px solid #332b22"><div style="max-width:1160px;margin:0 auto;padding:18px 32px;font:400 12px -apple-system;color:#6f6557">Made with care in Shanghai · © 2026 Jian Shuo Wang · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" style="color:#6f6557;text-decoration:none">沪ICP备06019413号-118</a></div></div>
   </footer>
 
 </div>
 
 <script>
 (function(){
-  var locs = ['上海 · 长宁区','上海 · 黄浦区','北京 · 朝阳区','杭州 · 上城区','上海 · 杨浦区','深圳 · 南山区'];
+  var locs = ['Shanghai · Changning','Shanghai · Huangpu','Beijing · Chaoyang','Hangzhou · Shangcheng','Shanghai · Yangpu','Shenzhen · Nanshan'];
   var durs = ['0:11','0:24','0:07','0:38','0:16','0:42'];
   var n = 0;
   var recs = [
-    { time: '06-27 09:14', loc: '上海 · 浦东新区', dur: '0:12', fresh: false },
-    { time: '06-27 08:02', loc: '上海 · 徐汇区', dur: '0:27', fresh: false },
-    { time: '06-26 22:40', loc: '上海 · 静安区', dur: '0:09', fresh: false },
-    { time: '06-26 18:13', loc: '杭州 · 西湖区', dur: '0:33', fresh: false }
+    { time: '06-27 09:14', loc: 'Shanghai · Pudong', dur: '0:12', fresh: false },
+    { time: '06-27 08:02', loc: 'Shanghai · Xuhui', dur: '0:27', fresh: false },
+    { time: '06-26 22:40', loc: 'Shanghai · Jing\'an', dur: '0:09', fresh: false },
+    { time: '06-26 18:13', loc: 'Hangzhou · West Lake', dur: '0:33', fresh: false }
   ];
   function bars(){
     var hs = [7,14,20,10,16];
@@ -405,7 +405,7 @@
     return s + '</span>';
   }
   function row(r){
-    var badge = r.fresh ? '<span style="font:600 10px -apple-system;color:var(--accent,#D8593B);background:#F6E4DC;border:1px solid #F0D2C6;padding:2px 6px;border-radius:5px">刚刚</span>' : '';
+    var badge = r.fresh ? '<span style="font:600 10px -apple-system;color:var(--accent,#D8593B);background:#F6E4DC;border:1px solid #F0D2C6;padding:2px 6px;border-radius:5px">Just now</span>' : '';
     return '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #F4ECDD;animation:vdslide .4s ease both">'
       + bars()
       + '<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font:600 13.5px -apple-system;font-variant-numeric:tabular-nums">'+r.time+'</span>'+badge+'</div>'

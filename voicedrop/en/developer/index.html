@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
+<title>VoiceDrop Developers</title>
 <link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/developer/">
 <link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/developer/">
 <link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/developer/">
-<title>VoiceDrop 开发者</title>
 <style>
   :root{
     --ink:#1d1d1f; --sub:#6e6e73; --line:#e5e5e7; --bg:#ffffff;
@@ -61,9 +61,9 @@
     <span class="bars" aria-hidden="true"><span style="height:8px"></span><span style="height:14px"></span><span style="height:20px"></span><span style="height:12px"></span><span style="height:7px"></span></span>
     <span class="title">VoiceDrop</span>
     <span style="margin-left:auto;display:flex;gap:20px;align-items:center">
-      <a href="/voicedrop/help/" style="font-size:13.5px;color:var(--sub)">帮助中心</a>
-      <a href="/voicedrop/" style="font-size:13.5px;color:var(--sub)">← 回首页</a>
-      <a href="/voicedrop/en/developer/" style="font-size:13.5px;color:var(--sub)">EN</a>
+      <a href="/voicedrop/en/help/" style="font-size:13.5px;color:var(--sub)">Help Center</a>
+      <a href="/voicedrop/en/" style="font-size:13.5px;color:var(--sub)">← Home</a>
+      <a href="/voicedrop/developer/" style="font-size:13.5px;color:var(--sub)">中文</a>
     </span>
   </div>
 </header>
@@ -72,43 +72,43 @@
 
   <section class="hero">
     <div class="eyebrow">Developer</div>
-    <h1>VoiceDrop 开发者</h1>
-    <p class="lede">VoiceDrop 的后端是一组跑在 Cloudflare 上的开放 HTTP 接口——你的录音、文章、照片、文风都能用一个凭证读写。下面是上手要看的文档。</p>
+    <h1>VoiceDrop Developers</h1>
+    <p class="lede">VoiceDrop's backend is a set of open HTTP APIs running on Cloudflare — your recordings, articles, photos, and writing style are all readable and writable with a single credential. Here's where to start.</p>
   </section>
 
-  <h2>文档</h2>
+  <h2>Docs</h2>
   <div class="cards">
-    <a class="card" href="/voicedrop/developer/wjs-voicedrop.html">
+    <a class="card" href="/voicedrop/en/developer/wjs-voicedrop.html">
       <span class="tag">Claude Code skill</span>
-      <h3>如何使用 wjs-voicedrop</h3>
-      <p>在终端里用一句话读写你的 VoiceDrop 文章 / 录音 / 照片 / 文风、触发挖矿、查算力。自带 6+4 手机配对登录，无需手抄 token。</p>
-      <div class="go">阅读指南 →</div>
+      <h3>Using wjs-voicedrop</h3>
+      <p>Read and write your VoiceDrop articles / recordings / photos / writing style, trigger mining, and check credits — all with a single sentence in your terminal. Built-in 6+4 phone pairing login, no token copy-pasting.</p>
+      <div class="go">Read the guide →</div>
     </a>
-    <a class="card" href="/voicedrop/developer/api.html">
+    <a class="card" href="/voicedrop/en/developer/api.html">
       <span class="tag">HTTP API</span>
-      <h3>API 参考</h3>
-      <p>三个服务的完整接口：认证、文件 / 文章 CRUD、分享、公众号、社区、挖矿触发、实时状态、算力计费。给自己写客户端时看这个。</p>
-      <div class="go">查看接口 →</div>
+      <h3>API Reference</h3>
+      <p>The complete API surface across three services: auth, file / article CRUD, sharing, WeChat Official Account, community, mining triggers, live status, and credit billing. Read this when building your own client.</p>
+      <div class="go">Browse the API →</div>
     </a>
   </div>
 
-  <h2>三个服务</h2>
+  <h2>Three services</h2>
   <div class="svc">
     <table>
-      <tr><th>服务</th><th>Base URL</th><th>用途</th></tr>
-      <tr><td><strong>Files API</strong></td><td><code>jianshuo.dev/files/api/</code></td><td>账户、录音 / 文章文件、照片、分享、公众号、社区。绝大多数调用在这里。</td></tr>
-      <tr><td><strong>Agent Worker</strong></td><td><code>jianshuo.dev/agent/</code></td><td>触发挖矿、实时状态推送（WS）、语音改稿、算力余额、6+4 设备配对。</td></tr>
-      <tr><td><strong>Reco Worker</strong></td><td><code>jianshuo.dev/reco/</code></td><td>社区 feed 排序 + 互动上报。可随时拔掉，挂了不影响主流程。</td></tr>
+      <tr><th>Service</th><th>Base URL</th><th>Purpose</th></tr>
+      <tr><td><strong>Files API</strong></td><td><code>jianshuo.dev/files/api/</code></td><td>Accounts, recording / article files, photos, sharing, WeChat Official Account, community. The vast majority of calls go here.</td></tr>
+      <tr><td><strong>Agent Worker</strong></td><td><code>jianshuo.dev/agent/</code></td><td>Mining triggers, live status push (WS), voice-driven edits, credit balance, 6+4 device pairing.</td></tr>
+      <tr><td><strong>Reco Worker</strong></td><td><code>jianshuo.dev/reco/</code></td><td>Community feed ranking + engagement reporting. Can be unplugged anytime — if it goes down, the main flow is unaffected.</td></tr>
     </table>
   </div>
-  <p class="muted" style="font-size:13.5px;margin-top:14px">数据流一句话：上传 <code style="font-size:.86em">.m4a</code> → 服务端挖矿（ASR + Claude）写出 <code style="font-size:.86em">articles/&lt;stem&gt;.json</code> → 客户端读文章、分享、发公众号 / 发社区。</p>
+  <p class="muted" style="font-size:13.5px;margin-top:14px">The data flow in one sentence: upload an <code style="font-size:.86em">.m4a</code> → server-side mining (ASR + Claude) writes out <code style="font-size:.86em">articles/&lt;stem&gt;.json</code> → clients read articles, share, publish to WeChat / the community.</p>
 
 </main>
 
 <footer>
   <div class="inner">
-    <span>VoiceDrop · 开发者文档</span>
-    <span><a href="/voicedrop/">产品首页</a> · <a href="/voicedrop/privacy/">隐私政策</a> · <a href="mailto:jianshuo@hotmail.com">联系作者</a></span>
+    <span>VoiceDrop · Developer Docs</span>
+    <span><a href="/voicedrop/en/">Product Home</a> · <a href="/voicedrop/en/privacy/">Privacy Policy</a> · <a href="mailto:jianshuo@hotmail.com">Contact the author</a></span>
   </div>
 </footer>
 

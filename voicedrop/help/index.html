@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop 帮助中心 —— 录音成文、追问、语音改稿、图片、文风、分享、社区、算力、开发者 API 的完整功能说明。">
+<meta property="og:title" content="VoiceDrop 帮助中心">
+<meta property="og:description" content="开口说，它自己成文。VoiceDrop 每一项功能的用法、规则与常见问题。">
+<meta property="og:url" content="https://jianshuo.dev/voicedrop/help/">
+<link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/help/">
+<link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/help/">
+<link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/help/">
+<title>VoiceDrop 帮助中心 · jianshuo.dev</title>
+<style>
+  :root{
+    --ink:#1d1d1f; --sub:#6e6e73; --line:#eae4da; --bg:#ffffff; --panel:#faf7f2;
+    --accent:#c0563f; --accent-2:#d8593b; --accent-soft:#f3ddd5; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:16px;line-height:1.75}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;
+    background:#f1efec;color:#37373a;padding:.1em .42em;border-radius:6px;word-break:break-word}
+
+  /* header */
+  header.site{position:sticky;top:0;z-index:60;border-bottom:1px solid var(--line);
+    background:rgba(255,255,255,.86);backdrop-filter:saturate(140%) blur(14px)}
+  header.site .inner{max-width:1140px;margin:0 auto;padding:15px 28px;display:flex;align-items:center;gap:11px}
+  header.site .bars{display:inline-flex;align-items:flex-end;gap:2.5px;height:20px}
+  header.site .bars span{width:3px;border-radius:2px;background:var(--accent)}
+  header.site .title{font-weight:600;font-size:18px;letter-spacing:-.01em}
+  header.site .spacer{margin-left:auto;display:flex;gap:22px;align-items:center}
+  header.site .spacer a{font-size:13.5px;color:var(--sub)}
+  @media(max-width:640px){header.site .spacer a.hide-sm{display:none}}
+
+  /* hero */
+  .hero{max-width:1140px;margin:0 auto;padding:46px 28px 10px}
+  .eyebrow{font-size:12px;letter-spacing:.16em;color:#a79f93;text-transform:uppercase;font-weight:600}
+  .hero h1{font-size:36px;line-height:1.18;letter-spacing:-.02em;margin:12px 0 0}
+  .hero .lede{font-size:17px;line-height:1.75;color:var(--sub);margin:14px 0 0;max-width:38em}
+
+  /* layout */
+  .layout{max-width:1140px;margin:0 auto;padding:26px 28px 90px;display:grid;
+    grid-template-columns:212px 1fr;gap:44px;align-items:start}
+  nav.toc{position:sticky;top:78px;align-self:start}
+  nav.toc .toc-lbl{font-size:11.5px;letter-spacing:.14em;color:#a79f93;text-transform:uppercase;font-weight:600;margin:0 0 12px 12px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;color:var(--sub);
+    font-size:14.5px;font-weight:500;transition:background .12s,color .12s}
+  .nav-item:hover{background:var(--panel);color:var(--ink);text-decoration:none}
+  .nav-item.active{background:var(--accent-soft);color:var(--accent)}
+  .ni-ico{font-size:15px;width:20px;text-align:center;filter:saturate(.9)}
+
+  main.content{min-width:0}
+
+  /* feature section */
+  .feature{padding:16px 0 40px;border-top:1px solid var(--line);scroll-margin-top:76px}
+  .feature:first-child{border-top:none;padding-top:0}
+  .f-head{display:flex;gap:15px;align-items:flex-start;margin-bottom:18px}
+  .f-ico{flex:0 0 auto;width:46px;height:46px;border-radius:13px;background:var(--accent-soft);
+    display:flex;align-items:center;justify-content:center;font-size:22px;line-height:1}
+  .f-head h2{font-size:25px;letter-spacing:-.01em;margin:2px 0 0}
+  .f-tag{margin:8px 0 0;font-size:15px;line-height:1.65;color:var(--sub)}
+
+  .f-body p{margin:0 0 12px}
+  .f-body p:last-child{margin-bottom:0}
+  .blk-h{font-size:13px;letter-spacing:.1em;color:var(--accent);text-transform:uppercase;
+    font-weight:700;margin:30px 0 12px;padding-left:11px;border-left:3px solid var(--accent)}
+  .blk h4{font-size:15px;margin:20px 0 8px;color:var(--ink);font-weight:600}
+  .blk h4:first-child{margin-top:0}
+
+  .steps, .rules{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px}
+  .steps ol{margin:0;padding-left:20px}
+  .steps ol li{margin:0 0 9px;padding-left:4px}
+  .steps ol li:last-child{margin-bottom:0}
+  .steps ul{margin:6px 0 6px;padding-left:19px}
+  .rules ul{margin:0;padding-left:19px;list-style:none}
+  .rules ul li{margin:0 0 11px;padding-left:22px;position:relative}
+  .rules ul li:last-child{margin-bottom:0}
+  .rules ul li::before{content:"";position:absolute;left:4px;top:11px;width:6px;height:6px;
+    border-radius:50%;background:var(--accent);opacity:.55}
+
+  /* faq */
+  .faqs{display:flex;flex-direction:column;gap:9px}
+  details.faq{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+  details.faq summary{list-style:none;cursor:pointer;padding:14px 44px 14px 17px;font-weight:600;
+    font-size:15px;position:relative;color:var(--ink)}
+  details.faq summary::-webkit-details-marker{display:none}
+  details.faq summary::after{content:"+";position:absolute;right:17px;top:50%;transform:translateY(-50%);
+    font-size:20px;font-weight:400;color:var(--accent);transition:transform .18s}
+  details.faq[open] summary::after{content:"−"}
+  details.faq[open] summary{color:var(--accent)}
+  .fa{padding:0 17px 15px;color:var(--sub);font-size:14.5px;line-height:1.7}
+
+  footer{border-top:1px solid var(--line);margin-top:20px}
+  footer .inner{max-width:1140px;margin:0 auto;padding:26px 28px;display:flex;flex-wrap:wrap;gap:16px;
+    align-items:center;justify-content:space-between;font-size:13px;color:var(--sub)}
+  footer a{color:var(--sub)}
+
+  @media(max-width:860px){
+    .layout{grid-template-columns:1fr;gap:8px;padding-top:14px}
+    nav.toc{position:static;margin:0 -6px 18px;display:flex;flex-wrap:wrap;gap:6px}
+    nav.toc .toc-lbl{width:100%;margin-left:2px}
+    .nav-item{background:var(--panel)}
+    .hero h1{font-size:29px}
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="inner">
+    <span class="bars" aria-hidden="true"><span style="height:8px"></span><span style="height:14px"></span><span style="height:20px"></span><span style="height:12px"></span><span style="height:7px"></span></span>
+    <span class="title">VoiceDrop</span>
+    <span class="spacer">
+      <a href="/voicedrop/" class="hide-sm">产品首页</a>
+      <a href="/voicedrop/developer/" class="hide-sm">开发者</a>
+      <a href="/voicedrop/en/help/">EN</a>
+      <a href="https://testflight.apple.com/join/PbzFFRS2">下载 iOS</a>
+    </span>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="eyebrow">Help Center · 帮助中心</div>
+  <h1>VoiceDrop 帮助中心</h1>
+  <p class="lede">开口说，它自己成文。这里是 VoiceDrop 每一项功能的用法、背后的规则，以及大家最常问的问题——从录一段音到挖成文章、修改、配图、分享、进社区，一页看全。</p>
+</section>
+
+<div class="layout">
+  <nav class="toc" aria-label="功能目录">
+    <div class="toc-lbl">功能</div>
+    <a href="#record" class="nav-item"><span class="ni-ico">🎙</span><span>录音成文</span></a>
+      <a href="#followup" class="nav-item"><span class="ni-ico">❓</span><span>追问</span></a>
+      <a href="#edit" class="nav-item"><span class="ni-ico">✏️</span><span>语音改稿</span></a>
+      <a href="#image" class="nav-item"><span class="ni-ico">🖼</span><span>图片</span></a>
+      <a href="#style" class="nav-item"><span class="ni-ico">🖋</span><span>文风</span></a>
+      <a href="#share" class="nav-item"><span class="ni-ico">🔗</span><span>分享导出</span></a>
+      <a href="#community" class="nav-item"><span class="ni-ico">💬</span><span>社区</span></a>
+      <a href="#credit" class="nav-item"><span class="ni-ico">⚡</span><span>算力</span></a>
+      <a href="#dev" class="nav-item"><span class="ni-ico">🛠</span><span>开发者</span></a>
+  </nav>
+
+  <main class="content">
+
+  <section id="record" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🎙</span>
+      <div>
+        <h2>录音与自动成文（挖矿）</h2>
+        <p class="f-tag">随口录一段话，VoiceDrop 自动转写并把它"挖"成一篇或几篇可直接发布的文章。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>这是 VoiceDrop 最核心的一条流程：你不用打字、不用整理，只要对着手机把想说的讲完，剩下的转写、分段、成文全交给 app 自动完成。</p>
+<p>在「我的录音」首页，底部悬浮着一颗<strong>红色录音键</strong>。轻点它就进入整屏录音界面开始录音，讲完点「停止」，这段录音就自动排队上传。上传成功后，服务器会先用语音识别把你说的话转成文字（<strong>听录音</strong>），再让 AI 把这段口述<strong>挖</strong>成结构完整的文章（<strong>挖文章</strong>）——有标题、有开头结尾，读起来就像你自己写好的公众号文章。</p>
+<p>整个过程你不用盯着。每条录音在列表里会依次显示 <strong>正在上传 → 待处理 → 听录音 / 挖文章 → 已成文</strong> 的状态，成文后点进去就能听原声、读文章、一键发布。如果这段录音里没识别到说话声，会标成 <strong>无语音</strong>；太零碎、没说成一件事的，会提示「还没成文」，可以讲完整一点重录。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><ol>
+<li>打开 app，停在底部标签的「我的录音」页。</li>
+<li><strong>轻点底部的红色录音键</strong>，屏幕切到整屏录音界面，会立即开始录音——顶部显示「正在录音」，中间是一个大计时器和跳动的声波。（注意：录音是「点一下开始」，不是按住说话；红键上标注的「长按说话」是另一个功能——长按红键是用语音给整个列表下指令，比如"删掉第二条"。）</li>
+<li>想结束时，<strong>点中间的「停止」方块键</strong>。录音界面立刻关闭，回到列表，这条录音显示「正在上传」。</li>
+<li>录音期间如果想配图，可点录音界面右侧那个浅色的「拍照」相机图标随手拍几张，照片会跟着这段录音一起上传、被 AI 融进对应的文字里（拍照不会打断录音）。</li>
+<li>之后什么都不用做。列表里这条录音会自动从「待处理」走到「听录音」「挖文章」，最后变成绿色的「已成文」。</li>
+<li>点进「已成文」的录音，就能上方听原声回放、下方读挖出的文章；右上角 ⋯ 菜单可「发布公众号草稿」或分享。</li>
+<li>想改文章：进到文章页，<strong>按住底部那条「按住 说话 修改」的说话条</strong>口述你的修改意见（如"第二段删掉"），松手即改。</li>
+<li>想让 AI 重挖一遍：在列表里<strong>长按已成文录音的「已成文」标签</strong>，选「重写」，会复用已有的转写、按原逻辑重新挖一遍（生成内容可能和原来不同）。</li>
+</ol></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><ul>
+<li><strong>怎么开始录音</strong>：轻点首页红色录音键，进入整屏界面即自动开始；点「停止」结束。真正录音是点按式，不是按住说话。</li>
+<li><strong>一段录音出几篇</strong>：默认「尽量合并、少而厚」，一段口述大多只出 <strong>1 篇</strong>；只有当你明显跳了几个不相干的话题时，才会拆成 <strong>2–3 篇</strong>，每篇都能独立成立。上限就是 3 篇。</li>
+<li><strong>只用你说过的事实</strong>：AI 有硬底线——只用转写里出现的内容，不编造、不脑补；篇幅顺着内容走，三五句话也能成一篇短文，不为凑字数注水。</li>
+<li><strong>追问</strong>：每篇成文后，AI 会挑出这篇最"薄"、只有你本人知道的地方，给出 1–3 个简短追问（真数字、真名字、没展开的判断等）。追问单独存放、不写进正文，你可以口述回答后让它接着补。</li>
+<li><strong>状态徽标</strong>：正在上传（红）→ 待处理（琥珀）→ 听录音 / 挖文章（转圈）→ 已成文（绿）。没识别到语音显示「无语音」；被拦下的显示「余额不足」或「录音过长」。</li>
+<li><strong>成文时机</strong>：服务器<strong>每小时自动处理一次</strong>（也会在上传后触发），长录音的转写可能跨几趟才完成，稍等再看即可。</li>
+<li><strong>离线与失败重试</strong>：没网也能录。录音先存在手机本地队列里，联网后自动上传；单次上传失败会自动重试（最多 3 次，间隔 1.5 秒、3 秒），失败的文件留在本地不丢，下次继续传；网络恢复的一刻会自动重新上传。</li>
+<li><strong>录音时长上限</strong>：单条录音最长 <strong>3 小时</strong>，超过会标「录音过长」不处理。</li>
+<li><strong>转写太短</strong>：识别出的文字少于 20 个字会判为「录得太短」，不成文。</li>
+<li><strong>算力（费用）</strong>：新用户注册一次性赠送 <strong>500 算力</strong>（有效期 1 年）；23 算力 = 1 元。语音转写按时长计费（约 0.8 元/小时），挖文章按 AI 用量计费。余额为 0（余额不足）时不再处理新录音，需充值。</li>
+<li><strong>追加/编辑逻辑</strong>：每段录音对应它自己的文章，没有"把新录音接到旧文章后面"的操作；要改已有文章用「按住说话修改」口述指令，要整体重来用「重写」重新挖。</li>
+<li><strong>从标签页录音</strong>：如果你是在某个标签页里点录音键发起的，挖出的文章会默认带上那个标签。</li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>一段录音能挖出几篇文章？</summary><div class="fa">默认是「尽量合并、少而厚」，大多数录音只出 1 篇讲透。只有当你在一段话里明显跳了好几个互不相关的话题时，才会拆成 2 到 3 篇，每篇都有自己的标题和开头结尾，可以各自独立发布。最多 3 篇。</div></details><details class="faq"><summary>录完为什么还显示「待处理」，多久能成文？</summary><div class="fa">录音上传成功后要先在服务器上排队处理：先语音转写（听录音），再由 AI 挖成文章（挖文章）。服务器每小时自动处理一次，长录音的转写还可能分几趟完成，所以稍等一会儿、过会儿再回来看即可，状态会自动变成「已成文」。</div></details><details class="faq"><summary>没有网络的时候能录音吗？</summary><div class="fa">能。录音会先存在手机本地，联网后自动上传，不用你手动操作。单次上传失败会自动重试，失败的文件也不会丢，一直留到传成功为止；网络恢复的那一刻 app 会自动把积压的录音补传上去。</div></details><details class="faq"><summary>为什么我的录音显示「无语音」或「还没成文」？</summary><div class="fa">「无语音」是这段录音里没识别到说话声（比如纯环境噪音或误触）。「还没成文」是听到了声音、但内容太零碎、还没说成一件完整的事，AI 找不到能单独成篇的东西。把想法讲得完整一点、重录一段通常就能成文。另外单条录音太短（转写不足 20 字）会提示「录得太短」。</div></details></div>
+    </div>
+  </section>
+
+  <section id="followup" class="feature">
+    <div class="f-head">
+      <span class="f-ico">❓</span>
+      <div>
+        <h2>追问</h2>
+        <p class="f-tag">文章挖矿成型后，AI 针对最薄弱处追问一两个只有你知道的细节，你按住说话回答，文章就随着回答长厚。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>你随口录一段音，VoiceDrop 把它挖成一篇结构完整的文章。但录音里往往有些「只有你自己知道」的关键信息没说出来——一个真实的数字、一个人的名字、一个具体的场景，或者一句点到没展开的判断。这些补上去，文章才真正立得住。</p>
+<p><strong>追问</strong> 就是干这件事的。每篇文章成型后，AI 会挑出这一篇最薄的地方，提 1 到 3 个又短又具体的问题，像编辑追着作者问细节，而不是客套。你不用打字，对着问题按住说话回答就行，回答里的信息会被自动织进正文最相关的段落。</p>
+<p>追问是默认打开的一个轻功能。它不占地方——平时收着，只在录音详情页的说话条右边亮一个带数字角标的星标，提醒你还有几个问题没答。你想答就点开，不想答它也不打扰你。答完或跳过，星标就消失了。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><ol>
+<li>正常录音，等 VoiceDrop 把它挖成文章，进入这篇文章的详情页。</li>
+<li>如果 AI 有想问你的，页面底部「按住 说话 修改」这条的<strong>右边会亮一个星标按钮</strong>，右上角的小数字角标就是还没回答的问题数。</li>
+<li><strong>点星标</strong>，追问卡片会从底部展开，把说话条包起来：上方显示「追问 N/M」（第几题 / 共几题）、问题本身，下方是一条分段进度条。</li>
+<li>想回答就<strong>按住那条说话</strong>（这时文案变成「按住 说话 回答」），把答案说出来，松手就发出去了。你不用照着问题念，把你知道的那点事实说清楚即可。</li>
+<li>松手后 AI 会把你回答里的信息织进正文最相关的段落，被补上的段落会<strong>黄底高亮几秒</strong>，让你看到文章哪里长厚了；之后自动翻到下一题。</li>
+<li>某个问题你不想答，点卡片右上角的「<strong>跳过</strong>」，直接翻下一题。</li>
+<li>全部答完或跳过后，卡片和星标自动收掉，回到普通说话条。</li>
+<li>想让 AI 再多问几个，直接对着说话说「<strong>再追问我几个</strong>」「还有什么要问我的」，它会当场补出新问题、星标重新亮起（注意：追问卡片展开时按住说话一律当成回答，想让它续问要先把卡片收起来再说）。</li>
+<li>不想要这个功能，去<strong>设置</strong>里关掉「<strong>成文后追问</strong>」开关（副标题：AI 追问一两个细节，把文章补厚）。</li>
+</ol></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><ul>
+<li>每篇文章 AI 一次追 <strong>1 到 3 个</strong>问题，问的都是录音里推断不出来、只有作者本人知道的具体信息（真数字、真名字、真场景、没展开的判断）。没有值得问的，就不追问。</li>
+<li>追问问题<strong>不进正文、不进历史版本</strong>。发公众号、生成分享页、发社区、导小红书等所有出口都天然不带这些问题，只有你自己在 app 里看得到。</li>
+<li>回答走的是和平时语音改文章完全一样的通道——就是一条普通编辑指令，没有专门的等待界面。发出后就是熟悉的队列气泡、「正在改」那套。</li>
+<li>每题的进度：<strong>绿色</strong>=已答，<strong>橙色</strong>=当前题，<strong>灰色</strong>=未答或已跳过。</li>
+<li>没回答的问题 <strong>7 天后自动消失</strong>，不会一直挂着。</li>
+<li>追问是<strong>逐篇</strong>的：每篇文章有自己的一组问题，星标角标是当前这篇的未答数。</li>
+<li>回答后正文段落的黄底高亮只是「让你看到改了哪」，几秒淡出，不影响你继续操作。</li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>为什么有的文章有追问，有的没有？</summary><div class="fa">AI 只在录音里确实缺了「只有你知道」的关键信息、且补上能让文章更立得住时才追问。如果这篇已经说得比较完整、没有值得问的，它就不问，星标也不会亮。</div></details><details class="faq"><summary>回答追问要照着问题一句句念吗？</summary><div class="fa">不用。你只要按住说话，把你知道的那点事实说清楚就行。AI 会自己把回答里的信息挑出来、织进正文最相关的段落，不会照抄问题，也不会动无关的地方。</div></details><details class="faq"><summary>追问的问题会不会跟着文章发出去，被别人看到？</summary><div class="fa">不会。追问问题只存在你自己的 app 里，不写进正文也不进历史版本。发公众号、分享链接、社区、小红书等所有出口都不带这些问题。</div></details><details class="faq"><summary>我想让 AI 多问我几个，怎么办？</summary><div class="fa">先把追问卡片收起来（往下滑，或答完当前批），然后按住说话说「再追问我几个」之类的话，AI 会当场再补 1 到 3 个新问题，星标会重新亮起。注意卡片展开着的时候按住说话都算回答，所以要先收起来再说。</div></details></div>
+    </div>
+  </section>
+
+  <section id="edit" class="feature">
+    <div class="f-head">
+      <span class="f-ico">✏️</span>
+      <div>
+        <h2>用语音修改文章</h2>
+        <p class="f-tag">打开一篇已经挖好的文章，按住底部的说话条开口说改哪儿，AI 就按你的话改文——改正文、改标题、删段落、换配图都行。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>文章挖出来之后不是终点。进到一篇文章的阅读页，底部始终有一条微信式的「按住说话」条——平时上面写着<strong>按住 说话 修改</strong>。你按住它开口说要改哪儿、怎么改，松手，AI 就读懂你的话、直接动手改这篇文章。全程不用打字、不用在文本框里找光标。</p>
+<p>它改的是<strong>你正在看的这一篇</strong>。为了让你能说清楚指哪儿，正文每一行开头都标了「第N行 / 图M」的号——你说「第3行删掉」「第5行改成……」「把标题改一下」，AI 就严格按屏幕上的号定位，不会自己数错行。你说话的时候，屏幕上方会实时显示听到的文字，其中「第N行 / 图M」这类定位词会被高亮出来，让你确认它听懂了你指的是哪行、哪张图。</p>
+<p>改动可以一条接一条地下。每说完一条，它就进入一个队列排队、依次执行——正在改的那条头上有一支跳动的铅笔，还没轮到的排在后面等着。改完之后，被改过的行会亮一下荧光高亮再慢慢淡掉，一眼就能看到「改在哪了」。每一次语音修改都会自动存成一个新版本，改错了随时能撤销退回去。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><ol>
+<li>打开一篇已经挖好的文章，进入它的阅读页。底部会有一条常驻的说话条，上面写着<strong>按住 说话 修改</strong>。</li>
+<li><strong>按住</strong>这条说话条不放，开口说你的修改要求，比如「把第二行删掉」「第五行这句改成……」「帮我把标题改成……」「在第三行后面加一段讲……」。说话时手指别松开。</li>
+<li>说的过程中留意屏幕上方的深色气泡，它实时显示听到的文字；你说的「第N行 / 图M」会被高亮，确认它指对了行。</li>
+<li>说完<strong>松开</strong>手指发送（松开前若想放弃，按提示<strong>上滑取消</strong>即可）。指令随即进入队列开始执行。</li>
+<li>想连着改好几处，不必等：<strong>按住继续说</strong>下一条，新指令会叠进队列，一条条排队执行。正在改的那条带跳动的铅笔图标，排队的带一个小时钟。</li>
+<li>改完后 AI 会在说话条上方回一句话（成功一般是「改好了」），被改动的行会短暂亮起荧光高亮。</li>
+<li>想更精准地改某一段，可以<strong>长按那一段正文</strong>，弹出的小菜单里有「改写这段」「插入图片」等选项（还有本地的「拷贝」）；长按已经生成的<strong>配图</strong>能调该图的风格。选中后同样会交给语音修改队列去执行。</li>
+<li>改得不满意，用工具栏里的<strong>撤销 / 重做</strong>按钮退回或恢复（有多个版本时才出现）。</li>
+</ol></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><ul>
+<li><strong>改的永远是你正在看的这一篇</strong>。正文里逐行标的「第N行 / 图M」号只用来帮你和 AI 对齐定位，不会被写进文章正文里。</li>
+<li><strong>能下的指令类型</strong>：删一行、改一行、在某行后插入一段、改标题；也可以让它整篇重写；配图相关的可以换图、生成新图。删段落就是删掉对应的第N行。</li>
+<li><strong>合并两篇、删掉整篇文章</strong>这类跨文章的操作不在单篇阅读页里做，而是在「我的录音」列表里长按对红键、对着篇号说（例如「把第二篇和第三篇合并」）。合并是另存新篇、原文保留；删除会先要你确认。</li>
+<li><strong>排队、串行执行</strong>：多条指令不是同时改，而是进一个队列一条条按顺序改。正在改的高亮显示，其余排队等待。服务端持有这个队列，是真正的权威。</li>
+<li><strong>版本会保留</strong>：每一次语音修改都会自动写入一个新版本（来源标记为 agent），最多保留 <strong>10</strong> 个历史版本，超出后最旧的被丢弃。撤销 / 重做只移动「当前版本」的指针、不新写版本；撤销之后若又改了新内容，被撤销掉的那些「未来」版本会像 git 一样被丢弃。</li>
+<li><strong>改完的反馈</strong>：说话条上方会留一句 AI 的回话，成功配一个亮点图标、出错配红色警告图标；这句话不会自动消失，直到被下一句回话替换或你点了别处。被改的行会亮约几秒荧光后淡出。</li>
+<li><strong>断网 / 退到后台 / 杀掉 App 都不丢</strong>：你已经说出但服务端还没确认改完的指令，会存在本地，重新连上后自动续跑；靠指令的稳定编号去重，续跑不会把同一处改两遍。纯文字指令连 App 被杀都能续；极少数在改图途中被打断的情况，需要你重新说一遍（图片编辑不做静默续跑）。</li>
+<li><strong>失败了怎么办</strong>：某条指令出错时，那句回话会变成红色警告并给出提示，这条指令随即从队列里移除；你把话说清楚一点、重说一遍即可。若是网络中途掉线，指令会留在队列里，等自动重连后继续送出，不用你手动重发。</li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>改错了能退回去吗？</summary><div class="fa">能。每一次语音修改都会自动存成一个新版本，工具栏里有撤销 / 重做按钮（有多个版本时才出现），点一下就退回上一版或再恢复。系统最多保留 10 个历史版本。注意撤销后如果又改了新内容，被撤掉的那些较新版本会像 git 一样被丢弃。</div></details><details class="faq"><summary>一口气说好几处要改，可以吗？</summary><div class="fa">可以。按住继续说就行，每条指令会叠进一个队列，一条接一条按顺序执行——正在改的那条带跳动的铅笔图标，还没轮到的带小时钟排队等着。不用等上一条改完再说下一条。</div></details><details class="faq"><summary>怎么让它精确改到某一行或某张图？</summary><div class="fa">正文每行开头都标了「第N行 / 图M」的号，你直接说这个号即可，比如「第3行删掉」「把图2换个风格」。说话时屏幕上方会把你说的定位词高亮出来，方便你确认它指对了地方。你也可以长按某一段正文，用弹出的「改写这段」等菜单更精准地改。</div></details><details class="faq"><summary>说到一半网断了、或者退出了 App，改的东西会丢吗？</summary><div class="fa">不会。已经说出但还没改完的指令会存在本地，重新连上后自动接着跑，而且靠指令编号去重，不会把同一处重复改两遍。纯文字的修改指令连 App 被杀掉都能续上；只有极少数正在改配图时被打断的情况，需要你重新说一遍。</div></details></div>
+    </div>
+  </section>
+
+  <section id="image" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🖼</span>
+      <div>
+        <h2>图片</h2>
+        <p class="f-tag">在 VoiceDrop 里拍照或从相册传图，让 AI 看图写成文章，或给已有文章配题图、卡通解释图和各种风格插图。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>VoiceDrop 不只是录音口述，图片同样是喂给 AI 的素材。你可以在录音的同时随手拍照，把现场画面附在这条录音里；也可以在一篇已经成形的文章里，随时补拍或从相册选图插进去。</p>
+<p>如果一条录音里<strong>只有照片、没有说话</strong>，VoiceDrop 不会判成「无语音」丢掉，而是自动改走「看图模式」——AI 观察照片内容，替你写出一条极简的图文。也就是说，一张照片本身就能变成一篇短文。</p>
+<p>除了让照片进文章，你还能反过来让 AI <strong>给文章画图</strong>：长按正文段落，可以让它生成一张微信公众号题图，或一张帮读者一眼看懂文章结构的<strong>卡通解释图</strong>；长按文章里已有的配图，还能把它一键重画成卡通、水彩、素描、油画、胶片或广告等不同风格。所有画图都排进和语音修改同一条队列，AI 逐条处理，改完自动更新到正文。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><h4>边录边拍（录音时加照片）</h4>
+<ol>
+<li>录音界面右侧有一个淡淡的「拍照」图标，点它打开方形相机。</li>
+<li>相机是正方形取景框，带九宫格辅助线。点中间的白色快门键拍照，拍下的照片会排成一条底部胶片带。</li>
+<li>左下角的相册图标可以从系统相册选图（一次最多 9 张）；右下角可以切换前后摄像头。</li>
+<li>想删掉某张，点该照片右上角的 ✕。</li>
+<li>拍完点右上角「完成」，照片就附在这条录音里，随录音一起上传。</li>
+</ol>
+<h4>只拍照片、不说话，直接生成文章</h4>
+<ol>
+<li>按上面的方式拍照或选图，可以完全不开口。</li>
+<li>录音结束后，AI 发现没有语音但有照片，会自动进入「看图模式」，观察照片替你写出一条极简图文。</li>
+</ol>
+<h4>给已有文章插入照片</h4>
+<ol>
+<li>打开一篇文章，点顶部工具栏里的「插入照片」图标（相机胶片样式）。</li>
+<li>同样进入方形相机，可以现拍或从相册选图。</li>
+<li>点「完成」后，照片上传，AI 会自动把每一张插到正文里最相符的段落附近。</li>
+</ol>
+<h4>让 AI 给文章画图（长按段落）</h4>
+<ol>
+<li>在编辑态长按正文任意一段，弹出操作菜单。</li>
+<li>选「插入图片」，里面有两项：<ul>
+<li><strong>公众号题图</strong>：画一张 2.45:1 的横幅题图放在文章最前面，标题从文章里提炼（约 6 到 10 个汉字）。</li>
+<li><strong>卡通解释图</strong>：画一张扁平卡通风格的解释图，插到正文最能帮助理解的位置，让人扫一眼就看懂文章结构。</li>
+</ul></li>
+<li>菜单里还有「改写这段」（更简洁 / 更口语 / 更书面 / 扩写一点）和「拷贝」。</li>
+</ol>
+<h4>给已有配图换风格（长按图片）</h4>
+<ol>
+<li>长按文章里 AI 已经出好的配图，弹出「图片风格」菜单。</li>
+<li>可选：卡通、广告、水彩、素描、油画、胶片。</li>
+<li>选中后 AI 在保持构图和主体不变的前提下，把这张图重画成对应风格。</li>
+</ol></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><ul>
+<li><strong>相册单次选图上限</strong>：一次最多选 9 张。</li>
+<li><strong>照片规格</strong>：所有照片都会被居中裁成正方形、缩到最长边不超过 1080 像素的 JPEG（单张小于 900KB），所以文章里的配图和相机取景框看到的一致，都是 1:1。</li>
+<li><strong>相机拍的照片会自动存一份到手机相册</strong>：存的是和取景框一致的方形版本；从相册选进来的图本来就在相册里，不会重复保存（若系统相册写入权限被拒，只是不保存，不影响使用）。</li>
+<li><strong>照片存哪儿</strong>：上传到你自己账号下的云端存储，路径形如 <code>photos/&lt;录音会话时间戳&gt;/&lt;第几秒&gt;-&lt;随机尾&gt;.jpg</code>，每张照片带一个独立标记，插进正文时用它自己的标记定位，不靠序号。</li>
+<li><strong>看图模式的限制</strong>：只拍照不说话生成的文章是「极简图文」；看图模式<strong>不会生成追问</strong>（因为没有口述内容可回答）。</li>
+<li><strong>画图和语音修改共用一条队列</strong>：长按菜单里的题图、卡通解释图、换风格等指令都排进同一个编辑队列，AI 逐条串行处理，处理时会显示「正在改」，改完正文自动更新，可撤销 / 重做。</li>
+<li><strong>题图与卡通解释图的画面约定</strong>：公众号题图固定 2.45:1 横幅；卡通解释图的画幅比例由内容决定（横版、竖版或方形），追求「一眼读懂」。</li>
+<li>这些菜单项（改写、插入图片、图片风格）由服务端配置下发，可能随版本更新增减。</li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>我只拍了照片、一句话没说，能出文章吗？</summary><div class="fa">能。VoiceDrop 发现这条录音没有语音但有照片时，会自动改走「看图模式」，让 AI 观察照片内容替你写出一条极简图文，而不是判成「无语音」丢掉。</div></details><details class="faq"><summary>从相册一次能选几张照片？</summary><div class="fa">一次最多选 9 张。你也可以分多次拍照或选图，它们会一起排在底部的胶片带里，点「完成」统一上传。</div></details><details class="faq"><summary>用 app 相机拍的照片，会存到我手机相册里吗？</summary><div class="fa">会。相机拍的照片会自动存一份和取景框一致的方形版本到系统相册。从相册选进来的图本来就在相册里，不会重复保存。</div></details><details class="faq"><summary>「公众号题图」和「卡通解释图」有什么区别？</summary><div class="fa">公众号题图是一张 2.45:1 的横幅封面，放在文章最前面，带一句从标题提炼的中文大标题；卡通解释图是插在正文中间的一张扁平卡通图，用来把文章的结构、对比或流程画出来，让人一眼看懂。两者都在长按段落后的「插入图片」菜单里。</div></details></div>
+    </div>
+  </section>
+
+  <section id="style" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🖋</span>
+      <div>
+        <h2>文风（写作风格）</h2>
+        <p class="f-tag">让 VoiceDrop 学会你自己的写法，把每次录音挖成"像你写的"文章。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>"文风"是 VoiceDrop 为你保存的一份<strong>写作风格指纹</strong>——它记录的是你<strong>喜欢怎么写</strong>：句子的长短节奏、常用的词、语气的松紧、开头怎么起、结尾怎么落，而不是你写什么内容、持什么观点。</p>
+<p>它的用处只有一个，但很关键：每次你把语音或照片"挖矿"成文章时，VoiceDrop 都会把这份文风叠进 AI 的指令里，让机器写出来的东西更接近<strong>你想要的味道</strong>，而不是一股通用的 AI 腔。</p>
+<p>文风是<strong>版本化</strong>保存的——每存一次就多一个版本，随时能切换、回滚，也能拿不同版本给同一篇录音各写一版来对比。你可以三种方式得到它：直接在设置里手写／粘贴一份；用"偷师"从你欣赏的文章里让服务器自动提炼一份；或者让 Claude 帮你从已发文章里蒸馏。文风做好后不光管以后的新录音，<strong>老文章也能挑一个文风版本重新挖一遍</strong>。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><h4>一、查看和手写自己的文风</h4>
+<ol>
+<li>进入「设置」，在第一张卡里点「写作风格」（副标题"成文时模仿这套语气"）。</li>
+<li>打开的是一个整页编辑框。还没有文风时会显示提示："还没有写作风格。把蒸馏好的文风贴进来，挖文章时会带上它、让文章更像你。"</li>
+<li>直接在框里输入或粘贴你的文风描述，点右上角「保存」。每次保存都会新增一个版本。</li>
+<li>顶部有一条版本栏，显示当前版本号、风格名、字数、共几版。点它会展开版本下拉列表，可以切换到任意历史版本；只是切换旧版再保存，等于回滚（不新增版本）；改了文字再保存，才算新的一版。</li>
+<li>不想保存就点左上角「取消」。</li>
+</ol>
+<h4>二、"偷师"——从别人的文章里提炼文风</h4>
+<ol>
+<li>在任意 app 里（Safari 网页、一段选中的文字、PDF/Word/RTF 文档），用系统的<strong>分享</strong>按钮，选 VoiceDrop。</li>
+<li>弹出「风格数据集」面板，顶部显示"已收集 N 项 · 约 X 字"，下面是已收录的语料和"本次新增"的条目。网页会自动解析正文（解析中→已收录，失败则"仅存链接"，可点"重试"）。</li>
+<li>想继续攒素材就点「继续收集」关掉面板，反复分享几篇进来。</li>
+<li>攒够了点橙色的「提取文章风格」。底部有个"提取后清空数据集"勾选（默认勾上，下次从零开始）。</li>
+<li>点下后 VoiceDrop 会在后台蒸馏，并自动跳到 app 的「我的录音」，蒸馏完成会出现一篇"你的写作风格 · 名字"的介绍文章。</li>
+</ol>
+<h4>三、给老文章换个文风重挖（restyle）</h4>
+<ol>
+<li>打开任意一篇已成文的文章（阅读页）。</li>
+<li>在标题下方那一行的日期旁边，有个带铅笔图标的<strong>风格标签</strong>（显示当前风格版本，如"v8 风格"），点它。</li>
+<li>弹出「换个风格重写」面板："选一个范文版本，把本文重写一遍。原文不变，可随时换回。"</li>
+<li>选一个文风版本，点底部「用 vN 重写本文」。若这篇之前用过这个版本，会直接切回（免费）；否则会用该文风重挖一遍，出一个新版本。</li>
+<li>重写期间显示"正在用新风格重写…"。原始口述内容不变，你随时能撤销/换回其他版本。</li>
+</ol></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><ul>
+<li><strong>文风只抓"怎么写"，不抓"怎么想"</strong>：蒸馏器提炼的是句子节奏、段落长度、词汇、语气、论证结构、比喻、情绪强度、开头收尾、以及"绝不做的事"这 9 个维度，每一维都会摘几句真实原句当锚点，并给这套风格起一个 5 个字以内的名字（作为版本首行的显示名）。</li>
+<li><strong>偷师有字数门槛</strong>：语料有效正文总字数要<strong>满 300 字</strong>才允许提取。不足时按钮点不动，并提示"素材还太少（共 X 字）——分享几篇带正文的文章，攒到 300 字以上再提取"。只分享了标题或链接、没带正文的（如微信读书这类只给书名的分享）不算数。</li>
+<li><strong>样本太少会不稳</strong>：语料少于 3 篇时，蒸馏结果会注明"指纹会不稳"，容易把一篇的偶然写法当成你的签名。</li>
+<li><strong>语料上限</strong>：单篇样本最多取前 4000 字，一次蒸馏喂给模型的语料总量上限约 48000 字，超出部分按收集顺序截断。</li>
+<li><strong>提取用的是挖矿流水线</strong>：点"提取文章风格"实际是上传一个静音占位录音触发服务端 miner，所以能在"我的录音"里像普通录音一样看到进度、失败可重试，比即时提取更稳。</li>
+<li><strong>字数不够时不会乱改</strong>：如果服务器发现语料不足 300 字，<strong>不会</strong>改动你当前生效的文风，而是给你一篇"样本不足，风格没有更新"的说明文章，列出收到的素材并告诉你怎么补，素材仍留在数据集里。</li>
+<li><strong>版本化与回滚</strong>：文风和文章一样是版本化存储，历史最多保留约 10 个版本，可随时在版本下拉里切换或回滚。</li>
+<li><strong>多风格对比</strong>：版本下拉里有"多风格对比"开关，可勾选 2–3 个版本（最多 3 个），设想是成文时各生成一篇在阅读页顶部对比切换。</li>
+<li><strong>重挖消耗算力</strong>：给老文章换风格重挖会走一次挖矿，正常消耗算力；若这篇此前已用过该版本，则是免费切回，不重新生成。</li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>我改了文风，以前挖好的文章会自动跟着变吗？</summary><div class="fa">不会。新的文风只对之后的新录音生效，老文章保持原样。想让某篇老文章套上新风格，要打开那篇文章，点日期旁的风格标签，用「换个风格重写」挑一个版本重挖一遍——而且原文不动，随时能换回。</div></details><details class="faq"><summary>"偷师"要分享多少内容才能提取？</summary><div class="fa">语料的有效正文总字数要满 300 字才能点"提取文章风格"，不够时按钮是灰的。关键是要带正文——选中文章正文再分享，或分享能解析出正文的网页链接；只带标题或书名的分享（比如某些阅读 app）攒不出真实的写作指纹。</div></details><details class="faq"><summary>提取新文风会把我原来那份覆盖掉、找不回来吗？</summary><div class="fa">不会。每次提取都是新增一个版本，旧版本都还在。去「设置 → 写作风格」，点顶部版本栏展开下拉，就能切回或回滚到任何一个历史版本。</div></details><details class="faq"><summary>分享网页进去时提示"解析失败·仅存链接"怎么办？</summary><div class="fa">有的网页正文抓不下来。可以点那一行的"重试"；还不行就回到网页里选中正文文字、直接分享文字进来，一样会进风格数据集。</div></details></div>
+    </div>
+  </section>
+
+  <section id="share" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🔗</span>
+      <div>
+        <h2>分享与导出</h2>
+        <p class="f-tag">把挖出来的文章生成公开链接分享出去、一键推送到微信公众号草稿箱，或把所有录音和文章连同音频打包导出到本地。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>VoiceDrop 把你随口录的音挖成文章之后，提供了几条把成果发出去的通道：给单篇文章生成一个任何人都能打开的<strong>公开链接</strong>、把文章推送到你自己的<strong>微信公众号草稿箱</strong>、转成<strong>小红书</strong>文案配图，以及把<strong>全部录音和文章打包导出</strong>到本地。</p>
+<p>单篇文章的分享入口都在<strong>成文阅读</strong>页右上角的 <strong>⋯ 菜单</strong>里。只有已经挖出文章（状态为「已成文」）的录音才能分享——还没成文的录音没有可分享的正文。点「分享」会先在服务器上为这篇文章签发一个公开页链接，形如 <code>https://jianshuo.dev/voicedrop/&lt;编号&gt;</code>，然后弹出系统分享面板，你可以把它发到微信、X 或任何 App。发给微信时，对方在聊天里看到的是一张带标题和配图的链接卡片（卡片图取自文章里的第一张照片，没有则用页面默认图）。</p>
+<p>想把「原始录音」给别人听，用<strong>导出数据</strong>：它会把你所有录音的音频、挖出的文章、照片和字幕打成一个压缩包，里面是一套可以直接用浏览器打开的网页，每篇文章下面都带一个「听录音」的播放条。</p>
+<p>如果你运营微信公众号，配置好公众号后，⋯ 菜单里的「发布公众号草稿」能把文章直接送进公众号后台的草稿箱，你再去后台排版发布。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><h4>生成并分享公开链接</h4>
+<ol>
+<li>进入某条录音的<strong>成文阅读</strong>页（需要已经「已成文」）。</li>
+<li>点右上角 <strong>⋯</strong>，选择「<strong>分享</strong>」。</li>
+<li>稍等 App 向服务器申请链接，随后弹出系统分享面板；链接会带上你当前正在看的那一篇（多篇文章时分享的是当前这篇）。</li>
+<li>选微信 / X / 拷贝等，把 <code>jianshuo.dev/voicedrop/…</code> 的链接发出去。发给微信会自动生成链接卡片。</li>
+</ol>
+<h4>发布到微信公众号草稿箱</h4>
+<ol>
+<li>先在<strong>设置 → 微信公众号</strong>里配置好公众号（AppID / Secret，并把服务器 IP 加进公众号白名单）。</li>
+<li>回到文章的 <strong>⋯</strong> 菜单，点「<strong>发布公众号草稿</strong>」（这篇已经发过则显示「<strong>更新公众号草稿</strong>」）。</li>
+<li>等待结果，成功会提示「<strong>已到草稿箱</strong>」或「<strong>已更新草稿</strong>」。再去公众号后台的草稿箱排版、发布。</li>
+</ol>
+<h4>导出全部录音与文章</h4>
+<ol>
+<li>打开<strong>设置</strong>，在「<strong>同步与存储</strong>」里点「<strong>导出数据</strong>」（副标题：所有录音和文章打包下载）。</li>
+<li>底部弹出进度：正在准备 → 正在导出数据（逐条显示 X / 总数）→ 正在打包。</li>
+<li>完成后显示「<strong>导出完成</strong>」和文件大小，点「<strong>分享 / 保存到本地</strong>」，用系统面板存到「文件」App、AirDrop 或发给别人。</li>
+</ol>
+<h4>转成小红书 / 发到社区</h4>
+<ul>
+<li>⋯ 菜单里的「<strong>分享到小红书</strong>」会自动生成小红书文案（复制进剪贴板）、把配图存进相册，并唤起小红书 App，你在发布器里选图、粘贴文案即可。</li>
+<li>「<strong>VD社区可见</strong>」开关可以把这篇文章发到 App 内的 VD 社区。</li>
+</ul></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><ul>
+<li><strong>公开链接的形态</strong>：<code>https://jianshuo.dev/voicedrop/&lt;编号&gt;</code>，编号是服务器对文章签名后生成的令牌。打开链接不需要装 VoiceDrop、也不需要登录，任何人点开就能读。</li>
+<li><strong>只有文章能分享</strong>：链接是给「已成文」的文章签发的；还没挖出文章的录音，⋯ 菜单里分享出去的只有纯文本、也拿不到公开链接。</li>
+<li><strong>多篇文章</strong>：一条录音可能挖出多篇文章，分享时带的是你当前正在阅读的那一篇，公开页会以这篇作为开头和预览。</li>
+<li><strong>微信链接卡片</strong>：分享到微信时给的是纯链接，微信自己抓取页面生成图文卡片；卡片缩略图优先用文章里的第一张照片，取不到时回退到页面默认图。发到 X 等平台则是「标题 + 正文 + 链接」的整段文字。</li>
+<li><strong>导出包内容与格式</strong>：导出的是一个压缩包（文件名形如 <code>voicedrop-export-年-月-日.zip</code>），里面是网页而非 Markdown/纯文本——一个总览页 <code>index.html</code>（按卡片列出「X 条录音、X 篇文章」，每张卡片有「读文章」「听录音」按钮），每篇文章一个 HTML（含正文、音频播放条、可展开的「原始转录」、文章里引用的照片），加上原始音频（<code>.m4a</code>）和字幕（<code>.srt</code>）。用任意浏览器打开 <code>index.html</code> 即可阅读和播放。</li>
+<li><strong>公众号是发到草稿箱，不是直接群发</strong>：文章进的是公众号后台草稿箱，排版和最终发布仍在公众号后台完成；已发过的文章再点会原地更新同一份草稿，不会重复生成。</li>
+<li><strong>公众号需先配置</strong>：没配置或配置有误（如 AppID/Secret 错、IP 未加白名单）会提示去「微信公众号」设置里检查。</li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>别人打开我分享的链接，需要装 VoiceDrop 或登录吗？</summary><div class="fa">不需要。公开链接是一个普通网页（jianshuo.dev/voicedrop/… 域名下），任何人在浏览器或微信里点开就能直接读文章，不用装 App、也不用登录。</div></details><details class="faq"><summary>导出的是 Markdown 还是纯文本？</summary><div class="fa">都不是。导出的是一个压缩包，里面是可以用浏览器直接打开的网页（HTML），外加原始音频文件（.m4a）和字幕（.srt）。打开里面的 index.html 就能翻看所有文章、点「听录音」播放原始音频。</div></details><details class="faq"><summary>怎么把我的原始录音发给别人听？</summary><div class="fa">用「设置 → 导出数据」。它会把所有录音的音频连同文章打包，导出的网页里每篇文章下面都带一个音频播放条，把这个包发给对方，他用浏览器打开就能听原声。</div></details><details class="faq"><summary>点了「发布公众号草稿」，文章会直接群发出去吗？</summary><div class="fa">不会。它只是把文章推送到你公众号后台的草稿箱，成功会提示「已到草稿箱」。真正的排版和群发，还是要你自己去公众号后台完成。前提是先在设置里配好公众号并把服务器 IP 加进白名单。</div></details></div>
+    </div>
+  </section>
+
+  <section id="community" class="feature">
+    <div class="f-head">
+      <span class="f-ico">💬</span>
+      <div>
+        <h2>VD社区（分享、浏览、回应、投币与举报）</h2>
+        <p class="f-tag">把 AI 挖出来的文章分享给同好，互相阅读、写回应、投币鼓励，也能随时撤回或举报不当内容。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>VoiceDrop 里挖出来的文章，除了发到自己的微信公众号，还可以分享到「<strong>VD社区</strong>」——一个由同样爱「说话变文章」的创作者组成的公开空间。你把成文分享进去，别人就能读到、点赞、投币、甚至用录音写一篇回应；你也能读别人的、给他们鼓励。</p>
+<p>社区在 App 主界面顶部就能进：主界面上方有两个标签，「<strong>我的录音</strong>」和「<strong>VD社区</strong>」，点后者即可浏览大家分享的文章。列表默认按分享时间从新到旧排列（并会根据你的兴趣做一些排序），下拉即可刷新。</p>
+<p>分享出去的每一篇都会有一个公开链接（形如 <code>/voicedrop/&lt;分享ID&gt;</code>），可以转发到微信、X 等平台，对方在浏览器里就能直接阅读，无需安装 App。</p>
+<p>社区遵循一套「<strong>社区公约</strong>」，对色情、暴力、仇恨、骚扰、违法、自残等令人反感的内容零容忍。你随时可以举报不当内容或屏蔽不想看到的用户，被举报的内容会立即下架并进入人工审核。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><h4>把一篇文章分享到社区</h4>
+<ol>
+<li>打开一篇已经挖出文章的录音，进入详情页（只有挖出文章的录音才能分享）。</li>
+<li>点右上角的 <strong>⋯</strong> 菜单，打开开关「<strong>VD社区可见</strong>」。</li>
+<li>如果是你第一次往社区发内容，会先弹出「<strong>社区公约</strong>」，读完点「<strong>同意并发布</strong>」。</li>
+<li>首次分享还需要用 <strong>Apple 登录</strong>（社区发帖需要实名担责，App 会自动弹出登录）。</li>
+<li>分享成功后会提示「<strong>已在 VD社区可见</strong>」。若文章命中敏感词过滤，会被拒绝分享。</li>
+</ol>
+<h4>浏览与阅读</h4>
+<ol>
+<li>主界面顶部切到「<strong>VD社区</strong>」标签，看到所有分享的卡片列表，下拉可刷新。</li>
+<li>点任意一张卡片进入文章详情，多篇文章的分享顶部会有可切换的标题小标签。</li>
+</ol>
+<p><strong>在别人的文章里互动</strong>（详情页顶部与 ⋯ 菜单）</p>
+<ol>
+<li>点 <strong>❤️（心形）</strong> 给文章点赞。</li>
+<li>点 <strong>⚡（闪电圆圈）</strong> 给文章「投币」鼓励。</li>
+<li>点 <strong>⋯</strong> → 「<strong>写回应</strong>」，直接录一段话；停止后 AI 会把它挖成文章，自动作为「回应」发布并挂在原文下方。</li>
+<li>点 <strong>⋯</strong> → 「<strong>分享</strong>」，把这篇转发到微信、X 等（生成公开链接卡片）。</li>
+</ol>
+<p><strong>撤回已分享的文章</strong>（两种方式，任选其一）</p>
+<ol>
+<li>回到那篇录音的详情页，点 <strong>⋯</strong>，把「<strong>VD社区可见</strong>」开关关掉，提示「<strong>已从 VD社区隐藏</strong>」。</li>
+<li>或在「VD社区」列表里找到你自己的帖子，选「<strong>从社区移除</strong>」，确认「<strong>移除</strong>」。</li>
+<li>两种方式都只是把它从社区拿下来，你的原文章不受影响，以后随时能再分享。</li>
+</ol>
+<h4>举报 / 屏蔽</h4>
+<ol>
+<li>在文章详情页点 <strong>⋯</strong> → 「<strong>举报</strong>」→「<strong>举报并下架</strong>」，这篇会立即从社区下架待审核。</li>
+<li>点 <strong>⋯</strong> → 「<strong>屏蔽此用户</strong>」，之后就不会再看到 TA 的社区内容；可在「<strong>设置 → 已屏蔽用户</strong>」里取消屏蔽。</li>
+</ol></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><ul>
+<li><strong>能分享的内容</strong>：只有已经挖出文章的录音才能分享；分享出去的是成文文章和正文里的场景照片，原始录音本身不会公开。</li>
+<li><strong>社区公约（发第一篇前必须同意一次）</strong>：你对自己发布的内容负责并拥有发布权利；严禁色情或露骨性内容、暴力血腥、仇恨或歧视、骚扰或欺凌、违法内容、自残等；零容忍。</li>
+<li><strong>发帖需 Apple 登录</strong>：分享、撤回、投币等「写」操作都要求 Apple 实名身份，匿名状态下 App 会自动引导你登录后重试。</li>
+<li><strong>投币机制</strong>：一次投币，文章作者得 <strong>2 金币</strong>、你自己得 <strong>0.5 金币</strong>，按当前币价即时折算成算力到账。同一篇你只能投一次；不能给自己的文章投币；投过会提示「已经投过这篇了」。</li>
+<li><strong>投币的额度保护</strong>：当日算力池发完时会提示「今日算力池已发完，明天再来」。</li>
+<li><strong>回应</strong>：写回应本质是又录一段、挖成文章，自动关联到原文；原文下方会显示「N 篇回应」，可点开逐篇阅读。</li>
+<li><strong>举报的效果</strong>：一经举报立即从社区下架（你也不会再看到它），并在 <strong>24 小时内</strong>由人工审核处理；屡次或严重违规的账号会被移除。</li>
+<li><strong>屏蔽是本地的</strong>：屏蔽只在你自己的设备上生效（按作者昵称过滤），不会通知对方，可随时在「设置 → 已屏蔽用户」取消。</li>
+<li><strong>联系与投诉</strong>：如需就内容联系或投诉，可发邮件至 jianshuo@hotmail.com。</li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>为什么分享到社区要用 Apple 登录？</summary><div class="fa">社区是公开空间，发帖需要一个实名可担责的身份，所以分享、撤回、投币这类操作都要求 Apple 登录。第一次操作时 App 会自动弹出「通过 Apple 登录」，登录后会自动帮你重试刚才的操作。</div></details><details class="faq"><summary>从社区撤回后，我的原文章会被删掉吗？</summary><div class="fa">不会。撤回只是把这篇从社区拿下来，别人在社区里看不到了，但你 App 里的原文章完全不受影响，以后随时可以再分享。</div></details><details class="faq"><summary>「投币」是什么？投了有什么用？</summary><div class="fa">投币是给你喜欢的文章一个鼓励。投一次，作者会得到 2 金币、你自己得到 0.5 金币，按当前币价即时折算成算力到账。同一篇文章你只能投一次，也不能给自己的文章投币。</div></details><details class="faq"><summary>看到不当内容怎么办？</summary><div class="fa">在文章详情页点右上角 ⋯，选「举报」再点「举报并下架」，这篇会立即从社区下架，并在 24 小时内人工审核。如果只是不想再看到某个人，可以选「屏蔽此用户」，之后在「设置 → 已屏蔽用户」里能取消。</div></details></div>
+    </div>
+  </section>
+
+  <section id="credit" class="feature">
+    <div class="f-head">
+      <span class="f-ico">⚡</span>
+      <div>
+        <h2>算力</h2>
+        <p class="f-tag">算力是 VoiceDrop 里的计费货币，转写、挖文章、语音修改、生成配图都用它结算。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p><strong>算力</strong>是 VoiceDrop 内部统一的计费单位。你在 app 里做的每一件要用到 AI 的事——把录音转成文字、把口述「挖」成文章、用语音反复修改文章、生成卡通解释图——都会按实际用量从你的算力余额里扣。</p>
+<p>新用户不用先充值。注册后系统会一次性赠送 <strong>500 算力</strong>，有效期 <strong>365 天（一年）</strong>，日常口述、挖文章足够用很久。算力还可以通过<strong>活动赠送</strong>和<strong>社区投币</strong>继续获得。</p>
+<p>算力的余额和每一笔进出，都记在<strong>设置 → 算力</strong>页里，公开透明：顶部大字是剩余算力和它大约能挖多少篇，下面分「算力来源」和「明细」两块，来龙去脉一目了然。当余额见底时，需要算力的操作会被暂时拦下并给出提示，已完成的内容不受影响。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><ol>
+<li>打开 <strong>设置</strong>，点进「<strong>算力</strong>」一栏。</li>
+<li>顶部深色卡片是你的<strong>剩余算力</strong>，旁边有「<strong>≈ N 篇</strong>」的估算（按一篇约 9 算力折算），下面一行写着「累计获赠 X · 已用 Y」。</li>
+<li>往下的「<strong>算力来源</strong>」把你所有到账算力按来源归类汇总，比如「注册赠送」「活动赠送」「包月发放」。</li>
+<li>再往下的「<strong>明细</strong>」是逐笔流水，倒序排列。绿色带「+」的是到账（如注册赠送、收到投币），带「−」的是消耗（如挖文章、语音转写、语音修改、图片编辑），每笔都带时间。</li>
+<li>正常使用时无需任何操作——录音上传后系统自动转写、挖文章并扣费，你只管说。</li>
+</ol></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><ul>
+<li><strong>新用户赠送</strong>：注册即得 <strong>500 算力</strong>，有效期 <strong>365 天</strong>。</li>
+<li><strong>挖文章（挖矿）</strong>：按 AI 实际消耗的 token 计费，一篇大约 <strong>9 算力</strong>（app 里就是按「9 算力/篇」来估算「还能挖几篇」的）。</li>
+<li><strong>语音转写</strong>：按录音时长计费，单价 <strong>¥0.8/小时</strong>（约 18 算力/小时）。</li>
+<li><strong>语音修改</strong>：按每次修改实际用量计费；<strong>同一篇文章最多修改 100 次</strong>，到顶后会提示「这篇已达编辑上限（100 次）」。</li>
+<li><strong>图片编辑 / 卡通解释图</strong>：每生成一张固定 <strong>1.8 算力</strong>。算力不足时会提示「算力不足，生成一张图 1.8 算力，请充值」。</li>
+<li><strong>文风蒸馏、小红书分享文案</strong>：也按 AI 实际用量从算力里扣。</li>
+<li><strong>单条录音最长 3 小时</strong>，超过不予处理（提示时长过长）。</li>
+<li><strong>社区投币奖励</strong>：把文章分享到社区后，别人给你「投币」，作者和投币的人<strong>双方都到账算力</strong>（作者每次得 2 币、投币者得 0.5 币，再按当前币价折成算力）。这类奖励算力 <strong>90 天过期</strong>。每日奖池 <strong>2000 算力</strong>，单枚币最高折 <strong>200 算力</strong>。同一个人反复给同一作者投币，奖励会递减（第 2 次打 7 折，第 3 次起打 5 折），防止刷币。</li>
+<li><strong>邀请奖励</strong>：目前暂无。挣算力的途径是注册赠送、活动赠送、社区投币。</li>
+<li><strong>包月订阅</strong>：卡片显示 <strong>¥19.9/月</strong>、<strong>每月 200 算力</strong>、<strong>月底清零</strong>、随时可取消——但目前标注「<strong>即将上线</strong>」，尚未开放，点了会提示还在开发中。</li>
+<li><strong>算力不足时</strong>：新录音的转写/挖文章会被暂停并标记（等有算力后可再处理），语音修改会提示「算力不足，无法继续编辑」。已经生成好的文章和历史内容不会丢。</li>
+<li><strong>计价基准</strong>：内部按 <strong>23 算力 = ¥1</strong> 折算。</li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>新注册送多少算力？能用多久？</summary><div class="fa">注册就送 500 算力，有效期一年（365 天）。一篇文章大约花 9 算力，加上按 ¥0.8/小时计费的转写，日常口述挖文章可以用很久。</div></details><details class="faq"><summary>挖一篇文章、生成一张图分别花多少算力？</summary><div class="fa">挖一篇文章按 AI 实际用量扣，大约 9 算力；生成一张卡通解释图/编辑图固定 1.8 算力。语音转写另按录音时长计费（¥0.8/小时）。</div></details><details class="faq"><summary>除了充值，还能怎么免费拿算力？</summary><div class="fa">两个途径：一是活动赠送（官方不定期发放）；二是把文章分享到社区，别人给你「投币」时，你和投币的人都会到账算力奖励（这类奖励 90 天内有效）。包月订阅还在开发中，暂未上线。</div></details><details class="faq"><summary>算力用完了会怎样？我的文章会丢吗？</summary><div class="fa">不会丢。余额见底时，新录音的转写和挖文章会被暂停并标记（等有算力后可继续处理），语音修改会提示「算力不足」。已经生成好的文章和所有历史记录都还在。</div></details></div>
+    </div>
+  </section>
+
+  <section id="dev" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🛠</span>
+      <div>
+        <h2>开发者 API 与账号登录</h2>
+        <p class="f-tag">VoiceDrop 的账号体系（匿名令牌 / Apple 登录 / 6+4 设备配对）以及面向高级用户的开放 HTTP 接口。</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>VoiceDrop 的后端是一组跑在 Cloudflare 上的开放接口——你的录音、文章、照片、文风，都能用同一个凭证读写。<strong>如果你只是正常用 app 录音、看文章，这一章完全不用看</strong>：登录、令牌、算力这些 app 都替你处理好了。</p>
+<p>这一章写给两类人：</p>
+<ul>
+<li><strong>想在电脑上登录、或用手机批准电脑登录的人</strong>——了解 VoiceDrop 的账号是怎么回事（匿名身份、Apple 登录、6+4 手机设备配对）。</li>
+<li><strong>想自己写脚本 / 客户端调 API 的高级用户</strong>——VoiceDrop 把文章、录音、照片、挖矿、算力、社区、文风全部开成了 HTTP 接口，一个 token 走天下。</li>
+</ul>
+<p>一句话理解数据流：你录一段 <code>.m4a</code> 上传上去，服务端自动挖矿（先语音转写、再让 AI 成文），写出一篇篇文章，客户端再把文章读出来、分享、发公众号或发社区。所有这些环节都有对应的接口。</p></div>
+      <h3 class="blk-h">怎么用</h3>
+      <div class="blk steps"><h4>一、账号是怎么回事</h4>
+<p>VoiceDrop 不强制注册。它的账号体系有三层，都指向同一份你的数据：</p>
+<ol>
+<li><strong>匿名身份（anon token）</strong>：你第一次用 app，它就在本地生成一个 <code>anon_</code> 开头的高熵令牌，这就是你的身份。数据存在只属于你的独立空间里，别人越不进来。这个 token 在 app 的<strong>设置</strong>里可以复制出来，拿去别处调 API。</li>
+<li><strong>Sign in with Apple（Apple 登录）</strong>：在 app 里用 Apple 登录，只是把你的 Apple ID <strong>绑定</strong>到当前这个匿名身份上——数据不搬家，还是原来那份。绑定后即使换设备也能用同一个 Apple 账号找回。发社区帖必须先完成 Apple 登录。</li>
+<li><strong>6+4 手机设备配对</strong>：想在电脑上登录你的 VoiceDrop 账号时用。不用手抄那串长长的 token，用手机批准一下就行（见下）。</li>
+</ol>
+<h4>二、在电脑上用手机批准登录（6+4 设备配对）</h4>
+<p>这是当你在电脑上（比如用命令行工具）要登录、又不想手抄令牌时的办法。电脑扮演「新设备」，手机扮演「老设备」，配一次对，就把身份安全地取到电脑上：</p>
+<ol>
+<li>打开手机 app 的<strong>设置 → 账户</strong>，里面有一串 <strong>6 位十六进制短 ID</strong>。</li>
+<li>在电脑上发起配对，输入这 6 位码。</li>
+<li>手机上会立刻弹出一个 <strong>4 位数字码</strong>（以及「是我 / 不是我」的确认）。</li>
+<li>把这 4 位数字码输回电脑，配对完成，身份就落到电脑本地了。</li>
+</ol>
+<p>前提是：手机在线、app 在前台、已经登录了目标账号。</p>
+<h4>三、自己调 API</h4>
+<ol>
+<li>先拿到一个 token：从 app 设置里复制匿名 token，或走上面的 6+4 配对，或用 Apple 登录换取 session。</li>
+<li>每个请求都带上 <code>Authorization: Bearer &lt;你的 token&gt;</code>（Files API 也接受 <code>?token=</code> 查询参数）。</li>
+<li>按需要调对应接口：列文章、读全文、上传录音触发挖矿、查算力余额、分享、发公众号、逛社区等。</li>
+<li>完整接口清单、请求示例、返回字段，看官方开发者文档页（下面「细节」里有链接）。</li>
+</ol></div>
+      <h3 class="blk-h">细节与规则</h3>
+      <div class="blk rules"><h4>三个后端服务（Base URL）</h4>
+<ul>
+<li><strong>Files API</strong> — <code>https://jianshuo.dev/files/api/</code>：账户、录音 / 文章文件、照片、分享、公众号、社区、Apple 登录。绝大多数调用都在这里。</li>
+<li><strong>Agent Worker</strong> — <code>https://jianshuo.dev/agent/</code>：触发挖矿、实时状态推送、语音改稿、算力余额、6+4 设备配对。</li>
+<li><strong>Reco Worker</strong> — <code>https://jianshuo.dev/reco/</code>：社区 feed 排序与互动上报，可随时拔掉，挂了不影响主流程。</li>
+</ul>
+<h4>三种凭证</h4>
+<ul>
+<li><strong>anon token</strong>：<code>anon_</code> 开头、20 位以上的高熵字符串，客户端生成一次长期用。scope（数据隔离空间）是 <code>users/anon-&lt;哈希&gt;/</code>。</li>
+<li><strong>session JWT</strong>：<code>POST /files/api/auth/apple</code> 用 Apple identityToken 换取，<strong>有效期 365 天</strong>。anon 和 session 解析到同一个用户、同一份数据。</li>
+<li><strong>24 小时只读 temp token</strong>：<code>GET /files/api/token/articles</code> 签发，<code>expires_in</code> 为 86400 秒，只能 <code>list</code> / <code>download</code>，用来把文章列表只读地交给外部工具。Agent、Reco 两个服务不接受这种只读 token。</li>
+</ul>
+<h4>权限边界</h4>
+<ul>
+<li>scope 决定你能看到谁的数据，所有相对路径都会被自动拼到你的 scope 前缀下，越不出去（<code>..</code>、绝对路径一律拒绝）。</li>
+<li>多数接口任意有效 token 都能调；<strong>只有写社区（分享 / 撤下）要求 Apple 登录过的 session</strong>，否则返回 <code>403 needs_apple_signin</code>。</li>
+<li>公开、无需 token 的接口只有：公开照片 <code>photo/*</code>、公众号封面图库 <code>asset/wechat-covers/*</code>、Apple 登录换取 <code>auth/apple</code>、以及分享页 HTML。</li>
+</ul>
+<h4>接口分组（都在开发者文档里有完整清单）</h4>
+<ul>
+<li><strong>文章</strong>：列出、读全文、写（版本化，可撤销 / 重做）、删除、SRT / 无语音 / 算力不足等边车标记、标签。</li>
+<li><strong>录音</strong>：列出、上传（上传即自动触发挖矿）、下载。</li>
+<li><strong>照片</strong>：列出、上传、下载（私有 scoped，或公开 key）。</li>
+<li><strong>挖矿</strong>：<code>POST /agent/mine/trigger</code> 触发处理待处理录音（服务端每 6 小时也会自动扫一遍）。</li>
+<li><strong>算力</strong>：<code>GET /agent/usage/balance</code> 查余额、<code>GET /agent/usage/ledger</code> 查账单流水（计价 23 算力 = ¥1）。</li>
+<li><strong>社区</strong>：信息流、读一条、回复、分享 / 撤下（需 Apple 登录）、举报。</li>
+<li><strong>文风</strong>：读 / 写（版本化）、偷师语料收集、服务端蒸馏、单篇按指定文风重挖。</li>
+</ul>
+<h4>6+4 设备配对的硬性限制</h4>
+<ul>
+<li>配对码有效期 <strong>2 分钟</strong>（超时要从头再来）。</li>
+<li>4 位码最多试 <strong>5 次</strong>，输错还有剩余次数提示，用尽即作废。</li>
+<li>一个 6 位前缀最多匹配 <strong>10</strong> 个候选账户。</li>
+<li>手机上点「不是我」会立即取消这次配对。</li>
+</ul>
+<p><strong>安全须知</strong>：6+4 配对拿到的是账号的<strong>完整身份密钥</strong>，不是可单独吊销的子令牌。谁拿到本地凭证文件，谁就有该账号的全部权限，务必保管好、绝不提交或同步到任何可被别人读到的地方。</p>
+<h4>开发者文档链接</h4>
+<ul>
+<li>开发者首页：<code>/voicedrop/developer/</code></li>
+<li>HTTP API 参考（完整接口 + 请求示例）：<code>/voicedrop/developer/api.html</code></li>
+<li>Claude Code 命令行工具指南：<code>/voicedrop/developer/wjs-voicedrop.html</code></li>
+</ul></div>
+      <h3 class="blk-h">常见问题</h3>
+      <div class="blk faqs"><details class="faq"><summary>我不写代码，需要管这些 token 和 API 吗？</summary><div class="fa">完全不用。正常在手机 app 里录音、看文章、发布，登录和令牌 app 都替你处理好了。这一章只写给想在电脑上登录、或想自己写脚本调接口的高级用户。</div></details><details class="faq"><summary>匿名身份（anon token）和 Apple 登录有什么区别？会不会两份数据？</summary><div class="fa">不会。Apple 登录只是把你的 Apple ID 绑定到当前这个匿名身份上，数据还是原来那一份，不搬家。区别在于：匿名身份存在本地，换设备就找不回；绑了 Apple ID 后可以在新设备用同一个 Apple 账号找回。另外，发社区帖必须先用 Apple 登录。</div></details><details class="faq"><summary>6+4 配对时手机没弹出 4 位数字码怎么办？</summary><div class="fa">先确认手机在线、app 在前台、且已经登录了目标账号。配对从输入 6 位码到完成有 2 分钟时限，超时就要重新发起。若 6 位码输错或手机离线，电脑侧会提示没匹配到，改对了再来一次即可。</div></details><details class="faq"><summary>我把 token 复制出去调 API 安全吗？</summary><div class="fa">要当心。匿名 token 和 6+4 配对拿到的都是账号的完整身份密钥，不是能单独吊销的子令牌，拿到它就等于拿到你账号的全部权限。请务必保管好，绝不要提交进代码仓库或同步到别人能读到的地方。只想把文章只读地交给外部工具时，用 24 小时只读 temp token 更稳妥。</div></details></div>
+    </div>
+  </section>
+  </main>
+</div>
+
+<footer>
+  <div class="inner">
+    <span>VoiceDrop · 帮助中心 · by 王建硕</span>
+    <span><a href="/voicedrop/">产品首页</a> · <a href="/voicedrop/developer/">开发者文档</a> · <a href="/voicedrop/privacy/">隐私政策</a> · <a href="mailto:jianshuo@hotmail.com">联系作者</a></span>
+  </div>
+</footer>
+
+<script>
+  // scrollspy: highlight nav item of section in view
+  var links = [].slice.call(document.querySelectorAll('.nav-item'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(l){ l.classList.remove('active'); });
+        var a = map[e.target.id];
+        if(a) a.classList.add('active');
+      }
+    });
+  }, {rootMargin:'-20% 0px -70% 0px', threshold:0});
+  document.querySelectorAll('section.feature').forEach(function(s){ obs.observe(s); });
+</script>
+
+</body>
+</html>

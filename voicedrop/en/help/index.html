@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop Help Center — complete guides to recording-to-article, follow-up questions, voice editing, images, writing style, sharing, community, credits, and the developer API.">
+<meta property="og:title" content="VoiceDrop Help Center">
+<meta property="og:description" content="Speak it, it writes itself. How every VoiceDrop feature works — usage, rules, and the questions people ask most.">
+<meta property="og:url" content="https://jianshuo.dev/voicedrop/en/help/">
+<title>VoiceDrop Help Center · jianshuo.dev</title>
+<link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/help/">
+<link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/help/">
+<link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/help/">
+<style>
+  :root{
+    --ink:#1d1d1f; --sub:#6e6e73; --line:#eae4da; --bg:#ffffff; --panel:#faf7f2;
+    --accent:#c0563f; --accent-2:#d8593b; --accent-soft:#f3ddd5; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:16px;line-height:1.75}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;
+    background:#f1efec;color:#37373a;padding:.1em .42em;border-radius:6px;word-break:break-word}
+
+  /* header */
+  header.site{position:sticky;top:0;z-index:60;border-bottom:1px solid var(--line);
+    background:rgba(255,255,255,.86);backdrop-filter:saturate(140%) blur(14px)}
+  header.site .inner{max-width:1140px;margin:0 auto;padding:15px 28px;display:flex;align-items:center;gap:11px}
+  header.site .bars{display:inline-flex;align-items:flex-end;gap:2.5px;height:20px}
+  header.site .bars span{width:3px;border-radius:2px;background:var(--accent)}
+  header.site .title{font-weight:600;font-size:18px;letter-spacing:-.01em}
+  header.site .spacer{margin-left:auto;display:flex;gap:22px;align-items:center}
+  header.site .spacer a{font-size:13.5px;color:var(--sub)}
+  @media(max-width:640px){header.site .spacer a.hide-sm{display:none}}
+
+  /* hero */
+  .hero{max-width:1140px;margin:0 auto;padding:46px 28px 10px}
+  .eyebrow{font-size:12px;letter-spacing:.16em;color:#a79f93;text-transform:uppercase;font-weight:600}
+  .hero h1{font-size:36px;line-height:1.18;letter-spacing:-.02em;margin:12px 0 0}
+  .hero .lede{font-size:17px;line-height:1.75;color:var(--sub);margin:14px 0 0;max-width:38em}
+
+  /* layout */
+  .layout{max-width:1140px;margin:0 auto;padding:26px 28px 90px;display:grid;
+    grid-template-columns:212px 1fr;gap:44px;align-items:start}
+  nav.toc{position:sticky;top:78px;align-self:start}
+  nav.toc .toc-lbl{font-size:11.5px;letter-spacing:.14em;color:#a79f93;text-transform:uppercase;font-weight:600;margin:0 0 12px 12px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;color:var(--sub);
+    font-size:14.5px;font-weight:500;transition:background .12s,color .12s}
+  .nav-item:hover{background:var(--panel);color:var(--ink);text-decoration:none}
+  .nav-item.active{background:var(--accent-soft);color:var(--accent)}
+  .ni-ico{font-size:15px;width:20px;text-align:center;filter:saturate(.9)}
+
+  main.content{min-width:0}
+
+  /* feature section */
+  .feature{padding:16px 0 40px;border-top:1px solid var(--line);scroll-margin-top:76px}
+  .feature:first-child{border-top:none;padding-top:0}
+  .f-head{display:flex;gap:15px;align-items:flex-start;margin-bottom:18px}
+  .f-ico{flex:0 0 auto;width:46px;height:46px;border-radius:13px;background:var(--accent-soft);
+    display:flex;align-items:center;justify-content:center;font-size:22px;line-height:1}
+  .f-head h2{font-size:25px;letter-spacing:-.01em;margin:2px 0 0}
+  .f-tag{margin:8px 0 0;font-size:15px;line-height:1.65;color:var(--sub)}
+
+  .f-body p{margin:0 0 12px}
+  .f-body p:last-child{margin-bottom:0}
+  .blk-h{font-size:13px;letter-spacing:.1em;color:var(--accent);text-transform:uppercase;
+    font-weight:700;margin:30px 0 12px;padding-left:11px;border-left:3px solid var(--accent)}
+  .blk h4{font-size:15px;margin:20px 0 8px;color:var(--ink);font-weight:600}
+  .blk h4:first-child{margin-top:0}
+
+  .steps, .rules{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px}
+  .steps ol{margin:0;padding-left:20px}
+  .steps ol li{margin:0 0 9px;padding-left:4px}
+  .steps ol li:last-child{margin-bottom:0}
+  .steps ul{margin:6px 0 6px;padding-left:19px}
+  .rules ul{margin:0;padding-left:19px;list-style:none}
+  .rules ul li{margin:0 0 11px;padding-left:22px;position:relative}
+  .rules ul li:last-child{margin-bottom:0}
+  .rules ul li::before{content:"";position:absolute;left:4px;top:11px;width:6px;height:6px;
+    border-radius:50%;background:var(--accent);opacity:.55}
+
+  /* faq */
+  .faqs{display:flex;flex-direction:column;gap:9px}
+  details.faq{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+  details.faq summary{list-style:none;cursor:pointer;padding:14px 44px 14px 17px;font-weight:600;
+    font-size:15px;position:relative;color:var(--ink)}
+  details.faq summary::-webkit-details-marker{display:none}
+  details.faq summary::after{content:"+";position:absolute;right:17px;top:50%;transform:translateY(-50%);
+    font-size:20px;font-weight:400;color:var(--accent);transition:transform .18s}
+  details.faq[open] summary::after{content:"−"}
+  details.faq[open] summary{color:var(--accent)}
+  .fa{padding:0 17px 15px;color:var(--sub);font-size:14.5px;line-height:1.7}
+
+  footer{border-top:1px solid var(--line);margin-top:20px}
+  footer .inner{max-width:1140px;margin:0 auto;padding:26px 28px;display:flex;flex-wrap:wrap;gap:16px;
+    align-items:center;justify-content:space-between;font-size:13px;color:var(--sub)}
+  footer a{color:var(--sub)}
+
+  @media(max-width:860px){
+    .layout{grid-template-columns:1fr;gap:8px;padding-top:14px}
+    nav.toc{position:static;margin:0 -6px 18px;display:flex;flex-wrap:wrap;gap:6px}
+    nav.toc .toc-lbl{width:100%;margin-left:2px}
+    .nav-item{background:var(--panel)}
+    .hero h1{font-size:29px}
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="inner">
+    <span class="bars" aria-hidden="true"><span style="height:8px"></span><span style="height:14px"></span><span style="height:20px"></span><span style="height:12px"></span><span style="height:7px"></span></span>
+    <span class="title">VoiceDrop</span>
+    <span class="spacer">
+      <a href="/voicedrop/en/" class="hide-sm">Home</a>
+      <a href="/voicedrop/en/developer/" class="hide-sm">Developers</a>
+      <a href="/voicedrop/help/">中文</a>
+      <a href="https://testflight.apple.com/join/PbzFFRS2">Get it on iOS</a>
+    </span>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="eyebrow">Help Center</div>
+  <h1>VoiceDrop Help Center</h1>
+  <p class="lede">Speak it, it writes itself. This page covers every VoiceDrop feature — how to use it, the rules behind it, and the questions people ask most. From recording a voice memo to mining it into articles, editing, illustrating, sharing, and joining the community — all on one page.</p>
+</section>
+
+<div class="layout">
+  <nav class="toc" aria-label="Feature navigation">
+    <div class="toc-lbl">Features</div>
+    <a href="#record" class="nav-item"><span class="ni-ico">🎙</span><span>Record &amp; Mine</span></a>
+      <a href="#followup" class="nav-item"><span class="ni-ico">❓</span><span>Follow-ups</span></a>
+      <a href="#edit" class="nav-item"><span class="ni-ico">✏️</span><span>Voice Editing</span></a>
+      <a href="#image" class="nav-item"><span class="ni-ico">🖼</span><span>Images</span></a>
+      <a href="#style" class="nav-item"><span class="ni-ico">🖋</span><span>Writing Style</span></a>
+      <a href="#share" class="nav-item"><span class="ni-ico">🔗</span><span>Share &amp; Export</span></a>
+      <a href="#community" class="nav-item"><span class="ni-ico">💬</span><span>Community</span></a>
+      <a href="#credit" class="nav-item"><span class="ni-ico">⚡</span><span>Credits</span></a>
+      <a href="#dev" class="nav-item"><span class="ni-ico">🛠</span><span>Developers</span></a>
+  </nav>
+
+  <main class="content">
+
+  <section id="record" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🎙</span>
+      <div>
+        <h2>Recording &amp; Auto-Writing (Mining)</h2>
+        <p class="f-tag">Record a quick voice memo, and VoiceDrop automatically transcribes it and "mines" it into one or more publish-ready articles.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>This is the core VoiceDrop workflow: no typing, no organizing. Just say what's on your mind into your phone, and the app handles everything else — transcription, structuring, and turning it into a finished article.</p>
+<p>On the "My Recordings" home screen, a <strong>red record button</strong> floats at the bottom. Tap it to enter the full-screen recording view and start recording. When you're done, tap Stop, and the recording is automatically queued for upload. Once uploaded, the server first transcribes your speech into text (<strong>Transcribing</strong>), then has AI <strong>mine</strong> your spoken words into a fully structured article (<strong>Mining</strong>) — with a title, an opening, and an ending, reading like an article you wrote yourself.</p>
+<p>You don't have to watch any of this happen. Each recording moves through the statuses <strong>Uploading → Queued → Transcribing / Mining → Done</strong> in the list. Once done, tap it to hear the original audio, read the article, and publish with one tap. If no speech is detected in the recording, it's marked <strong>No Speech</strong>; if it's too fragmented to form a coherent piece, it shows "No article yet" — try again with a more complete thought.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><ol>
+<li>Open the app and stay on the "My Recordings" tab at the bottom.</li>
+<li><strong>Tap the red record button</strong> at the bottom. The screen switches to a full-screen recording view and recording starts immediately — "Recording" at the top, a large timer and a bouncing waveform in the middle. (Note: recording is tap-to-start, not press-and-hold. The "hold to speak" label on the red button is a different feature — holding the red button lets you give voice commands to the whole list, like "delete the second one".)</li>
+<li>To finish, <strong>tap the square Stop button</strong> in the middle. The recording view closes, you're back at the list, and the recording shows "Uploading".</li>
+<li>Want photos with your recording? Tap the light-colored camera icon on the right side of the recording view to snap a few shots. The photos upload together with the recording and get woven into the matching text by AI (taking photos doesn't interrupt recording).</li>
+<li>Then do nothing. The recording moves automatically from "Queued" through "Transcribing" and "Mining", and finally turns into a green "Done".</li>
+<li>Tap a "Done" recording to play back the original audio on top and read the mined article below. The ⋯ menu in the top right lets you "Publish to WeChat Drafts" or share.</li>
+<li>To edit the article: open the article view, <strong>hold the "Hold to Speak · Edit" talk bar</strong> at the bottom and speak your edit (like "delete the second paragraph"), then release — done.</li>
+<li>To have AI mine it again from scratch: in the list, <strong>long-press the "Done" badge</strong> on a finished recording and choose "Rewrite". It reuses the existing transcript and re-mines with the original logic (the output may differ from before).</li>
+</ol></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><ul>
+<li><strong>How to start recording</strong>: tap the red record button on the home screen; the full-screen view starts recording automatically. Tap "Stop" to finish. Actual recording is tap-based, not press-and-hold.</li>
+<li><strong>How many articles per recording</strong>: the default is "merge aggressively, fewer but richer" — one voice memo usually produces just <strong>1 article</strong>. Only when you clearly jump between unrelated topics does it split into <strong>2–3 articles</strong>, each able to stand on its own. The cap is 3.</li>
+<li><strong>Only facts you actually said</strong>: the AI has a hard rule — it only uses content from the transcript, never invents or embellishes. Length follows the content: a few sentences can become a short piece; it never pads for word count.</li>
+<li><strong>Follow-up questions</strong>: after each article is written, the AI picks out the "thinnest" spots that only you would know and asks 1–3 short follow-up questions (real numbers, real names, judgments left unexplained). The questions are stored separately and never enter the article body; you can answer by voice and let it fill things in.</li>
+<li><strong>Status badges</strong>: Uploading (red) → Queued (amber) → Transcribing / Mining (spinner) → Done (green). No detected speech shows "No Speech"; blocked recordings show "Out of Credits" or "Recording Too Long".</li>
+<li><strong>When articles get written</strong>: the server <strong>processes automatically once an hour</strong> (and also triggers on upload). Transcribing a long recording may take several passes, so just check back a bit later.</li>
+<li><strong>Offline &amp; retry</strong>: you can record without a connection. Recordings are saved to a local queue on your phone and upload automatically once you're back online. A failed upload retries automatically (up to 3 times, at 1.5s and 3s intervals); failed files stay safely on your phone and get retried later. The moment the network comes back, uploads resume automatically.</li>
+<li><strong>Recording length limit</strong>: a single recording can be up to <strong>3 hours</strong>. Beyond that it's marked "Recording Too Long" and not processed.</li>
+<li><strong>Transcript too short</strong>: if the transcript is under 20 characters, it's marked "Too Short" and no article is written.</li>
+<li><strong>Credits (cost)</strong>: new users get a one-time gift of <strong>500 credits</strong> (valid for 1 year); 23 credits = ¥1. Transcription is billed by duration (about ¥0.8/hour); mining is billed by AI usage. When your balance hits 0 (out of credits), new recordings stop being processed until you top up.</li>
+<li><strong>Appending / editing logic</strong>: each recording maps to its own article(s) — there's no "append a new recording to an old article". To change an existing article, use the hold-to-speak edit bar; to redo it entirely, use "Rewrite" to mine again.</li>
+<li><strong>Recording from a tag page</strong>: if you start a recording from inside a tag page, the mined article gets that tag by default.</li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>How many articles can one recording produce?</summary><div class="fa">The default is "merge aggressively, fewer but richer" — most recordings produce a single article that covers the topic well. Only when you clearly jump between several unrelated topics does it split into 2 or 3 articles, each with its own title, opening, and ending, publishable on its own. Three is the maximum.</div></details><details class="faq"><summary>Why does my recording still say "Queued", and how long until it's done?</summary><div class="fa">After upload, recordings wait in a server queue: first transcription (Transcribing), then AI writing (Mining). The server processes automatically once an hour, and long recordings may take several passes to transcribe — so just wait a bit and check back later. The status will change to "Done" on its own.</div></details><details class="faq"><summary>Can I record without an internet connection?</summary><div class="fa">Yes. Recordings are saved locally on your phone first and upload automatically once you're online — no manual steps. Failed uploads retry automatically, and failed files are never lost; they stay until the upload succeeds. The moment your connection comes back, the app pushes the backlog up automatically.</div></details><details class="faq"><summary>Why does my recording show "No Speech" or "No article yet"?</summary><div class="fa">"No Speech" means no spoken voice was detected (e.g. pure background noise or an accidental tap). "No article yet" means speech was heard, but it was too fragmented to form a complete thought — the AI couldn't find anything that could stand as an article. Speaking your idea through more completely and re-recording usually fixes it. Also, a very short recording (transcript under 20 characters) is marked "Too Short".</div></details></div>
+    </div>
+  </section>
+
+  <section id="followup" class="feature">
+    <div class="f-head">
+      <span class="f-ico">❓</span>
+      <div>
+        <h2>Follow-up Questions</h2>
+        <p class="f-tag">After an article is mined, the AI asks about its weakest spots — one or two details only you know. Hold to speak your answer, and the article grows richer with every reply.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>You record a quick memo, and VoiceDrop mines it into a fully structured article. But recordings often leave out key information "only you know" — a real number, a person's name, a concrete scene, or a judgment you touched on but never unpacked. Fill those in, and the article truly stands up.</p>
+<p>That's what <strong>follow-up questions</strong> are for. After each article takes shape, the AI finds its thinnest spots and asks 1 to 3 short, specific questions — like an editor pressing the author for details, not small talk. No typing needed: hold to speak your answer, and the information gets woven into the most relevant paragraphs automatically.</p>
+<p>Follow-ups are a lightweight feature that's on by default. It stays out of the way — normally tucked away, showing only as a star with a number badge next to the talk bar on the recording detail page, reminding you how many questions are unanswered. Open it when you feel like answering; it never nags. Once you've answered or skipped them all, the star disappears.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><ol>
+<li>Record as usual, wait for VoiceDrop to mine it into an article, and open the article's detail page.</li>
+<li>If the AI has questions for you, a <strong>star button lights up on the right</strong> of the "Hold to Speak · Edit" bar at the bottom. The small number badge in its corner is the count of unanswered questions.</li>
+<li><strong>Tap the star</strong>, and the follow-up card expands from the bottom, wrapping around the talk bar: above it, "Question N/M" (current / total) and the question itself; below, a segmented progress bar.</li>
+<li>To answer, <strong>hold the talk bar</strong> (its label changes to "Hold to Speak · Answer"), speak your answer, and release to send. You don't need to echo the question — just state the facts you know.</li>
+<li>After you release, the AI weaves your answer into the most relevant paragraphs. The updated paragraphs <strong>highlight in yellow for a few seconds</strong> so you can see where the article grew, then it automatically flips to the next question.</li>
+<li>Don't want to answer one? Tap "<strong>Skip</strong>" in the card's top right corner to move on.</li>
+<li>When everything is answered or skipped, the card and star tuck away automatically, back to the normal talk bar.</li>
+<li>Want more questions? Just hold and say "<strong>ask me a few more</strong>" or "anything else you want to know" — it generates new questions on the spot and the star lights up again. (Note: while the follow-up card is open, anything you speak is treated as an answer. To ask for more questions, collapse the card first.)</li>
+<li>Don't want this feature at all? Turn off the "<strong>Follow-up after writing</strong>" switch in <strong>Settings</strong> (subtitle: AI asks a detail or two to thicken the article).</li>
+</ol></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><ul>
+<li>The AI asks <strong>1 to 3</strong> questions per article, all about specific information that can't be inferred from the recording — things only the author knows (real numbers, real names, real scenes, unexplained judgments). If nothing is worth asking, it doesn't ask.</li>
+<li>Follow-up questions <strong>never enter the article body or version history</strong>. Publishing to WeChat, generating a share page, posting to the community, exporting to Xiaohongshu — every outlet is naturally free of these questions. Only you see them, inside the app.</li>
+<li>Answers travel through exactly the same channel as regular voice edits — each answer is just an ordinary edit command, with no special waiting screen. Once sent, you get the familiar queue bubble and "editing" flow.</li>
+<li>Per-question progress: <strong>green</strong> = answered, <strong>orange</strong> = current, <strong>gray</strong> = unanswered or skipped.</li>
+<li>Unanswered questions <strong>expire automatically after 7 days</strong> — they don't hang around forever.</li>
+<li>Follow-ups are <strong>per-article</strong>: each article has its own set of questions, and the star badge shows the unanswered count for the article you're viewing.</li>
+<li>The yellow highlight after an answer just shows "what changed where" — it fades in a few seconds and doesn't block anything.</li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>Why do some articles get follow-up questions and others don't?</summary><div class="fa">The AI only asks when the recording genuinely lacks key information "only you know" — and filling it in would make the article stronger. If a piece is already fairly complete with nothing worth asking, it stays quiet and the star never lights up.</div></details><details class="faq"><summary>Do I have to answer each question word by word?</summary><div class="fa">No. Just hold to speak and state the facts you know, in your own words. The AI extracts the information from your answer and weaves it into the most relevant paragraphs — it won't copy the question or touch unrelated parts.</div></details><details class="faq"><summary>Will the follow-up questions get published with my article, where others can see them?</summary><div class="fa">No. Follow-up questions live only in your own app — they never enter the article body or version history. WeChat publishing, share links, the community, Xiaohongshu — no outlet ever includes them.</div></details><details class="faq"><summary>How do I get the AI to ask me more questions?</summary><div class="fa">First collapse the follow-up card (swipe it down, or finish the current batch), then hold to speak and say something like "ask me a few more". The AI adds 1 to 3 new questions on the spot and the star lights up again. Note that while the card is open, anything you speak counts as an answer — so collapse it first.</div></details></div>
+    </div>
+  </section>
+
+  <section id="edit" class="feature">
+    <div class="f-head">
+      <span class="f-ico">✏️</span>
+      <div>
+        <h2>Editing Articles by Voice</h2>
+        <p class="f-tag">Open a mined article, hold the talk bar at the bottom, and say what to change — the AI edits accordingly: body text, title, deleting paragraphs, swapping images, all of it.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>A mined article isn't the end of the road. On any article's reading page, there's a persistent WeChat-style talk bar at the bottom — normally labeled <strong>Hold to Speak · Edit</strong>. Hold it, say what to change and how, release — and the AI understands your words and edits the article directly. No typing, no hunting for a cursor in a text box.</p>
+<p>It edits <strong>the article you're currently reading</strong>. So you can point precisely, every line of the body is numbered "Line N / Image M" at the start — say "delete line 3", "change line 5 to…", "change the title", and the AI locates targets strictly by the numbers on screen, never miscounting. While you speak, the transcript shows live at the top of the screen, with locator phrases like "Line N / Image M" highlighted so you can confirm it heard the right line or image.</p>
+<p>You can issue edits one after another. Each command joins a queue and runs in order — the one being executed shows a bouncing pencil, and the rest wait behind it. When an edit lands, the changed lines flash with a highlight and slowly fade, so you can see at a glance what changed where. Every voice edit is automatically saved as a new version, so if something goes wrong you can always undo.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><ol>
+<li>Open a mined article's reading page. A persistent talk bar sits at the bottom, labeled <strong>Hold to Speak · Edit</strong>.</li>
+<li><strong>Hold</strong> the talk bar and speak your edit, e.g. "delete line 2", "rewrite line 5 as…", "change the title to…", "add a paragraph after line 3 about…". Keep your finger down while speaking.</li>
+<li>As you speak, watch the dark bubble at the top of the screen — it shows the live transcript, with your "Line N / Image M" locators highlighted so you can confirm the target.</li>
+<li>When you're done, <strong>release</strong> to send (to abandon before releasing, <strong>swipe up to cancel</strong> as prompted). The command joins the queue and starts executing.</li>
+<li>Want several changes in a row? Don't wait — <strong>hold and speak</strong> the next one. New commands stack in the queue and run one by one. The one executing shows a bouncing pencil icon; queued ones show a little clock.</li>
+<li>When an edit finishes, the AI replies above the talk bar (on success, usually "Done"), and the changed lines flash briefly with a highlight.</li>
+<li>For more precise edits, you can <strong>long-press a paragraph</strong> — a small menu pops up with "Rewrite this paragraph", "Insert image", and more (plus a local "Copy"). Long-pressing a generated <strong>illustration</strong> lets you change that image's style. Your choice is handed to the same voice-edit queue.</li>
+<li>Not happy with an edit? Use the <strong>Undo / Redo</strong> buttons in the toolbar to step back or forward (they appear once there's more than one version).</li>
+</ol></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><ul>
+<li><strong>It always edits the article you're looking at.</strong> The "Line N / Image M" numbers in the body exist only to align you and the AI on targets — they're never written into the article itself.</li>
+<li><strong>Commands you can give</strong>: delete a line, change a line, insert a paragraph after a line, change the title; you can also have it rewrite the whole piece. For images: swap an image or generate a new one. Deleting a paragraph means deleting the corresponding line N.</li>
+<li><strong>Merging two articles or deleting a whole article</strong> — cross-article operations — don't happen on the single-article page. Do them from the "My Recordings" list by holding the red button and speaking with article numbers (e.g. "merge article two and article three"). Merging saves a new article and keeps the originals; deleting asks you to confirm first.</li>
+<li><strong>Queued, serial execution</strong>: multiple commands don't run at once — they enter one queue and execute in order. The active one is highlighted; the rest wait. The server holds this queue and is the true source of authority.</li>
+<li><strong>Versions are kept</strong>: every voice edit automatically writes a new version (source tagged as agent), with a maximum of <strong>10</strong> versions kept — the oldest gets dropped beyond that. Undo / Redo only moves the "current version" pointer without writing a new version; if you undo and then make new edits, the undone "future" versions are discarded, just like git.</li>
+<li><strong>Feedback after edits</strong>: the AI leaves one line of reply above the talk bar — a bright dot icon on success, a red warning icon on error. The reply doesn't auto-dismiss until replaced by the next one or you tap elsewhere. Changed lines glow for a few seconds and fade.</li>
+<li><strong>Nothing is lost on disconnect / backgrounding / force-quit</strong>: commands you've spoken but the server hasn't confirmed are stored locally and resume automatically on reconnect. Stable command IDs deduplicate the resume, so the same edit never applies twice. Text-only commands survive even a force-quit; in the rare case an image edit is interrupted mid-flight, you'll need to say it again (image edits don't silently resume).</li>
+<li><strong>When a command fails</strong>: the reply turns into a red warning with a hint, and that command is removed from the queue — just rephrase more clearly and say it again. If the network dropped mid-way, the command stays in the queue and is sent again after auto-reconnect; no manual resend needed.</li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>Can I undo a bad edit?</summary><div class="fa">Yes. Every voice edit is automatically saved as a new version, and the toolbar has Undo / Redo buttons (they appear once there's more than one version) — one tap steps back or forward. Up to 10 versions are kept. Note that if you undo and then make new edits, the undone newer versions are discarded, just like git.</div></details><details class="faq"><summary>Can I dictate several edits in one go?</summary><div class="fa">Yes. Just hold and keep going — each command stacks into a queue and executes in order. The one being edited shows a bouncing pencil icon; the ones waiting show a little clock. No need to wait for one edit to finish before speaking the next.</div></details><details class="faq"><summary>How do I target an exact line or image?</summary><div class="fa">Every line of the body is numbered "Line N / Image M" at the start — just say the number, like "delete line 3" or "restyle image 2". While you speak, your locator words are highlighted at the top of the screen so you can confirm the target. You can also long-press a paragraph and use the pop-up menu ("Rewrite this paragraph", etc.) for even more precision.</div></details><details class="faq"><summary>If the network drops mid-edit, or I quit the app, do I lose my changes?</summary><div class="fa">No. Commands you've spoken but that haven't finished are stored locally and resume automatically on reconnect, with command IDs deduplicating so nothing applies twice. Text edits survive even a force-quit; only the rare case of an interrupted image edit needs to be spoken again.</div></details></div>
+    </div>
+  </section>
+
+  <section id="image" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🖼</span>
+      <div>
+        <h2>Images</h2>
+        <p class="f-tag">Take photos or import from your library inside VoiceDrop — let the AI write from what it sees, or generate cover images, cartoon explainers, and illustrations in various styles for existing articles.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>VoiceDrop isn't just about voice — photos are material for the AI too. You can snap photos while recording to attach what's in front of you, or add photos to any finished article later, taken on the spot or picked from your library.</p>
+<p>If a recording contains <strong>only photos and no speech</strong>, VoiceDrop doesn't discard it as "No Speech" — it automatically switches to <strong>photo mode</strong>: the AI observes the photos and writes a minimal photo essay for you. In other words, a single photo can become a short article on its own.</p>
+<p>Photos can also flow the other way — you can have the AI <strong>draw for your article</strong>: long-press a paragraph to generate a WeChat Official Account cover image, or a <strong>cartoon explainer</strong> that helps readers grasp the article's structure at a glance. Long-press an existing illustration to redraw it in a different style — cartoon, watercolor, sketch, oil painting, film, or advertising. All drawing jobs join the same queue as voice edits; the AI processes them one by one, and the article updates automatically.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><h4>Shoot while recording (photos during a recording)</h4>
+<ol>
+<li>On the recording screen, tap the faint camera icon on the right to open the square camera.</li>
+<li>The viewfinder is square, with a rule-of-thirds grid. Tap the white shutter button to shoot; photos line up in a filmstrip at the bottom.</li>
+<li>The library icon in the bottom left picks photos from your system library (up to 9 at a time); the bottom right switches between front and rear cameras.</li>
+<li>To remove a photo, tap the ✕ in its top right corner.</li>
+<li>Tap "Done" in the top right when finished — the photos attach to the recording and upload with it.</li>
+</ol>
+<h4>Photos only, no speech — straight to an article</h4>
+<ol>
+<li>Take or pick photos as above; you don't have to say a word.</li>
+<li>When the recording ends, the AI sees photos but no speech and automatically enters photo mode, observing the photos and writing a minimal photo essay for you.</li>
+</ol>
+<h4>Insert photos into an existing article</h4>
+<ol>
+<li>Open an article and tap the "Insert photos" icon (film-strip style) in the top toolbar.</li>
+<li>The same square camera opens — shoot on the spot or pick from your library.</li>
+<li>Tap "Done"; the photos upload and the AI places each one near the paragraph it fits best.</li>
+</ol>
+<h4>Have the AI draw for your article (long-press a paragraph)</h4>
+<ol>
+<li>In edit mode, long-press any paragraph to open the action menu.</li>
+<li>Choose "Insert image" — it has two options:<ul>
+<li><strong>WeChat cover image</strong>: a 2.45:1 banner cover placed at the very top of the article, with a title distilled from the article (about 6–10 characters).</li>
+<li><strong>Cartoon explainer</strong>: a flat cartoon-style diagram inserted where it best aids understanding, making the article's structure clear at a glance.</li>
+</ul></li>
+<li>The menu also has "Rewrite this paragraph" (more concise / more casual / more formal / expand a bit) and "Copy".</li>
+</ol>
+<h4>Restyle an existing illustration (long-press the image)</h4>
+<ol>
+<li>Long-press an AI-generated illustration in the article to open the "Image style" menu.</li>
+<li>Options: cartoon, advertising, watercolor, sketch, oil painting, film.</li>
+<li>Pick one, and the AI redraws the image in that style while keeping the composition and subject intact.</li>
+</ol></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><ul>
+<li><strong>Library picker limit</strong>: up to 9 photos per pick.</li>
+<li><strong>Photo format</strong>: every photo is center-cropped to a square and scaled so the longest edge is at most 1080 pixels, saved as JPEG (under 900KB each). So illustrations in the article match exactly what you saw in the viewfinder — always 1:1.</li>
+<li><strong>Camera shots are also saved to your phone's photo library</strong>: the saved copy is the same square version as the viewfinder. Photos picked from the library are already there and aren't duplicated. (If library write permission is denied, they simply aren't saved — everything else still works.)</li>
+<li><strong>Where photos live</strong>: they upload to cloud storage under your own account, at paths like <code>photos/&lt;session-timestamp&gt;/&lt;second&gt;-&lt;random-suffix&gt;.jpg</code>. Each photo carries its own marker and is placed in the article by that marker, not by sequence number.</li>
+<li><strong>Photo-mode limits</strong>: articles generated from photos alone are minimal photo essays, and photo mode <strong>does not generate follow-up questions</strong> (there's no dictation to answer about).</li>
+<li><strong>Drawing shares one queue with voice edits</strong>: cover images, cartoon explainers, and restyle commands from the long-press menu all join the same edit queue. The AI processes them serially, showing "editing" while it works; the article updates automatically when done, with undo / redo available.</li>
+<li><strong>Cover vs. explainer conventions</strong>: WeChat cover images are fixed at a 2.45:1 banner; a cartoon explainer's aspect ratio follows the content (landscape, portrait, or square), aiming for "understood at a glance".</li>
+<li>These menu items (rewrite, insert image, image style) are configured server-side and may change between releases.</li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>I only took photos and didn't say a word — can it still produce an article?</summary><div class="fa">Yes. When VoiceDrop sees a recording with photos but no speech, it automatically switches to photo mode: the AI observes the photo content and writes a minimal photo essay for you, instead of discarding it as "No Speech".</div></details><details class="faq"><summary>How many photos can I pick from the library at once?</summary><div class="fa">Up to 9 per pick. You can also shoot or pick in several rounds — everything lines up in the filmstrip at the bottom, and tapping "Done" uploads them together.</div></details><details class="faq"><summary>Do photos taken with the in-app camera get saved to my phone's photo library?</summary><div class="fa">Yes. Camera shots are automatically saved as the same square version you saw in the viewfinder. Photos picked from the library are already there and won't be duplicated.</div></details><details class="faq"><summary>What's the difference between a "WeChat cover image" and a "cartoon explainer"?</summary><div class="fa">The WeChat cover is a 2.45:1 banner placed at the very top of the article, with a short headline distilled from the title. The cartoon explainer is a flat cartoon diagram inserted mid-article, drawing out the article's structure, contrasts, or flow so it's understood at a glance. Both live in the "Insert image" menu after long-pressing a paragraph.</div></details></div>
+    </div>
+  </section>
+
+  <section id="style" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🖋</span>
+      <div>
+        <h2>Writing Style</h2>
+        <p class="f-tag">Teach VoiceDrop how you write, so every recording gets mined into an article that reads like you wrote it.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>Your "writing style" is a <strong>style fingerprint</strong> VoiceDrop keeps for you — it records <strong>how you like to write</strong>: sentence rhythm and length, favorite words, how tight or loose your tone is, how you open and how you land — not what you write about or what you believe.</p>
+<p>It has exactly one job, but a crucial one: every time your voice or photos get "mined" into an article, VoiceDrop folds this style into the AI's instructions, so the output tastes like <strong>you</strong> — not generic AI-speak.</p>
+<p>Styles are stored <strong>versioned</strong> — every save adds a version, and you can switch or roll back anytime, or even mine the same recording with different versions to compare. There are three ways to get one: write or paste one yourself in Settings; use "Style Learning" to have the server distill one from articles you admire; or have Claude distill one from your published work. Once a style is in place, it applies to all future recordings — and <strong>older articles can be re-mined with any style version too</strong>.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><h4>1. View and hand-write your own style</h4>
+<ol>
+<li>Go to <strong>Settings</strong> and tap "Writing Style" in the first card (subtitle: "mimic this voice when writing").</li>
+<li>A full-page editor opens. If you have no style yet, it shows the hint: "No writing style yet. Paste a distilled style here, and mining will apply it to make articles sound more like you."</li>
+<li>Type or paste your style description into the box and tap "Save" in the top right. Every save adds a new version.</li>
+<li>A version bar at the top shows the current version number, style name, character count, and total versions. Tap it to expand the version dropdown and switch to any past version. Switching to an old version and saving without edits equals a rollback (no new version); editing the text and saving creates a new version.</li>
+<li>Tap "Cancel" in the top left to leave without saving.</li>
+</ol>
+<h4>2. Style Learning — distill a style from other people's articles</h4>
+<ol>
+<li>From any app (a Safari page, a text selection, a PDF/Word/RTF document), use the system <strong>Share</strong> button and choose VoiceDrop.</li>
+<li>The "Style Dataset" panel appears: the top shows "N items collected · ~X characters", with the corpus so far and what this share added below. Web pages get their body text parsed automatically (parsing → collected; on failure it shows "link only", with a "Retry" button).</li>
+<li>Tap "Keep collecting" to close the panel and share in a few more pieces.</li>
+<li>When you have enough, tap the orange "<strong>Extract Writing Style</strong>". There's a "clear dataset after extraction" checkbox at the bottom (checked by default, so next time starts fresh).</li>
+<li>VoiceDrop distills in the background and jumps to "My Recordings" in the app. When done, an introduction article titled "Your writing style · name" appears.</li>
+</ol>
+<h4>3. Re-mine an old article in a different style (restyle)</h4>
+<ol>
+<li>Open any finished article (reading page).</li>
+<li>Next to the date under the title, there's a <strong>style tag</strong> with a pencil icon (showing the current style version, e.g. "v8 style"). Tap it.</li>
+<li>The "Rewrite in a different style" panel opens: "Pick a style version and rewrite this article. The original stays; switch back anytime."</li>
+<li>Pick a style version and tap "<strong>Rewrite with vN</strong>" at the bottom. If this article has used that version before, it switches back instantly (free); otherwise it re-mines with that style and produces a new version.</li>
+<li>During the rewrite it shows "Rewriting in the new style…". The original dictation is untouched, and you can undo or switch versions anytime.</li>
+</ol></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><ul>
+<li><strong>Style captures "how you write", not "how you think"</strong>: the distiller extracts 9 dimensions — sentence rhythm, paragraph length, vocabulary, tone, argument structure, metaphors, emotional intensity, openings and endings, and "things you never do" — anchoring each with a few real quoted sentences, and names the style in 5 characters or fewer (shown as the first line of the version).</li>
+<li><strong>Style Learning has a word-count threshold</strong>: the corpus needs <strong>at least 300 characters</strong> of usable body text before extraction is allowed. Below that, the button is disabled with the hint "Not enough material yet (X characters total) — share a few articles with body text and collect 300+ characters first". Shares that carry only a title or link with no body (like book-title-only shares from reading apps) don't count.</li>
+<li><strong>Too few samples get shaky</strong>: with fewer than 3 pieces in the corpus, the distilled result is flagged "the fingerprint may be unstable" — it's easy to mistake one article's quirks for your signature.</li>
+<li><strong>Corpus limits</strong>: each sample keeps up to its first 4,000 characters, and one distillation feeds the model at most about 48,000 characters total — anything beyond is truncated in collection order.</li>
+<li><strong>Extraction runs on the mining pipeline</strong>: tapping "Extract Writing Style" actually uploads a silent placeholder recording that triggers the server-side miner — so you can watch progress in "My Recordings" like any recording, and retry on failure. More reliable than instant extraction.</li>
+<li><strong>It won't wreck anything when material is short</strong>: if the server finds the corpus under 300 characters, it <strong>does not</strong> touch your active style. Instead it gives you an explainer article — "Not enough samples, style unchanged" — listing what it received and how to add more. Your material stays in the dataset.</li>
+<li><strong>Versioning and rollback</strong>: styles are stored versioned just like articles, keeping roughly 10 versions of history; switch or roll back anytime from the version dropdown.</li>
+<li><strong>Multi-style comparison</strong>: the version dropdown has a "multi-style comparison" toggle, letting you check 2–3 versions (3 max). The idea: mining generates one article per style so you can flip between them at the top of the reading page.</li>
+<li><strong>Re-mining costs credits</strong>: restyling an old article runs a full mining pass and costs credits normally. If the article has already used that version, switching back is free — nothing is regenerated.</li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>I changed my style — will my previously mined articles change with it?</summary><div class="fa">No. A new style only applies to new recordings; old articles stay as they are. To apply a new style to an old article, open it, tap the style tag next to the date, and use "Rewrite in a different style" to re-mine it with a chosen version — the original is untouched and you can switch back anytime.</div></details><details class="faq"><summary>How much material does Style Learning need before I can extract?</summary><div class="fa">The corpus needs at least 300 characters of usable body text before "Extract Writing Style" is enabled; below that the button stays gray. The key is body text — select the article's actual text before sharing, or share a web link whose body can be parsed. Title-only or book-name-only shares (from some reading apps) can't build a real writing fingerprint.</div></details><details class="faq"><summary>Will extracting a new style overwrite my old one for good?</summary><div class="fa">No. Every extraction adds a new version; all old versions remain. Go to Settings → Writing Style, tap the version bar at the top to expand the dropdown, and you can switch or roll back to any past version.</div></details><details class="faq"><summary>A shared web page says "parse failed · link only" — what do I do?</summary><div class="fa">Some pages' body text can't be fetched. Tap "Retry" on that row; if it still fails, go back to the page, select the body text yourself, and share the text directly — it goes into the style dataset just the same.</div></details></div>
+    </div>
+  </section>
+
+  <section id="share" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🔗</span>
+      <div>
+        <h2>Share &amp; Export</h2>
+        <p class="f-tag">Turn mined articles into public links, push them to your WeChat Official Account drafts with one tap, or export all recordings and articles — audio included — to your device.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>Once VoiceDrop mines your voice memos into articles, there are several ways to get them out into the world: a <strong>public link</strong> for any single article that anyone can open, pushing an article to your own <strong>WeChat Official Account drafts</strong>, converting to <strong>Xiaohongshu (RED)</strong> copy with images, and a <strong>full export</strong> of all recordings and articles to your device.</p>
+<p>Sharing for a single article lives in the <strong>⋯ menu</strong> at the top right of the article reading page. Only recordings that have produced an article (status "Done") can be shared — a recording with no article has no body to share. Tapping "Share" first has the server issue a public page link for the article, in the form <code>https://jianshuo.dev/voicedrop/&lt;id&gt;</code>, then opens the system share sheet so you can send it to WeChat, X, or any app. In WeChat, the recipient sees a link card with the title and an image (the card image comes from the first photo in the article, falling back to the page default).</p>
+<p>To let someone hear the <strong>original audio</strong>, use <strong>Export Data</strong>: it packs all your recordings' audio, mined articles, photos, and subtitles into one archive — a set of web pages you can open right in a browser, with a "Play recording" bar under every article.</p>
+<p>If you run a WeChat Official Account, once it's configured, "Publish to WeChat Drafts" in the ⋯ menu sends the article straight into your account's draft box, where you finish layout and publish.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><h4>Create and share a public link</h4>
+<ol>
+<li>Open a recording's article reading page (it must be "Done").</li>
+<li>Tap <strong>⋯</strong> in the top right and choose "<strong>Share</strong>".</li>
+<li>Wait a moment while the app requests a link from the server, then the system share sheet appears. The link carries the article you're currently reading (with multiple articles, it's the current one).</li>
+<li>Pick WeChat / X / Copy and send the <code>jianshuo.dev/voicedrop/…</code> link out. Sending to WeChat automatically produces a link card.</li>
+</ol>
+<h4>Publish to WeChat Official Account drafts</h4>
+<ol>
+<li>First configure your account in <strong>Settings → WeChat Official Account</strong> (AppID / Secret, and add the server IP to your account's whitelist).</li>
+<li>Back in the article's <strong>⋯</strong> menu, tap "<strong>Publish to WeChat Drafts</strong>" (if the article has been published before, it shows "<strong>Update WeChat Draft</strong>").</li>
+<li>Wait for the result — on success you'll see "<strong>Saved to drafts</strong>" or "<strong>Draft updated</strong>". Then go to the WeChat backend's draft box to lay out and publish.</li>
+</ol>
+<h4>Export all recordings and articles</h4>
+<ol>
+<li>Open <strong>Settings</strong> and tap "<strong>Export Data</strong>" under "<strong>Sync &amp; Storage</strong>" (subtitle: download all recordings and articles in one package).</li>
+<li>A progress sheet appears: Preparing → Exporting data (showing X / total) → Packing.</li>
+<li>When done, it shows "<strong>Export complete</strong>" and the file size. Tap "<strong>Share / Save locally</strong>" and use the system sheet to save to the Files app, AirDrop it, or send it to someone.</li>
+</ol>
+<h4>Convert to Xiaohongshu / post to the community</h4>
+<ul>
+<li>"<strong>Share to Xiaohongshu</strong>" in the ⋯ menu auto-generates Xiaohongshu copy (put on your clipboard), saves the images to your photo library, and opens the Xiaohongshu app — pick the images and paste the copy in its composer.</li>
+<li>The "<strong>Visible in VD Community</strong>" switch posts the article to the in-app VD Community.</li>
+</ul></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><ul>
+<li><strong>What a public link looks like</strong>: <code>https://jianshuo.dev/voicedrop/&lt;id&gt;</code>, where the id is a token generated by the server signing the article. Opening the link requires neither VoiceDrop nor a login — anyone can read it.</li>
+<li><strong>Only articles can be shared</strong>: links are issued for "Done" articles. For recordings without an article yet, the ⋯ menu can only share plain text — no public link is available.</li>
+<li><strong>Multiple articles</strong>: one recording may mine into several articles. Sharing carries the article you're currently reading, and the public page opens and previews with that one.</li>
+<li><strong>WeChat link cards</strong>: what's shared to WeChat is a plain link; WeChat fetches the page and builds the card itself. The card thumbnail prefers the first photo in the article, falling back to the page default. Sharing to X and similar platforms sends "title + body + link" as one block of text.</li>
+<li><strong>What's in the export</strong>: an archive (named like <code>voicedrop-export-YYYY-MM-DD.zip</code>) of web pages rather than Markdown/plain text — an overview page <code>index.html</code> (cards listing "X recordings, X articles", each with "Read article" and "Play recording" buttons), one HTML file per article (body, an audio player bar, an expandable "raw transcript", and the article's photos), plus the original audio (<code>.m4a</code>) and subtitles (<code>.srt</code>). Open <code>index.html</code> in any browser to read and listen.</li>
+<li><strong>WeChat goes to drafts, not straight to broadcast</strong>: articles land in your account's draft box; layout and the actual send still happen in the WeChat backend. Publishing an already-published article updates the same draft in place — no duplicates.</li>
+<li><strong>WeChat needs setup first</strong>: without configuration, or with a bad one (wrong AppID/Secret, IP not whitelisted), you'll be prompted to check the "WeChat Official Account" settings.</li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>Do people opening my shared link need VoiceDrop or an account?</summary><div class="fa">No. The public link is an ordinary web page (under the jianshuo.dev/voicedrop/… domain) — anyone can open it in a browser or inside WeChat and read the article directly, no app install, no login.</div></details><details class="faq"><summary>Does the export come as Markdown or plain text?</summary><div class="fa">Neither. The export is an archive of web pages (HTML) you can open directly in a browser, plus the original audio files (.m4a) and subtitles (.srt). Open the included index.html to browse every article and tap "Play recording" to hear the original audio.</div></details><details class="faq"><summary>How do I send my original recordings to someone?</summary><div class="fa">Use Settings → Export Data. It packs all your recordings' audio along with the articles; in the exported pages, every article has an audio player bar underneath. Send the package to them, and they can listen in any browser.</div></details><details class="faq"><summary>If I tap "Publish to WeChat Drafts", does the article get broadcast immediately?</summary><div class="fa">No. It only pushes the article into your account's draft box — success shows "Saved to drafts". The actual layout and broadcast still happen in the WeChat backend, done by you. Prerequisite: configure your account in Settings and add the server IP to the whitelist.</div></details></div>
+    </div>
+  </section>
+
+  <section id="community" class="feature">
+    <div class="f-head">
+      <span class="f-ico">💬</span>
+      <div>
+        <h2>VD Community (Share, Browse, Respond, Tip &amp; Report)</h2>
+        <p class="f-tag">Share your AI-mined articles with fellow creators — read each other's work, record responses, toss coins in encouragement, and withdraw or report content anytime.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>Beyond your own WeChat Official Account, articles mined in VoiceDrop can be shared to the <strong>VD Community</strong> — a public space of creators who also love turning speech into writing. Share a finished article, and others can read it, like it, toss coins, or even record a response article; you can read theirs and encourage them back.</p>
+<p>The community is right at the top of the main screen: two tabs, "<strong>My Recordings</strong>" and "<strong>VD Community</strong>" — tap the latter to browse what everyone has shared. The list is sorted newest-first by share time (with some ranking based on your interests); pull down to refresh.</p>
+<p>Every shared article gets a public link (like <code>/voicedrop/&lt;share-id&gt;</code>) you can forward to WeChat, X, and elsewhere — recipients read it right in the browser, no app install needed.</p>
+<p>The community follows a set of <strong>Community Guidelines</strong> with zero tolerance for objectionable content: sexual content, violence, hate, harassment, illegal content, self-harm. You can report inappropriate content or block users you don't want to see at any time; reported content is taken down immediately and goes to human review.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><h4>Share an article to the community</h4>
+<ol>
+<li>Open a recording that has produced an article and go to its detail page (only recordings with a mined article can be shared).</li>
+<li>Tap the <strong>⋯</strong> menu in the top right and turn on the "<strong>Visible in VD Community</strong>" switch.</li>
+<li>If it's your first time posting, the "<strong>Community Guidelines</strong>" appear first — read them and tap "<strong>Agree &amp; Publish</strong>".</li>
+<li>First-time sharing also requires <strong>Sign in with Apple</strong> (community posts need a real, accountable identity; the app prompts the login automatically).</li>
+<li>On success you'll see "<strong>Now visible in VD Community</strong>". If the article trips the sensitive-word filter, the share is rejected.</li>
+</ol>
+<h4>Browse and read</h4>
+<ol>
+<li>Switch to the "<strong>VD Community</strong>" tab at the top of the main screen to see all shared cards; pull down to refresh.</li>
+<li>Tap any card to open the article. Shares with multiple articles show switchable title chips at the top.</li>
+</ol>
+<p><strong>Interacting on someone's article</strong> (detail page top bar and ⋯ menu)</p>
+<ol>
+<li>Tap <strong>❤️ (heart)</strong> to like the article.</li>
+<li>Tap <strong>⚡ (lightning circle)</strong> to "toss a coin" in encouragement.</li>
+<li>Tap <strong>⋯</strong> → "<strong>Write a response</strong>" and just record a voice memo; when you stop, the AI mines it into an article, published automatically as a "response" attached under the original.</li>
+<li>Tap <strong>⋯</strong> → "<strong>Share</strong>" to forward the article to WeChat, X, and more (a public link card is generated).</li>
+</ol>
+<p><strong>Withdraw a shared article</strong> (two ways, either works)</p>
+<ol>
+<li>Return to that recording's detail page, tap <strong>⋯</strong>, and turn off "<strong>Visible in VD Community</strong>" — you'll see "<strong>Hidden from VD Community</strong>".</li>
+<li>Or find your own post in the "VD Community" list, choose "<strong>Remove from community</strong>", and confirm "<strong>Remove</strong>".</li>
+<li>Both only take it off the community — your original article is untouched, and you can share it again anytime.</li>
+</ol>
+<h4>Report / block</h4>
+<ol>
+<li>On an article's detail page, tap <strong>⋯</strong> → "<strong>Report</strong>" → "<strong>Report &amp; take down</strong>" — the article is immediately removed from the community pending review.</li>
+<li>Tap <strong>⋯</strong> → "<strong>Block this user</strong>" to stop seeing their community content; unblock anytime in "<strong>Settings → Blocked Users</strong>".</li>
+</ol></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><ul>
+<li><strong>What can be shared</strong>: only recordings that have produced an article. What goes public is the finished article and the scene photos in its body — the original audio recording is never made public.</li>
+<li><strong>Community Guidelines (must agree once before your first post)</strong>: you are responsible for what you publish and must have the right to publish it; sexual or explicit content, graphic violence, hate or discrimination, harassment or bullying, illegal content, and self-harm are strictly forbidden — zero tolerance.</li>
+<li><strong>Posting requires Sign in with Apple</strong>: sharing, withdrawing, coin-tossing — all "write" actions require an accountable Apple identity. If you're anonymous, the app guides you through login and then retries automatically.</li>
+<li><strong>How coin-tossing works</strong>: one toss gives the author <strong>2 coins</strong> and you <strong>0.5 coins</strong>, instantly converted to credits at the current coin rate. One toss per article per person; you can't tip your own article; tossing again shows "already tossed on this one".</li>
+<li><strong>Daily tipping cap</strong>: when the day's credit pool is exhausted, you'll see "today's credit pool is used up — come back tomorrow".</li>
+<li><strong>Responses</strong>: writing a response is just recording another memo that gets mined into an article, automatically linked to the original. The original shows "N responses" underneath, each openable.</li>
+<li><strong>What reporting does</strong>: reported content is removed from the community immediately (you won't see it again either) and handled by human review <strong>within 24 hours</strong>. Repeat or serious offenders get removed.</li>
+<li><strong>Blocking is local</strong>: blocking takes effect only on your own device (filtering by author nickname), the other person isn't notified, and you can undo it anytime in "Settings → Blocked Users".</li>
+<li><strong>Contact &amp; complaints</strong>: to reach us about content, email jianshuo@hotmail.com.</li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>Why does sharing to the community require Sign in with Apple?</summary><div class="fa">The community is a public space, and posting needs a real, accountable identity — so sharing, withdrawing, and coin-tossing all require Apple sign-in. The first time you try, the app automatically shows "Sign in with Apple" and retries your action after you log in.</div></details><details class="faq"><summary>If I withdraw from the community, is my original article deleted?</summary><div class="fa">No. Withdrawing only takes the piece off the community — others can no longer see it there, but the original article in your app is completely unaffected, and you can share it again anytime.</div></details><details class="faq"><summary>What is "coin-tossing"? What do coins do?</summary><div class="fa">Tossing a coin is a way to encourage an article you like. One toss gives the author 2 coins and you 0.5 coins, instantly converted to credits at the current coin rate. You can toss only once per article, and not on your own articles.</div></details><details class="faq"><summary>What do I do about inappropriate content?</summary><div class="fa">On the article's detail page, tap ⋯ in the top right, choose "Report", then "Report &amp; take down" — the piece is removed from the community immediately and reviewed by a human within 24 hours. If you simply don't want to see someone anymore, choose "Block this user"; you can undo it later in "Settings → Blocked Users".</div></details></div>
+    </div>
+  </section>
+
+  <section id="credit" class="feature">
+    <div class="f-head">
+      <span class="f-ico">⚡</span>
+      <div>
+        <h2>Credits</h2>
+        <p class="f-tag">Credits are VoiceDrop's billing currency — transcription, article mining, voice edits, and image generation all settle in credits.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p><strong>Credits</strong> are VoiceDrop's unified billing unit. Everything AI-powered you do in the app — transcribing recordings, "mining" dictation into articles, editing articles by voice over and over, generating cartoon explainers — deducts from your credit balance by actual usage.</p>
+<p>New users don't need to pay first. Signing up grants a one-time gift of <strong>500 credits</strong>, valid for <strong>365 days (one year)</strong> — plenty for everyday dictation and mining for a long while. You can keep earning credits through <strong>promotional gifts</strong> and <strong>community coin-tossing</strong>.</p>
+<p>Your balance and every transaction are recorded on the <strong>Settings → Credits</strong> page, fully transparent: the big number on top is your remaining credits and roughly how many articles they can mine, with "Credit sources" and "History" sections below — the whole story at a glance. When your balance runs dry, credit-consuming actions are temporarily blocked with a prompt; everything already produced is unaffected.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><ol>
+<li>Open <strong>Settings</strong> and tap "<strong>Credits</strong>".</li>
+<li>The dark card on top shows your <strong>remaining credits</strong>, with an "<strong>≈ N articles</strong>" estimate next to it (at roughly 9 credits per article), and a line below reading "total granted X · used Y".</li>
+<li>Below that, "<strong>Credit sources</strong>" groups everything you've received by source — like "sign-up gift", "promotional gift", "monthly allowance".</li>
+<li>Further down, "<strong>History</strong>" is the transaction ledger, newest first. Green "+" entries are income (sign-up gift, coins received); "−" entries are spending (mining, transcription, voice edits, image edits), each timestamped.</li>
+<li>In normal use, no action is needed — recordings upload, the system transcribes, mines, and bills automatically. You just talk.</li>
+</ol></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><ul>
+<li><strong>New-user gift</strong>: <strong>500 credits</strong> on sign-up, valid for <strong>365 days</strong>.</li>
+<li><strong>Article mining</strong>: billed by the AI tokens actually consumed — roughly <strong>9 credits per article</strong> (the app's "articles remaining" estimate uses 9 credits/article).</li>
+<li><strong>Transcription</strong>: billed by recording length at <strong>¥0.8/hour</strong> (about 18 credits/hour).</li>
+<li><strong>Voice edits</strong>: billed by actual usage per edit; <strong>each article allows up to 100 edits</strong>, after which you'll see "this article has reached its edit limit (100)".</li>
+<li><strong>Image edits / cartoon explainers</strong>: a flat <strong>1.8 credits</strong> per image. When short, you'll see "not enough credits — one image costs 1.8 credits, please top up".</li>
+<li><strong>Style distillation and Xiaohongshu copy</strong>: also deducted by actual AI usage.</li>
+<li><strong>Recordings cap at 3 hours</strong> — longer ones aren't processed (marked too long).</li>
+<li><strong>Community coin rewards</strong>: when you share an article to the community and someone tosses a coin, <strong>both sides receive credits</strong> (the author gets 2 coins per toss, the tosser 0.5, converted to credits at the current coin rate). These reward credits <strong>expire in 90 days</strong>. The daily pool is <strong>2,000 credits</strong>, and a single coin converts to at most <strong>200 credits</strong>. Repeated tosses from the same person to the same author taper off (2nd toss at 70%, 3rd and later at 50%) to prevent farming.</li>
+<li><strong>Referral rewards</strong>: none at the moment. The ways to earn credits are the sign-up gift, promotional gifts, and community coins.</li>
+<li><strong>Monthly subscription</strong>: the card shows <strong>¥19.9/month</strong>, <strong>200 credits per month</strong>, <strong>reset at month end</strong>, cancel anytime — but it's marked "<strong>coming soon</strong>" and not yet available; tapping it says it's still in development.</li>
+<li><strong>When credits run out</strong>: transcription/mining of new recordings is paused and flagged (they can be processed once you have credits again), and voice edits show "not enough credits to keep editing". Finished articles and history are never lost.</li>
+<li><strong>Pricing basis</strong>: internally, <strong>23 credits = ¥1</strong>.</li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>How many credits do new users get, and how long do they last?</summary><div class="fa">Sign-up grants 500 credits, valid for one year (365 days). An article costs about 9 credits, plus transcription at ¥0.8/hour — everyday dictation and mining will last you a long time.</div></details><details class="faq"><summary>How much does mining an article or generating an image cost?</summary><div class="fa">Mining an article is billed by actual AI usage — roughly 9 credits. Generating a cartoon explainer or editing an image is a flat 1.8 credits. Transcription is billed separately by recording length (¥0.8/hour).</div></details><details class="faq"><summary>Besides topping up, how can I get credits for free?</summary><div class="fa">Two ways: promotional gifts (handed out from time to time), and sharing articles to the community — when someone tosses a coin, both you and the tosser receive credit rewards (valid for 90 days). The monthly subscription is still in development and not yet available.</div></details><details class="faq"><summary>What happens when I run out of credits? Do I lose my articles?</summary><div class="fa">Nothing is lost. When your balance runs dry, transcription and mining of new recordings are paused and flagged (they resume once you have credits), and voice edits show "not enough credits". All finished articles and your full history remain intact.</div></details></div>
+    </div>
+  </section>
+
+  <section id="dev" class="feature">
+    <div class="f-head">
+      <span class="f-ico">🛠</span>
+      <div>
+        <h2>Developer API &amp; Account Sign-in</h2>
+        <p class="f-tag">VoiceDrop's account system (anonymous tokens / Sign in with Apple / 6+4 device pairing) and the open HTTP API for power users.</p>
+      </div>
+    </div>
+    <div class="f-body">
+      <div class="blk"><p>VoiceDrop's backend is a set of open APIs running on Cloudflare — your recordings, articles, photos, and writing style are all readable and writable with a single credential. <strong>If you just use the app normally to record and read articles, you can skip this whole section</strong>: login, tokens, and credits are all handled for you.</p>
+<p>This section is for two kinds of people:</p>
+<ul>
+<li><strong>People who want to sign in on a computer, or approve a computer login from their phone</strong> — understand how VoiceDrop accounts work (anonymous identity, Sign in with Apple, 6+4 phone device pairing).</li>
+<li><strong>Power users who want to write their own scripts / clients against the API</strong> — VoiceDrop exposes articles, recordings, photos, mining, credits, community, and writing style all as HTTP endpoints; one token goes everywhere.</li>
+</ul>
+<p>The data flow in one sentence: you upload an <code>.m4a</code> recording, the server mines it automatically (transcription first, then AI writing) into articles, and the client reads those articles back to share, publish to WeChat, or post to the community. Every step has a corresponding endpoint.</p></div>
+      <h3 class="blk-h">How to use it</h3>
+      <div class="blk steps"><h4>1. How accounts work</h4>
+<p>VoiceDrop doesn't force registration. Its account system has three layers, all pointing to the same copy of your data:</p>
+<ol>
+<li><strong>Anonymous identity (anon token)</strong>: the first time you use the app, it locally generates a high-entropy token starting with <code>anon_</code> — that's your identity. Your data lives in an isolated space that belongs only to you; nobody else can cross into it. You can copy this token from the app's <strong>Settings</strong> and use it to call the API elsewhere.</li>
+<li><strong>Sign in with Apple</strong>: signing in with Apple in the app simply <strong>binds</strong> your Apple ID to your current anonymous identity — your data doesn't move; it's still the same copy. Once bound, you can recover the account on a new device with the same Apple ID. Posting to the community requires Apple sign-in first.</li>
+<li><strong>6+4 phone device pairing</strong>: for signing in to your VoiceDrop account on a computer. Instead of hand-copying the long token, approve it from your phone (see below).</li>
+</ol>
+<h4>2. Approve a computer login from your phone (6+4 device pairing)</h4>
+<p>This is for when you want to log in on a computer (say, with a command-line tool) without hand-copying the token. The computer plays the "new device", the phone plays the "old device" — pair once, and the identity lands safely on the computer:</p>
+<ol>
+<li>Open the phone app's <strong>Settings → Account</strong>, which shows a <strong>6-digit hexadecimal short ID</strong>.</li>
+<li>Start pairing on the computer and enter that 6-digit code.</li>
+<li>The phone immediately shows a <strong>4-digit numeric code</strong> (with an "It's me / Not me" confirmation).</li>
+<li>Type the 4-digit code back on the computer — pairing complete, and the identity is now stored locally on the computer.</li>
+</ol>
+<p>Prerequisites: the phone is online, the app is in the foreground, and it's signed in to the target account.</p>
+<h4>3. Calling the API yourself</h4>
+<ol>
+<li>First get a token: copy the anon token from the app's Settings, run the 6+4 pairing above, or exchange an Apple sign-in for a session.</li>
+<li>Send <code>Authorization: Bearer &lt;your token&gt;</code> on every request (the Files API also accepts a <code>?token=</code> query parameter).</li>
+<li>Call the endpoints you need: list articles, read full text, upload recordings to trigger mining, check your credit balance, share, publish to WeChat, browse the community, and more.</li>
+<li>For the complete endpoint list, request examples, and response fields, see the official developer docs (linked under "Details" below).</li>
+</ol></div>
+      <h3 class="blk-h">Details &amp; rules</h3>
+      <div class="blk rules"><h4>Three backend services (Base URLs)</h4>
+<ul>
+<li><strong>Files API</strong> — <code>https://jianshuo.dev/files/api/</code>: accounts, recording / article files, photos, sharing, WeChat, community, Apple sign-in. The vast majority of calls go here.</li>
+<li><strong>Agent Worker</strong> — <code>https://jianshuo.dev/agent/</code>: triggering mining, live status push, voice editing, credit balance, 6+4 device pairing.</li>
+<li><strong>Reco Worker</strong> — <code>https://jianshuo.dev/reco/</code>: community feed ranking and interaction reporting. Can be unplugged anytime; if it's down, the main flow is unaffected.</li>
+</ul>
+<h4>Three kinds of credentials</h4>
+<ul>
+<li><strong>anon token</strong>: a high-entropy string of 20+ characters starting with <code>anon_</code>, generated once by the client and used long-term. Its scope (isolated data space) is <code>users/anon-&lt;hash&gt;/</code>.</li>
+<li><strong>session JWT</strong>: obtained via <code>POST /files/api/auth/apple</code> with an Apple identityToken, <strong>valid for 365 days</strong>. anon and session resolve to the same user and the same data.</li>
+<li><strong>24-hour read-only temp token</strong>: issued by <code>GET /files/api/token/articles</code>, with <code>expires_in</code> of 86400 seconds. It can only <code>list</code> / <code>download</code> — for handing your article list read-only to external tools. The Agent and Reco services do not accept this read-only token.</li>
+</ul>
+<h4>Permission boundaries</h4>
+<ul>
+<li>Your scope decides whose data you can see. All relative paths are automatically prefixed with your scope — there's no crossing out (<code>..</code> and absolute paths are rejected outright).</li>
+<li>Most endpoints accept any valid token; <strong>only community writes (share / withdraw) require an Apple-signed session</strong>, otherwise you get <code>403 needs_apple_signin</code>.</li>
+<li>The only public, token-free endpoints are: public photos <code>photo/*</code>, the WeChat cover gallery <code>asset/wechat-covers/*</code>, the Apple sign-in exchange <code>auth/apple</code>, and share-page HTML.</li>
+</ul>
+<h4>Endpoint groups (full list in the developer docs)</h4>
+<ul>
+<li><strong>Articles</strong>: list, read full text, write (versioned, with undo / redo), delete, sidecar flags (SRT / no-speech / out-of-credits), tags.</li>
+<li><strong>Recordings</strong>: list, upload (upload auto-triggers mining), download.</li>
+<li><strong>Photos</strong>: list, upload, download (private scoped, or public key).</li>
+<li><strong>Mining</strong>: <code>POST /agent/mine/trigger</code> processes pending recordings (the server also auto-sweeps every 6 hours).</li>
+<li><strong>Credits</strong>: <code>GET /agent/usage/balance</code> for the balance, <code>GET /agent/usage/ledger</code> for the transaction ledger (priced at 23 credits = ¥1).</li>
+<li><strong>Community</strong>: feed, read one, reply, share / withdraw (requires Apple sign-in), report.</li>
+<li><strong>Writing style</strong>: read / write (versioned), style-learning corpus collection, server-side distillation, re-mining a single article with a chosen style.</li>
+</ul>
+<h4>Hard limits on 6+4 device pairing</h4>
+<ul>
+<li>The pairing code is valid for <strong>2 minutes</strong> (start over after a timeout).</li>
+<li>The 4-digit code allows at most <strong>5 attempts</strong>, with a remaining-attempts hint on each miss; exhausting them voids the pairing.</li>
+<li>A 6-digit prefix matches at most <strong>10</strong> candidate accounts.</li>
+<li>Tapping "Not me" on the phone cancels the pairing immediately.</li>
+</ul>
+<p><strong>Security note</strong>: what 6+4 pairing hands over is the account's <strong>full identity key</strong>, not a separately revocable sub-token. Whoever holds the local credential file holds full control of the account — guard it carefully, and never commit or sync it anywhere others can read.</p>
+<h4>Developer documentation links</h4>
+<ul>
+<li>Developer home: <code>/voicedrop/en/developer/</code></li>
+<li>HTTP API reference (complete endpoints + request examples): <code>/voicedrop/en/developer/api.html</code></li>
+<li>Claude Code command-line tool guide: <code>/voicedrop/en/developer/wjs-voicedrop.html</code></li>
+</ul></div>
+      <h3 class="blk-h">FAQ</h3>
+      <div class="blk faqs"><details class="faq"><summary>I don't write code — do I need to care about these tokens and APIs?</summary><div class="fa">Not at all. If you record, read, and publish normally in the phone app, login and tokens are handled entirely for you. This section exists only for power users who want to sign in on a computer or write their own scripts against the API.</div></details><details class="faq"><summary>What's the difference between the anonymous identity (anon token) and Sign in with Apple? Will I end up with two copies of my data?</summary><div class="fa">No. Signing in with Apple simply binds your Apple ID to your current anonymous identity — your data stays as the same single copy, nothing moves. The difference: an anonymous identity lives only on the device and can't be recovered if you switch phones; once bound to an Apple ID, you can recover it on a new device with the same Apple account. Also, posting to the community requires Apple sign-in.</div></details><details class="faq"><summary>The 4-digit code never appeared on my phone during 6+4 pairing — what now?</summary><div class="fa">First check that the phone is online, the app is in the foreground, and it's signed in to the target account. Pairing has a 2-minute window from entering the 6-digit code to completion — after a timeout, start over. If the 6-digit code was mistyped or the phone was offline, the computer side reports no match; fix it and try again.</div></details><details class="faq"><summary>Is it safe to copy my token out to call the API?</summary><div class="fa">Be careful. Both the anon token and what 6+4 pairing hands over are the account's full identity key — not a separately revocable sub-token. Whoever holds it holds full control of your account. Guard it well, and never commit it to a code repository or sync it anywhere others can read. If you only want to hand your articles read-only to an external tool, the 24-hour read-only temp token is the safer choice.</div></details></div>
+    </div>
+  </section>
+  </main>
+</div>
+
+<footer>
+  <div class="inner">
+    <span>VoiceDrop · Help Center · by Jian Shuo Wang</span>
+    <span><a href="/voicedrop/en/">Home</a> · <a href="/voicedrop/en/developer/">Developer Docs</a> · <a href="/voicedrop/en/privacy/">Privacy Policy</a> · <a href="mailto:jianshuo@hotmail.com">Contact</a></span>
+  </div>
+</footer>
+
+<script>
+  // scrollspy: highlight nav item of section in view
+  var links = [].slice.call(document.querySelectorAll('.nav-item'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(l){ l.classList.remove('active'); });
+        var a = map[e.target.id];
+        if(a) a.classList.add('active');
+      }
+    });
+  }, {rootMargin:'-20% 0px -70% 0px', threshold:0});
+  document.querySelectorAll('section.feature').forEach(function(s){ obs.observe(s); });
+</script>
+
+</body>
+</html>

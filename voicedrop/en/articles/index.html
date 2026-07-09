@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
+<title>My Articles · VoiceDrop</title>
 <link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/articles/">
 <link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/articles/">
 <link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/articles/">
-<title>我的文章 · VoiceDrop</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -48,15 +48,15 @@
 <div class="wrap">
 
   <header>
-    <a class="brand" href="/voicedrop/"><span class="blob"></span>VoiceDrop</a>
+    <a class="brand" href="/voicedrop/en/"><span class="blob"></span>VoiceDrop</a>
     <span class="exp" id="expLabel"></span>
-    <a href="/voicedrop/en/articles/" onclick="this.href='/voicedrop/en/articles/'+location.search" style="font-size:.78rem;font-weight:700;color:var(--soft);background:var(--card);padding:5px 12px;border-radius:999px;border:1px solid var(--line);text-decoration:none">EN</a>
+    <a href="/voicedrop/articles/" onclick="this.href='/voicedrop/articles/'+location.search" style="font-size:.78rem;font-weight:700;color:var(--soft);background:var(--card);padding:5px 12px;border-radius:999px;border:1px solid var(--line);text-decoration:none">中文</a>
   </header>
 
-  <h1>我的文章</h1>
-  <p class="sub">全部口述成文的录音，按时间倒序排列。</p>
+  <h1>My Articles</h1>
+  <p class="sub">All your voice memos turned into articles, newest first.</p>
 
-  <div id="main"><div class="state"><span class="spin"></span>读取中…</div></div>
+  <div id="main"><div class="state"><span class="spin"></span>Loading…</div></div>
 
 </div>
 
@@ -67,7 +67,7 @@ const params = new URLSearchParams(location.search);
 const TOKEN = params.get('t') || '';
 
 if (!TOKEN) {
-  document.getElementById('main').innerHTML = '<div class="state err">链接无效 —— 请在 VoiceDrop App 的「设置→我的文章」重新生成。</div>';
+  document.getElementById('main').innerHTML = '<div class="state err">Invalid link — please generate a new one in the VoiceDrop app under Settings → My Articles.</div>';
 } else {
   init();
 }
@@ -85,10 +85,10 @@ function showExpiry() {
   const exp = jwtExp(TOKEN);
   if (!exp) return;
   const diff = exp * 1000 - Date.now();
-  if (diff <= 0) { document.getElementById('expLabel').textContent = '链接已过期'; return; }
+  if (diff <= 0) { document.getElementById('expLabel').textContent = 'Link expired'; return; }
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  document.getElementById('expLabel').textContent = h > 0 ? `${h} 小时后过期` : `${m} 分钟后过期`;
+  document.getElementById('expLabel').textContent = h > 0 ? `Expires in ${h} h` : `Expires in ${m} min`;
 }
 
 async function init() {
@@ -97,13 +97,13 @@ async function init() {
   try {
     const r = await fetch(`${API}/list`, { headers: { Authorization: `Bearer ${TOKEN}` } });
     if (r.status === 401 || r.status === 403) {
-      document.getElementById('main').innerHTML = '<div class="state err">链接已过期，请在 App 里重新生成。</div>';
+      document.getElementById('main').innerHTML = '<div class="state err">This link has expired — please generate a new one in the app.</div>';
       return;
     }
     if (!r.ok) throw new Error('list failed: ' + r.status);
     files = (await r.json()).files || [];
   } catch (e) {
-    document.getElementById('main').innerHTML = `<div class="state err">读取失败：${e.message}</div>`;
+    document.getElementById('main').innerHTML = `<div class="state err">Failed to load: ${e.message}</div>`;
     return;
   }
 
@@ -113,7 +113,7 @@ async function init() {
     .sort((a, b) => b.uploaded < a.uploaded ? -1 : 1);
 
   if (!articles.length) {
-    document.getElementById('main').innerHTML = '<div class="state">还没有成文的文章 —— 录几段音等待处理就好了。</div>';
+    document.getElementById('main').innerHTML = '<div class="state">No articles yet — record a few voice memos and they will show up here once processed.</div>';
     return;
   }
 
@@ -154,7 +154,7 @@ function renderArticle(a) {
     wrap.classList.toggle('open');
     if (!wrap.classList.contains('open') || loaded) return;
     loaded = true;
-    body.innerHTML = '<div class="art-loading"><span class="spin"></span>加载中…</div>';
+    body.innerHTML = '<div class="art-loading"><span class="spin"></span>Loading…</div>';
     try {
       const r = await fetch(`${API}/download/${encodeURIComponent(a.name)}`, {
         headers: { Authorization: `Bearer ${TOKEN}` }
@@ -162,17 +162,17 @@ function renderArticle(a) {
       if (!r.ok) throw new Error(r.status);
       const doc = await r.json();
       const arts = resolveArticles(doc);
-      if (!arts.length) { body.innerHTML = '<div class="art-loading">没有挖出文章内容。</div>'; return; }
+      if (!arts.length) { body.innerHTML = '<div class="art-loading">No article content was mined from this recording.</div>'; return; }
       const main = arts[0];
       // Update header title
       const titleEl = head.querySelector('[data-title]');
       if (titleEl && main.title) { titleEl.textContent = main.title; titleEl.classList.remove('placeholder'); }
-      let h = `<div class="art-full-title">${esc(main.title || '无题')}</div>
+      let h = `<div class="art-full-title">${esc(main.title || 'Untitled')}</div>
                <div class="art-text">${esc((main.body || '').trim())}</div>`;
       if (p.loc) h += `<div class="loc">${esc(p.loc)}</div>`;
       body.innerHTML = h;
     } catch (e) {
-      body.innerHTML = `<div class="art-loading err">读取失败：${e.message}</div>`;
+      body.innerHTML = `<div class="art-loading err">Failed to load: ${e.message}</div>`;
     }
   });
 

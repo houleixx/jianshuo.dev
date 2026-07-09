@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="在 Claude Code、Codex 里用 VoiceDrop —— /wjs-voicedrop、/wjs-distilling-style 等 skill 完整指南。">
-<title>VoiceDrop for Agents — Claude Code / Codex 使用指南</title>
-<meta property="og:title" content="VoiceDrop for Agents — Claude Code / Codex 使用指南">
-<meta property="og:description" content="你的口述 → 结构化文章，一条 slash 命令就能被 Claude Code / Codex 直接读写。">
+<meta name="description" content="Use VoiceDrop from Claude Code and Codex — the complete guide to /wjs-voicedrop, /wjs-distilling-style, and the underlying API.">
+<title>VoiceDrop for Agents — Claude Code / Codex Guide</title>
+<meta property="og:title" content="VoiceDrop for Agents — Claude Code / Codex Guide">
+<meta property="og:description" content="Your voice memos become structured articles — readable and writable from Claude Code / Codex with a single slash command.">
 <meta property="og:image" content="https://jianshuo.dev/voicedrop/og.png">
 <link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/agent/">
 <link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/agent/">
@@ -65,139 +65,139 @@
 <div class="wrap">
 
   <header>
-    <a class="brand" href="/voicedrop/"><span class="blob"></span>VoiceDrop</a>
-    <nav><a href="/voicedrop/en/agent/">EN</a><a href="/voicedrop/">← 首页 Home</a></nav>
+    <a class="brand" href="/voicedrop/en/"><span class="blob"></span>VoiceDrop</a>
+    <nav><a href="/voicedrop/agent/">中文</a><a href="/voicedrop/en/">← Home</a></nav>
   </header>
 
   <div class="hero">
-    <span class="pill">Agent 使用指南</span>
-    <h1>在 Claude Code / Codex<br>里用 VoiceDrop</h1>
-    <p>你的每一段录音，都已经是 agent 可以读写的结构化数据。<br>
-    以下是全部可用的 slash 命令和 skill。</p>
+    <span class="pill">Agent Guide</span>
+    <h1>Use VoiceDrop from<br>Claude Code / Codex</h1>
+    <p>Every recording you make is already structured data an agent can read and write.<br>
+    Here are all the slash commands and skills available.</p>
   </div>
 
   <!-- Setup -->
-  <div class="section-label">第零步：拿到访问令牌</div>
+  <div class="section-label">Step 0: Get your access token</div>
   <div class="card">
     <div class="step">
       <div class="num">1</div>
       <div class="step-body">
-        <h4>在 VoiceDrop App 里复制令牌</h4>
-        <p>底部「设置」→「账户」→ 点「复制访问令牌」。令牌形如 <code>anon_xxxx…</code>。</p>
+        <h4>Copy the token in the VoiceDrop app</h4>
+        <p>Bottom tab "Settings" → "Account" → tap "Copy Access Token". The token looks like <code>anon_xxxx…</code>.</p>
       </div>
     </div>
     <div class="step">
       <div class="num">2</div>
       <div class="step-body">
-        <h4>在 Claude Code / Codex 里设好</h4>
-        <pre><code>TOKEN=anon_xxxxxxxx...   # 粘贴你刚复制的令牌</code></pre>
-        <p class="note">令牌只在本次 shell 会话有效。也可以写进 <code>~/.zshrc</code> 的 <code>export VOICEDROP_TOKEN=…</code> 里永久保存。</p>
+        <h4>Set it in Claude Code / Codex</h4>
+        <pre><code>TOKEN=anon_xxxxxxxx...   # paste the token you just copied</code></pre>
+        <p class="note">The token only lasts for the current shell session. To keep it permanently, add <code>export VOICEDROP_TOKEN=…</code> to your <code>~/.zshrc</code>.</p>
       </div>
     </div>
   </div>
 
   <!-- Skills -->
-  <div class="section-label">可用 Skill 一览</div>
+  <div class="section-label">Available skills</div>
 
   <div class="card">
 
     <!-- /wjs-voicedrop -->
     <div class="skill-block">
       <div class="skill-name"><code>/wjs-voicedrop</code></div>
-      <p class="skill-desc">VoiceDrop 配套 skill，两个模式：<b>list</b>（列出你的录音与文章）和 <b>distill</b>（从你的文章蒸馏文风，上传到 <code>CLAUDE.md</code>）。</p>
-      <p style="font-size:.83rem;font-weight:700;color:var(--soft);margin-bottom:6px">触发词 / 说什么都行：</p>
+      <p class="skill-desc">VoiceDrop's companion skill, with two modes: <b>list</b> (list your recordings and articles) and <b>distill</b> (distill a writing style from your articles and upload it to <code>CLAUDE.md</code>).</p>
+      <p style="font-size:.83rem;font-weight:700;color:var(--soft);margin-bottom:6px">Trigger phrases — say it however you like:</p>
       <div class="trigger-list">
         <span class="trigger">/wjs-voicedrop</span>
         <span class="trigger">voicedrop list</span>
-        <span class="trigger">列出 VoiceDrop 文件</span>
+        <span class="trigger">list my VoiceDrop files</span>
         <span class="trigger">voicedrop distill</span>
-        <span class="trigger">蒸馏 VoiceDrop 文风</span>
+        <span class="trigger">distill my VoiceDrop style</span>
       </div>
 
-      <h3>模式一：list — 列文件</h3>
-      <p>说「voicedrop list」，agent 会列出你在 VoiceDrop 空间里的所有内容并分类：</p>
+      <h3>Mode 1: list — list your files</h3>
+      <p>Say "voicedrop list" and the agent lists everything in your VoiceDrop space, grouped into:</p>
       <ul>
-        <li>待处理录音（还没变成文章的 <code>.m4a</code>）</li>
-        <li>已成文文章（<code>articles/*.json</code>，每篇含标题 + 正文 + 转写 + SRT）</li>
-        <li>无语音标记（<code>articles/*.empty</code>，原始录音里没说话）</li>
-        <li>文风设置（你上传的 <code>CLAUDE.md</code>）</li>
+        <li>Pending recordings (<code>.m4a</code> files not yet turned into articles)</li>
+        <li>Finished articles (<code>articles/*.json</code>, each with title + body + transcript + SRT)</li>
+        <li>No-speech markers (<code>articles/*.empty</code> — the original recording had no speech)</li>
+        <li>Writing style settings (the <code>CLAUDE.md</code> you uploaded)</li>
       </ul>
-      <div class="chat">「voicedrop list」</div>
-      <div class="chat">「帮我看看 VoiceDrop 里还有哪些录音没变成文章」</div>
+      <div class="chat">"voicedrop list"</div>
+      <div class="chat">"Show me which VoiceDrop recordings haven't become articles yet"</div>
 
-      <h3>模式二：distill — 蒸馏文风</h3>
-      <p>说「voicedrop distill」，agent 会从你最近的几篇文章里提炼 15–20 条可执行的写作规则，预览后确认，上传到你的 <code>CLAUDE.md</code>——下次挖文章时服务器自动带上。</p>
-      <div class="chat">「voicedrop distill」</div>
-      <div class="chat">「帮我从 VoiceDrop 文章里蒸馏文风，更新到设置里」</div>
-      <p class="note">上传成功后，在 VoiceDrop App 的「设置→文风」里也能看到，两边是同一份数据。</p>
+      <h3>Mode 2: distill — distill your writing style</h3>
+      <p>Say "voicedrop distill" and the agent extracts 15–20 actionable writing rules from your recent articles, shows you a preview for confirmation, then uploads them to your <code>CLAUDE.md</code> — the server picks them up automatically the next time it mines articles.</p>
+      <div class="chat">"voicedrop distill"</div>
+      <div class="chat">"Distill my writing style from my VoiceDrop articles and update my settings"</div>
+      <p class="note">Once uploaded, it also shows up in the VoiceDrop app under "Settings → Writing Style" — both are the same data.</p>
     </div>
 
     <!-- /wjs-distilling-style -->
     <div class="skill-block">
       <div class="skill-name"><code>/wjs-distilling-style</code></div>
-      <p class="skill-desc">通用文风蒸馏 skill。给任意几篇文章，提炼出这位作者精确可执行的写作指纹——不只是 VoiceDrop 用户，也可以用来学任何作者的笔法。</p>
-      <p style="font-size:.83rem;font-weight:700;color:var(--soft);margin-bottom:6px">触发词：</p>
+      <p class="skill-desc">A general-purpose style-distillation skill. Give it a few articles by any author and it extracts a precise, executable writing fingerprint — not just for VoiceDrop users; use it to learn any writer's craft.</p>
+      <p style="font-size:.83rem;font-weight:700;color:var(--soft);margin-bottom:6px">Trigger phrases:</p>
       <div class="trigger-list">
         <span class="trigger">/wjs-distilling-style</span>
-        <span class="trigger">蒸馏文风</span>
-        <span class="trigger">提炼 XX 的风格</span>
-        <span class="trigger">把这篇改成 XX 的味儿</span>
+        <span class="trigger">distill this writing style</span>
+        <span class="trigger">capture X's style</span>
+        <span class="trigger">rewrite this in X's voice</span>
         <span class="trigger">mimic this writer</span>
       </div>
 
-      <h3>两个模式</h3>
+      <h3>Two modes</h3>
       <ul>
-        <li><b>蒸馏</b>：给 3–6 篇样本文章，输出一张 9 轴 Style Card（句子节奏、段落密度、词汇、语气、论证结构、比喻、情绪、开头/收尾、雷区），存到 <code>~/code/style-cards/&lt;author-slug&gt;/style-card.md</code>。</li>
-        <li><b>改写</b>：给一篇目标文章 + 已有 Style Card，改写成对应作者的笔调。改写后有独立「裁判」盲测，不让 agent 自己给自己打分。</li>
+        <li><b>Distill</b>: give it 3–6 sample articles and it produces a 9-axis Style Card (sentence rhythm, paragraph density, vocabulary, tone, argument structure, metaphors, emotion, openings/closings, no-go zones), saved to <code>~/code/style-cards/&lt;author-slug&gt;/style-card.md</code>.</li>
+        <li><b>Rewrite</b>: give it a target article plus an existing Style Card and it rewrites the piece in that author's voice. Every rewrite is blind-tested by an independent "judge" — the agent never grades its own work.</li>
       </ul>
-      <div class="chat">「把这三篇文章的文风蒸馏出来，存成 Style Card」</div>
-      <div class="chat">「用王建硕的文风把这篇稿子改一遍」</div>
-      <p class="note">和 <code>/wjs-voicedrop distill</code> 的区别：这里适合精细化全量 9 轴蒸馏；voicedrop distill 是快速模式，只提炼差异规则补充到 VoiceDrop 的 CLAUDE.md。</p>
+      <div class="chat">"Distill the writing style of these three articles into a Style Card"</div>
+      <div class="chat">"Rewrite this draft in Jian Shuo Wang's style"</div>
+      <p class="note">How it differs from <code>/wjs-voicedrop distill</code>: this skill does the full, fine-grained 9-axis distillation; voicedrop distill is the quick mode that only extracts differential rules to append to VoiceDrop's CLAUDE.md.</p>
     </div>
 
   </div>
 
   <!-- Raw API -->
-  <div class="section-label">直接用 API（不走 skill）</div>
+  <div class="section-label">Use the API directly (no skill)</div>
   <div class="card">
-    <h2>Files API 速查</h2>
-    <p>所有 skill 底层都在调这套 API，你也可以在 agent prompt 里直接用：</p>
+    <h2>Files API cheat sheet</h2>
+    <p>Every skill above calls this same API under the hood — you can also use it directly in your agent prompt:</p>
     <pre><code>BASE=https://jianshuo.dev/files/api
 
-# 列出所有文件
+# List all files
 curl -s -H "Authorization: Bearer $TOKEN" $BASE/list
 
-# 下载某篇文章 JSON
+# Download an article JSON
 curl -s -H "Authorization: Bearer $TOKEN" \
-  "$BASE/download/users/&lt;你的id&gt;/articles/VoiceDrop-xxxx.json"
+  "$BASE/download/users/&lt;your-id&gt;/articles/VoiceDrop-xxxx.json"
 
-# 下载文风设置
+# Download writing style settings
 curl -s -H "Authorization: Bearer $TOKEN" \
   "$BASE/download/CLAUDE.md"
 
-# 上传更新文风设置
+# Upload / update writing style settings
 curl -s -X PUT \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/markdown; charset=utf-8" \
   --data-binary @/tmp/style.md \
   "$BASE/upload/CLAUDE.md"</code></pre>
-    <p>文章 JSON 格式：<code>{ title, body, transcript, srt }</code>。</p>
+    <p>Article JSON format: <code>{ title, body, transcript, srt }</code>.</p>
   </div>
 
   <!-- Loop -->
   <div class="card">
-    <h2>整条回路长这样</h2>
-    <p>说一段话 → VoiceDrop 自动转写、挖成文章 → <code>/wjs-voicedrop list</code> 读出来 → <code>/wjs-voicedrop distill</code> 或 <code>/wjs-distilling-style</code> 蒸馏文风 → 写回 <code>CLAUDE.md</code> → 下一篇更像你。</p>
-    <p>整个过程，agent 始终在用你自己的数据、你自己的 token，没有第二个后台，没有锁定。这就是 VoiceDrop 想做的事：<b>让口述无缝接进 agent 生态</b>。</p>
+    <h2>The full loop</h2>
+    <p>Speak → VoiceDrop transcribes it and mines it into an article → <code>/wjs-voicedrop list</code> reads it out → <code>/wjs-voicedrop distill</code> or <code>/wjs-distilling-style</code> distills your writing style → written back to <code>CLAUDE.md</code> → the next article sounds more like you.</p>
+    <p>Throughout the whole loop, the agent works with your own data and your own token — no second backend, no lock-in. That's exactly what VoiceDrop is built for: <b>plugging voice seamlessly into the agent ecosystem</b>.</p>
   </div>
 
   <div class="links">
-    <a href="/voicedrop/">← VoiceDrop 首页</a>
-    <a href="/voicedrop/privacy/">隐私政策</a>
+    <a href="/voicedrop/en/">← VoiceDrop Home</a>
+    <a href="/voicedrop/en/privacy/">Privacy Policy</a>
     <a href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a>
   </div>
 
-  <footer>Made with care in Shanghai · © 2026 王建硕</footer>
+  <footer>Made with care in Shanghai · © 2026 Jian Shuo Wang</footer>
 </div>
 </body>
 </html>
