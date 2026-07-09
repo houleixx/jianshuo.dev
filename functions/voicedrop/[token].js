@@ -23,8 +23,8 @@ const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
 export function ctaHtml(rate, cfg) {
   const on = cfg && cfg.enabled !== false && rate && rate.suanliPerCoin > 0;
   const line = on
-    ? `下载 <a id="vd-dl" href="${APP_STORE}">VoiceDrop App</a>，你约得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力，作者约得 ${Math.round(cfg.authorCoins * rate.suanliPerCoin)} 算力`
-    : `下载 <a id="vd-dl" href="${APP_STORE}">VoiceDrop App</a>，把口述变成文章`;
+    ? `安装 <a id="vd-dl" href="${APP_STORE}">VoiceDrop App</a>，你约得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力，作者约得 ${Math.round(cfg.authorCoins * rate.suanliPerCoin)} 算力`
+    : `安装 <a id="vd-dl" href="${APP_STORE}">VoiceDrop App</a>，把口述变成文章`;
   return `<div class="vd-cta">${line}</div>
 <script>document.getElementById('vd-dl').addEventListener('click',function(){
 try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}})</script>`;
