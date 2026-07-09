@@ -30,6 +30,7 @@ import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
+import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
@@ -1277,6 +1278,9 @@ export default {
 
     // 投币（铸币事件 + 双边算力到账）—— src/mint.js
     { const r = await handleMintRoutes(url, request, env); if (r) return r; }
+
+    // 邀请奖励（新装归因 + 双边铸币入账）—— src/referral.js
+    { const r = await handleReferralRoutes(url, request, env); if (r) return r; }
 
     { const r = await handleUsageRoute(url, request, env); if (r) return r; }
 
