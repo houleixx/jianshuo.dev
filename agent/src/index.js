@@ -1330,6 +1330,8 @@ export default {
       return;
     }
     ctx.waitUntil(stub.fetch(new Request("https://miner/trigger", { method: "POST" })));
+    // 6h 一次顺手刷新落地页 CTA 汇率（冷启动没铸币也有价可显示）。
+    if (env.USAGE) ctx.waitUntil(publishMintRate(env, env.USAGE, Date.now()));
   },
 };
 

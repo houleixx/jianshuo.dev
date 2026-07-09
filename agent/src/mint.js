@@ -19,6 +19,7 @@ import { resolveArticles } from "../../functions/lib/article-store.js";
 import { isShareId, communityKey } from "../../functions/lib/community-store.js";
 import { readProfileName } from "../../functions/lib/style-store.js";
 import { grantBucket } from "./usage_store.js";
+import { publishMintRate } from "./referral.js";
 import {
   POOL_7D_UY, DAILY_POOL_UY, SEED_COINS_UC, FEED_AUTHOR_UC, FEED_FEEDER_UC,
   FEED_GRANT_EXPIRE_DAYS, FUSE_MULT, pairDiscount, ucToCoins, uyToSuanli,
@@ -122,6 +123,8 @@ export async function handleMintRoutes(url, request, env) {
       { feed_id: feedId, share_id: shareId, title, from: feederName });
     await grantBucket(env.USAGE, feeder, q.actorUY, "feed_curator", exp, now,
       { feed_id: feedId, share_id: shareId, title, author: authorName });
+
+    await publishMintRate(env, env.USAGE, now); // 落地页 CTA 实时价（尽力而为）
 
     return J({
       ok: true,

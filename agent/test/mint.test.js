@@ -271,3 +271,16 @@ describe("POST /agent/feed/state", () => {
     expect((await r.json()).states[SHARE1]).toEqual({ count: 0, fed: false });
   });
 });
+
+// ── 投币成功后发布实时汇率（落地页 CTA 用）────────────────────────────────────
+describe("mint-rate publish", () => {
+  it("feed 成功后 R2 出现 config/mint-rate.json 且价格>0", async () => {
+    const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    expect(r.status).toBe(200);
+    const obj = await env.FILES.get("config/mint-rate.json");
+    expect(obj).not.toBeNull();
+    const rate = JSON.parse(await obj.text());
+    expect(rate.suanliPerCoin).toBeGreaterThan(0);
+    expect(rate.updatedAt).toBeGreaterThan(0);
+  });
+});
