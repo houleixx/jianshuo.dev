@@ -74,7 +74,13 @@
 
 ## 夜间同步约定
 
+- **执行者：claude.ai 云端 routine `voicedrop-en-sync`**（trig_01CYcbWBm8DJLvefmEsHiKXD，
+  每天 UTC 18:30 = 东京凌晨 3:30），管理入口 https://claude.ai/code/routines 。
 - manifest：`infra/voicedrop-en-sync/manifest.json`，记录每个中文源文件上次翻译时的 sha256。
 - 同步时：对比当前 sha256 与 manifest，只重翻变更了的文件（整页重翻，覆盖 en 镜像），翻完更新 manifest。
 - 新增的中文页（在范围表里的目录下）自动纳入；删除的中文页，en 镜像同步删除。
-- 完成后 commit + push main + wrangler 部署（部署命令见 jianshuo-memory/08-infrastructure/domains-hosting-deploy.md，注意 .claude/worktrees 25MiB 坑）。
+- 完成后 commit + push main。**部署由 GitHub Action `.github/workflows/deploy-pages.yml`
+  自动完成**（push 到 main 且涉及 voicedrop/** 时触发，需要仓库 secrets
+  CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID）。routine 自己不部署。
+- 本目录的 `sync.sh` 保留作本地手动工具（SEED_ONLY=1 重种 manifest / DRY_RUN=1 看变更清单 /
+  直接跑=本地全流程），日常不再依赖它。
