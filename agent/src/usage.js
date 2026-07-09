@@ -131,6 +131,6 @@ export const REFERRAL_DEFAULTS = {
   enabled: true,
   authorCoins: 12,        // 作者（分享 owner）得币
   newUserCoins: 6,        // 新装用户得币
-  dailyCapPerOwner: 10,   // owner 每日被奖励安装数上限（超出只发新人侧）
+  dailyCapPerOwner: 30,   // owner 每日被奖励安装数上限（超出只发新人侧）
   requireDeviceCheck: true,
 };

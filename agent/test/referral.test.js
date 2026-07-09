@@ -10,7 +10,7 @@ describe("referral constants", () => {
   it("has defaults", () => {
     expect(REFERRAL_DEFAULTS).toEqual({
       enabled: true, authorCoins: 12, newUserCoins: 6,
-      dailyCapPerOwner: 10, requireDeviceCheck: true,
+      dailyCapPerOwner: 30, requireDeviceCheck: true,
     });
   });
 });
