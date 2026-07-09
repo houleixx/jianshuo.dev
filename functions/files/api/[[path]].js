@@ -218,12 +218,15 @@ async function handleRequest(context) {
   }
 
   // ---- Public (no auth): resolve a share/community id for universal links ----
-  // GET link/<id> → {type:"article"|"community", owner:"users/<sub>/", stem}
+  // GET link/<id> → {type:"article"|"community", owner:"users/<sub>/", stem,
+  //                  title, articles:[{title,body}], photos?}
   // The app receives https://voicedrop.cn/<id> as a universal link and asks what
   // the id points at: its OWN article (owner == whoami scope) opens the native
-  // detail view; anything else falls back to the public web page. Exposes nothing
-  // new — the same mapping is already served as public HTML by functions/[token].js,
-  // and a reported community post 404s here exactly like there (Apple 1.2).
+  // detail view; a community post opens the native post view; anyone else's plain
+  // share renders natively from the content returned here (read-only reader).
+  // Exposes nothing new — the same mapping AND content are already served as
+  // public HTML by functions/[token].js, and a reported community post 404s here
+  // exactly like there (Apple 1.2).
   if (request.method === 'GET' && action === 'link' && sub2) {
     const id = sub2;
     if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) return json({ error: 'bad id' }, 400);
@@ -241,7 +244,18 @@ async function handleRequest(context) {
     }
     const m = key && key.match(/^(users\/[^/]+\/)articles\/([^/]+)\.json$/);
     if (!m) return json({ error: 'not found' }, 404);
-    return json({ type, owner: m[1], stem: m[2] });
+    const obj = await env.FILES.get(key);
+    if (!obj) return json({ error: 'not found' }, 404);
+    let doc; try { doc = JSON.parse(await obj.text()); } catch { return json({ error: 'not found' }, 404); }
+    const articles = resolveArticles(doc)
+      .filter((a) => a && (a.body || '').trim())
+      .map((a) => ({ title: a.title, body: a.body }));
+    // `photos` = legacy [[photo:N]] resolution only (new articles use key markers).
+    return json({
+      type, owner: m[1], stem: m[2],
+      title: articles[0]?.title || '', articles,
+      ...(Array.isArray(doc.photos) && doc.photos.length ? { photos: doc.photos } : {}),
+    });
   }
 
   // ---- Authenticate every other route ----
