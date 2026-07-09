@@ -1,0 +1,35 @@
+# voicedrop.cn:备案接入点(本机,国内解析)反代 → Cloudflare Pages(jianshuo-dev)。
+# 整站映射:voicedrop.cn/* = jianshuo.dev/voicedrop/*,且对外只暴露干净路径——
+#   /voicedrop/... 一律 301 到去前缀的形态(canonical 无 folder);
+#   /files/*(接口与图片)原样透传;其余路径内部补 /voicedrop 前缀去上游取内容。
+# X-Forwarded-Host 把真实域名带给 Pages Functions(og 标签 / host 路由)。
+# 2026-07-09 由 Claude 配置。
+
+voicedrop.cn, www.voicedrop.cn {
+        # 旧形态 → 干净形态(对外 301,URL 栏里不再出现 /voicedrop)
+        redir /voicedrop / permanent
+        redir /voicedrop/ / permanent
+        handle_path /voicedrop/* {
+                redir * {uri} permanent
+        }
+
+        # 接口与图片透传(分享页的照片、og 图都走这里)
+        handle /files/* {
+                reverse_proxy https://jianshuo-dev.pages.dev {
+                        header_up Host jianshuo-dev.pages.dev
+                        header_up X-Forwarded-Host {host}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+
+        # 其余一切:内部补前缀取内容,URL 保持干净
+        handle {
+                rewrite * /voicedrop{path}
+                reverse_proxy https://jianshuo-dev.pages.dev {
+                        header_up Host jianshuo-dev.pages.dev
+                        header_up X-Forwarded-Host {host}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+        encode gzip
+}
