@@ -288,7 +288,7 @@ code{background:#efeee9;padding:.1em .35em;border-radius:4px;font-size:.92em}
 strong{font-weight:650}
 hr{border:none;border-top:1px solid #e6e3dd;margin:2.4rem 0}
 .vd-photo{margin:1.4rem 0}
-.vd-photo img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;display:block}
+.vd-photo img{width:100%;height:auto;border-radius:12px;display:block}
 .muted{color:#86868b}
 footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid #ececec;
   color:#a1a1a6;font-size:.82rem}
