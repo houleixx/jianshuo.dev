@@ -14,7 +14,7 @@ describe("ctaHtml", () => {
   it("without rate falls back to generic copy (no numbers)", () => {
     const h = ctaHtml(null, { authorCoins: 12, newUserCoins: 6, enabled: true });
     expect(h).toContain("apps.apple.com");
-    expect(h).not.toMatch(/\d+<\/b> 算力/);
+    expect(h).not.toMatch(/\d+ 算力/);
   });
   it("disabled → still a download CTA, no reward copy", () => {
     const h = ctaHtml({ suanliPerCoin: 200 }, { enabled: false });

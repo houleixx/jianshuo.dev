@@ -14,17 +14,18 @@ import { writeRefhit } from "../lib/refhits.js";
 
 const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
 
-// 落地页底部 CTA：奖励数字按「访问时刻」池子价现算（带「约」，实发以入账时为准，
-// rate 来自 worker 铸币后发布的 R2 config/mint-rate.json）。rate/cfg 读不到 →
-// 无数字通用文案；enabled:false → 纯下载条不提奖励。下载按钮点击顺手把本页 URL
-// 写进剪贴板（用户手势，微信内也允许）——App 首启剪贴板兜底归因（第 3 层）靠它。
+// 落地页 CTA：低调小字，与 footer「由 VoiceDrop 口述生成」同风格、紧随其后
+// （2026-07-09 用户定稿：大卡片影响阅读，弃用）。奖励数字按「访问时刻」池子价现算
+// （带「约」，实发以入账时为准，rate 来自 worker 铸币后发布的 R2 config/mint-rate.json）。
+// rate/cfg 读不到 → 无数字通用文案；enabled:false → 纯下载一句不提奖励。
+// 下载链接点击顺手把本页 URL 写进剪贴板（用户手势，微信内也允许）——App 首启
+// 剪贴板兜底归因（第 3 层）靠它。
 export function ctaHtml(rate, cfg) {
   const on = cfg && cfg.enabled !== false && rate && rate.suanliPerCoin > 0;
   const line = on
-    ? `下载 VoiceDrop，你约得 <b>${Math.round(cfg.newUserCoins * rate.suanliPerCoin)}</b> 算力，作者约得 <b>${Math.round(cfg.authorCoins * rate.suanliPerCoin)}</b> 算力`
-    : `下载 VoiceDrop，把口述变成文章`;
-  return `<div class="vd-cta"><p>${line}</p>
-<a id="vd-dl" href="${APP_STORE}">下载 App${on ? ' 领取' : ''}</a></div>
+    ? `下载 <a id="vd-dl" href="${APP_STORE}">VoiceDrop App</a>，你约得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力，作者约得 ${Math.round(cfg.authorCoins * rate.suanliPerCoin)} 算力`
+    : `下载 <a id="vd-dl" href="${APP_STORE}">VoiceDrop App</a>，把口述变成文章`;
+  return `<div class="vd-cta">${line}</div>
 <script>document.getElementById('vd-dl').addEventListener('click',function(){
 try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}})</script>`;
 }
@@ -294,15 +295,13 @@ footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid #ececec;
   color:#a1a1a6;font-size:.82rem}
 footer a{color:#86868b;text-decoration:none}
 ::selection{background:#ffe49b}
-.vd-cta{margin-top:2.2rem;padding:1rem 1.2rem;background:#f4f1ea;border-radius:14px;text-align:center}
-.vd-cta p{margin:0 0 .7rem;font-size:.95rem}
-.vd-cta a{display:inline-block;background:#1d1d1f;color:#fff;text-decoration:none;
-  padding:.55rem 1.6rem;border-radius:999px;font-size:.95rem}
+.vd-cta{margin-top:.4rem;color:#a1a1a6;font-size:.82rem}
+.vd-cta a{color:#86868b;text-decoration:none}
 </style></head>
 <body><div class="wrap">
 ${inner}
-${extra}
 <footer>由 <a href="https://voicedrop.cn/">VoiceDrop</a> 口述生成</footer>
+${extra}
 </div></body></html>`;
 }
 
