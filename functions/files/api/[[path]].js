@@ -217,6 +217,33 @@ async function handleRequest(context) {
     });
   }
 
+  // ---- Public (no auth): resolve a share/community id for universal links ----
+  // GET link/<id> → {type:"article"|"community", owner:"users/<sub>/", stem}
+  // The app receives https://voicedrop.cn/<id> as a universal link and asks what
+  // the id points at: its OWN article (owner == whoami scope) opens the native
+  // detail view; anything else falls back to the public web page. Exposes nothing
+  // new — the same mapping is already served as public HTML by functions/[token].js,
+  // and a reported community post 404s here exactly like there (Apple 1.2).
+  if (request.method === 'GET' && action === 'link' && sub2) {
+    const id = sub2;
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) return json({ error: 'bad id' }, 400);
+    let key = null, type = 'article';
+    const map = await env.FILES.get(`shares/${id}`);
+    if (map) {
+      key = (await map.text()).trim();
+    } else {
+      const cm = await env.FILES.get(communityKey(id));
+      if (cm) {
+        if (await env.FILES.head(reportKey(id))) return json({ error: 'not found' }, 404);
+        type = 'community';
+        try { key = JSON.parse(await cm.text()).articleKey || null; } catch { /* fallthrough */ }
+      }
+    }
+    const m = key && key.match(/^(users\/[^/]+\/)articles\/([^/]+)\.json$/);
+    if (!m) return json({ error: 'not found' }, 404);
+    return json({ type, owner: m[1], stem: m[2] });
+  }
+
   // ---- Authenticate every other route ----
   const token = bearerToken(request) || url.searchParams.get('token') || '';
 

@@ -1,0 +1,9 @@
+# apple-app-site-association has no file extension — Pages would serve it as
+# application/octet-stream; Apple's CDN wants application/json. Two copies:
+# the root one is fetched for jianshuo.dev, the /voicedrop/ one is what the
+# voicedrop.cn Caddy prefix-mapping resolves /.well-known/* to.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+
+/voicedrop/.well-known/apple-app-site-association
+  Content-Type: application/json

@@ -211,6 +211,10 @@ export function metaTags(title, og) {
     `<meta name="description" content="${d}"/>`,
     `<meta name="twitter:title" content="${t}"/>`,
     `<meta name="twitter:description" content="${d}"/>`,
+    // Smart App Banner — Safari shows an「打开」ribbon that hands this SAME url to
+    // the app. Universal links do NOT fire on same-domain taps inside the page, so
+    // the banner is the only reliable web→app hop (e.g. after 微信 →「在 Safari 中打开」).
+    `<meta name="apple-itunes-app" content="app-id=6781565141, app-argument=${u}"/>`,
   ];
   if (img) {
     tags.push(

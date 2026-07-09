@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["97XBW2A43H.com.wangjianshuo.VoiceDrop"],
+        "components": [
+          { "/": "/voicedrop/privacy/*", "exclude": true, "comment": "policy pages must stay web-readable" },
+          { "/": "/voicedrop/*", "comment": "legacy share links jianshuo.dev/voicedrop/<token> open the app" }
+        ]
+      }
+    ]
+  }
+}

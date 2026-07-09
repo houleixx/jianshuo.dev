@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["97XBW2A43H.com.wangjianshuo.VoiceDrop"],
+        "components": [
+          { "/": "/files/*", "exclude": true, "comment": "API + photos stay in the browser" },
+          { "/": "/privacy/*", "exclude": true, "comment": "policy pages must stay web-readable" },
+          { "/": "/*", "comment": "landing, share short links /<id>, help — open the app" }
+        ]
+      }
+    ]
+  }
+}

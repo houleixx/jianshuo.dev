@@ -41,6 +41,16 @@ curl -X PUT "https://api.cloudflare.com/client/v4/zones/206722cd14c10dbaa28f35e9
 CF 直连下分享短链照常(functions/[token].js 兜底),整站映射退化为仅短链 + 根跳转;
 微信可能恢复弹提示(域名解析出境)。
 
+## Universal Links（2026-07-09）
+
+- `https://voicedrop.cn/.well-known/apple-app-site-association` 走既有「补前缀」规则
+  映射到 Pages 的 `voicedrop/.well-known/apple-app-site-association`（内容真源在
+  jianshuo.dev repo），`_headers` 强制 application/json。重建机器后记得验证这条：
+  `curl -i https://voicedrop.cn/.well-known/apple-app-site-association`（要 200 无跳转，
+  Apple CDN 才取得到，App 里的链接拉起才工作）。
+- ⚠️ 本目录的 `Caddyfile` 目前是 0 字节空文件——线上真配置在机器 `/etc/caddy/Caddyfile`，
+  尚未回填（回填后删除本条）。「照此可 10 分钟重建」在回填前不成立。
+
 ## 监控
 
 voicedrop-agent worker 的 */5 cron 探活 `https://voicedrop.cn/`,连续 2 次不可达
