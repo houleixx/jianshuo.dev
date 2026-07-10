@@ -13,6 +13,18 @@ voicedrop.cn, www.voicedrop.cn {
                 redir * {uri} permanent
         }
 
+        # /p/* 密码保护的静态页(2026-07-11 加):往机器 /var/www/p/ 扔 HTML 即发布。
+        # 密码本地存 ~/.config/voicedrop/p-pages-password.txt(用户 jianshuo)
+        handle_path /p/* {
+                basic_auth {
+                        jianshuo $2y$12$4N6wgtXbyEEAzdCyoKnrpu0mOt6rFxyrYP8VndJ28LFON/YRQzfhq
+                }
+                root * /var/www/p
+                file_server {
+                        index index.html
+                }
+        }
+
         # 接口与图片透传(分享页的照片、og 图都走这里)
         handle /files/* {
                 reverse_proxy https://jianshuo-dev.pages.dev {
