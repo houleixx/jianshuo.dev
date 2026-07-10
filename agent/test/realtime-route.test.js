@@ -62,4 +62,17 @@ describe("buildSessionUpdate", () => {
       .toEqual({ type: "audio/pcmu" });
     expect(u.session.audio.output.voice).toBe("cedar");
   });
+  // 2026-07-10「采访者自顾自说个不停」修复：semantic_vad 自动触发的回应不走 app 的
+  // response.create（那个 120 上限根本没人调用），没有 session 级上限就是无限长。
+  it("session 级 max_output_tokens 存在且有界（auto 回应否则可无限独白）", () => {
+    const m = buildSessionUpdate().session.max_output_tokens;
+    expect(Number.isInteger(m)).toBe(true);
+    expect(m).toBeGreaterThan(0);
+    expect(m).toBeLessThanOrEqual(4096);
+  });
+  it("instructions 含「绝不连续发言」铁律、不再要求填满冷场", () => {
+    const ins = buildSessionUpdate().session.instructions;
+    expect(ins).toMatch(/绝不连续发言/);
+    expect(ins).not.toMatch(/不让对话冷场/);
+  });
 });
