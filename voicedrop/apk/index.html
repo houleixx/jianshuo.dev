@@ -69,9 +69,12 @@
 
   var APK = '/voicedrop/apk/VoiceDrop.apk';
   var dl = document.getElementById('dl');
+  // 端点 302 到 /gh/ 代理（同域），fetch 自动跟随；从最终 URL 解析版本号
   fetch(APK, { method: 'HEAD' }).then(function(r){
     if (!r.ok) throw 0;
     var mb = (parseInt(r.headers.get('Content-Length') || '0', 10) / 1048576).toFixed(1);
+    var vm = /\/download\/(v[\w.-]+)\//.exec(r.url || '');
+    var ver = vm ? vm[1] : '';
     var lm = r.headers.get('Last-Modified');
     var dateStr = '';
     if (lm) {
@@ -81,7 +84,7 @@
     dl.innerHTML =
       '<a class="vd-btn" href="' + APK + '" style="display:inline-block;font:600 16px -apple-system;color:#fff;background:#D8593B;padding:15px 36px;border-radius:10px;box-shadow:0 10px 26px -8px rgba(216,89,59,.55);text-decoration:none">下载 VoiceDrop.apk</a>' +
       '<p style="font:400 12.5px -apple-system;color:#9a8f7f;margin:14px 0 0">' +
-      [mb > 0 ? mb + ' MB' : '', dateStr ? '更新于 ' + dateStr : ''].filter(Boolean).join(' · ') + '</p>';
+      [ver, mb > 0 ? mb + ' MB' : '', dateStr ? '更新于 ' + dateStr : ''].filter(Boolean).join(' · ') + '</p>';
   }).catch(function(){
     dl.innerHTML = '<p style="font:400 14px/1.8 -apple-system;color:#6b5f51">安卓安装包正在打包中，还没有就绪。<br>可以先收藏本页，稍后再来。</p>';
   });

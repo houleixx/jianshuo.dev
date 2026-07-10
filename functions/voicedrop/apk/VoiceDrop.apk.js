@@ -1,63 +1,58 @@
-// Serve the VoiceDrop Android APK from R2.
+// VoiceDrop 安卓 APK 下载：解析 GitHub 最新 Release 后 302 到同域 /gh/ 代理。
 //
 // URL:  GET/HEAD https://jianshuo.dev/voicedrop/apk/VoiceDrop.apk
-// R2:   bucket jianshuo-dev-files, key "apk/VoiceDrop.apk"
+//   → 302 /gh/houleixx/voicedrop-android/releases/download/<tag>/<asset>
+//   → functions/gh/[[path]].js 从 github.com 实时代取（流式 + Range 续传）
 //
-// APK 太大放不进 Pages 静态资源（单文件 25MiB 上限），走 R2 流式输出——
-// 与 functions/setup/machine-setup.tar.gz.js 同一模式。发布新包零部署：
-//   npx wrangler r2 object put jianshuo-dev-files/apk/VoiceDrop.apk --file=<path> --remote
-// 下载页 /voicedrop/apk/ 用 HEAD 探测本路由决定显示下载按钮还是「打包中」。
+// 不走 R2、不用上传：houleixx/voicedrop-android 发新 Release 后本端点自动指向新版。
+// 用户全程只见 jianshuo.dev 域名（302 是同域相对路径），国内不需要能连 github.com。
+// GitHub API 解析结果边缘缓存 10 分钟（unauth 限流 60/h/IP，必须缓存）；
+// API 失败时回退到写死的 FALLBACK 版本，保证下载永远可用。
 
-const KEY = "apk/VoiceDrop.apk";
+const OWNER_REPO = "houleixx/voicedrop-android";
+const FALLBACK = "/gh/houleixx/voicedrop-android/releases/download/v0.6.0/voicedrop-0.6.0.apk";
+const CACHE_KEY = "https://jianshuo.dev/__internal/vd-apk-latest";
+const CACHE_SECS = 600;
 
-export async function onRequest({ request, env }) {
+async function resolveLatestPath() {
+  const cache = caches.default;
+  const cached = await cache.match(CACHE_KEY);
+  if (cached) return (await cached.text()) || FALLBACK;
+
+  let path = FALLBACK;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${OWNER_REPO}/releases/latest`, {
+      headers: { "user-agent": "jianshuo-dev-apk-resolver", accept: "application/vnd.github+json" },
+    });
+    if (r.ok) {
+      const rel = await r.json();
+      const apk = (rel.assets || []).find((a) => a.name && a.name.endsWith(".apk"));
+      if (apk && rel.tag_name) {
+        path = `/gh/${OWNER_REPO}/releases/download/${encodeURIComponent(rel.tag_name)}/${encodeURIComponent(apk.name)}`;
+      }
+    }
+  } catch (_) {
+    // API 不可达 → 用 FALLBACK，且不写缓存，下次再试
+    return path;
+  }
+  await cache.put(
+    CACHE_KEY,
+    new Response(path, { headers: { "cache-control": `public, max-age=${CACHE_SECS}` } })
+  );
+  return path;
+}
+
+export async function onRequest({ request }) {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("method not allowed", { status: 405 });
   }
-
-  const head = await env.FILES.head(KEY);
-  if (!head) return new Response("APK not available yet", { status: 404 });
-
-  const headers = new Headers({
-    "content-type": "application/vnd.android.package-archive",
-    "content-disposition": 'attachment; filename="VoiceDrop.apk"',
-    "accept-ranges": "bytes",
-    "cache-control": "no-cache",
-    "last-modified": head.uploaded.toUTCString(),
-    etag: head.httpEtag,
-    "x-robots-tag": "noindex",
+  const path = await resolveLatestPath();
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: path,
+      "cache-control": "no-cache",
+      "x-robots-tag": "noindex",
+    },
   });
-
-  if (request.method === "HEAD") {
-    headers.set("content-length", String(head.size));
-    return new Response(null, { headers });
-  }
-
-  // 单段 Range 支持：手机网络断点续传靠它
-  const m = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get("range") || "");
-  if (m && (m[1] || m[2])) {
-    let offset, length;
-    if (m[1]) {
-      offset = parseInt(m[1], 10);
-      const end = m[2] ? Math.min(parseInt(m[2], 10), head.size - 1) : head.size - 1;
-      if (offset >= head.size || offset > end) {
-        return new Response(null, { status: 416, headers: { "content-range": `bytes */${head.size}` } });
-      }
-      length = end - offset + 1;
-    } else {
-      // 后缀形式 bytes=-N：取末尾 N 字节
-      length = Math.min(parseInt(m[2], 10), head.size);
-      offset = head.size - length;
-    }
-    const obj = await env.FILES.get(KEY, { range: { offset, length } });
-    if (!obj) return new Response("APK not available yet", { status: 404 });
-    headers.set("content-length", String(length));
-    headers.set("content-range", `bytes ${offset}-${offset + length - 1}/${head.size}`);
-    return new Response(obj.body, { status: 206, headers });
-  }
-
-  const obj = await env.FILES.get(KEY);
-  if (!obj) return new Response("APK not available yet", { status: 404 });
-  headers.set("content-length", String(head.size));
-  return new Response(obj.body, { headers });
 }
