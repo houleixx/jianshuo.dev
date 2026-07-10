@@ -70,9 +70,11 @@ describe("buildSessionUpdate", () => {
     expect(m).toBeGreaterThan(0);
     expect(m).toBeLessThanOrEqual(4096);
   });
-  it("instructions 含「绝不连续发言」铁律、不再要求填满冷场", () => {
+  it("instructions 是安静版（默认沉默、卡住才插话），没有填满冷场类指令", () => {
     const ins = buildSessionUpdate().session.instructions;
-    expect(ins).toMatch(/绝不连续发言/);
+    expect(ins).toMatch(/保持完全沉默/);
+    expect(ins).toMatch(/停顿超过三秒/);
     expect(ins).not.toMatch(/不让对话冷场/);
+    expect(ins).not.toMatch(/接住/);
   });
 });
