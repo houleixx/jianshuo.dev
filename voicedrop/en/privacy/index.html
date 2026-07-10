@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop privacy policy — what the app collects and why. Short version: your recordings are yours.">
+<title>VoiceDrop Privacy Policy</title>
+<link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/privacy/">
+<link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/privacy/">
+<link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/privacy/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#ef7d54}
+  body{background:radial-gradient(ellipse 120% 80% at 50% -10%,#fdf0e0,var(--bg));color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:720px;margin:0 auto;padding:44px 32px 80px}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px}
+  .brand{display:flex;align-items:center;gap:12px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.2rem;text-decoration:none;color:inherit}
+  .brand .blob{width:34px;height:34px;border-radius:42% 58% 60% 40%/45% 45% 55% 55%;background:linear-gradient(135deg,#f6a560,#ef7d54);box-shadow:0 6px 16px rgba(239,125,84,.4)}
+  header nav a{font-weight:700;font-size:.84rem;color:var(--soft);text-decoration:none;padding:8px 16px;border-radius:999px;transition:all .2s}
+  header nav a:hover{background:var(--card);color:var(--ink);box-shadow:0 4px 12px rgba(74,63,53,.08)}
+  h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(1.8rem,4vw,2.4rem);letter-spacing:-.02em;margin-bottom:6px}
+  .updated{font-size:.84rem;color:var(--soft);font-weight:700;margin-bottom:30px}
+  .tldr{background:#fff;border-radius:20px;padding:22px 26px;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8);font-size:1.02rem;color:#6f6253;font-weight:700;line-height:1.6;margin-bottom:36px}
+  .tldr b{color:var(--accent)}
+  section{margin-bottom:30px}
+  h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.18rem;margin-bottom:10px}
+  p,li{font-size:.98rem;color:#5f5346;font-weight:600;line-height:1.65}
+  ul{margin:8px 0 0 0;list-style:none;display:flex;flex-direction:column;gap:8px}
+  li{padding-left:24px;position:relative}
+  li::before{content:"●";color:var(--accent);position:absolute;left:4px;font-size:.62rem;top:.45em}
+  a.inline{color:var(--accent);font-weight:800;text-decoration:none}
+  a.inline:hover{text-decoration:underline}
+  .divider{height:1px;background:rgba(155,139,120,.25);margin:46px 0 40px;border:0}
+  .lang-tag{display:inline-block;background:#fff;border-radius:999px;padding:6px 16px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:.78rem;color:var(--accent);box-shadow:0 6px 16px rgba(74,63,53,.06);margin-bottom:24px}
+  footer{text-align:center;margin-top:44px;font-size:.78rem;color:var(--soft);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="brand" href="/"><span class="blob"></span>jianshuo.dev</a>
+    <nav><a href="/voicedrop/privacy/">中文</a><a href="/voicedrop/en/">← VoiceDrop</a></nav>
+  </header>
+
+  <h1>VoiceDrop Privacy Policy</h1>
+  <div class="updated">Last updated: June 20, 2026</div>
+
+  <div class="tldr">In one line: <b>your recordings are yours.</b> VoiceDrop does not sell, analyze, or advertise against them, and includes no third-party tracking.</div>
+
+  <section>
+    <h2>What we collect</h2>
+    <ul>
+      <li><b>Recordings</b> — the audio you create by tapping record. Recordings are uploaded to a private storage area that belongs to <b>you</b> (scoped to your account) and mirrored to your iCloud. We never access them for any purpose other than storing them and returning them to you.</li>
+      <li><b>Location (optional)</b> — if you grant location access, the app reverse-geocodes your current position into a <b>coarse place name (city / district)</b> used <b>only to name the recording file</b> so you can recognize it later. Precise coordinates are never stored or transmitted. You can deny location and recording still works.</li>
+      <li><b>Microphone</b> — used to record audio, the app's core function.</li>
+      <li><b>Identifier</b> — to scope your files to you, the app uses an anonymous identifier, or the stable anonymous identifier (Apple "sub") returned by Sign in with Apple. We do not request or store your name or email, and there is no password.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What we don't do</h2>
+    <ul>
+      <li>We never sell or share your recordings or data with third parties.</li>
+      <li>The app contains no advertising SDKs and no third-party analytics or tracking.</li>
+      <li>We do not track you across other apps or websites for advertising.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Storage &amp; deletion</h2>
+    <p>Recordings are stored in Cloudflare R2 (under your own prefix) and mirrored to your iCloud. You can delete any recording from your file relay at any time. To delete all of your data, email
+    <a class="inline" href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a> and I'll take care of it promptly.</p>
+  </section>
+
+  <section>
+    <h2>Children</h2>
+    <p>VoiceDrop is not directed to children under 13 and does not knowingly collect their information.</p>
+  </section>
+
+  <section>
+    <h2>Contact</h2>
+    <p>For any privacy question: <a class="inline" href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a> (Jian Shuo Wang).</p>
+  </section>
+
+  <footer>Made with care in Shanghai · © 2026 Jian Shuo Wang</footer>
+</div>
+</body>
+</html>

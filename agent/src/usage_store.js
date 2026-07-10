@@ -111,3 +111,46 @@ export async function allAccounts(db, now) {
   ).bind(now).all();
   return r.results;
 }
+
+// 投喂挖矿账本（admin）：mint 表是投币玩法的事件真源，这里做三张聚合——
+//   summary  全站累计（挖出算力/币数/事件数）+ 今日池用量
+//   board    每账户挖矿收益（作为作者收到 vs 主动投币奖励），按合计降序
+//   events   最近 N 笔投喂流水（含文章标题快照与双边算力）
+// 只聚合 kind='feed'（当前唯一玩法），将来新玩法可放宽。金额一律微元，出口再转算力。
+export async function mintLedger(db, now, limit = 80) {
+  const DAY = 86400000;
+  const summary = await db.prepare(
+    "SELECT COUNT(*) AS events, COALESCE(SUM(coins_uc),0) AS coins_uc, " +
+    "COALESCE(SUM(actor_uy+beneficiary_uy),0) AS minted_uy, " +
+    "COALESCE(SUM(beneficiary_uy),0) AS author_uy, COALESCE(SUM(actor_uy),0) AS feeder_uy " +
+    "FROM mint WHERE kind='feed'"
+  ).first();
+
+  const day0 = now - (now % DAY);
+  const today = await db.prepare(
+    "SELECT COALESCE(SUM(actor_uy+beneficiary_uy),0) AS minted_uy, COUNT(*) AS events FROM mint WHERE ts>=?"
+  ).bind(day0).first();
+
+  // 近 7 天铸币量（币价分母用，与 /agent/feed/state 同口径）
+  const sum7 = (await db.prepare(
+    "SELECT COALESCE(SUM(coins_uc),0) AS s FROM mint WHERE ts>?"
+  ).bind(now - 7 * DAY).first()).s;
+
+  // 每账户收益：作者侧(beneficiary)与投币侧(actor)分别贡献行，再按账户合并——
+  // 避免把一笔事件的算力双记；coins_uc 只算在作者侧那半，防重复。
+  const board = (await db.prepare(
+    "SELECT sub, SUM(author_uy) AS author_uy, SUM(feeder_uy) AS feeder_uy, " +
+    "SUM(recv_cnt) AS recv_cnt, SUM(feed_cnt) AS feed_cnt FROM (" +
+    "  SELECT beneficiary_sub AS sub, beneficiary_uy AS author_uy, 0 AS feeder_uy, 1 AS recv_cnt, 0 AS feed_cnt FROM mint WHERE kind='feed'" +
+    "  UNION ALL" +
+    "  SELECT actor_sub AS sub, 0, actor_uy, 0, 1 FROM mint WHERE kind='feed' AND actor_sub IS NOT NULL" +
+    ") GROUP BY sub ORDER BY (author_uy+feeder_uy) DESC LIMIT 500"
+  ).all()).results;
+
+  const events = (await db.prepare(
+    "SELECT share_id, actor_sub, beneficiary_sub, coins_uc, price_uy, actor_uy, beneficiary_uy, detail, ts " +
+    "FROM mint WHERE kind='feed' ORDER BY ts DESC, id DESC LIMIT ?"
+  ).bind(limit).all()).results;
+
+  return { summary, today, sum7, board, events };
+}

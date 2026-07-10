@@ -10,6 +10,25 @@
 
 import { TITLE_FALLBACK, resolveArticles } from "../lib/article-store.js";
 import { communityKey, reportKey } from "../lib/community-store.js";
+import { writeRefhit } from "../lib/refhits.js";
+
+const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
+
+// 落地页 CTA：并进 footer 同一行——「由 VoiceDrop 口述生成。下载，你约得 X 算力，
+// 作者约得 Y 算力」（2026-07-09 用户定稿：低调，不影响阅读）。奖励数字按「访问时刻」
+// 池子价现算（「约得」自带约，实发以入账时为准，rate 来自 worker 铸币后发布的
+// R2 config/mint-rate.json）。rate/cfg 读不到或 enabled:false → 只补「。下载」不提奖励。
+// 「下载」点击顺手把本页 URL 写进剪贴板（用户手势，微信内也允许）——App 首启
+// 剪贴板兜底归因（第 3 层）靠它。返回值拼在 footer 文案之后。
+export function ctaHtml(rate, cfg) {
+  const on = cfg && cfg.enabled !== false && rate && rate.suanliPerCoin > 0;
+  const reward = on
+    ? `，你约得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力，作者约得 ${Math.round(cfg.authorCoins * rate.suanliPerCoin)} 算力`
+    : '';
+  return `。<a id="vd-dl" href="${APP_STORE}">下载</a>${reward}
+<script>document.getElementById('vd-dl').addEventListener('click',function(){
+try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}})</script>`;
+}
 
 export async function onRequest(context) {
   const { params, env } = context;
@@ -72,15 +91,34 @@ export async function onRequest(context) {
   // Share-card image = the FIRST photo THIS section references, as an ABSOLUTE URL
   // (WeChat / X crawlers need a full origin, not the root-relative inline src). No
   // photo → no og:image, so photo-less articles still render as a clean text card.
-  const origin = new URL(context.request.url).origin;
+  const fwdHost = context.request.headers?.get?.('x-forwarded-host');
+  const origin = fwdHost ? `https://${fwdHost}` : new URL(context.request.url).origin;
   const image = photoRefs.length ? origin + photoURIs[photoRefs[0].token] : '';
 
   const og = {
     description: plainExcerpt(stripPhotoMarkers(shown[0].body), 120),
-    url: context.request.url,
+    // 规范链接用真实域名 + 干净短链（经备案接入点反代时 request.url 是
+    // pages.dev/voicedrop/<id>，直接用会让微信卡片指到内部域名）。
+    url: fwdHost ? `${origin}/${id}` : context.request.url,
     image,
   };
-  return html(page(title, bodyHtml, og), 200, true);
+
+  // 邀请归因：记录本次访问的 IP 指纹（归因第 2 层，refhits/，R2 lifecycle 2 天）。
+  // 不阻塞渲染；缺 SESSION_SECRET / IP 时静默跳过。
+  const shareOwner = (key.match(/^(users\/[^/]+\/)/) || [])[1];
+  const visitorIP = context.request.headers?.get?.('CF-Connecting-IP');
+  if (shareOwner && visitorIP && env.SESSION_SECRET && context.waitUntil) {
+    context.waitUntil(
+      writeRefhit({ FILES: env.FILES }, visitorIP, env.SESSION_SECRET, shareOwner, id, Date.now())
+        .catch(() => {}));
+  }
+  // CTA 实时价：worker 铸币后发布的现价 + 面额配置，任一读不到就走通用文案。
+  let rate = null, refCfg = null;
+  try { const o = await env.FILES.get('config/mint-rate.json'); if (o) rate = JSON.parse(await o.text()); } catch {}
+  try { const o = await env.FILES.get('config/referral.json'); if (o) refCfg = JSON.parse(await o.text()); } catch {}
+  const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 });
+
+  return html(page(title, bodyHtml, og, cta), 200, true);
 }
 
 // Strip [[photo:<token>]] markers from text (for excerpts / fallback). Token is a
@@ -196,7 +234,7 @@ function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
 export function metaTags(title, og) {
   const t = escAttr(title);
   const d = escAttr(og.description || '把口述，变成文章');
-  const u = escAttr(og.url || 'https://jianshuo.dev/voicedrop/');
+  const u = escAttr(og.url || 'https://voicedrop.cn/');
   const img = og.image ? escAttr(og.image) : '';
   const tags = [
     '<meta property="og:type" content="article"/>',
@@ -208,6 +246,10 @@ export function metaTags(title, og) {
     `<meta name="description" content="${d}"/>`,
     `<meta name="twitter:title" content="${t}"/>`,
     `<meta name="twitter:description" content="${d}"/>`,
+    // Smart App Banner — Safari shows an「打开」ribbon that hands this SAME url to
+    // the app. Universal links do NOT fire on same-domain taps inside the page, so
+    // the banner is the only reliable web→app hop (e.g. after 微信 →「在 Safari 中打开」).
+    `<meta name="apple-itunes-app" content="app-id=6781565141, app-argument=${u}"/>`,
   ];
   if (img) {
     tags.push(
@@ -223,7 +265,7 @@ export function metaTags(title, og) {
   return tags.join('\n');
 }
 
-function page(title, inner, og) {
+function page(title, inner, og, extra = '') {
   return `<!doctype html><html lang="zh-CN"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -247,7 +289,7 @@ code{background:#efeee9;padding:.1em .35em;border-radius:4px;font-size:.92em}
 strong{font-weight:650}
 hr{border:none;border-top:1px solid #e6e3dd;margin:2.4rem 0}
 .vd-photo{margin:1.4rem 0}
-.vd-photo img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;display:block}
+.vd-photo img{width:100%;height:auto;border-radius:12px;display:block}
 .muted{color:#86868b}
 footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid #ececec;
   color:#a1a1a6;font-size:.82rem}
@@ -256,7 +298,7 @@ footer a{color:#86868b;text-decoration:none}
 </style></head>
 <body><div class="wrap">
 ${inner}
-<footer>由 <a href="https://jianshuo.dev/voicedrop/">VoiceDrop</a> 口述生成</footer>
+<footer>由 <a href="https://voicedrop.cn/">VoiceDrop</a> 口述生成${extra}</footer>
 </div></body></html>`;
 }
 

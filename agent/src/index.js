@@ -17,6 +17,7 @@
 import { Agent, getAgentByName } from "agents";
 import { TOOL_DEFS, deleteArticleFiles } from "./tools.js";
 import { runCommandTurn } from "./command-turn.js";
+import { sendPush } from "./push.js";
 import { runMine, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
@@ -26,9 +27,10 @@ import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
-import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH } from "./usage.js";
-import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts } from "./usage_store.js";
-import { handleMintRoutes } from "./mint.js";
+import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
+import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger } from "./usage_store.js";
+import { handleMintRoutes, feedQuote } from "./mint.js";
+import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
@@ -38,6 +40,8 @@ import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { xhsPack } from "./xhs.js";
 import { handlePromptLab } from "./prompt-lab.js";
+import { proxyRealtimeWebSocket } from "./realtime.js";
+import { REVISE_SYSTEM, EDIT_SYSTEM as SYSTEM } from "./prompts/edit.js";
 export { AnthropicRelay } from "./relay.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
@@ -75,44 +79,8 @@ export async function meteredCommandGate(db, scope, now) {
 // resolveArticles + withTopLevelArticles are imported from the shared
 // functions/lib/article-store.js (single source of truth).
 
-// Owner-voice DNA — reused from mining/mine.py SYSTEM, reframed for REVISION.
-const REVISE_SYSTEM = `你在修改自己已经成文的公众号文章。下面给你：你这段录音的原始口述转写（事实来源）、当前的全部文章、以及历次修改要求。按「这次的修改要求」改写全部文章——可以改写、合并、拆分、增删某一篇。
-
-事实来源（编辑场景，重要）：
-- 「这次的修改要求」就是最高事实来源——用户当场说的就是事实。他让你加 / 改的任何内容（数字、价格、人名、公司名、一句话，例如「加一句花了2430」「把价格改成1300」「结尾补一句X」），一律照加照改，直接当成用户提供的真实信息。**绝不反问、绝不要求确认、绝不拿「原始转写里没有」当理由顶回去。**
-- 原始口述转写只是底稿参考，不是限制用户的边界。用户这次说的和转写不一致时，以用户这次说的为准。
-- 唯一底线：不要自己凭空虚构用户根本没说、也没让你加的东西。只要是用户这次明确说出来的，就照办，别犹豫。
-
-每一篇都遵守的语气 DNA：
-- 胸有成竹地下断言，不绕弯、不加「我觉得可能也许」的缓冲。
-- 不讲故事、不铺垫，直接给结论再给理由；开头一句就立住，绝不用小白式提问钩子。
-- 第一人称用「我」，绝不用「笔者」。称呼 AI / Claude 一律用「他」，不用「它」。
-- 多用「我 / 他」起句，少用「这里会有…」这类无人称、物称句。
-- 细节能列就用表格 / 列表，不在叙述句里堆细节。
-- 保留口语词（吧 / 呢 / 啊 / 了）、自造词、家常比喻——这是你的声音，别改成书面语。
-- 不加 AI 味连接词（首先 / 其次 / 综上所述 / 值得注意的是），不加 emoji。
-- 中英文之间留一个空格（盘古之白）。
-- 正文里可能有形如 [[photo:photos/2026-…/….jpg]] 的照片标记，方括号里就是这张照片的 key，标明配图位置。改写时默认原样保留每一个标记（连同里面的 key），放在和原来意思相符的段落附近；不要新增、不要改动标记里的 key。
-
-用户会用「行号 / 图号」指位置（app 在按住说话时把这些号浮在正文左边距和图片角上）。下面用户消息里的「当前文章」正文就是逐行标好号的版本——每行开头的「第N行 / 图M」就是用户此刻屏幕上看到的号，请严格按这个号定位，不要自己重新数行：
-- 「第N行」= 正文里标着「第N行」的那一行（正文按真实换行拆出的第 N 个非空行；照片标记 [[photo:…]] 自己单独成行，也占一个行号，所以行号会跨过图片连续往后累加）。例：「把第3行改简洁点」= 改写正文里第 3 行那段。
-- 「图N」= 第 N 个 [[photo:…]] 照片标记；同一张图在正文里既标「第N行」也标「图N」，两种说法都指向它。例：「删掉图2」= 删掉第 2 个照片标记，其余标记和别的图号都不动。
-- 一律按用户看到的带号正文定位；这些号只是定位用、不属于正文，改完正文里不要写行号 / 图号，正常输出，[[photo:…]] 标记原样保留。
-
-绝大多数语音指令都是对当前这篇做定点小改（删一行、改一行、合并相邻几行、拆成两段、删图、插一段、改标题）——这种一律用 edit_current_article，只描述这次的改动（行号就用当前文章里标的第N行），绝不要回传整篇正文。「把第X行和第Y行合并」也是定点小改：用 replace_line 把合并后的整段写进前一行、再 delete_lines 删掉后一行，别去 read/write_article。只有当这次要把多篇不同的文章合并成一篇、参考别的文章重写、或对当前篇做伤筋动骨的大重构时，才用 write_article 回传完整文章数组。无论用哪个，都绝不要把 JSON 或正文直接贴进聊天回复——回复里只简略的把做了什么告诉用户就好。`;
-
-const SYSTEM = `你在用语音帮用户编辑他自己的公众号文章。你有一组工具，按用户这次的语音指令决定怎么做：
-- 定点修改当前这篇（删行 / 改一行 / 合并相邻几行 / 拆成两段 / 删图 / 插一段 / 改标题）：调 edit_current_article，只描述这次的改动，不要回传全文。这是默认路径，绝大多数指令都走这里。**「把第X行和第Y行合并」这种行级合并也走这里**——没有专门的合并 op，用 replace_line 把合并后的整段写进前一行、再 delete_lines 删掉后一行（一次 ops 里一起做），绝不要为此去 read_article / write_article。
-- 大改 / 把多篇不同的文章合并成一篇 / 参考其它文章重写：先 list_articles 看有哪些，再 read_article 读出来，融合后用 write_article 把完整文章数组写回当前这一篇（只能写当前篇，其它篇只读）。**注意：这里的「合并」只指把多篇不同文章并成一篇；用户说「合并第几行」是上一条的行级合并，用 edit_current_article，别走这条。**
-- 发公众号：调 publish_wechat。分享到社区：调 share_to_community。
-- 调整文风：先 read_style 读出当前 CLAUDE.md，改完用 write_style 整体写回。
-- 编辑文章里的某张图（如"把图二变成广告"）：调 edit_photo(用那张图 [[photo:KEY]] 的 KEY)。凭空生成一张新图插入：调 new_photo(prompt + 插在第几行之后)。都是异步，约1分钟自动出现，本轮先说在处理。
-- 指令若以【回答追问】开头：这是用户在回答编辑追问，把回答里的信息用 edit_current_article 织进正文最相关的段落——只用回答里出现的事实，不编造、不照抄问题本身、不动无关段落。
-- 用户想要更多追问（「再追问我几个」「还有什么要问我的」「继续问我」）：调 add_followups，自己找出这篇最薄、只有作者本人知道的点，出 1–3 个短问题；不改正文。若返回 added:0 说明想问的都问过了，如实告诉用户。
-默认就是用 edit_current_article 定点改当前这篇。做完简短说一句结果即可。
-
-写文章时遵守下面的语气 DNA：
-${REVISE_SYSTEM}`;
+// REVISE_SYSTEM / SYSTEM (owner-voice DNA + edit agent prompt) now live in
+// ./prompts/edit.js (imported above as REVISE_SYSTEM / SYSTEM).
 
 // ---------------------------------------------------------------------------
 // The Durable Object: one instance per (user, article).
@@ -581,7 +549,72 @@ export class Miner {
     this.env   = env;
   }
 
-  async fetch(_request) {
+  async fetch(request) {
+    const url = new URL(request.url);
+
+    // ── ops 错误计数（报警机制）──────────────────────────────────────────────
+    // Pages/Worker 的 4xx/5xx 打点进来按「分钟桶 × 路由|状态」累计；/ops/check
+    // 由 */5 cron 调，聚合最近 15 分钟并按阈值给出报警（同规则 60 分钟静默）。
+    if (url.pathname === "/ops/tick") {
+      const b = await request.json().catch(() => ({}));
+      const route = String(b.route || "?").slice(0, 40);
+      const status = Number(b.status) || 0;
+      const bucket = Math.floor(Date.now() / 60000);
+      const key = `ops:${bucket}`;
+      const cur = (await this.state.storage.get(key)) || {};
+      const k = `${route}|${status}`;
+      cur[k] = (cur[k] || 0) + 1;
+      await this.state.storage.put(key, cur);
+      return new Response("ok");
+    }
+    // ── voicedrop.cn 备案接入点探活(腾讯云机器随时可能释放/不稳)────────────
+    // */5 cron 每轮报告一次探活结果;连续 ≥2 次失败且 60 分钟内未报过 → 报警。
+    if (url.pathname === "/ops/probe") {
+      const { ok } = await request.json().catch(() => ({ ok: true }));
+      let fails = (await this.state.storage.get("probe:fails")) || 0;
+      fails = ok ? 0 : fails + 1;
+      await this.state.storage.put("probe:fails", fails);
+      let alert = null;
+      if (fails >= 2) {
+        const last = (await this.state.storage.get("probe:alertedAt")) || 0;
+        if (Date.now() - last > 60 * 60 * 1000) {
+          await this.state.storage.put("probe:alertedAt", Date.now());
+          alert = { fails };
+        }
+      }
+      return Response.json({ alert });
+    }
+    if (url.pathname === "/ops/check") {
+      const nowBucket = Math.floor(Date.now() / 60000);
+      const all = await this.state.storage.list({ prefix: "ops:" });
+      const agg = {};   // route → {c4, c5, samples}
+      for (const [key, val] of all) {
+        const bucket = Number(key.slice(4));
+        if (bucket < nowBucket - 30) { await this.state.storage.delete(key); continue; }
+        if (bucket < nowBucket - 15) continue;
+        for (const [rk, n] of Object.entries(val)) {
+          const [route, st] = rk.split("|");
+          const cls = Number(st) >= 500 ? "c5" : "c4";
+          agg[route] = agg[route] || { c4: 0, c5: 0 };
+          agg[route][cls] += n;
+        }
+      }
+      const alerts = [];
+      const now = Date.now();
+      for (const [route, { c4, c5 }] of Object.entries(agg)) {
+        for (const [cls, count, threshold] of [["4xx", c4, 20], ["5xx", c5, 5]]) {
+          if (count < threshold) continue;
+          const ruleKey = `opsAlerted:${route}|${cls}`;
+          const last = (await this.state.storage.get(ruleKey)) || 0;
+          if (now - last < 60 * 60 * 1000) continue;   // 60 分钟静默去重
+          await this.state.storage.put(ruleKey, now);
+          alerts.push({ route, cls, count });
+        }
+      }
+      return Response.json({ alerts });
+    }
+
+    // ── 默认：挖矿排队（原行为）─────────────────────────────────────────────
     const existing = await this.state.storage.getAlarm();
     if (!existing) await this.state.storage.setAlarm(Date.now() + 500);
     return new Response("queued", { status: 202 });
@@ -751,6 +784,50 @@ export async function handleUsageRoute(url, request, env) {
       spent_suanli: r1(uyToSuanli(a.spent_uy)), spent_yuan: r2(uyToYuan(a.spent_uy)) })) });
   }
 
+  // 投喂挖矿账本：mint 表全站聚合（累计挖出/今日池/币价/熔断）+ 每人收益排行 + 最近流水。
+  if (url.pathname === "/agent/usage/admin/mint" && request.method === "GET") {
+    if (!isAdmin) return J({ error: "unauthorized" }, 401);
+    if (!env.USAGE) return J({ summary: {}, board: [], events: [], degraded: true });
+    const now = Date.now();
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "80", 10) || 80, 300);
+    const { summary, today, sum7, board, events } = await mintLedger(env.USAGE, now, limit);
+    const priceUY = feedQuote(sum7, 0).priceUY;   // 当前币价（与 App 报价同口径）
+    return J({
+      summary: {
+        events: summary.events,
+        coins: r1(ucToCoins(summary.coins_uc)),
+        minted_suanli: r1(uyToSuanli(summary.minted_uy)),
+        author_suanli: r1(uyToSuanli(summary.author_uy)),
+        feeder_suanli: r1(uyToSuanli(summary.feeder_uy)),
+        today_suanli: r1(uyToSuanli(today.minted_uy)),
+        today_events: today.events,
+        daily_pool_suanli: DAILY_POOL_SUANLI,
+        price_suanli_per_coin: r1(uyToSuanli(priceUY)),
+        fuse_cap_suanli: r1(uyToSuanli(FUSE_MULT * DAILY_POOL_UY)),
+        fuse_blown: today.minted_uy > FUSE_MULT * DAILY_POOL_UY,
+      },
+      board: board.map((b) => ({
+        user_sub: b.sub,
+        author_suanli: r1(uyToSuanli(b.author_uy)),
+        feeder_suanli: r1(uyToSuanli(b.feeder_uy)),
+        total_suanli: r1(uyToSuanli(b.author_uy + b.feeder_uy)),
+        recv_cnt: b.recv_cnt, feed_cnt: b.feed_cnt,
+      })),
+      events: events.map((e) => {
+        let d = null; try { d = e.detail ? JSON.parse(e.detail) : null; } catch (_) {}
+        return {
+          ts: e.ts, share_id: e.share_id,
+          actor_sub: e.actor_sub, beneficiary_sub: e.beneficiary_sub,
+          title: (d && d.title) || "",
+          coins: r1(ucToCoins(e.coins_uc)),
+          price_suanli_per_coin: r1(uyToSuanli(e.price_uy)),
+          author_suanli: r1(uyToSuanli(e.beneficiary_uy)),
+          feeder_suanli: r1(uyToSuanli(e.actor_uy)),
+        };
+      }),
+    });
+  }
+
   return J({ error: "not-found" }, 404);
   } catch (_) {
     return J({ error: "usage-unavailable", degraded: true }, 200);
@@ -857,6 +934,18 @@ export default {
       return proxyVolcAsrWebSocket(request, env);
     }
 
+    // ── /agent/realtime/relay ── 认证 WS 中转：手机 → 本 worker → OpenAI realtime。
+    // 手机连不了 api.openai.com，worker 在边缘用 OPENAI_API_KEY 连 OpenAI；服务端计费。
+    if (url.pathname === "/agent/realtime/relay") {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("expected websocket", { status: 426 });
+      }
+      const token = bearerToken(request);
+      const scope = await resolveScope(token, env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
+      return proxyRealtimeWebSocket(request, env, scope, ctx);
+    }
+
     // ── /agent/prompt-registry ── 线上 prompt 注册表（管理 token）。GET 打平列出
     // ui-config 生效版里的全部叶子指令；PUT 改一条并写回 R2 覆盖文件=零部署上线。
     if (url.pathname === "/agent/prompt-registry") {
@@ -886,6 +975,15 @@ export default {
       if (!scope) return new Response("unauthorized", { status: 401 });
       const cfg = await loadUIConfigFor(env, scope);
       return new Response(JSON.stringify(cfg), { headers: { "content-type": "application/json" } });
+    }
+
+    // ── /agent/ops/tick ── 服务端错误打点（Pages Functions 4xx/5xx 时 fire-and-forget）──
+    // 无鉴权：只累加计数、无副作用；载荷截断，恶意灌水最多触发一条报警。
+    if (url.pathname === "/agent/ops/tick" && request.method === "POST") {
+      const body = await request.text();
+      const stub = env.Miner.get(env.Miner.idFromName("miner"));
+      ctx.waitUntil(stub.fetch(new Request("https://miner/ops/tick", { method: "POST", body })));
+      return new Response(null, { status: 204 });
     }
 
     // ── /agent/mine/trigger ── kick the miner (any authenticated user or admin) ──
@@ -1181,21 +1279,65 @@ export default {
     // 投币（铸币事件 + 双边算力到账）—— src/mint.js
     { const r = await handleMintRoutes(url, request, env); if (r) return r; }
 
+    // 邀请奖励（新装归因 + 双边铸币入账）—— src/referral.js
+    { const r = await handleReferralRoutes(url, request, env); if (r) return r; }
+
     { const r = await handleUsageRoute(url, request, env); if (r) return r; }
 
     return new Response("not found", { status: 404 });
   },
 
-  // CF Cron Trigger: fires the miner on schedule (every 6 hours).
-  async scheduled(_event, env, ctx) {
+  // CF Cron Triggers: 6 小时一次的挖矿兜底 + 每 5 分钟一次的错误报警检查。
+  async scheduled(event, env, ctx) {
     const stub = env.Miner.get(env.Miner.idFromName("miner"));
+    if (event.cron === "*/5 * * * *") {
+      ctx.waitUntil((async () => {
+        // 探活 voicedrop.cn(备案接入点)。挂了 → 推送报警,含回滚提示。
+        try {
+          let ok = false;
+          try {
+            const pr = await fetch("https://voicedrop.cn/", { signal: AbortSignal.timeout(10_000), redirect: "manual" });
+            ok = pr.status < 500;
+          } catch (_) {}
+          const rp = await stub.fetch(new Request("https://miner/ops/probe", { method: "POST", body: JSON.stringify({ ok }) }));
+          const { alert } = await rp.json().catch(() => ({}));
+          if (alert) {
+            console.log("[ops] voicedrop.cn PROBE DOWN", JSON.stringify(alert));
+            if (env.ADMIN_SCOPE) {
+              await sendPush(env, env.ADMIN_SCOPE, {
+                title: "voicedrop.cn 探活失败",
+                body: `连续 ${alert.fails} 次不可达——腾讯云接入点可能挂了。回滚: DNS 改回 CNAME jianshuo-dev.pages.dev(见 infra/voicedrop-cn/README)`,
+                threadId: "ops",
+              });
+            }
+          }
+        } catch (e) { console.log("[ops] probe failed", String(e).slice(0, 120)); }
+        try {
+          const r = await stub.fetch(new Request("https://miner/ops/check", { method: "POST" }));
+          const { alerts = [] } = await r.json().catch(() => ({}));
+          for (const a of alerts) {
+            console.log("[ops] ALERT", JSON.stringify(a));
+            if (env.ADMIN_SCOPE) {
+              await sendPush(env, env.ADMIN_SCOPE, {
+                title: `服务端 ${a.cls} 报警`,
+                body: `${a.route} 最近 15 分钟 ${a.cls} × ${a.count}`,
+                threadId: "ops",
+              });
+            }
+          }
+        } catch (e) { console.log("[ops] check failed", String(e).slice(0, 200)); }
+      })());
+      return;
+    }
     ctx.waitUntil(stub.fetch(new Request("https://miner/trigger", { method: "POST" })));
+    // 6h 一次顺手刷新落地页 CTA 汇率（冷启动没铸币也有价可显示）。
+    if (env.USAGE) ctx.waitUntil(publishMintRate(env, env.USAGE, Date.now()));
   },
 };
 
 // Resolve a writable scope from an app token. Read-only temp tokens are rejected
 // (editing requires write). Returns 'users/<sub>/' or null.
-async function resolveScope(token, env) {
+export async function resolveScope(token, env) {
   if (!token) return null;
   if (env.FILES_TOKEN && token === env.FILES_TOKEN) return null; // admin has no single scope here
   if (env.SESSION_SECRET) {

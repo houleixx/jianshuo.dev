@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoiceDrop API</title>
+<link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/developer/api.html">
+<link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/developer/api.html">
+<link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/developer/api.html">
+<style>
+  :root{
+    --ink:#1d1d1f;
+    --sub:#6e6e73;
+    --line:#e5e5e7;
+    --bg:#ffffff;
+    --accent:#c0563f;
+    --accent-soft:#f2ddd6;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-size:16px;
+    line-height:1.75;
+  }
+  header.site{
+    border-bottom:1px solid var(--line);
+    background:var(--bg);
+  }
+  header.site .inner{
+    max-width:820px;
+    margin:0 auto;
+    padding:18px 24px;
+    display:flex;
+    align-items:center;
+    gap:11px;
+  }
+  header.site .bars{
+    display:inline-flex;
+    align-items:flex-end;
+    gap:2.5px;
+    height:20px;
+  }
+  header.site .bars span{width:3px;border-radius:2px;background:var(--accent)}
+  header.site .title{font-weight:600;font-size:18px;letter-spacing:-.01em}
+  .wrap{max-width:820px;margin:0 auto;padding:8px 24px 90px}
+  h1{font-size:30px;line-height:1.25;letter-spacing:-.02em;margin:30px 0 12px}
+  h2{
+    font-size:23px;
+    line-height:1.3;
+    letter-spacing:-.01em;
+    margin:50px 0 14px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+    color:var(--accent);
+  }
+  h3{font-size:18px;line-height:1.45;margin:34px 0 10px}
+  h3 code{font-size:.84em}
+  p{margin:14px 0}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  strong{font-weight:600;color:var(--ink)}
+  em{font-style:italic}
+  hr{border:none;border-top:1px solid var(--line);margin:42px 0}
+  ul{margin:14px 0;padding-left:22px}
+  li{margin:9px 0}
+  li > .table-wrap{margin-top:12px}
+  blockquote{
+    margin:18px 0;
+    padding:12px 18px;
+    background:var(--accent-soft);
+    border-left:3px solid var(--accent);
+    border-radius:0 10px 10px 0;
+    color:#5b3a30;
+  }
+  blockquote p{margin:0}
+  blockquote code{background:rgba(192,86,63,.12);color:#7a3322}
+  code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    font-size:.86em;
+    background:#f0f0f2;
+    color:#37373a;
+    padding:.1em .42em;
+    border-radius:6px;
+    overflow-wrap:anywhere;
+  }
+  pre{
+    margin:16px 0;
+    background:#f6f6f7;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px 16px;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  pre code{
+    display:block;
+    background:none;
+    color:#1d1d1f;
+    padding:0;
+    font-size:13.5px;
+    line-height:1.7;
+    white-space:pre;
+    overflow-wrap:normal;
+  }
+  .table-wrap{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    margin:16px 0;
+    border:1px solid var(--line);
+    border-radius:12px;
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    font-size:14.5px;
+  }
+  th,td{
+    text-align:left;
+    padding:10px 14px;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+  }
+  th{
+    background:#fafafa;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  table tr:last-child td{border-bottom:none}
+  td code,th code{white-space:normal}
+  @media (max-width:520px){
+    body{font-size:15px}
+    .wrap{padding:4px 16px 70px}
+    header.site .inner{padding:16px}
+    h1{font-size:25px}
+    h2{font-size:20px}
+    h3{font-size:17px}
+    pre code{font-size:12.5px}
+    table{font-size:13.5px}
+    th,td{padding:9px 11px}
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="inner">
+    <span class="bars" aria-hidden="true">
+      <span style="height:8px"></span><span style="height:14px"></span><span style="height:20px"></span><span style="height:12px"></span><span style="height:7px"></span>
+    </span>
+    <span class="title">VoiceDrop API</span>
+    <a href="/voicedrop/en/developer/" style="margin-left:auto;font-size:13.5px;color:var(--sub)">← Developers</a>
+    <a href="/voicedrop/developer/api.html" style="font-size:13.5px;color:var(--sub)">中文</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+<h1>VoiceDrop API</h1>
+
+<p>The VoiceDrop backend is made up of <strong>three independent HTTP services</strong>, all running on Cloudflare under the same <code>jianshuo.dev</code> zone. A client typically only talks to the first two.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Service</th><th>Base URL</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Files API</strong></td><td><code>https://jianshuo.dev/files/api/</code></td><td>Accounts, recording/article files, sharing, WeChat Official Account, community. The vast majority of calls go here.</td></tr>
+    <tr><td><strong>Agent Worker</strong></td><td><code>https://jianshuo.dev/agent/</code> (WS: <code>wss://jianshuo.dev/agent/</code>)</td><td>Trigger mining, real-time status push, voice-driven editing.</td></tr>
+    <tr><td><strong>Reco Worker</strong></td><td><code>https://jianshuo.dev/reco/</code></td><td>Community feed ranking + engagement reporting. Can be unplugged at any time; if it's down, the main flow is unaffected.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<blockquote><p>Each service also has a <code>*.jianshuo.workers.dev</code> mirror (<code>voicedrop-agent.jianshuo.workers.dev</code>, <code>voicedrop-reco.jianshuo.workers.dev</code>) with identical behavior. Server-to-server calls within the same zone use the mirror to bypass Pages routing; clients should just use the <code>jianshuo.dev/...</code> URLs above.</p></blockquote>
+
+<p><strong>The data flow in one sentence</strong>: upload <code>.m4a</code> → server-side mining (ASR + Claude) writes out <code>articles/&lt;stem&gt;.json</code> → client reads articles, shares them, publishes to WeChat Official Account / community.</p>
+
+<hr>
+
+<h2>1. Authentication</h2>
+
+<p>All requests use <code>Authorization: Bearer &lt;token&gt;</code> (the Files API also accepts a <code>?token=&lt;token&gt;</code> query parameter). There are two tiers of credentials:</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Credential</th><th>Shape</th><th>How to get it</th><th>scope (data isolation)</th></tr></thead>
+  <tbody>
+    <tr><td><strong>anon token</strong></td><td>High-entropy string starting with <code>anon_</code>, ≥20 chars</td><td>Client generates it once and keeps it (the same user always uses the same token)</td><td><code>users/anon-&lt;sha256(token)[:32]&gt;/</code></td></tr>
+    <tr><td><strong>session JWT</strong></td><td><code>h.p.sig</code> (HS256)</td><td>Exchange an Apple identityToken via <code>POST auth/apple</code></td><td><code>scope</code> inside the JWT</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>Key points:</strong></p>
+<ul>
+  <li><strong>scope decides whose data you can see.</strong> All your relative keys are automatically joined under the <code>scope</code> prefix; there is no way to escape it (<code>..</code> and absolute paths are always rejected).</li>
+  <li><strong>anon and session resolve to the same user.</strong> Apple sign-in merely <em>binds</em> the Apple ID to your current anon data box — the session's scope is itself <code>users/anon-&lt;hash&gt;/</code>. So whether a user calls with anon or session, it lands on the same data.</li>
+  <li><strong>Most endpoints accept any valid token.</strong> Only <strong>community writes (share / unshare)</strong> require an Apple-verified session JWT; otherwise <code>403 needs_apple_signin</code>.</li>
+  <li>There is also a 24h <strong>read-only temp token</strong> (issued by <code>GET token/articles</code>) that can only <code>list</code> / <code>download</code>. Reco and Agent do <strong>not accept</strong> temp tokens.</li>
+</ul>
+
+<h3>Exchanging for a session JWT</h3>
+
+<pre><code>POST /files/api/auth/apple
+Content-Type: application/json
+
+{ "identityToken": "&lt;Apple identity token&gt;", "fullName": "Zhang San", "email": "..." }</code></pre>
+
+<p><code>fullName</code> / <code>email</code> are only provided by Apple on first authorization and are optional. If you include your current anon token (in the <code>Authorization</code> header), the Apple ID gets bound to that anon box and your data stays put.</p>
+
+<p>Returns: <code>{ "session": "&lt;JWT, valid for 365 days&gt;", "scope": "users/&lt;sub&gt;/" }</code></p>
+
+<hr>
+
+<h2>2. General conventions</h2>
+
+<ul>
+  <li><strong>Request / response bodies are JSON</strong> (except file upload / download).</li>
+  <li><strong>Errors</strong>: any non-2xx returns <code>{ "error": "&lt;code&gt;", ... }</code>. Common status codes:
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>400</td><td>Invalid parameter / key</td></tr>
+        <tr><td>401</td><td>Token missing or invalid</td></tr>
+        <tr><td>403</td><td>Insufficient permission (read-only token overreach, not the owner, community write without Apple sign-in)</td></tr>
+        <tr><td>404</td><td>Resource not found</td></tr>
+        <tr><td>409</td><td>Not configured (e.g. WeChat Official Account missing AppID/Secret → <code>wechat_not_configured</code>)</td></tr>
+        <tr><td>502</td><td>Upstream failure (WeChat Official Account relay / real WeChat errcode passed through)</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </li>
+  <li><strong>Path conventions</strong> (easy to mix up — read carefully):
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Endpoint family</th><th>Identifier you pass</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>File endpoints (<code>list</code>/<code>download</code>/<code>upload</code>/<code>file</code>)</td><td><strong>Relative path within scope</strong></td><td><code>VoiceDrop-xxx.m4a</code>, <code>articles/xxx.json</code></td></tr>
+        <tr><td><code>share</code> / <code>wechat</code> / <code>community/*</code></td><td><strong>Relative article key</strong></td><td><code>articles/&lt;stem&gt;.json</code></td></tr>
+        <tr><td>Articles API (<code>/articles/...</code>)</td><td><strong>stem</strong> (bare filename, no <code>articles/</code> prefix, no <code>.json</code>)</td><td><code>VoiceDrop-xxx</code></td></tr>
+        <tr><td><code>photo</code> / <code>asset</code> (public)</td><td><strong>Full R2 key</strong></td><td><code>users/&lt;sub&gt;/photos/.../x.jpg</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </li>
+</ul>
+
+<hr>
+
+<h2>3. Files API</h2>
+
+<blockquote><p>Everything requires a token except <code>auth/apple</code>, <code>photo/*</code>, and <code>asset/wechat-covers/*</code>.</p></blockquote>
+
+<h3>Account</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method / path</th><th>Description</th><th>Returns</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST auth/apple</code></td><td>See above</td><td><code>{session, scope}</code></td></tr>
+    <tr><td><code>GET whoami</code></td><td>The scope resolved from the current token</td><td><code>{scope:"users/&lt;sub&gt;/"}</code></td></tr>
+    <tr><td><code>GET token/articles</code></td><td>Issue a 24h read-only articles link</td><td><code>{token, url, expires_in:86400}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Files (raw R2 read/write)</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method / path</th><th>Description</th><th>Returns</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET list</code></td><td>List all objects within scope (pagination is aggregated, never truncated)</td><td><code>{files:[{name,size,uploaded}]}</code></td></tr>
+    <tr><td><code>PUT upload/&lt;name&gt;</code></td><td>Upload (request body is the raw file bytes, <code>Content-Type</code> passed through). <strong>When <code>name</code> looks like <code>VoiceDrop-*.m4a</code>, mining is triggered automatically.</strong></td><td><code>{ok:true, name}</code></td></tr>
+    <tr><td><code>GET download/&lt;name&gt;</code></td><td>Download raw bytes. <code>HEAD</code> on the same path fetches metadata only.</td><td>File bytes</td></tr>
+    <tr><td><code>DELETE file/&lt;name&gt;</code></td><td>Delete a single object</td><td><code>{ok:true}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>Recording filename convention</strong>: <code>VoiceDrop-&lt;ts&gt;-&lt;dur&gt;-&lt;weekday&gt;-&lt;period&gt;[-&lt;city&gt;-&lt;district&gt;].m4a</code> (pure ASCII). Only this prefix + suffix triggers automatic mining.</p>
+
+<h3>Articles (high-level CRUD, versioned)</h3>
+
+<p><code>&lt;stem&gt;</code> = the recording filename with its extension removed. <strong>Prefer this set of endpoints over raw <code>download/articles/&lt;stem&gt;.json</code></strong> — it flattens the internal version structure (<code>versions[head]</code>) into a top-level <code>articles</code>.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method / path</th><th>Description</th><th>Returns</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET articles</code></td><td>List all articles</td><td><code>{articles:[{stem,title,head,createdAt,updatedAt,count}]}</code></td></tr>
+    <tr><td><code>GET articles/&lt;stem&gt;</code></td><td>Read one (current head version)</td><td>Article document (see §6)</td></tr>
+    <tr><td><code>PUT articles/&lt;stem&gt;</code></td><td>Write (automatically saved as a new version)</td><td><code>{ok, head}</code></td></tr>
+    <tr><td><code>DELETE articles/&lt;stem&gt;</code></td><td>Delete the article + <code>.srt</code> + <code>.empty</code> sidecars</td><td><code>{ok}</code></td></tr>
+    <tr><td><code>GET articles/&lt;stem&gt;/history</code></td><td>Version history</td><td><code>{head, versions:[...]}</code></td></tr>
+    <tr><td><code>PATCH articles/&lt;stem&gt;/head</code></td><td>Move only the head pointer (undo / redo, no new version created), body <code>{head:&lt;n&gt;}</code></td><td><code>{ok, head}</code></td></tr>
+    <tr><td><code>PUT articles/&lt;stem&gt;/srt</code></td><td>Write the subtitle sidecar (request body is SRT text)</td><td><code>{ok}</code></td></tr>
+    <tr><td><code>PUT articles/&lt;stem&gt;/empty</code></td><td>Mark as no speech, body <code>{reason?}</code></td><td><code>{ok}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Writing style (versioned)</h3>
+
+<p>The mining / editing prompts layer in the user's writing style. Storage is a versioned <code>CLAUDE.json</code> (schema-3, same <code>versions[head]</code> structure as articles). <strong>The writing style is the only versioned field</strong>; <strong>identity fields like the name live in the non-versioned <code>doc.profile</code></strong> (renaming does not create a new style version). On read, it falls back to the "# My name" line in the legacy <code>CLAUDE.md</code>.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method / path</th><th>Description</th><th>Returns</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET style</code></td><td>Read the current writing style + name</td><td><code>{style, name, head, createdAt, updatedAt}</code>; with only a legacy <code>CLAUDE.md</code>: <code>{style, name, head:0, legacy:true}</code>; neither exists → <code>404</code></td></tr>
+    <tr><td><code>PUT style</code></td><td>Write. Body <code>{style?, name?, source?}</code>: pass <code>style</code> to save as a new version; pass <code>name</code> to update only <code>profile.name</code> (<strong>no new version</strong>); both may be passed together</td><td><code>{ok, head}</code>; both <code>style</code> and <code>name</code> empty → <code>400 empty_content</code></td></tr>
+    <tr><td><code>GET style/history</code></td><td>Version history</td><td><code>{head, versions:[{v,savedAt,source,style}]}</code> (oldest-first, max 10 versions)</td></tr>
+    <tr><td><code>PATCH style/head</code></td><td>Move only the head pointer (undo / redo, no new version created), body <code>{head:&lt;n&gt;}</code></td><td><code>{ok, head}</code>; version not found → <code>404</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Sharing &amp; WeChat Official Account</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method / path</th><th>Description</th><th>Returns</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET share/articles/&lt;stem&gt;.json</code></td><td>Create / fetch the public short link for this article</td><td><code>{url:"https://jianshuo.dev/voicedrop/&lt;id&gt;"}</code></td></tr>
+    <tr><td><code>POST wechat/articles/&lt;stem&gt;.json</code></td><td><strong>Synchronously</strong> publish the article as a WeChat Official Account draft (updates in place if already published). Requires <code>WECHAT.json</code> to be configured first.</td><td><code>{ok,created,updated}</code>; <code>409 wechat_not_configured</code>; <code>502 {errcode,errmsg}</code> passes through the real WeChat error</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Community (shared cross-user space)</h3>
+
+<p>A post is a <strong>live pointer to an article</strong> (schema-2, no content copy) — edit the source article and the community reflects it immediately.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method / path</th><th>Description</th><th>Returns</th></tr></thead>
+  <tbody>
+    <tr><td><code>POST community/share/articles/&lt;stem&gt;.json</code></td><td>Share / re-share one of your own articles. Body may include <code>{replyTo:&lt;shareId&gt;}</code> to mark it as a reply. <strong>Requires an Apple session</strong>, otherwise <code>403 needs_apple_signin</code>.</td><td><code>{ok, shareId}</code></td></tr>
+    <tr><td><code>GET community/list</code></td><td>All posts, newest first by first-shared time</td><td><code>{posts:[{shareId,author,title,firstSharedAt,count,mine,replyTo?}]}</code></td></tr>
+    <tr><td><code>GET community/get/&lt;shareId&gt;</code></td><td>Read one post (with live article content)</td><td><code>{shareId,author,title,articles:[{title,body}],owner,firstSharedAt,replyTo?}</code></td></tr>
+    <tr><td><code>GET community/replies/&lt;shareId&gt;</code></td><td>Replies to a post, oldest first</td><td><code>{posts:[...]}</code></td></tr>
+    <tr><td><code>GET community/shared/articles/&lt;stem&gt;.json</code></td><td>Whether my article is already shared (drives the "Share / Update" button)</td><td><code>{shared:bool, shareId?}</code></td></tr>
+    <tr><td><code>POST community/unshare/&lt;shareId&gt;</code></td><td>Take down your own post (<strong>owner only</strong>)</td><td><code>{ok}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<blockquote><p>To render photos in a community post: join the returned <code>owner</code> with the key from each <code>[[photo:&lt;relkey&gt;]]</code> marker in the body to get the full key, then fetch it via the public <code>photo/&lt;key&gt;</code> endpoint below.</p></blockquote>
+
+<h3>Public assets (no token required)</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Method / path</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET photo/&lt;full R2 key&gt;</code></td><td>Fetch a session photo. Only accepts <code>users/*/photos/*.(jpg|jpeg|png)</code>, CORS <code>*</code>, publicly cached. <strong>All photo display goes through this single endpoint.</strong></td></tr>
+    <tr><td><code>GET asset/wechat-covers</code></td><td>List WeChat Official Account cover image names → <code>{covers:[...]}</code></td></tr>
+    <tr><td><code>GET asset/wechat-covers/&lt;name&gt;</code></td><td>Fetch one cover image's bytes</td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr>
+
+<h2>4. Agent Worker</h2>
+
+<p>Base: <code>https://jianshuo.dev/agent/</code>. Auth is the same as the Files API (anon or session; <strong>editing requires a writable token</strong>).</p>
+
+<h3>Trigger mining</h3>
+
+<pre><code>POST /agent/mine/trigger
+Authorization: Bearer &lt;any valid user token&gt;</code></pre>
+
+<p>Wakes the server-side miner to process all pending recordings. Idempotent — already-processed ones are skipped. Returns <code>202 queued</code>. The server already calls this automatically on <code>.m4a</code> upload, so manual calls are rarely needed.</p>
+
+<h3><code>wss://…/agent/edit?stem=&lt;stem&gt;</code> — voice-driven editing</h3>
+
+<p>Once open it is a long-lived connection supporting multiple round trips; the server persists history per article, so context carries across turns.</p>
+
+<p><strong>Client → server</strong> (send an editing instruction):</p>
+<pre><code>{
+  "type": "instruct",
+  "text": "Make line 3 more concise, and delete photo 2",
+  "images": [
+    { "data": "&lt;base64&gt;", "key": "photos/&lt;sessionTs&gt;/&lt;offset&gt;-&lt;rand&gt;.jpg", "mediaType": "image/jpeg" }
+  ]
+}</code></pre>
+<p>(<code>images</code> is optional, for attaching new photos.)</p>
+
+<p><strong>Server → client</strong> (pushed in order for each instruction):</p>
+<pre><code>{ "type": "status",  "state": "working" }
+{ "type": "updated", "article": { ... the full top-level articles document } }
+{ "type": "reply",   "text": "Done", "ok": true }
+{ "type": "error",   "message": "&lt;reason&gt;" }</code></pre>
+<ul>
+  <li><code>status</code>: processing started.</li>
+  <li><code>updated</code>: written back to R2 — use it to refresh in place.</li>
+  <li><code>reply</code>: verbal confirmation (<code>text</code> may be empty).</li>
+  <li><code>error</code>: failed; this instruction did not take effect.</li>
+</ul>
+
+<p><strong>Protocol rules (clients must follow):</strong></p>
+<ul>
+  <li><strong>Strictly serial</strong>: do not send the next <code>instruct</code> until the previous one has received <code>updated</code>. If the server is busy it replies <code>{"type":"error","message":"正在修改，请稍候"}</code> ("editing in progress, please wait").</li>
+  <li>A successful instruction always goes <code>status</code> → then <code>updated</code> → (usually) <code>reply</code>. Once you receive <code>updated</code>, the article for this turn is persisted.</li>
+  <li>A <code>[[photo:&lt;key&gt;]]</code> marker in the body = a photo placement; the key is the photo's relative R2 key. Edits preserve these markers verbatim.</li>
+  <li>Users may refer to positions as "line N / photo N": line N = the Nth non-empty line after splitting the body on real newlines (a photo marker occupies its own line); photo N = the Nth photo marker appearing in the body.</li>
+</ul>
+
+<h3><code>wss://…/agent/status</code> — real-time status push</h3>
+
+<p>Read-only subscription; <strong>the client sends no messages</strong>. Whenever a recording's status changes, the server pushes:</p>
+<pre><code>{ "type": "status_update", "stem": "VoiceDrop-xxx", "status": "asr" }</code></pre>
+<p><code>status</code> values: <code>asr</code> (listening to the recording) · <code>mining</code> (mining articles) · <code>ready</code> (article ready) · <code>empty</code> (no speech). Use this to flip list-row badges in place, no polling needed.</p>
+
+<hr>
+
+<h2>5. Reco Worker</h2>
+
+<p>Base: <code>https://jianshuo.dev/reco/</code>. Auth: anon or session token (temp tokens are <strong>not accepted</strong>). Unpluggable — <strong>clients should use a 2s timeout of their own; if reco is down or times out, fall back to reverse-chronological order</strong> and the feed still works.</p>
+
+<h3><code>POST /reco/rank</code> — feed ranking</h3>
+
+<p>Hand the posts from <code>GET community/list</code> to reco for ranking. Request:</p>
+<pre><code>{ "posts": [ { "shareId":"abc", "firstSharedAt":1700000000000, "replyCount":2, "author":"Zhang San" } ] }</code></pre>
+<p>Returns:</p>
+<pre><code>{ "order": ["&lt;shareId&gt;", "..."],
+  "liked": ["&lt;shareId&gt;", "..."] }</code></pre>
+<p><code>order</code> = the shareIds in ranked order; <code>liked</code> = the ones the current user has ❤️'d. Score = <code>(1 + view·1 + finish·4 + like·3 + reply·5 + report·(-9)) / (ageHours+2)^1.5</code>, then interleaved by author.</p>
+
+<h3><code>POST /reco/engage/&lt;shareId&gt;</code> — engagement reporting (fire-and-forget)</h3>
+
+<pre><code>{ "action": "view" }</code></pre>
+<p><code>action</code> ∈ <code>view</code> (opened the post) · <code>finish</code> (read to the end) · <code>like</code> (❤️) · <code>report</code> (report).</p>
+<ul>
+  <li>Deduplicated per user per action; <code>view</code> / <code>finish</code> / <code>report</code> are one-shot, never accumulated.</li>
+  <li><strong><code>like</code></strong> with <code>{"action":"like","on":false}</code> means un-like; returns <code>{ok, liked:&lt;bool&gt;}</code>. Everything else returns <code>{ok}</code>.</li>
+  <li><strong><code>report</code></strong> is irrevocable and negatively weighted; a single report can sink a cold-start post to the bottom.</li>
+  <li>If D1 is unavailable, everything degrades to a no-op — it never errors.</li>
+</ul>
+
+<hr>
+
+<h2>6. Data model</h2>
+
+<h3>Article document (returned by <code>GET articles/&lt;stem&gt;</code>)</h3>
+
+<pre><code>{
+  "schema": 3,
+  "id": "VoiceDrop-xxx",
+  "sourceAudio": "VoiceDrop-xxx.m4a",
+  "createdAt": 1700000000000,
+  "updatedAt": 1700000000000,
+  "transcript": "Raw dictation transcript…",
+  "srt": "1\n00:00:00,000 --&gt; ...",
+  "status": "ready",
+  "model": "claude-sonnet-4-6",
+  "articles": [ { "title": "Title", "body": "Body markdown, with [[photo:&lt;relkey&gt;]] markers" } ]
+}</code></pre>
+<ul>
+  <li><strong><code>articles</code> is the current head version, flattened</strong>; the internal <code>versions</code> / <code>head</code> are not returned here (use <code>/history</code>).</li>
+  <li>An article <strong>exists</strong> = <code>articles/&lt;stem&gt;.json</code> exists = the article is ready.</li>
+  <li>Processed but <strong>no speech</strong> = the same directory has <code>articles/&lt;stem&gt;.empty</code> (<code>{status:"empty",reason:"..."}</code>).</li>
+  <li><strong>Photos</strong> are referenced only via <code>[[photo:&lt;relkey&gt;]]</code> markers in the body; there is no separate photos array. <code>&lt;relkey&gt;</code> is a relative key within scope — prepend the <code>users/&lt;sub&gt;/</code> prefix from <code>whoami</code> / <code>owner</code> to get the full key, then fetch via the public <code>photo/&lt;key&gt;</code> endpoint.</li>
+</ul>
+
+<h3>R2 key cheat sheet (all under <code>users/&lt;sub&gt;/</code>)</h3>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>key</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td><code>VoiceDrop-&lt;ts&gt;-….m4a</code></td><td>Recording (uploading it triggers mining)</td></tr>
+    <tr><td><code>articles/&lt;stem&gt;.json</code></td><td>Article (exists = ready)</td></tr>
+    <tr><td><code>articles/&lt;stem&gt;.empty</code></td><td>No-speech marker</td></tr>
+    <tr><td><code>articles/&lt;stem&gt;.srt</code></td><td>Subtitle sidecar</td></tr>
+    <tr><td><code>photos/&lt;sessionTs&gt;/&lt;offset&gt;-&lt;rand&gt;.jpg</code></td><td>Session photo (<code>&lt;offset&gt;</code> = whole seconds from the start of the recording)</td></tr>
+    <tr><td><code>CLAUDE.json</code></td><td>Writing style (versioned schema-3, fed into the mining/editing prompts) — see the "Writing style" endpoints above</td></tr>
+    <tr><td><code>CLAUDE.md</code></td><td>Stores only the user's name (legacy style fallback source; writes go to <code>CLAUDE.json</code> only)</td></tr>
+    <tr><td><code>WECHAT.json</code></td><td>WeChat Official Account config <code>{appid,secret,enabled,coverMediaIds}</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<hr>
+
+<h2>7. End-to-end example (cURL)</h2>
+
+<pre><code>TOKEN="anon_xxxxxxxxxxxxxxxxxxxx"
+BASE="https://jianshuo.dev/files/api"
+
+# 1) Upload a recording (triggers mining automatically)
+curl -X PUT "$BASE/upload/VoiceDrop-20260627-093012-Sat-morning.m4a" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: audio/m4a" \
+  --data-binary @rec.m4a
+
+# 2) (optional) Manually nudge the miner
+curl -X POST "https://jianshuo.dev/agent/mine/trigger" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3) List articles, read one
+curl "$BASE/articles" -H "Authorization: Bearer $TOKEN"
+curl "$BASE/articles/VoiceDrop-20260627-093012-Sat-morning" -H "Authorization: Bearer $TOKEN"
+
+# 4) Create a public share link
+curl "$BASE/share/articles/VoiceDrop-20260627-093012-Sat-morning.json" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5) Publish as a WeChat Official Account draft (configure WECHAT.json first)
+curl -X POST "$BASE/wechat/articles/VoiceDrop-20260627-093012-Sat-morning.json" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+<p>For live progress, subscribe to <code>wss://jianshuo.dev/agent/status</code> (with the same <code>Authorization</code>) and watch this recording's badge flip from <code>asr</code> → <code>mining</code> → <code>ready</code>.</p>
+
+</main>
+
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>下载 VoiceDrop 安卓版</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font:400 16px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:#FAF6EF;color:#2A2521;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{max-width:420px;width:100%;text-align:center;padding:44px 28px}
+  .bars{display:inline-flex;align-items:flex-end;gap:3px;height:30px;margin-bottom:18px}
+  .bars span{width:4px;background:#D8593B;border-radius:2px}
+  h1{font:600 26px/1.3 -apple-system;letter-spacing:-.02em;margin-bottom:10px}
+  p{color:#6b5f51;font-size:15px}
+  .btn{display:inline-block;margin-top:26px;font:600 16px -apple-system;color:#fff;background:#D8593B;padding:15px 34px;border-radius:10px;box-shadow:0 10px 26px -8px rgba(216,89,59,.55);text-decoration:none}
+  .alt{display:block;margin-top:20px;font:500 13.5px -apple-system;color:#9a9082;text-decoration:none}
+  .mask{display:none;position:fixed;inset:0;background:rgba(20,16,12,.88);z-index:9;color:#fff;padding:28px 24px;text-align:right}
+  .mask .arrow{font-size:44px;line-height:1;display:inline-block}
+  .mask .tip{margin-top:14px;text-align:center;font:500 17px/1.8 -apple-system}
+  .mask .tip b{color:#FFC9B5}
+  .wx .mask{display:block}
+</style>
+</head>
+<body>
+<div class="card">
+  <span class="bars"><span style="height:11px"></span><span style="height:22px"></span><span style="height:30px"></span><span style="height:17px"></span><span style="height:9px"></span></span>
+  <h1>下载 VoiceDrop 安卓版</h1>
+  <p id="msg">点击下方按钮开始下载，下载完成后打开安装包即可安装。</p>
+  <a class="btn" id="dl" href="#">下载安卓安装包</a>
+  <a class="alt" href="https://testflight.apple.com/join/PbzFFRS2">iPhone 用户？去 TestFlight 下载 iOS 版 →</a>
+  <a class="alt" href="https://voicedrop.cn/">← 回 VoiceDrop 首页</a>
+</div>
+<div class="mask">
+  <span class="arrow">⤴</span>
+  <div class="tip">微信内无法直接下载安装包<br>请点击右上角 <b>···</b> 菜单<br>选择 <b>「在浏览器中打开」</b> 后下载</div>
+</div>
+<script>
+(function(){
+  var apk = 'https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk';
+  var wx = /MicroMessenger/i.test(navigator.userAgent);
+  var dl = document.getElementById('dl');
+  if (wx) {
+    document.body.className = 'wx';
+    document.getElementById('msg').textContent = '请先在浏览器中打开本页，再开始下载。';
+    dl.addEventListener('click', function(e){ e.preventDefault(); });
+  } else {
+    dl.href = apk;
+    setTimeout(function(){ location.href = apk; }, 800);
+  }
+})();
+</script>
+</body>
+</html>

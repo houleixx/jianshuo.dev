@@ -8,6 +8,9 @@
 <meta property="og:description" content="一句话录下灵感，自动按时间和地点命名，上传到你自己的私有文件中转站。打开、说、完成——没有第二个动作。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://jianshuo.dev/voicedrop/">
+<link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/">
+<link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/">
+<link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/">
 <title>VoiceDrop — 口述备忘 · jianshuo.dev</title>
 <style>
   *{box-sizing:border-box}
@@ -33,14 +36,16 @@
     <div style="max-width:1160px;margin:0 auto;padding:15px 32px;display:flex;align-items:center;justify-content:space-between">
       <div style="display:flex;align-items:flex-end;gap:9px">
         <span style="display:inline-flex;align-items:flex-end;gap:2.5px;height:24px"><span style="width:3px;height:10px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:18px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:24px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:15px;background:var(--accent,#D8593B);border-radius:2px"></span><span style="width:3px;height:8px;background:var(--accent,#D8593B);border-radius:2px"></span></span>
-        <span style="font:600 18px -apple-system;letter-spacing:-.01em">VD口述</span>
+        <span style="font:600 18px -apple-system;letter-spacing:-.01em">VoiceDrop</span>
       </div>
       <nav style="display:flex;align-items:center;gap:26px">
         <span class="vd-navlinks" style="display:flex;align-items:center;gap:26px">
         <a href="#features" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">功能</a>
         <a href="#privacy" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">隐私</a>
         <a href="#support" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">支持</a>
+        <a href="/voicedrop/help/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">帮助</a>
         <a href="/voicedrop/developer/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">开发者</a>
+        <a href="/voicedrop/en/" style="font:500 13.5px -apple-system;color:#6b5f51;text-decoration:none">EN</a>
         </span>
         <a href="#download" style="font:600 13px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:9px 16px;border-radius:8px;box-shadow:0 4px 12px rgba(216,89,59,.26);text-decoration:none;white-space:nowrap">下载</a>
       </nav>
@@ -59,7 +64,6 @@
         <p style="margin:22px 0 0;font:400 17px/1.75 -apple-system;color:#6b5f51;max-width:30em">一句话录下灵感，自动按 <b style="color:#2A2521">时间</b> 和 <b style="color:#2A2521">地点</b> 命名，上传到 <b style="color:#2A2521">你自己</b> 的私有文件中转站。打开、说、完成——没有第二个动作。</p>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin-top:30px">
           <a href="https://testflight.apple.com/join/PbzFFRS2" style="font:600 16px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:14px 26px;border-radius:9px;box-shadow:0 8px 20px -6px rgba(216,89,59,.5);text-decoration:none">下载 · iOS →</a>
-          <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="font:600 16px -apple-system;color:var(--accent,#D8593B);border:1.5px solid rgba(216,89,59,.45);padding:13px 25px;border-radius:9px;text-decoration:none">下载 · 安卓 APK</a>
           <a href="#features" style="font:600 14.5px -apple-system;color:var(--accent,#D8593B);border-bottom:1.5px solid rgba(216,89,59,.35);padding-bottom:2px;text-decoration:none">看看它怎么用 ↓</a>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:34px">
@@ -353,7 +357,6 @@
       <p style="margin:18px auto 0;font:400 16px/1.7 -apple-system;color:#6b5f51;max-width:26em">免费下载，开口几秒，灵感就安静地收好了。</p>
       <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:16px;margin-top:28px">
         <a href="https://testflight.apple.com/join/PbzFFRS2" style="display:inline-block;font:600 16px -apple-system;color:#fff;background:var(--accent,#D8593B);padding:15px 32px;border-radius:10px;box-shadow:0 10px 26px -8px rgba(216,89,59,.55);text-decoration:none">下载 VoiceDrop · iOS →</a>
-        <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="display:inline-block;font:600 16px -apple-system;color:var(--accent,#D8593B);border:1.5px solid rgba(216,89,59,.45);padding:14px 31px;border-radius:10px;text-decoration:none">下载 · 安卓 APK</a>
       </div>
     </div>
   </section>
@@ -366,14 +369,17 @@
         <span style="font:600 15px -apple-system;color:#E8DECF">VoiceDrop</span>
       </div>
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:22px">
-        <a href="/voicedrop/privacy/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">隐私政策</a>
+        <a href="/voicedrop/help/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">帮助中心</a>
+        <a href="/voicedrop/community/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">社区</a>
+        <a href="/voicedrop/agent/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">给 Agent 用</a>
+        <a href="/voicedrop/welcome/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">测试群</a>
         <a href="/voicedrop/developer/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">开发者</a>
+        <a href="/voicedrop/privacy/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">隐私政策</a>
         <a href="https://jianshuo.dev/" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">jianshuo.dev</a>
         <a href="https://testflight.apple.com/join/PbzFFRS2" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">iOS 下载</a>
-        <a href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.4.0/voicedrop-0.4.0.apk" style="font:500 13px -apple-system;color:#9a9082;text-decoration:none">安卓下载</a>
       </div>
     </div>
-    <div style="border-top:1px solid #332b22"><div style="max-width:1160px;margin:0 auto;padding:18px 32px;font:400 12px -apple-system;color:#6f6557">Made with care in Shanghai · © 2026 王建硕</div></div>
+    <div style="border-top:1px solid #332b22"><div style="max-width:1160px;margin:0 auto;padding:18px 32px;font:400 12px -apple-system;color:#6f6557">Made with care in Shanghai · © 2026 王建硕 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" style="color:#6f6557;text-decoration:none">沪ICP备06019413号-118</a></div></div>
   </footer>
 
 </div>

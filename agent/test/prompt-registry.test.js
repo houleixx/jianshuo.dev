@@ -60,11 +60,12 @@ describe("handlePromptRegistry — 管理 token 门禁 + R2 覆盖写回", () =>
     expect((await handlePromptRegistry(req("GET", { token: "wrong" }), env)).status).toBe(401);
   });
 
-  it("GET → 生效版打平列表（无 R2 覆盖时即内置缺省）", async () => {
+  it("GET → 生效版打平列表（无 R2 覆盖时即内置缺省）+ 核心 global 提示词", async () => {
     const res = await handlePromptRegistry(req("GET", { token: ADMIN }), envWith());
     expect(res.status).toBe(200);
     const { prompts } = await res.json();
-    expect(prompts.length).toBe(12);
+    // 12 条 ui-config 叶子 + 6 条核心 global 提示词（mine.system/force、image.observe/plan/write/review）
+    expect(prompts.length).toBe(18);
     expect(prompts.find((p) => p.id === COVER_ID).instruction).toContain("2.45:1");
   });
 

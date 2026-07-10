@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Use VoiceDrop from Claude Code and Codex — the complete guide to /wjs-voicedrop, /wjs-distilling-style, and the underlying API.">
+<title>VoiceDrop for Agents — Claude Code / Codex Guide</title>
+<meta property="og:title" content="VoiceDrop for Agents — Claude Code / Codex Guide">
+<meta property="og:description" content="Your voice memos become structured articles — readable and writable from Claude Code / Codex with a single slash command.">
+<meta property="og:image" content="https://jianshuo.dev/voicedrop/og.png">
+<link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/agent/">
+<link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/agent/">
+<link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/agent/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#ef7d54}
+  body{background:radial-gradient(ellipse 120% 80% at 50% -10%,#fdf0e0,var(--bg));color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:760px;margin:0 auto;padding:44px 32px 80px}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:48px}
+  .brand{display:flex;align-items:center;gap:12px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.2rem;text-decoration:none;color:inherit}
+  .brand .blob{width:34px;height:34px;border-radius:42% 58% 60% 40%/45% 45% 55% 55%;background:linear-gradient(135deg,#f6a560,#ef7d54);box-shadow:0 6px 16px rgba(239,125,84,.4)}
+  header nav a{font-weight:700;font-size:.84rem;color:var(--soft);text-decoration:none;padding:8px 16px;border-radius:999px;transition:all .2s}
+  header nav a:hover{background:var(--card);color:var(--ink);box-shadow:0 4px 12px rgba(74,63,53,.08)}
+  .hero{text-align:center;margin-bottom:44px}
+  .hero .pill{display:inline-block;background:#fff;border-radius:999px;padding:7px 18px;font-family:'Quicksand',sans-serif;font-weight:600;font-size:.8rem;color:var(--accent);box-shadow:0 6px 16px rgba(74,63,53,.06);margin-bottom:22px}
+  .hero h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(1.8rem,5vw,2.8rem);line-height:1.12;letter-spacing:-.02em}
+  .hero p{margin-top:16px;font-size:1.02rem;color:#7d6f5f;font-weight:600;line-height:1.6}
+  .card{background:var(--card);border-radius:24px;padding:28px 30px;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8);margin-bottom:22px}
+  .card h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:12px}
+  .card h3{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.05rem;margin:18px 0 8px;color:var(--ink)}
+  .card p{font-size:.96rem;color:#6f6253;font-weight:600;line-height:1.65;margin-bottom:10px}
+  .card p:last-child{margin-bottom:0}
+  .card ul{list-style:none;display:flex;flex-direction:column;gap:9px;margin-top:4px}
+  .card li{font-size:.94rem;color:#6f6253;font-weight:600;line-height:1.55;padding-left:26px;position:relative}
+  .card li::before{content:"●";color:var(--accent);position:absolute;left:5px;font-size:.65rem;top:.38em}
+  .skill-block{border:1.5px solid rgba(239,125,84,.22);border-radius:18px;padding:22px 24px;margin-bottom:18px;background:rgba(255,255,255,.55)}
+  .skill-block:last-child{margin-bottom:0}
+  .skill-name{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#f6a560,#ef7d54);color:#fff;font-family:'Quicksand',sans-serif;font-weight:700;font-size:.92rem;border-radius:999px;padding:5px 14px;margin-bottom:12px}
+  .skill-name code{font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:.88rem}
+  .skill-desc{font-size:.95rem;color:#5e5248;font-weight:600;line-height:1.65;margin-bottom:12px}
+  .trigger-list{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+  .trigger{background:#f4ece0;border-radius:999px;padding:4px 12px;font-size:.8rem;font-family:'SF Mono',ui-monospace,Menlo,monospace;color:#8a6f5a;font-weight:600}
+  .step{display:flex;gap:14px;align-items:flex-start;margin-bottom:16px}
+  .step:last-child{margin-bottom:0}
+  .num{flex:none;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#f6a560,#ef7d54);color:#fff;font-family:'Quicksand',sans-serif;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:.85rem;box-shadow:0 4px 10px rgba(239,125,84,.3)}
+  .step-body h4{font-family:'Quicksand',sans-serif;font-weight:700;font-size:.96rem;margin-bottom:4px}
+  .step-body p{font-size:.91rem;margin-bottom:6px}
+  pre{background:#2c2620;color:#f4ece0;border-radius:12px;padding:14px 16px;overflow-x:auto;font-size:.82rem;line-height:1.55;margin:8px 0 4px}
+  code{font-family:'SF Mono',ui-monospace,Menlo,monospace}
+  .chat{background:#f7efe4;border-radius:12px;padding:10px 14px;font-size:.9rem;color:#6f6253;font-weight:600;font-style:italic;margin:6px 0;border-left:3px solid var(--accent)}
+  .section-label{font-size:.75rem;font-family:'Quicksand',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--soft);margin:36px 0 12px}
+  .links{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:36px}
+  .links a{background:#fff;border-radius:999px;padding:12px 22px;font-weight:700;font-size:.86rem;color:#6f6253;text-decoration:none;box-shadow:0 6px 16px rgba(74,63,53,.06);transition:all .25s}
+  .links a:hover{transform:translateY(-3px);color:var(--accent)}
+  footer{text-align:center;margin-top:40px;font-size:.78rem;color:var(--soft);font-weight:600}
+  a.inline{color:var(--accent);font-weight:800;text-decoration:none}
+  a.inline:hover{text-decoration:underline}
+  .note{font-size:.83rem;color:var(--soft);font-weight:600;line-height:1.55;background:#f4ece0;border-radius:10px;padding:10px 14px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="brand" href="/voicedrop/en/"><span class="blob"></span>VoiceDrop</a>
+    <nav><a href="/voicedrop/agent/">中文</a><a href="/voicedrop/en/">← Home</a></nav>
+  </header>
+
+  <div class="hero">
+    <span class="pill">Agent Guide</span>
+    <h1>Use VoiceDrop from<br>Claude Code / Codex</h1>
+    <p>Every recording you make is already structured data an agent can read and write.<br>
+    Here are all the slash commands and skills available.</p>
+  </div>
+
+  <!-- Setup -->
+  <div class="section-label">Step 0: Get your access token</div>
+  <div class="card">
+    <div class="step">
+      <div class="num">1</div>
+      <div class="step-body">
+        <h4>Copy the token in the VoiceDrop app</h4>
+        <p>Bottom tab "Settings" → "Account" → tap "Copy Access Token". The token looks like <code>anon_xxxx…</code>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div class="step-body">
+        <h4>Set it in Claude Code / Codex</h4>
+        <pre><code>TOKEN=anon_xxxxxxxx...   # paste the token you just copied</code></pre>
+        <p class="note">The token only lasts for the current shell session. To keep it permanently, add <code>export VOICEDROP_TOKEN=…</code> to your <code>~/.zshrc</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Skills -->
+  <div class="section-label">Available skills</div>
+
+  <div class="card">
+
+    <!-- /wjs-voicedrop -->
+    <div class="skill-block">
+      <div class="skill-name"><code>/wjs-voicedrop</code></div>
+      <p class="skill-desc">VoiceDrop's companion skill, with two modes: <b>list</b> (list your recordings and articles) and <b>distill</b> (distill a writing style from your articles and upload it to <code>CLAUDE.md</code>).</p>
+      <p style="font-size:.83rem;font-weight:700;color:var(--soft);margin-bottom:6px">Trigger phrases — say it however you like:</p>
+      <div class="trigger-list">
+        <span class="trigger">/wjs-voicedrop</span>
+        <span class="trigger">voicedrop list</span>
+        <span class="trigger">list my VoiceDrop files</span>
+        <span class="trigger">voicedrop distill</span>
+        <span class="trigger">distill my VoiceDrop style</span>
+      </div>
+
+      <h3>Mode 1: list — list your files</h3>
+      <p>Say "voicedrop list" and the agent lists everything in your VoiceDrop space, grouped into:</p>
+      <ul>
+        <li>Pending recordings (<code>.m4a</code> files not yet turned into articles)</li>
+        <li>Finished articles (<code>articles/*.json</code>, each with title + body + transcript + SRT)</li>
+        <li>No-speech markers (<code>articles/*.empty</code> — the original recording had no speech)</li>
+        <li>Writing style settings (the <code>CLAUDE.md</code> you uploaded)</li>
+      </ul>
+      <div class="chat">"voicedrop list"</div>
+      <div class="chat">"Show me which VoiceDrop recordings haven't become articles yet"</div>
+
+      <h3>Mode 2: distill — distill your writing style</h3>
+      <p>Say "voicedrop distill" and the agent extracts 15–20 actionable writing rules from your recent articles, shows you a preview for confirmation, then uploads them to your <code>CLAUDE.md</code> — the server picks them up automatically the next time it mines articles.</p>
+      <div class="chat">"voicedrop distill"</div>
+      <div class="chat">"Distill my writing style from my VoiceDrop articles and update my settings"</div>
+      <p class="note">Once uploaded, it also shows up in the VoiceDrop app under "Settings → Writing Style" — both are the same data.</p>
+    </div>
+
+    <!-- /wjs-distilling-style -->
+    <div class="skill-block">
+      <div class="skill-name"><code>/wjs-distilling-style</code></div>
+      <p class="skill-desc">A general-purpose style-distillation skill. Give it a few articles by any author and it extracts a precise, executable writing fingerprint — not just for VoiceDrop users; use it to learn any writer's craft.</p>
+      <p style="font-size:.83rem;font-weight:700;color:var(--soft);margin-bottom:6px">Trigger phrases:</p>
+      <div class="trigger-list">
+        <span class="trigger">/wjs-distilling-style</span>
+        <span class="trigger">distill this writing style</span>
+        <span class="trigger">capture X's style</span>
+        <span class="trigger">rewrite this in X's voice</span>
+        <span class="trigger">mimic this writer</span>
+      </div>
+
+      <h3>Two modes</h3>
+      <ul>
+        <li><b>Distill</b>: give it 3–6 sample articles and it produces a 9-axis Style Card (sentence rhythm, paragraph density, vocabulary, tone, argument structure, metaphors, emotion, openings/closings, no-go zones), saved to <code>~/code/style-cards/&lt;author-slug&gt;/style-card.md</code>.</li>
+        <li><b>Rewrite</b>: give it a target article plus an existing Style Card and it rewrites the piece in that author's voice. Every rewrite is blind-tested by an independent "judge" — the agent never grades its own work.</li>
+      </ul>
+      <div class="chat">"Distill the writing style of these three articles into a Style Card"</div>
+      <div class="chat">"Rewrite this draft in Jian Shuo Wang's style"</div>
+      <p class="note">How it differs from <code>/wjs-voicedrop distill</code>: this skill does the full, fine-grained 9-axis distillation; voicedrop distill is the quick mode that only extracts differential rules to append to VoiceDrop's CLAUDE.md.</p>
+    </div>
+
+  </div>
+
+  <!-- Raw API -->
+  <div class="section-label">Use the API directly (no skill)</div>
+  <div class="card">
+    <h2>Files API cheat sheet</h2>
+    <p>Every skill above calls this same API under the hood — you can also use it directly in your agent prompt:</p>
+    <pre><code>BASE=https://jianshuo.dev/files/api
+
+# List all files
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/list
+
+# Download an article JSON
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$BASE/download/users/&lt;your-id&gt;/articles/VoiceDrop-xxxx.json"
+
+# Download writing style settings
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$BASE/download/CLAUDE.md"
+
+# Upload / update writing style settings
+curl -s -X PUT \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: text/markdown; charset=utf-8" \
+  --data-binary @/tmp/style.md \
+  "$BASE/upload/CLAUDE.md"</code></pre>
+    <p>Article JSON format: <code>{ title, body, transcript, srt }</code>.</p>
+  </div>
+
+  <!-- Loop -->
+  <div class="card">
+    <h2>The full loop</h2>
+    <p>Speak → VoiceDrop transcribes it and mines it into an article → <code>/wjs-voicedrop list</code> reads it out → <code>/wjs-voicedrop distill</code> or <code>/wjs-distilling-style</code> distills your writing style → written back to <code>CLAUDE.md</code> → the next article sounds more like you.</p>
+    <p>Throughout the whole loop, the agent works with your own data and your own token — no second backend, no lock-in. That's exactly what VoiceDrop is built for: <b>plugging voice seamlessly into the agent ecosystem</b>.</p>
+  </div>
+
+  <div class="links">
+    <a href="/voicedrop/en/">← VoiceDrop Home</a>
+    <a href="/voicedrop/en/privacy/">Privacy Policy</a>
+    <a href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a>
+  </div>
+
+  <footer>Made with care in Shanghai · © 2026 Jian Shuo Wang</footer>
+</div>
+</body>
+</html>

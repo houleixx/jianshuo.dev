@@ -58,6 +58,13 @@ describe("metaTags — WeChat / OG / Twitter share card", () => {
     expect(out).toContain('<meta name="twitter:card" content="summary"/>');
   });
 
+  it("emits the Smart App Banner with the share url as app-argument", () => {
+    const out = metaTags("标题", { description: "摘要", url: "https://voicedrop.cn/Ab3xK9_p2Q" });
+    expect(out).toContain(
+      '<meta name="apple-itunes-app" content="app-id=6781565141, app-argument=https://voicedrop.cn/Ab3xK9_p2Q"/>',
+    );
+  });
+
   it("escapes quotes in title/description into attributes", () => {
     const out = metaTags('引"号"', { description: 'a"b', url: "https://x/" });
     expect(out).toContain('<meta property="og:title" content="引&quot;号&quot;"/>');

@@ -12,10 +12,12 @@
 //   R2_ACCESS_KEY_ID       R2 S3-compatible access key
 //   R2_SECRET_ACCESS_KEY   R2 S3-compatible secret key
 
+import { loadPrompts } from "./prompts/loader.js";
 import { writeLlmLog } from "./llmlog.js";
 import { callAnthropic } from "./anthropic.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
+import { sendPush } from "./push.js";
 import { hmacSign } from "../../functions/lib/auth.js";
 import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
@@ -28,6 +30,7 @@ import {
   MINE_DEFAULT_STYLE as DEFAULT_STYLE,
   IMAGE_ONLY_SYSTEM,
 } from "./prompts/mine.js";
+import { MOD_CATEGORIES, buildModerationSystem } from "./prompts/moderation.js";
 import { mineImageOnly, rewriteFromVision, buildFactPack, makeStageCaller } from "./image-mine.js";
 
 export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
@@ -139,34 +142,43 @@ function sessionTs(audioKey) {
   return (parts.length >= 5 && parts[0] === "VoiceDrop") ? parts.slice(1, 5).join("-") : null;
 }
 
+// Base user scope, IGNORING any subfolder between the user and the file. The Android
+// app uploads to users/<sub>/upload/VoiceDrop-*.m4a; we want its article to land in the
+// SAME flat place as iOS (users/<sub>/articles/<stem>.json), not a new upload/articles/
+// dir. So both the article key and the admin write path derive from this base scope.
+// "users/<sub>/[dir/…/]file" → "users/<sub>/".
+function baseScope(key) {
+  const p = key.split("/");
+  return (p[0] === "users" && p[1]) ? `users/${p[1]}/` : userPrefix(key);
+}
+
 function articleKeyFor(key) {
-  const parts = key.split("/"); const stem = stemOf(key); parts.pop();
-  return `${parts.join("/")}/articles/${stem}.json`;
+  return `${baseScope(key)}articles/${stemOf(key)}.json`;
 }
 
 function emptyKeyFor(key) {
-  const parts = key.split("/"); const stem = stemOf(key); parts.pop();
-  return `${parts.join("/")}/articles/${stem}.empty`;
+  return `${baseScope(key)}articles/${stemOf(key)}.empty`;
 }
 
 // Pending ASR task sidecar: holds {taskId, logId, submittedAt} between passes so a
 // long transcription RESUMES instead of re-submitting. Distinct from the
 // `.json`/`.empty` markers, so the audio stays "unprocessed" until truly done.
 export function asrTaskKeyFor(key) {
-  const parts = key.split("/"); const stem = stemOf(key); parts.pop();
-  return `${parts.join("/")}/articles/${stem}.asr.json`;
+  return `${baseScope(key)}articles/${stemOf(key)}.asr.json`;
 }
 
 // Per-user 训练风格 corpus entry for a shared style submission. The sample file's
 // existence doubles as the "already collected" marker (skip on the next run).
 function styleSampleKeyFor(key) {
-  return `${userPrefix(key)}style/${stemOf(key)}.json`;
+  return `${baseScope(key)}style/${stemOf(key)}.json`;
 }
 
-// "users/<sub>/VoiceDrop-stem.<ext>" → "<sub>/VoiceDrop-stem"  (admin article API path)
+// "users/<sub>/[dir/]VoiceDrop-stem.<ext>" → "<sub>/VoiceDrop-stem"  (admin article API
+// path). Uses baseScope so an Android upload/ recording writes to the flat article path
+// (<sub>/<stem>) — the admin API can't route a stem under a subfolder anyway.
 function adminArticlePath(key) {
-  const prefix = userPrefix(key);
-  const sub = prefix.startsWith("users/") ? prefix.slice(6, -1) : prefix.slice(0, -1);
+  const s = baseScope(key);
+  const sub = s.startsWith("users/") ? s.slice(6, -1) : s.slice(0, -1);
   return `${sub}/${stemOf(key)}`;
 }
 
@@ -599,10 +611,12 @@ export function buildMinePrompt({
 }
 
 async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system", systemOverride = null, photoInstr = undefined) {
+  const _P = await loadPrompts(env);
   const payload = buildMinePrompt({
     transcript, styleText: claudeMd, photos, force, cacheMode,
     provider: modelCfg.provider, model: modelCfg.model,
-    ...(systemOverride ? { systemPrompt: systemOverride } : {}),
+    systemPrompt: systemOverride || _P["mine.system"],
+    forcePrompt: _P["mine.force"],
     // Explicit "" (image-only vision path) must win over buildMinePrompt's PHOTO_INSTR
     // default; omitted (undefined) leaves every other caller's behavior unchanged.
     ...(photoInstr !== undefined ? { photoInstr } : {}),
@@ -638,12 +652,12 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
 // flag (no second LLM call) and refuses to publish a flagged article. Anthropic
 // (haiku) regardless of the mining provider, so moderation stays reliable + cheap.
 // Fail-open on any infra error (don't block legit content) — report/block still cover it.
-const MOD_CATEGORIES = "色情或露骨性内容、暴力血腥、仇恨或歧视、骚扰或欺凌、违法内容(毒品/武器/诈骗等)、自残或自杀、未成年人不当内容";
+// MOD_CATEGORIES / buildModerationSystem now live in ./prompts/moderation.js (imported above).
 export async function moderateArticles(articles, env) {
   if (!env.CLAUDE_API_KEY) return { flagged: false, skipped: "no-key" };
   const text = (articles || []).map(a => `${a.title || ""}\n${a.body || ""}`).join("\n\n").trim().slice(0, 16000);
   if (!text) return { flagged: false };
-  const system = `你是面向公开社区的内容安全审核员。判断下面这篇用户生成的中文文章，是否含有不适合公开展示的内容（${MOD_CATEGORIES}）。正常的观点表达、商业、生活、科技、情绪宣泄一律视为安全(false)；只有明确违规才标记 true。只输出 JSON，不要解释：{"flagged":true|false,"categories":["命中的类别"]}`;
+  const system = buildModerationSystem();
   try {
     const r = await callAnthropic(env, { model: "claude-haiku-4-5-20251001", max_tokens: 200,
       system, messages: [{ role: "user", content: text }] });
@@ -710,7 +724,7 @@ async function writeBlocked(audioKey, reason, env) {
 // derivation, same pointer shape — so the post is byte-identical to a manual share:
 // the app detects it as 已分享, a re-mine updates the same post in place, and 取消分享
 // still works. Best-effort: never blocks or fails mining (caller wraps in try/catch).
-// 用户 CONFIG.json（autoShareCommunity / noFollowups / …）——存储细节收口在这，
+// 用户 CONFIG.json（autoShareCommunity / …）——存储细节收口在这，
 // 调用方只传 scope。读不到/坏 JSON 一律回空对象，调用方按默认值走。
 export async function readUserConfig(env, scope) {
   const obj = await env.FILES.get(scope + "CONFIG.json");
@@ -916,7 +930,6 @@ export async function restyleArticle(env, scope, stem, styleV) {
 
   // 重挖出的新稿带新一轮追问，整体替换旧 sidecar（追问只属于当前这版正文）。
   const { articles: cleanedArts, questions } = extractFollowups(articles);
-  const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
 
   // 文风版本 = per-article 字段（不再往 body 塞注释——隐形行会让第N行编号错位）
   const tagged = cleanedArts.map((a) => ({ ...a, style: v }));
@@ -924,7 +937,7 @@ export async function restyleArticle(env, scope, stem, styleV) {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),
     transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: modelCfg.model,
-    ...(followupsOn && questions.length ? { questions } : {}),
+    ...(questions.length ? { questions } : {}),
     // 标签是 doc 级元数据，重写必须原样带上——PUT 是整体替换，漏了就把标签吃掉
     ...(Array.isArray(doc.tags) && doc.tags.length ? { tags: doc.tags } : {}),
     // 流水线元数据随版本继承——下次 restyle 还能继续复用观察与立意
@@ -1097,7 +1110,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     if (decision === "too-long") { await writeBlocked(audioKey, "too-long", env); return; }
     if (decision === "no-credit") { await writeBlocked(audioKey, "no-credit", env); return; }
     // Drop stale .blocked marker before proceeding (e.g. user topped up)
-    try { await env.FILES.delete(`${userPrefix(audioKey)}articles/${stemOf(audioKey)}.blocked`); } catch (_) {}
+    try { await env.FILES.delete(`${baseScope(audioKey)}articles/${stemOf(audioKey)}.blocked`); } catch (_) {}
 
     // ── ASR (resumable across passes) ───────────────────────────────────────────
     // 0 秒 = 静音占位（图片分享的占位音频，文件名 …-0m0s-…）：没有可转写的语音，直接
@@ -1200,6 +1213,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
           };
           await writeArticle(audioKey, doc, env);
           await notifyStatus(scope, stem, "ready", env);
+          { const t = doc.articles?.[0]?.title; await sendPush(env, scope, { title: "文章已生成", body: t ? `《${t}》挖好了，点开看看` : "你的照片已成文", link: `voicedrop://article/${stem}` }); }
           try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
           log("看图写入完成", { articles: arts.length, pipeline: !!pipe });
           result = "mined";
@@ -1279,8 +1293,6 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // undo/redo walks the others. No photos array — [[photo:<key>]] markers in the body
     // are the sole source of truth for which photos appear and where.
     const pendingTags = await consumePendingTags(audioKey, env);
-    // 追问开关：CONFIG.noFollowups=true 的用户不落 questions sidecar。
-    const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
     const baseDoc = {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
@@ -1290,10 +1302,12 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // 每次 PUT 整体替换 doc 元数据，最后一个 variant（= head）的 questions 生效。
     for (const arts of variants) {
       const { articles: cleaned, questions } = extractFollowups(arts);
-      await writeArticle(audioKey, { ...baseDoc, articles: cleaned, ...(followupsOn && questions.length ? { questions } : {}) }, env);
+      await writeArticle(audioKey, { ...baseDoc, articles: cleaned, ...(questions.length ? { questions } : {}) }, env);
     }
     if (srt) await writeSrt(audioKey, srt, env);
     await notifyStatus(scope, stem, "ready", env);
+    // APNs：成文是异步的（用户多半已离开 app），推一条让他知道回来看。
+    { const t = variants.at(-1)?.[0]?.title; await sendPush(env, scope, { title: "文章已生成", body: t ? `《${t}》挖好了，点开看看` : "你的录音已成文", link: `voicedrop://article/${stem}` }); }
     try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
     log("写入完成", { variants: variants.length });
     result = "mined";
@@ -1362,15 +1376,15 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
     }
 
     const { articles: cleaned, questions } = extractFollowups(articles);
-    const followupsOn = (await readUserConfig(env, scope)).noFollowups !== true;
     const doc = {
       schema: 2, id: stem, sourceText: leaf,
       createdAt: uploaded[textKey] || new Date().toISOString(),
       transcript: text, srt: "", articles: cleaned, status: "ready", model: modelCfg.model,
-      ...(followupsOn && questions.length ? { questions } : {}),
+      ...(questions.length ? { questions } : {}),
     };
     await writeArticle(textKey, doc, env);
     await notifyStatus(scope, stem, "ready", env);
+    { const t = cleaned?.[0]?.title; await sendPush(env, scope, { title: "文章已生成", body: t ? `《${t}》挖好了，点开看看` : "你的分享已成文", link: `voicedrop://article/${stem}` }); }
     try { await maybeAutoShareCommunity(textKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
     log("写入完成", { articles: articles.length, titles: articles.map(a => a.title) });
     return (result = "mined");

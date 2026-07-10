@@ -116,8 +116,9 @@ export function buildStagePayload({
   stage, provider = "anthropic", model,
   photos = [], factPack = null, observation = null, storyPlan = null,
   draftArticles = null, styleText = "", previousIssues = null,
+  stageSystem = STAGE_SYSTEM,
 }) {
-  const sys = STAGE_SYSTEM[stage];
+  const sys = stageSystem[stage];
   if (!sys) throw new Error(`unknown stage: ${stage}`);
 
   const parts = [];

@@ -8,6 +8,8 @@ import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
 import { restyleArticle, ensurePhotoMarkers } from "./miner.js";
 import { silentM4aBytes } from "./silent-m4a.js";
+import { snapSize } from "./paint-size.js";
+import { MERGE_ARTICLES_DESC, ADD_FOLLOWUPS_DESC, EDIT_PHOTO_DESC, NEW_PHOTO_DESC } from "./prompts/tool-desc.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
 
@@ -193,7 +195,7 @@ register(
   // 这里只负责去重落库（元数据写，不铸版本）。App 收到 updated doc 后星标/
   // 卡片自动接上新题。
   { name: "add_followups",
-    description: "用户想要更多追问（如「再追问我几个」「还有什么要问我的」）时用：你根据转写和当前文章，找出最薄、只有作者本人才知道的具体信息点（真数字、真名字、真场景、点到没展开的判断），生成 1–3 个短问题传进来，会追加到这篇的追问列表。只问转写里推断不出来的；要短、要具体，像编辑追问作者。不改正文。",
+    description: ADD_FOLLOWUPS_DESC,
     input_schema: { type: "object", properties: {
       questions: { type: "array", items: { type: "string" }, description: "1–3 个新问题" },
     }, required: ["questions"], additionalProperties: false } },
@@ -275,7 +277,7 @@ async function postPaintJob(ctx, { prompt, newKey, oldKey, size }) {
   const meta = { scope, newKey, articleKey, editId: editId || null };
   const body = {
     prompt,
-    size: typeof size === "string" && /^\d{2,4}x\d{2,4}$/.test(size) ? size : "1024x1024",
+    size: snapSize(size, "1024x1024"), // 对齐 16 的倍数：paint 拒绝非 16 倍数的宽高
     format: "jpeg",
     callback_url: `${origin}/agent/paint-callback`,
     callback_token: env.PAINT_CALLBACK_TOKEN,
@@ -299,8 +301,7 @@ async function postPaintJob(ctx, { prompt, newKey, oldKey, size }) {
 register(
   {
     name: "edit_photo",
-    description:
-      "把当前文章里某张图按指令重画/编辑（如变成广告、换背景、改风格）。参数 key 用该图 [[photo:KEY]] 里的 KEY（从当前正文图M那行读出）；prompt 是你把用户口述蒸馏成的完整图像编辑指令。异步：提交后约 1 分钟自动替换，本轮先告诉用户在处理，不要重复调用。",
+    description: EDIT_PHOTO_DESC,
     input_schema: {
       type: "object",
       properties: {
@@ -357,8 +358,7 @@ register(
 register(
   {
     name: "new_photo",
-    description:
-      "凭空生成一张新图片插入当前文章（文生图：配图 / 插画 / 海报 / 广告）。prompt=完整的图像生成指令；after_line=插到当前正文第几行之后（0=插到正文最前面，行号用当前正文里标的第N行）。异步：提交后约 1 分钟自动出现，本轮先告诉用户在生成，不要重复调用。",
+    description: NEW_PHOTO_DESC,
     input_schema: {
       type: "object",
       properties: {
@@ -434,7 +434,7 @@ async function writeStandaloneArticle({ env, scope, token, origin }, stem, title
 
 register(
   { name: "merge_articles",
-    description: "把若干篇文章揉成一篇连贯的新文章（保持用户文风、去重、顺逻辑），另存为新一条，原文保留。用于「把第3和第4篇合并」。stems 传要合并的文章 stem 数组。",
+    description: MERGE_ARTICLES_DESC,
     input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, guidance: { type: "string", description: "可选，合并侧重" } }, required: ["stems"], additionalProperties: false } },
   async ({ stems, guidance }, ctx) => {
     const { env, scope, callClaude } = ctx;

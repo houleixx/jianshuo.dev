@@ -6,6 +6,7 @@
 
 import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
 import { buildStagePayload, parseStageJson, QUALITY_GATE, MAX_RECENT_TITLES } from "./prompts/image-pipeline.js";
+import { loadPrompts } from "./prompts/loader.js";
 import { writeLlmLog } from "./llmlog.js";
 import { callAnthropic } from "./anthropic.js";
 import { claudeCostUY } from "./usage.js";
@@ -73,9 +74,9 @@ const normalizeArticles = (arts) => (arts || [])
   .map((a) => ({ title: (a.title || TITLE_FALLBACK).trim(), body: (a.body || "").trim() }));
 
 // 写作 + 审稿一轮（plan 固定）。restyle 复用观察结果时也走这里——换文风不换立意。
-export async function rewriteFromVision({ photos, factPack, vision, plan, styleText, provider = "anthropic", model, callModel }) {
+export async function rewriteFromVision({ photos, factPack, vision, plan, styleText, provider = "anthropic", model, callModel, stageSystem }) {
   const run = async (stage, extra) =>
-    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, provider, model, ...extra }) }));
+    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, provider, model, stageSystem, ...extra }) }));
   const draft = await run("write", { factPack, observation: vision, storyPlan: plan, styleText });
   const draftArts = normalizeArticles(draft.articles);
   if (!draftArts.length) throw new Error("write-stage-empty");
@@ -89,9 +90,9 @@ export async function rewriteFromVision({ photos, factPack, vision, plan, styleT
 }
 
 // 全流水线：观察 → (立意 → 写作 → 审稿)，质量门不过带 issues 从立意重跑一次，取分高一版。
-export async function runImagePipeline({ photos, factPack, styleText, provider = "anthropic", model, callModel, log = () => {} }) {
+export async function runImagePipeline({ photos, factPack, styleText, provider = "anthropic", model, callModel, log = () => {}, stageSystem }) {
   const run = async (stage, extra) =>
-    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, provider, model, ...extra }) }));
+    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, provider, model, stageSystem, ...extra }) }));
 
   const vision = await run("observe", { photos, factPack });
   log("观察完成", { images: (vision.images || []).length });
@@ -99,7 +100,7 @@ export async function runImagePipeline({ photos, factPack, styleText, provider =
   const oneRound = async (previousIssues) => {
     const plan = await run("plan", { factPack, observation: vision, previousIssues });
     log("立意完成", { selected: plan.selected });
-    const r = await rewriteFromVision({ photos, factPack, vision, plan, styleText, provider, model, callModel });
+    const r = await rewriteFromVision({ photos, factPack, vision, plan, styleText, provider, model, callModel, stageSystem });
     return { plan, ...r };
   };
 
@@ -182,5 +183,8 @@ export async function mineImageOnly(env, { scope, stem, photos, styleText, model
   const factPack = await buildFactPack(env, { scope, stem, photos });
   log("流水线开始", { photos: photos.length, place: factPack.place, titles: factPack.recentTitles.length });
   const callModel = makeStageCaller(env, { modelCfg, scope, stem, turnId, log });
-  return await runImagePipeline({ photos, factPack, styleText, provider: modelCfg.provider, model: modelCfg.model, callModel, log });
+  // 每次运行解析一次 prompt 覆盖，四个阶段共用同一份 map（不逐阶段重复解析 R2）。
+  const _P = await loadPrompts(env);
+  const stageSystem = { observe: _P["image.observe"], plan: _P["image.plan"], write: _P["image.write"], review: _P["image.review"] };
+  return await runImagePipeline({ photos, factPack, styleText, provider: modelCfg.provider, model: modelCfg.model, callModel, log, stageSystem });
 }

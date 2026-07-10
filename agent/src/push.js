@@ -1,0 +1,73 @@
+// src/push.js — APNs 推送（HTTP/2 API 直连，ES256 JWT 用 WebCrypto 签）。
+// 用途：①「文章挖好了」通知用户 ②运维报警（4xx/5xx 风暴）推给管理员。
+// 设备 token 由 iOS 端存到 R2 `users/<sub>/push-token.json`（{token, env, updatedAt}）。
+// secrets：APNS_KEY_P8（.p8 全文）/ APNS_KEY_ID / APNS_TEAM_ID；缺任一则静默降级为 no-op。
+const APNS_TOPIC = "com.wangjianshuo.VoiceDrop";
+
+// JWT 缓存（APNs 要求 20~60 分钟内复用，太频繁签发会被拒）。isolate 生命周期内有效。
+let jwtCache = { token: null, exp: 0, keyId: null };
+
+function pemToPkcs8(pem) {
+  const b64 = pem.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  const raw = atob(b64);
+  const buf = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+  return buf.buffer;
+}
+
+const b64url = (buf) =>
+  btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+async function apnsJwt(env) {
+  const now = Math.floor(Date.now() / 1000);
+  if (jwtCache.token && jwtCache.exp > now + 300 && jwtCache.keyId === env.APNS_KEY_ID) return jwtCache.token;
+  const key = await crypto.subtle.importKey(
+    "pkcs8", pemToPkcs8(env.APNS_KEY_P8), { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const header = b64url(new TextEncoder().encode(JSON.stringify({ alg: "ES256", kid: env.APNS_KEY_ID })));
+  const payload = b64url(new TextEncoder().encode(JSON.stringify({ iss: env.APNS_TEAM_ID, iat: now })));
+  const sig = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(`${header}.${payload}`));
+  const token = `${header}.${payload}.${b64url(sig)}`;
+  jwtCache = { token, exp: now + 2400, keyId: env.APNS_KEY_ID };   // 40 分钟后换新
+  return token;
+}
+
+/// 给某个用户 scope（"users/<sub>/"）推一条通知。尽力而为：任何失败只 console.log,
+/// 绝不向上抛（推送永远不该影响主流程）。410/BadDeviceToken 时清掉失效 token。
+export async function sendPush(env, scope, { title, body, threadId, link }) {
+  try {
+    if (!env.APNS_KEY_P8 || !env.APNS_KEY_ID || !env.APNS_TEAM_ID || !env.FILES) return false;
+    const obj = await env.FILES.get(`${scope}push-token.json`);
+    if (!obj) return false;
+    const reg = JSON.parse(await obj.text());
+    if (!reg?.token) return false;
+    const host = reg.env === "dev" ? "api.sandbox.push.apple.com" : "api.push.apple.com";
+    const resp = await fetch(`https://${host}/3/device/${reg.token}`, {
+      method: "POST",
+      headers: {
+        "authorization": `bearer ${await apnsJwt(env)}`,
+        "apns-topic": APNS_TOPIC,
+        "apns-push-type": "alert",
+        "apns-priority": "10",
+      },
+      // link = voicedrop:// 深链（如 voicedrop://article/<stem>），app 点按通知时路由过去。
+      body: JSON.stringify({
+        aps: { alert: { title, body }, sound: "default", "thread-id": threadId || "voicedrop" },
+        ...(link ? { link } : {}),
+      }),
+    });
+    if (resp.status === 410) {
+      await env.FILES.delete(`${scope}push-token.json`).catch(() => {});
+      console.log("[push] token gone (410), removed", scope);
+      return false;
+    }
+    if (!resp.ok) {
+      console.log("[push] apns", resp.status, (await resp.text()).slice(0, 200), scope);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.log("[push] error", String(e?.message || e).slice(0, 200));
+    return false;
+  }
+}

@@ -29,6 +29,24 @@ import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, 
 import { checkArticlesShareable } from "../../lib/moderation.js";
 
 export async function onRequest(context) {
+  // 报警打点包裹：任何 4xx/5xx 响应 fire-and-forget 通知 voicedrop-agent 的
+  // ops 计数器（分钟桶），worker 的 */5 cron 聚合并按阈值 APNs 报警——
+  // 照片 400 风暴那种「服务端默默拒了几小时」的事故从此有人喊。401 除外
+  //（未登录探测太常见，纯噪声）。打点失败不影响响应。
+  const resp = await handleRequest(context);
+  try {
+    if (resp && resp.status >= 400 && resp.status !== 401) {
+      const route = (Array.isArray(context.params.path) ? context.params.path[0] : context.params.path) || '?';
+      context.waitUntil(fetch('https://jianshuo.dev/agent/ops/tick', {
+        method: 'POST',
+        body: JSON.stringify({ route: `files/${route}`, status: resp.status }),
+      }).catch(() => {}));
+    }
+  } catch (_) {}
+  return resp;
+}
+
+async function handleRequest(context) {
   const { request, env, params } = context;
   const segments = Array.isArray(params.path) ? params.path : [params.path || ''];
   const action = segments[0] || '';
@@ -207,6 +225,47 @@ export async function onRequest(context) {
         'Cache-Control': 'public, max-age=86400',
         'Access-Control-Allow-Origin': '*',
       },
+    });
+  }
+
+  // ---- Public (no auth): resolve a share/community id for universal links ----
+  // GET link/<id> → {type:"article"|"community", owner:"users/<sub>/", stem,
+  //                  title, articles:[{title,body}], photos?}
+  // The app receives https://voicedrop.cn/<id> as a universal link and asks what
+  // the id points at: its OWN article (owner == whoami scope) opens the native
+  // detail view; a community post opens the native post view; anyone else's plain
+  // share renders natively from the content returned here (read-only reader).
+  // Exposes nothing new — the same mapping AND content are already served as
+  // public HTML by functions/[token].js, and a reported community post 404s here
+  // exactly like there (Apple 1.2).
+  if (request.method === 'GET' && action === 'link' && sub2) {
+    const id = sub2;
+    if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) return json({ error: 'bad id' }, 400);
+    let key = null, type = 'article';
+    const map = await env.FILES.get(`shares/${id}`);
+    if (map) {
+      key = (await map.text()).trim();
+    } else {
+      const cm = await env.FILES.get(communityKey(id));
+      if (cm) {
+        if (await env.FILES.head(reportKey(id))) return json({ error: 'not found' }, 404);
+        type = 'community';
+        try { key = JSON.parse(await cm.text()).articleKey || null; } catch { /* fallthrough */ }
+      }
+    }
+    const m = key && key.match(/^(users\/[^/]+\/)articles\/([^/]+)\.json$/);
+    if (!m) return json({ error: 'not found' }, 404);
+    const obj = await env.FILES.get(key);
+    if (!obj) return json({ error: 'not found' }, 404);
+    let doc; try { doc = JSON.parse(await obj.text()); } catch { return json({ error: 'not found' }, 404); }
+    const articles = resolveArticles(doc)
+      .filter((a) => a && (a.body || '').trim())
+      .map((a) => ({ title: a.title, body: a.body }));
+    // `photos` = legacy [[photo:N]] resolution only (new articles use key markers).
+    return json({
+      type, owner: m[1], stem: m[2],
+      title: articles[0]?.title || '', articles,
+      ...(Array.isArray(doc.photos) && doc.photos.length ? { photos: doc.photos } : {}),
     });
   }
 
@@ -428,6 +487,24 @@ export async function onRequest(context) {
   }
 
   if ((request.method === 'PUT' || request.method === 'POST') && action === 'upload' && name) {
+    // 入口护栏：上传路径的每个字符必须是 ASCII（允许 '/' 分段——照片传
+    // photos/<ts>/<n>.jpg、标签传 articles/<stem>.tags 都是多段路径；2026-07-08
+    // 曾误禁 '/'，把所有照片/标签上传 400 拒掉，教训）。真正要挡的是非 ASCII：
+    // 历史上安卓版本发中文名（VoiceDrop-…-周三-上午.m4a），文章/标记被写到 URL
+    // 编码后的 R2 key，而 miner 用解码 key 查存在性 → 永远对不上 → 每轮重挖。
+    // '..' 由 keyFor 拒绝（路径穿越）。iOS 命名本就 ASCII-only，不受影响。
+    if (!/^[A-Za-z0-9._/-]+$/.test(name)) {
+      const badChars = [...new Set(name.match(/[^A-Za-z0-9._/-]/g) || [])].join('');
+      return json({
+        error: 'invalid_upload_name',
+        reason: '上传路径只允许 ASCII 字符 [A-Za-z0-9._/-]。' +
+          (badChars ? `当前含非法字符：${badChars}。` : '') +
+          '非 ASCII 文件名会让服务端存 R2 的 key 与挖矿检查用的 key 不一致，导致录音无法被处理。',
+        rule: '^[A-Za-z0-9._/-]+$',
+        name,
+        hint: '请用纯 ASCII 命名（如中文星期/时段换成 Wed/Afternoon）后重新 PUT /files/api/upload/<path>',
+      }, 400);
+    }
     const key = keyFor(name);
     if (!key) return json({ error: 'bad name' }, 400);
     await env.FILES.put(key, request.body, {
@@ -495,7 +572,9 @@ export async function onRequest(context) {
     }
     const id = (await hmacSign('share:' + key, env.SESSION_SECRET)).slice(0, 10);
     await env.FILES.put(`shares/${id}`, key);
-    return json({ url: `${url.origin}/voicedrop/${id}` });
+    // 分享链接用 voicedrop.cn（.cn 域名，微信内打开不弹「非官方网页」提示）根路径
+    // 短链；老的 jianshuo.dev/voicedrop/<id> 继续有效（functions/[token].js 转发）。
+    return json({ url: `https://voicedrop.cn/${id}` });
   }
 
   // On-demand WeChat draft push for ONE mined article. The app calls this when
@@ -1005,7 +1084,13 @@ export async function onRequest(context) {
     // segments = ['articles', ...rest]
     // For user token: rest = [stem] or [stem, subaction]
     // For admin token: rest = [sub, stem] or [sub, stem, subaction]
-    const rest = segments.slice(1);
+    // URL-decode each segment — CF Pages leaves params.path percent-encoded, and Android
+    // recordings carry Chinese stems (e.g. VoiceDrop-…-周三-上午). Without decoding, the
+    // article/marker is STORED under the encoded key (…%E5%91%A8…) while the miner's
+    // existence check (env.FILES.head on the decoded key) never matches → the recording
+    // is re-mined every pass, burning ASR+LLM tokens and blocking the queue. Matches the
+    // decodeURIComponent already used by the raw-file handlers above.
+    const rest = segments.slice(1).map((s) => { try { return decodeURIComponent(s); } catch { return s; } });
     let stem, subaction;
 
     if (!scope) {
