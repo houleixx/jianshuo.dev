@@ -17,17 +17,18 @@
 
 <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center">
 
-  <a href="/voicedrop/" style="text-decoration:none;display:flex;align-items:flex-end;gap:9px">
+  <a href="https://jianshuo.dev/voicedrop/" style="text-decoration:none;display:flex;align-items:flex-end;gap:9px">
     <span style="display:inline-flex;align-items:flex-end;gap:2.5px;height:24px"><span style="width:3px;height:10px;background:#D8593B;border-radius:2px"></span><span style="width:3px;height:18px;background:#D8593B;border-radius:2px"></span><span style="width:3px;height:24px;background:#D8593B;border-radius:2px"></span><span style="width:3px;height:15px;background:#D8593B;border-radius:2px"></span><span style="width:3px;height:8px;background:#D8593B;border-radius:2px"></span></span>
     <span style="font:600 18px -apple-system;letter-spacing:-.01em">VoiceDrop</span>
   </a>
 
   <h1 style="margin:30px 0 0;font:600 34px/1.2 -apple-system;letter-spacing:-.02em">Android 版</h1>
-  <p style="margin:14px auto 0;font:400 15px/1.7 -apple-system;color:#6b5f51;max-width:22em">开口说，它自己归档。<br>安装包由本站直接分发，不经应用商店。</p>
+  <p style="margin:14px auto 0;font:400 15px/1.7 -apple-system;color:#6b5f51;max-width:22em">开口说，它自己归档。</p>
 
-  <!-- 下载区：JS 探测安装包是否就位后填充 -->
-  <div id="dl" style="margin-top:32px;min-height:88px">
-    <p style="font:400 14px -apple-system;color:#9a8f7f">正在检查安装包……</p>
+  <!-- 发新版时只改下面这一个 href（和版本号文字） -->
+  <div style="margin-top:32px">
+    <a class="vd-btn" href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.6.0/voicedrop-0.6.0.apk" style="display:inline-block;font:600 16px -apple-system;color:#fff;background:#D8593B;padding:15px 36px;border-radius:10px;box-shadow:0 10px 26px -8px rgba(216,89,59,.55);text-decoration:none">下载 VoiceDrop.apk</a>
+    <p style="font:400 12.5px -apple-system;color:#9a8f7f;margin:14px 0 0">v0.6.0 · 8.0 MB</p>
   </div>
 
   <p style="margin:26px auto 0;font:400 12.5px/1.8 -apple-system;color:#9a8f7f;max-width:24em">
@@ -55,39 +56,11 @@
 <script>
 (function(){
   var ua = navigator.userAgent;
-  var inWeChat = /MicroMessenger/i.test(ua);
-  var inQQ = / QQ\//i.test(ua); // QQ 聊天内置 webview（独立的 QQ 浏览器不拦，它能正常下载）
-  if (inWeChat || inQQ) {
+  if (/MicroMessenger/i.test(ua) || / QQ\//i.test(ua)) {
     var mask = document.getElementById('wx-mask');
     mask.style.display = 'block';
-    if (inQQ && !inWeChat) {
-      mask.querySelector('p').textContent = 'QQ 里不能直接下载安装包';
-    }
-    // 蒙层可点击关闭，方便用户想先看看页面内容
     mask.addEventListener('click', function(){ mask.style.display = 'none'; });
   }
-
-  var APK = '/voicedrop/apk/VoiceDrop.apk';
-  var dl = document.getElementById('dl');
-  // 端点 302 到 /gh/ 代理（同域），fetch 自动跟随；从最终 URL 解析版本号
-  fetch(APK, { method: 'HEAD' }).then(function(r){
-    if (!r.ok) throw 0;
-    var mb = (parseInt(r.headers.get('Content-Length') || '0', 10) / 1048576).toFixed(1);
-    var vm = /\/download\/(v[\w.-]+)\//.exec(r.url || '');
-    var ver = vm ? vm[1] : '';
-    var lm = r.headers.get('Last-Modified');
-    var dateStr = '';
-    if (lm) {
-      var d = new Date(lm);
-      dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-    }
-    dl.innerHTML =
-      '<a class="vd-btn" href="' + APK + '" style="display:inline-block;font:600 16px -apple-system;color:#fff;background:#D8593B;padding:15px 36px;border-radius:10px;box-shadow:0 10px 26px -8px rgba(216,89,59,.55);text-decoration:none">下载 VoiceDrop.apk</a>' +
-      '<p style="font:400 12.5px -apple-system;color:#9a8f7f;margin:14px 0 0">' +
-      [ver, mb > 0 ? mb + ' MB' : '', dateStr ? '更新于 ' + dateStr : ''].filter(Boolean).join(' · ') + '</p>';
-  }).catch(function(){
-    dl.innerHTML = '<p style="font:400 14px/1.8 -apple-system;color:#6b5f51">安卓安装包正在打包中，还没有就绪。<br>可以先收藏本页，稍后再来。</p>';
-  });
 })();
 </script>
 
