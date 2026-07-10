@@ -127,3 +127,42 @@ describe("buckets", () => {
     expect(led[0].reason).toBe("campaign:x");
   });
 });
+
+// ── 翻页 + 全量聚合（算力页修复：老账单看不到、来源只算部分窗口）──────────────
+import { usageSummary } from "../src/usage_store.js";
+
+describe("getLedger pagination + usageSummary", () => {
+  it("getLedger 游标翻页：不重不漏走完全部历史（含同毫秒多笔）", async () => {
+    db = fakeD1(SQL);
+    await ensureAccount(db, U, 1);
+    for (let i = 0; i < 7; i++) await debit(db, U, 10, "mine", null, 100 + i);
+    await debit(db, U, 5, "asr", null, 200);   // 同一毫秒两笔——必须靠 id 区分
+    await debit(db, U, 5, "asr", null, 200);
+    const seen = [];
+    let before = null;
+    for (;;) {
+      const page = await getLedger(db, U, 3, before);
+      if (!page.length) break;
+      seen.push(...page.map((r) => r.id));
+      before = { ts: page[page.length - 1].ts, id: page[page.length - 1].id };
+      if (page.length < 3) break;
+    }
+    expect(seen.length).toBe(10);              // signup + 7 + 2
+    expect(new Set(seen).size).toBe(10);       // 无重复
+  });
+  it("usageSummary 全量按 kind+reason 聚合，不受任何条数窗口限制", async () => {
+    db = fakeD1(SQL);
+    await ensureAccount(db, U, 1);
+    await grantBucket(db, U, 1000, "feed_author", null, 2);
+    await debit(db, U, 100, "mine", null, 3);
+    await debit(db, U, 50, "mine", null, 4);
+    await debit(db, U, 30, "asr", null, 5);
+    const rows = await usageSummary(db, U);
+    const find = (k, r) => rows.find((x) => x.kind === k && x.reason === r);
+    expect(find("grant", "signup").total_uy).toBe(SIGNUP_GRANT_UY);
+    expect(find("grant", "feed_author").total_uy).toBe(1000);
+    expect(find("spend", "mine").total_uy).toBe(150);
+    expect(find("spend", "mine").n).toBe(2);
+    expect(find("spend", "asr").total_uy).toBe(30);
+  });
+});

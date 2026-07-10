@@ -28,7 +28,7 @@ import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
-import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger } from "./usage_store.js";
+import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
@@ -738,12 +738,43 @@ export async function handleUsageRoute(url, request, env) {
     if (!scope) return J({ error: "unauthorized" }, 401);
     if (!env.USAGE) return J({ entries: [], degraded: true });
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10) || 50, 200);
-    const rows = await getLedger(env.USAGE, scope, limit);
+    // 翻页游标：before="<ts>-<id>"（上一页最后一行），keyset 不漂移。多取 1 行探测还有没有。
+    let before = null;
+    const bp = (url.searchParams.get("before") || "").match(/^(\d+)-(\d+)$/);
+    if (bp) before = { ts: parseInt(bp[1], 10), id: parseInt(bp[2], 10) };
+    const rows = await getLedger(env.USAGE, scope, limit + 1, before);
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1];
     // reason 出口翻译成中文（老 App 直接显示 reason 字段 → 无需发版即全中文）；
     // 英文码保留在 reason_code，给需要程序判断的新客户端用。
-    return J({ entries: rows.map((e) => ({ ts: e.ts, kind: e.kind, reason: reasonZH(e.reason), reason_code: e.reason,
+    return J({ entries: page.map((e) => ({ id: e.id, ts: e.ts, kind: e.kind, reason: reasonZH(e.reason), reason_code: e.reason,
       suanli: r1(uyToSuanli(e.amount_uy)), yuan: r2(uyToYuan(e.amount_uy)),
-      balance_suanli: r1(uyToSuanli(e.balance_uy)), detail: e.detail ? JSON.parse(e.detail) : null })) });
+      balance_suanli: r1(uyToSuanli(e.balance_uy)), detail: e.detail ? JSON.parse(e.detail) : null })),
+      has_more: hasMore, next: hasMore && last ? `${last.ts}-${last.id}` : null });
+  }
+
+  if (url.pathname === "/agent/usage/summary" && request.method === "GET") {
+    const scope = await resolveScope(tok, env);
+    if (!scope) return J({ error: "unauthorized" }, 401);
+    if (!env.USAGE) return J({ granted: [], spent: [], degraded: true });
+    // 全量 ledger 聚合（非 50 条窗口）：来源、花费各按中文名归组——campaign:* 合并为
+    // 活动赠送、xhs-pack/xhs-tags 合并为小红书分享，与明细页的展示口径一致。
+    const rows = await usageSummary(env.USAGE, scope);
+    const groups = { grant: new Map(), spend: new Map() };
+    for (const row of rows) {
+      const m = groups[row.kind];
+      if (!m) continue;
+      const zh = reasonZH(row.reason);
+      const g = m.get(zh) || { reason_code: row.reason.startsWith("campaign:") ? "campaign" : row.reason, reason: zh, uy: 0, count: 0 };
+      g.uy += row.total_uy; g.count += row.n;
+      m.set(zh, g);
+    }
+    const out = (m) => [...m.values()].sort((a, b) => b.uy - a.uy)
+      .map((g) => ({ reason_code: g.reason_code, reason: g.reason, suanli: r1(uyToSuanli(g.uy)), count: g.count }));
+    const total = (kind) => rows.filter((x) => x.kind === kind).reduce((s, x) => s + x.total_uy, 0);
+    return J({ granted: out(groups.grant), spent: out(groups.spend),
+      granted_suanli: r1(uyToSuanli(total("grant"))), spent_suanli: r1(uyToSuanli(total("spend"))) });
   }
 
   if (url.pathname === "/agent/usage/grant" && request.method === "POST") {

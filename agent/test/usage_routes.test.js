@@ -192,3 +192,56 @@ describe("usage routes", () => {
     expect(r.status).toBe(400);
   });
 });
+
+// ── /usage/summary 全量聚合 + /usage/ledger 游标翻页 ─────────────────────────
+import { suanliToUY } from "../src/usage.js";
+
+describe("usage summary + ledger pagination routes", () => {
+  const tok = "anon_unittesttoken_abcdefghijklmnop";
+  it("summary 全量聚合：campaign 合并为活动赠送，来源/花费分组齐全", async () => {
+    const db = fakeD1(SQL);
+    const env = { USAGE: db, SESSION_SECRET: "" };
+    const scope = await anonScopeFromToken(tok);
+    await grantBucket(db, scope, suanliToUY(100), "campaign:a", null, 1);  // 先触发 signup 500
+    await grantBucket(db, scope, suanliToUY(50), "campaign:b", null, 2);
+    await grantBucket(db, scope, suanliToUY(80), "referral_author", null, 3);
+    await debit(db, scope, suanliToUY(9), "mine", null, 4);
+    await debit(db, scope, suanliToUY(1), "asr", null, 5);
+    const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/summary"),
+      req("/agent/usage/summary", { token: tok }), env);
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    const g = Object.fromEntries(body.granted.map((x) => [x.reason, x.suanli]));
+    expect(g["注册赠送"]).toBe(500);
+    expect(g["活动赠送"]).toBe(150);            // campaign:a + campaign:b 合并
+    expect(g["邀请奖励"]).toBe(80);
+    const s = Object.fromEntries(body.spent.map((x) => [x.reason, x.suanli]));
+    expect(s["挖文章"]).toBe(9);
+    expect(s["语音转写"]).toBe(1);
+    expect(body.spent.find((x) => x.reason === "挖文章").count).toBe(1);
+    expect(body.granted_suanli).toBe(730);
+    expect(body.spent_suanli).toBe(10);
+  });
+  it("ledger 翻页：limit+before 游标、has_more/next，两页拼起来不重不漏", async () => {
+    const db = fakeD1(SQL);
+    const env = { USAGE: db, SESSION_SECRET: "" };
+    const scope = await anonScopeFromToken(tok);
+    await grantBucket(db, scope, 100, "feed_author", null, 1);   // signup + grant
+    for (let i = 0; i < 5; i++) await debit(db, scope, 10, "mine", null, 100 + i);
+    // 共 7 行：4 + 3
+    const r1resp = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/ledger?limit=4"),
+      req("/agent/usage/ledger?limit=4", { token: tok }), env);
+    const p1 = await r1resp.json();
+    expect(p1.entries.length).toBe(4);
+    expect(p1.has_more).toBe(true);
+    expect(p1.next).toBeTruthy();
+    const r2resp = await handleUsageRoute(new URL(`https://jianshuo.dev/agent/usage/ledger?limit=4&before=${p1.next}`),
+      req(`/agent/usage/ledger?limit=4&before=${p1.next}`, { token: tok }), env);
+    const p2 = await r2resp.json();
+    expect(p2.entries.length).toBe(3);
+    expect(p2.has_more).toBe(false);
+    expect(p2.next).toBeNull();
+    const ids = [...p1.entries, ...p2.entries].map((e) => e.id);
+    expect(new Set(ids).size).toBe(7);
+  });
+});

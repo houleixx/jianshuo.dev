@@ -88,10 +88,26 @@ export async function debit(db, userSub, amountUY, reason, detail, now) {
 }
 
 
-export async function getLedger(db, userSub, limit = 50) {
+// 明细翻页：keyset 游标 (ts,id) 双键——ts 会撞（同毫秒多笔），OFFSET 会在新行插入时漂移。
+// before = { ts, id }：只取严格早于该行的记录。
+export async function getLedger(db, userSub, limit = 50, before = null) {
+  let sql = "SELECT id,ts,kind,amount_uy,reason,detail,balance_uy FROM ledger WHERE user_sub=?";
+  const binds = [userSub];
+  if (before) {
+    sql += " AND (ts < ? OR (ts = ? AND id < ?))";
+    binds.push(before.ts, before.ts, before.id);
+  }
+  sql += " ORDER BY ts DESC, id DESC LIMIT ?";
+  binds.push(limit);
+  return (await db.prepare(sql).bind(...binds).all()).results;
+}
+
+// 算力页的「来源/花费」汇总：全量 ledger 按 kind+reason 聚合，一次拿全——
+// 客户端在 50 条窗口里现算来源是错的（老 grant 早被挤出窗口）。金额微元，出口转算力。
+export async function usageSummary(db, userSub) {
   const r = await db.prepare(
-    "SELECT ts,kind,amount_uy,reason,detail,balance_uy FROM ledger WHERE user_sub=? ORDER BY ts DESC, id DESC LIMIT ?"
-  ).bind(userSub, limit).all();
+    "SELECT kind, reason, SUM(amount_uy) AS total_uy, COUNT(*) AS n FROM ledger WHERE user_sub=? GROUP BY kind, reason"
+  ).bind(userSub).all();
   return r.results;
 }
 
