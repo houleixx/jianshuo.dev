@@ -28,7 +28,7 @@ import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
-import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, usageSummary } from "./usage_store.js";
+import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, referralLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { handlePromptShareRoutes } from "./prompt-share.js";
@@ -823,6 +823,7 @@ export async function handleUsageRoute(url, request, env) {
     const now = Date.now();
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "80", 10) || 80, 300);
     const { summary, today, sum7, board, events } = await mintLedger(env.USAGE, now, limit);
+    const ref = await referralLedger(env.USAGE, now, Math.min(limit, 100));
     const priceUY = feedQuote(sum7, 0).priceUY;   // 当前币价（与 App 报价同口径）
     return J({
       summary: {
@@ -857,6 +858,28 @@ export async function handleUsageRoute(url, request, env) {
           feeder_suanli: r1(uyToSuanli(e.actor_uy)),
         };
       }),
+      // 拉新（kind='referral'）：邀请人=beneficiary，新人=actor；via 是归因层。
+      referral: {
+        events: ref.summary.events,
+        today_events: ref.today.events,
+        minted_suanli: r1(uyToSuanli(ref.summary.minted_uy)),
+        owner_suanli: r1(uyToSuanli(ref.summary.owner_uy)),
+        newuser_suanli: r1(uyToSuanli(ref.summary.newuser_uy)),
+        board: ref.board.map((b) => ({
+          user_sub: b.sub, invited_cnt: b.invited_cnt,
+          owner_suanli: r1(uyToSuanli(b.owner_uy)), last_ts: b.last_ts,
+        })),
+        events_list: ref.events.map((e) => {
+          let d = null; try { d = e.detail ? JSON.parse(e.detail) : null; } catch (_) {}
+          return {
+            ts: e.ts, token: e.share_id || "",
+            inviter_sub: e.beneficiary_sub, newuser_sub: e.actor_sub,
+            via: (d && d.via) || "", capped: !!(d && d.capped),
+            owner_suanli: r1(uyToSuanli(e.beneficiary_uy)),
+            newuser_suanli: r1(uyToSuanli(e.actor_uy)),
+          };
+        }),
+      },
     });
   }
 

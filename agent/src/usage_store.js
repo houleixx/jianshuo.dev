@@ -170,3 +170,35 @@ export async function mintLedger(db, now, limit = 80) {
 
   return { summary, today, sum7, board, events };
 }
+
+// 拉新账本（admin）：mint 表 kind='referral' 的三张聚合——
+//   summary  累计拉新（人数/发出算力，邀请人侧 vs 新人侧）+ 今日人数
+//   board    每邀请人拉新数与奖励（owner 日封顶 30，capped 后作者侧为 0 但人数照记）
+//   events   最近 N 笔归因流水（via: link/clipboard=token 层，hello=IP 指纹层）
+export async function referralLedger(db, now, limit = 50) {
+  const DAY = 86400000;
+  const summary = await db.prepare(
+    "SELECT COUNT(*) AS events, COALESCE(SUM(actor_uy+beneficiary_uy),0) AS minted_uy, " +
+    "COALESCE(SUM(beneficiary_uy),0) AS owner_uy, COALESCE(SUM(actor_uy),0) AS newuser_uy " +
+    "FROM mint WHERE kind='referral'"
+  ).first();
+
+  const day0 = now - (now % DAY);
+  const today = await db.prepare(
+    "SELECT COUNT(*) AS events FROM mint WHERE kind='referral' AND ts>=?"
+  ).bind(day0).first();
+
+  const board = (await db.prepare(
+    "SELECT beneficiary_sub AS sub, COUNT(*) AS invited_cnt, " +
+    "COALESCE(SUM(beneficiary_uy),0) AS owner_uy, MAX(ts) AS last_ts " +
+    "FROM mint WHERE kind='referral' GROUP BY beneficiary_sub " +
+    "ORDER BY invited_cnt DESC, owner_uy DESC LIMIT 200"
+  ).all()).results;
+
+  const events = (await db.prepare(
+    "SELECT share_id, actor_sub, beneficiary_sub, price_uy, actor_uy, beneficiary_uy, detail, ts " +
+    "FROM mint WHERE kind='referral' ORDER BY ts DESC, id DESC LIMIT ?"
+  ).bind(limit).all()).results;
+
+  return { summary, today, board, events };
+}

@@ -115,18 +115,18 @@ async function load(){
 
   const pool = s.daily_pool_suanli || 2000;
   const fuseCls = s.fuse_blown ? 'fuse-bad' : 'fuse-ok';
+  const rf = data.referral || {};
   const cards = [
     ['bal',   fmt(s.minted_suanli), '累计挖出(算力)'],
     ['',      `${fmt(s.today_suanli)} / ${fmt(pool)}`, `今日池 · ${s.today_events||0} 笔`],
     ['',      fmt(s.price_suanli_per_coin), '当前币价(算力/币)'],
     ['spent', (s.events||0).toLocaleString(), '累计投喂(笔)'],
+    ['',      `${(rf.events||0).toLocaleString()} 人`, `累计拉新 · 今日 ${rf.today_events||0} 人`],
   ];
   for(const [c,n,l] of cards)
     $('#cards').append(el('div','card '+c, `<div class="n">${n}</div><div class="l">${l}</div>`));
 
-  if(!s.events){
-    $('#body').innerHTML='<div class="empty-state">还没有人投喂。等第一枚硬币落进池子。</div>'; return;
-  }
+  const hasFeed = !!s.events, hasRef = !!rf.events;
 
   // ── 收益排行 ──
   const brows = board.map((b,i)=>`<tr>
@@ -158,8 +158,41 @@ async function load(){
     <thead><tr><th>时间</th><th>投币者 → 作者</th><th>文章</th><th>币</th><th>作者得</th><th>投币者得</th><th>币价</th></tr></thead>
     <tbody>${erows}</tbody></table></div>`;
 
-  $('#body').innerHTML = boardCard + eventCard;
+  // ── 拉新排行 ──
+  const viaName = (v) => ({link:'邀请链接', clipboard:'剪贴板', hello:'IP 指纹'}[v] || v || '—');
+  const rboard = rf.board || [], revents = rf.events_list || [];
+  const rbrows = rboard.map((b,i)=>`<tr>
+    <td class="rank">${i+1}</td>
+    <td>${esc(who(b.user_sub))}</td>
+    <td>${b.invited_cnt||0}</td>
+    <td class="mint">${fmt(b.owner_suanli)}</td>
+    <td class="dim" style="font-family:var(--fm);font-size:.8rem">${esc(fmtTime(b.last_ts))}</td>
+  </tr>`).join('');
+  const rboardCard = `<div class="sect">拉新排行 · ${rboard.length} 位邀请人</div>
+    <div class="tablecard"><table>
+    <thead><tr><th class="rank">#</th><th>邀请人</th><th>拉新(人)</th><th>邀请奖励(算力)</th><th>最近一次</th></tr></thead>
+    <tbody>${rbrows}</tbody></table></div>`;
+
+  // ── 最近拉新流水 ──
+  const rerows = revents.map(e=>`<tr>
+    <td class="dim" style="font-family:var(--fm);font-size:.8rem">${esc(fmtTime(e.ts))}</td>
+    <td><span class="flow">${esc(who(e.inviter_sub))}<span class="arr">→</span>${esc(who(e.newuser_sub))}</span></td>
+    <td class="dim">${esc(viaName(e.via))}${e.token?` · <span style="font-family:var(--fm);font-size:.78rem">${esc(e.token)}</span>`:''}</td>
+    <td class="mint">${fmt(e.owner_suanli)}${e.capped?' <span class="fuse-bad" title="邀请人当日已达封顶，作者侧归零">顶</span>':''}</td>
+    <td>${fmt(e.newuser_suanli)}</td>
+  </tr>`).join('');
+  const reventCard = `<div class="sect">最近拉新 · ${revents.length} 笔</div>
+    <div class="tablecard"><table>
+    <thead><tr><th>时间</th><th>邀请人 → 新人</th><th>归因途径</th><th>邀请人得</th><th>新人得</th></tr></thead>
+    <tbody>${rerows}</tbody></table></div>`;
+
+  const feedHTML = hasFeed ? boardCard + eventCard
+    : '<div class="empty-state">还没有人投喂。等第一枚硬币落进池子。</div>';
+  const refHTML = hasRef ? rboardCard + reventCard
+    : '<div class="sect">拉新</div><div class="empty-state">还没有拉新记录。</div>';
+  $('#body').innerHTML = feedHTML + refHTML;
   $('#sum').innerHTML = `累计挖出 <b>${fmt(s.minted_suanli)}</b> 算力（作者侧 ${fmt(s.author_suanli)} · 投币侧 ${fmt(s.feeder_suanli)}）` +
+    ` · 拉新发出 <b>${fmt(rf.minted_suanli)}</b> 算力（邀请人侧 ${fmt(rf.owner_suanli)} · 新人侧 ${fmt(rf.newuser_suanli)}）` +
     ` · 熔断阈值 <span class="${fuseCls}">${fmt(s.fuse_cap_suanli)}</span> 算力/日` +
     (s.fuse_blown ? ' · <span class="fuse-bad">⚠ 今日已熔断，投喂暂停</span>' : '');
 }
