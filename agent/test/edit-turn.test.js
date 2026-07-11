@@ -139,7 +139,7 @@ describe("runEditTurn", () => {
       instruction: "用4563566改这段", images: [], system: "SYS", history: [], callClaude,
     });
     const userText = seen.messages.find((m) => m.role === "user").content.map((b) => b.text || "").join("\n");
-    expect(userText).toContain("【分享指令开始】");
+    expect(userText).toContain("【分享提示词开始】");
     expect(userText).toContain("改得更毒舌。");
     expect(userText).toContain("更毒舌");
   });
@@ -156,7 +156,7 @@ describe("runEditTurn", () => {
       instruction: "把标题改短", images: [], system: "SYS", history: [], callClaude,
     });
     const userText = seen.messages.find((m) => m.role === "user").content.map((b) => b.text || "").join("\n");
-    expect(userText).not.toContain("【分享指令开始】");
+    expect(userText).not.toContain("【分享提示词开始】");
     expect(userText).not.toContain("系统备注");
   });
 });

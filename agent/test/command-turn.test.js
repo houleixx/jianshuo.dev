@@ -73,7 +73,7 @@ describe("runCommandTurn", () => {
     });
     expect(r.ok).toBe(true);
     const text = JSON.stringify(saw.messages);
-    expect(text).toContain("【分享指令开始】");
+    expect(text).toContain("【分享提示词开始】");
     expect(text).toContain("改得更毒舌。");
   });
 
@@ -86,7 +86,7 @@ describe("runCommandTurn", () => {
       instruction: "把第一篇归档", refs: [{ n: 1, stem: "S1", title: "一" }], callClaude,
     });
     const text = JSON.stringify(saw.messages);
-    expect(text).not.toContain("【分享指令开始】");
+    expect(text).not.toContain("【分享提示词开始】");
     expect(text).not.toContain("系统备注");
   });
 });

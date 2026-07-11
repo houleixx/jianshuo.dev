@@ -198,8 +198,8 @@ describe("resolveSharedPromptBlock", () => {
 
   it("hits a plain 7-digit code; block carries delimiters + label + text, no placeholder note", async () => {
     const block = await resolveSharedPromptBlock(seeded(), "用4563566改这段");
-    expect(block).toContain("【分享指令开始】");
-    expect(block).toContain("【分享指令结束】");
+    expect(block).toContain("【分享提示词开始】");
+    expect(block).toContain("【分享提示词结束】");
     expect(block).toContain("更毒舌");
     expect(block).toContain("把它改得更毒舌");
     expect(block).not.toContain("占位符");

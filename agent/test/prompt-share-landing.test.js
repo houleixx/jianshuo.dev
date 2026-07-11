@@ -25,7 +25,7 @@ describe("promptShareHtml", () => {
     expect(h).toContain("把它改得更毒舌。");
     expect(h).toContain("怎么用");
     expect(h).toContain("长按屏幕按住说话");
-    expect(h).toContain("设置 → AI 指令");
+    expect(h).toContain("设置 → 提示词");
     expect(h).not.toContain("占位符");
   });
   it("adds the placeholder note only when the instruction has {{…}}", () => {

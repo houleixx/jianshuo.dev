@@ -140,7 +140,7 @@ export async function onRequest(context) {
 // 「怎么用 / 怎么收藏」是这里的渲染期模板，不入存储、不进语音兑换的注入文本。
 async function promptSharePage(context, env, id, ptr) {
   const { request } = context;
-  const label = String(ptr.label || '分享指令');
+  const label = String(ptr.label || '分享提示词');
   const instruction = String(ptr.instruction || '');
 
   const fwdHost = request.headers?.get?.('x-forwarded-host');
@@ -169,14 +169,14 @@ export function promptShareHtml(label, code, instruction) {
     : '';
   return `<article>
 <h1>${esc(label)}</h1>
-<p class="muted">一条 VoiceDrop AI 指令 · 分享码</p>
+<p class="muted">一条 VoiceDrop 提示词 · 分享码</p>
 <div class="vd-code">${esc(code)}</div>
 <div class="vd-prompt">${mdToHtml(instruction)}</div>
 ${note}
 <h2>怎么用</h2>
 <ol>
-<li>打开 VoiceDrop，进入任意一篇文章，<strong>长按屏幕按住说话</strong>，说：「用 ${esc(code)} 改这段」——AI 会按上面这条指令干活。只管这一次，不会改动你自己的任何设置。</li>
-<li>想长期用：打开 VoiceDrop 的 <strong>设置 → AI 指令</strong>，选一个动作，把上面的指令内容粘贴进「我的指令」，以后长按菜单里随手可用。</li>
+<li>打开 VoiceDrop，进入任意一篇文章，<strong>长按屏幕按住说话</strong>，说：「用 ${esc(code)} 改这段」——AI 会按上面这条提示词干活。只管这一次，不会改动你自己的任何设置。</li>
+<li>想长期用：打开 VoiceDrop 的 <strong>设置 → 提示词</strong>，选一个动作，把上面的提示词内容粘贴进「我的提示词」，以后长按菜单里随手可用。</li>
 </ol>
 </article>`;
 }
