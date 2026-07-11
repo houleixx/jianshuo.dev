@@ -10,6 +10,15 @@ export async function onRequest(context) {
   // Host 是 pages.dev,真实域名在 X-Forwarded-Host。两种形态都认。
   const host = context.request.headers?.get?.("x-forwarded-host") || new URL(context.request.url).hostname;
   if (host !== "voicedrop.cn" && host !== "www.voicedrop.cn") return context.next();
+  // voicedrop.cn/favicon.ico —— 浏览器/微信默认会请求；用 VoiceDrop app 图标
+  // （静态资源 /vd-favicon.ico，多尺寸 ico），别让它掉进分享页 404。
+  if (new URL(context.request.url).pathname === "/favicon.ico") {
+    const asset = await context.env.ASSETS.fetch(new URL("/vd-favicon.ico", context.request.url));
+    return new Response(asset.body, {
+      status: asset.status,
+      headers: { "content-type": "image/x-icon", "cache-control": "public, max-age=86400" },
+    });
+  }
   // 复用 /voicedrop/<id> 的整套渲染（id 校验 / shares 与社区双解析 / og 标签）。
   return sharePage(context);
 }
