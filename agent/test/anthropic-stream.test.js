@@ -104,3 +104,20 @@ describe("anthropicFetch streaming", () => {
     expect(r.errorText).toContain("bad");
   });
 });
+
+describe("onEvent 外露(实时预览地基)", () => {
+  it("每个 content_block_delta 都回调,拼起来等于最终全文;不传回调行为不变", async () => {
+    const seen = [];
+    const f = async () => sseResponse(TEXT_EVENTS);
+    const r = await callAnthropic(ENV, { model: "m" }, { fetchImpl: f, onEvent: (ev) => { if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") seen.push(ev.delta.text); } });
+    expect(r.ok).toBe(true);
+    expect(seen.join("")).toBe("你好，世界");
+    expect(r.json.content[0].text).toBe("你好，世界");
+  });
+  it("onEvent 抛错不炸整个调用(预览是 best-effort)", async () => {
+    const f = async () => sseResponse(TEXT_EVENTS);
+    const r = await callAnthropic(ENV, { model: "m" }, { fetchImpl: f, onEvent: () => { throw new Error("ui boom"); } });
+    expect(r.ok).toBe(true);
+    expect(r.json.content[0].text).toBe("你好，世界");
+  });
+});

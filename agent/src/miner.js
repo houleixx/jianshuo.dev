@@ -645,7 +645,7 @@ export function buildMinePrompt({
   return payload;
 }
 
-async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system", systemOverride = null, photoInstr = undefined) {
+async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system", systemOverride = null, photoInstr = undefined, onText = null) {
   const _P = await loadPrompts(env);
   const payload = buildMinePrompt({
     transcript, styleText: claudeMd, photos, force, cacheMode,
@@ -671,7 +671,11 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
     rawResp = await resp.json();
     text = rawResp.choices?.[0]?.message?.content || "";
   } else {
-    const r = await callAnthropic(env, payload, { apiKey: modelCfg.apiKey });
+    const r = await callAnthropic(env, payload, {
+      apiKey: modelCfg.apiKey,
+      // 实时预览：把生成中的 text token 漏给调用方（restyle 用）。relay 路径无 delta。
+      onEvent: onText ? (ev) => { if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") onText(ev.delta.text); } : null,
+    });
     latencyMs = Date.now() - t0;
     if (!r.ok) throw new Error(`Claude ${r.status}: ${(r.errorText || "").slice(0, 200)}`);
     rawResp = r.json;
@@ -835,15 +839,17 @@ async function notifyStatus(scope, stem, status, env) {
 async function mineVariant(env, {
   transcript, styleText, photos, cacheMode, modelCfg, scope, stem, turnId,
   metaExtra = {}, debitExtra = {}, label = "", log = () => {},
-  systemOverride = null, noForce = false, photoInstr = undefined,
+  systemOverride = null, noForce = false, photoInstr = undefined, preview = null,
 }) {
   const meta = { user_scope: scope, stem, ...metaExtra };
   const tag = label ? " " + label : "";
   const runLlm = async (force, step) => {
     const tLlm = Date.now();
     log(`LLM 开始${tag}${force ? " (force)" : ""}`, { step });
+    if (preview) { try { preview.reset(); } catch (_) {} }   // force 重试 = 全新一份流
     try {
-      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, modelCfg, cacheMode, systemOverride, photoInstr);
+      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, modelCfg, cacheMode, systemOverride, photoInstr,
+        preview ? (t) => { try { preview.text(t); } catch (_) {} } : null);
       await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
       try {
         if (env.USAGE) {
@@ -904,7 +910,7 @@ export function ensurePhotoMarkers(sourceArticles, newArticles) {
   return out;
 }
 
-export async function restyleArticle(env, scope, stem, styleV) {
+export async function restyleArticle(env, scope, stem, styleV, preview = null) {
   const articleKey = `${scope}articles/${stem}.json`;
   const obj = await env.FILES.get(articleKey);
   if (!obj) return { ok: false, reason: "not-found" };
@@ -955,7 +961,7 @@ export async function restyleArticle(env, scope, stem, styleV) {
     // recordings — so restyle can never again drift from runMine.
     articles = await mineVariant(env, {
       transcript: mineSource, styleText, photos, cacheMode: "transcript", modelCfg, scope, stem, turnId,
-      metaExtra: { restyle: v }, debitExtra: { restyle: v },
+      metaExtra: { restyle: v }, debitExtra: { restyle: v }, preview,
     });
   }
   if (!articles.length) return { ok: false, reason: "no-article" };

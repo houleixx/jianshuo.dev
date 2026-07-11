@@ -36,6 +36,7 @@ import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
 import { callAnthropic, anthropicFetch, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
+import { makePreviewPusher } from "./preview.js";
 import { loadUIConfigFor } from "./ui-config.js";
 import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
@@ -107,6 +108,19 @@ export class ArticleEditor extends Agent {
   // The Worker has already authenticated the request and injected the
   // token-derived article key + scope as headers. Persist them so reconnects
   // (after the DO hibernates) still know which file they own.
+  // 实时预览通道：/agent/restyle（普通 worker 路由）把重写生成中的增量 POST 进来，
+  // 由本 DO 广播给已连接的详情页 WS。外部到不了这里——/agent/edit 只放行 WS 升级，
+  // 这个 HTTP 入口只有服务端拿着同名 stub 才能调（DO 名内嵌 scope，跨用户无法命中）。
+  async onRequest(request) {
+    const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/preview") {
+      const msg = await request.text();
+      try { this.broadcast(msg); } catch (_) {}
+      return new Response("ok");
+    }
+    return new Response("not found", { status: 404 });
+  }
+
   onConnect(connection, ctx) {
     const key = ctx.request.headers.get("x-vd-article-key");
     const scope = ctx.request.headers.get("x-vd-scope");
@@ -1068,7 +1082,18 @@ export default {
       if (!stem || stem.includes("/") || stem.includes("..")) {
         return new Response(JSON.stringify({ ok: false, error: "bad-request" }), { status: 400, headers: { "content-type": "application/json" } });
       }
-      const r = await restyleArticle(env, scope, stem, styleV);
+      // 实时预览（best-effort）：把生成中的增量推给同名编辑 DO，广播给已打开的
+      // 详情页。App 收到 preview-done 即可收尾——就算这个 HTTP 响应超时/断线，
+      // 结果也已落库、预览通道也宣告了完成。
+      let pusher = null;
+      try {
+        const agent = await getAgentByName(env.ArticleEditor, sanitizeName(scope + stem));
+        pusher = makePreviewPusher((obj) => agent.fetch(new Request("https://agent/preview", {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(obj),
+        })));
+      } catch (_) {}
+      const r = await restyleArticle(env, scope, stem, styleV, pusher && pusher.preview);
+      if (pusher) { try { await pusher.done(r.ok); } catch (_) {} }
       return new Response(JSON.stringify(r), { status: r.ok ? 200 : 422, headers: { "content-type": "application/json" } });
     }
 

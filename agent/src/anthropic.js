@@ -31,7 +31,7 @@ export function isGeoBlock(status, bodyText) {
 // 字节就掐线（HTTP 524）——超长录音挖矿生成超 2 分钟必死（2026-07-09 事故：
 // 2h12m 录音 156 个 pass 全灭）。流式后首 token 几秒即达、字节持续流动，连接
 // 不会被掐。SSE 在这里聚合回非流式的响应形状，所有调用方零改动。
-export async function anthropicFetch(apiKey, reqBody, fetchImpl = fetch) {
+export async function anthropicFetch(apiKey, reqBody, fetchImpl = fetch, onEvent = null) {
   try {
     const resp = await fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -47,7 +47,7 @@ export async function anthropicFetch(apiKey, reqBody, fetchImpl = fetch) {
     }
     const ct = (resp.headers && resp.headers.get && resp.headers.get("content-type")) || "";
     // 非 SSE（测试 fake / 中间代理剥流）或无 body 流 → 按老路径直接解析 JSON。
-    const json = ct.includes("event-stream") && resp.body ? await aggregateSse(resp) : await resp.json();
+    const json = ct.includes("event-stream") && resp.body ? await aggregateSse(resp, onEvent) : await resp.json();
     return { ok: true, status: resp.status, json, errorText: "" };
   } catch (e) {
     return { ok: false, status: 0, json: null, errorText: String((e && e.message) || e) };
@@ -56,7 +56,7 @@ export async function anthropicFetch(apiKey, reqBody, fetchImpl = fetch) {
 
 // 把 Messages API 的 SSE 事件流聚合回非流式响应对象。流中途的 error 事件
 // throw —— 外层 catch 转成 {ok:false,status:0}，调用方按网络错误重试。
-async function aggregateSse(resp) {
+async function aggregateSse(resp, onEvent = null) {
   const reader = resp.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
@@ -115,6 +115,8 @@ async function aggregateSse(resp) {
         let ev;
         try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
         handle(ev);
+        // 实时预览钩子：best-effort，回调炸了不影响聚合。
+        if (onEvent) { try { onEvent(ev); } catch (_) {} }
       }
     }
   }
@@ -150,7 +152,7 @@ async function currentColo(fetchImpl) {
 
 // Drop-in replacement for the scattered raw fetches: returns
 // {ok, status, json, errorText, via, colo?} and never throws.
-export async function callAnthropic(env, reqBody, { apiKey, fetchImpl = fetch } = {}) {
+export async function callAnthropic(env, reqBody, { apiKey, fetchImpl = fetch, onEvent = null } = {}) {
   const key = apiKey || env.CLAUDE_API_KEY;
 
   if (preferRelay && env.RELAY) {
@@ -159,7 +161,7 @@ export async function callAnthropic(env, reqBody, { apiKey, fetchImpl = fetch } 
     // another instant 403); a direct success flips us back to direct-first.
     const relayed = await relayCall(env, key, reqBody);
     if (relayed.ok) return relayed;
-    const direct = await anthropicFetch(key, reqBody, fetchImpl);
+    const direct = await anthropicFetch(key, reqBody, fetchImpl, onEvent);
     if (direct.ok) {
       preferRelay = false;
       return { ...direct, via: "direct" };
@@ -167,7 +169,7 @@ export async function callAnthropic(env, reqBody, { apiKey, fetchImpl = fetch } 
     return relayed;
   }
 
-  const direct = await anthropicFetch(key, reqBody, fetchImpl);
+  const direct = await anthropicFetch(key, reqBody, fetchImpl, onEvent);
   if (!(env.RELAY && isGeoBlock(direct.status, direct.errorText))) {
     return { ...direct, via: "direct" };
   }
