@@ -7,6 +7,7 @@
 import { runAgentLoop } from "./loop.js";
 import { TITLE_FALLBACK, resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { inlineNumberedBody } from "./linenum.js";
+import { resolveSharedPromptBlock } from "./prompt-share.js";
 
 const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo", "new_photo"];
 
@@ -73,6 +74,10 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
     );
   }
   varLines.push("", "这次的语音指令：", instruction);
+
+  // 指令里报了 7 位分享码 → 追加对应的共享指令块（一次性参考；查无则软备注）。
+  const sharedBlock = await resolveSharedPromptBlock(env, instruction);
+  if (sharedBlock) varLines.push("", sharedBlock);
 
   const userContent = [
     ...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data } })),

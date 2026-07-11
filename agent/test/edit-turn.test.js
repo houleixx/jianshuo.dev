@@ -125,4 +125,38 @@ describe("runEditTurn", () => {
     // No second clean copy of the body: 乙 appears exactly once (only in 第2行：乙).
     expect(userText.match(/乙/g)?.length).toBe(1);
   });
+
+  it("injects the shared-prompt block when the instruction carries a 7-digit share code", async () => {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "底稿", articles: [{ title: "T", body: "甲" }] }),
+      "shares/4563566": JSON.stringify({ type: "prompt", sub: "o", itemId: "x", label: "更毒舌", instruction: "改得更毒舌。" }),
+    });
+    let seen;
+    const callClaude = async (req) => { seen = req; return { content: [{ type: "text", text: "改好了" }] }; };
+    await runEditTurn({
+      env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+      token: "t", origin: "https://jianshuo.dev", editId: "e-share",
+      instruction: "用4563566改这段", images: [], system: "SYS", history: [], callClaude,
+    });
+    const userText = seen.messages.find((m) => m.role === "user").content.map((b) => b.text || "").join("\n");
+    expect(userText).toContain("【分享指令开始】");
+    expect(userText).toContain("改得更毒舌。");
+    expect(userText).toContain("更毒舌");
+  });
+
+  it("does NOT inject anything for a plain instruction without a share code", async () => {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "底稿", articles: [{ title: "T", body: "甲" }] }),
+    });
+    let seen;
+    const callClaude = async (req) => { seen = req; return { content: [{ type: "text", text: "好" }] }; };
+    await runEditTurn({
+      env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+      token: "t", origin: "https://jianshuo.dev", editId: "e-noshare",
+      instruction: "把标题改短", images: [], system: "SYS", history: [], callClaude,
+    });
+    const userText = seen.messages.find((m) => m.role === "user").content.map((b) => b.text || "").join("\n");
+    expect(userText).not.toContain("【分享指令开始】");
+    expect(userText).not.toContain("系统备注");
+  });
 });

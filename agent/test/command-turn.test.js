@@ -59,4 +59,34 @@ describe("runCommandTurn", () => {
     });
     expect(r.pending).toEqual([{ action: "delete", stem: "S2", title: "二" }]);
   });
+
+  it("指令带 7 位分享码 → userContent 追加分享指令块", async () => {
+    let saw;
+    const callClaude = vi.fn(async (req) => { saw = req; return { content: [{ type: "text", text: "好" }], usage: {} }; });
+    const env = { FILES: { async get(k) {
+      if (k === "shares/4563566") return { async text() { return JSON.stringify({ type: "prompt", sub: "o", itemId: "x", label: "更毒舌", instruction: "改得更毒舌。" }); } };
+      return null;
+    } } };
+    const r = await runCommandTurn({
+      env, scope: "users/x/", token: "tk", origin: "https://jianshuo.dev", turnId: "T4",
+      instruction: "用4563566整理第一篇", refs: [{ n: 1, stem: "S1", title: "一" }], callClaude,
+    });
+    expect(r.ok).toBe(true);
+    const text = JSON.stringify(saw.messages);
+    expect(text).toContain("【分享指令开始】");
+    expect(text).toContain("改得更毒舌。");
+  });
+
+  it("无分享码的指令不注入任何块", async () => {
+    let saw;
+    const callClaude = vi.fn(async (req) => { saw = req; return { content: [{ type: "text", text: "好" }], usage: {} }; });
+    const env = { FILES: { async get() { return null; } } };
+    await runCommandTurn({
+      env, scope: "users/x/", token: "tk", origin: "https://jianshuo.dev", turnId: "T5",
+      instruction: "把第一篇归档", refs: [{ n: 1, stem: "S1", title: "一" }], callClaude,
+    });
+    const text = JSON.stringify(saw.messages);
+    expect(text).not.toContain("【分享指令开始】");
+    expect(text).not.toContain("系统备注");
+  });
 });

@@ -11,6 +11,7 @@
 // 认证由 index.js 完成（用户 token → scope），这里只管业务。
 import { loadUIConfig, loadUserOverrides } from "./ui-config.js";
 import { flattenPrompts } from "./prompt-registry.js";
+import { refreshPromptShare, shareStates } from "./prompt-share.js";
 
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
@@ -22,6 +23,7 @@ export async function handleUIConfigCustom(request, env, scope) {
   if (request.method === "GET") {
     const { overrides, hidden } = await loadUserOverrides(env, scope);
     const hide = new Set(hidden);
+    const shares = await shareStates(env, scope);
     return J({
       schema: 2,
       items: flat.map((p) => ({
@@ -31,6 +33,8 @@ export async function handleUIConfigCustom(request, env, scope) {
         override: overrides[p.id]?.instruction ?? null,
         customLabel: overrides[p.id]?.label ?? null,
         hidden: hide.has(p.id),
+        shareCode: shares[p.id]?.shareCode ?? null,
+        sharing: shares[p.id]?.sharing ?? false,
       })),
     });
   }
@@ -57,6 +61,8 @@ export async function handleUIConfigCustom(request, env, scope) {
     } else {
       await env.FILES.delete(key);
     }
+    // 分享中的指令：保存即同步分享副本（活绑定；已关闭的不复活）。
+    await refreshPromptShare(env, scope, body.id);
     return J({
       ok: true, id: body.id,
       override: overrides[body.id]?.instruction ?? null,

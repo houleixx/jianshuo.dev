@@ -31,6 +31,7 @@ import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, 
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
+import { handlePromptShareRoutes } from "./prompt-share.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
@@ -1312,6 +1313,9 @@ export default {
 
     // 邀请奖励（新装归因 + 双边铸币入账）—— src/referral.js
     { const r = await handleReferralRoutes(url, request, env); if (r) return r; }
+
+    // 指令分享码（魔法数字：POST 开分享 / DELETE 关分享）—— src/prompt-share.js
+    { const r = await handlePromptShareRoutes(url, request, env); if (r) return r; }
 
     { const r = await handleUsageRoute(url, request, env); if (r) return r; }
 

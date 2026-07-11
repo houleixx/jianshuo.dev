@@ -46,6 +46,20 @@ export async function onRequest(context) {
   const map = await env.FILES.get(`shares/${id}`);
   if (map) {
     key = await map.text();
+    // 指令分享码（魔法数字）：shares/<码> 是 typed JSON（老式文章条目是纯文本
+    // key，JSON.parse 失败自然走原路）。写穿副本自带 label/instruction，零额外读。
+    try {
+      const ptr = JSON.parse(key);
+      if (ptr && typeof ptr === "object") {
+        if (ptr.type === "prompt" && typeof ptr.instruction === "string") {
+          return promptSharePage(context, env, id, ptr);
+        }
+        return context.next(); // 未知 typed 条目：不当文章 key 用
+      }
+    } catch { /* 纯文本文章 key，走原路 */ }
+  } else if (/^[1-9][0-9]{6}$/.test(id)) {
+    // 纯数字码永远不是静态资源；查无 = 作者已关闭分享（或码不存在）。
+    return html(page('分享已停止', '<p class="muted">这条分享已被作者停止，或者链接不存在。</p>'), 404);
   } else {
     const cm = await env.FILES.get(communityKey(id));
     if (cm) {
@@ -119,6 +133,52 @@ export async function onRequest(context) {
   const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 });
 
   return html(page(title, bodyHtml, og, cta), 200, true);
+}
+
+// ── 指令分享落地页（魔法数字）────────────────────────────────────────────────
+// spec: voicedrop repo docs/superpowers/specs/2026-07-11-prompt-share-magic-number-design.md
+// 「怎么用 / 怎么收藏」是这里的渲染期模板，不入存储、不进语音兑换的注入文本。
+async function promptSharePage(context, env, id, ptr) {
+  const { request } = context;
+  const label = String(ptr.label || '分享指令');
+  const instruction = String(ptr.instruction || '');
+
+  const fwdHost = request.headers?.get?.('x-forwarded-host');
+  const origin = fwdHost ? `https://${fwdHost}` : new URL(request.url).origin;
+  const og = { description: plainExcerpt(instruction, 120), url: fwdHost ? `${origin}/${id}` : request.url, image: '' };
+
+  // 邀请归因 + 下载 CTA：与文章分享页同款（作者分享指令同样是引流）。
+  const shareOwner = ptr.sub ? `users/${ptr.sub}/` : null;
+  const visitorIP = request.headers?.get?.('CF-Connecting-IP');
+  if (shareOwner && visitorIP && env.SESSION_SECRET && context.waitUntil) {
+    context.waitUntil(
+      writeRefhit({ FILES: env.FILES }, visitorIP, env.SESSION_SECRET, shareOwner, id, Date.now())
+        .catch(() => {}));
+  }
+  let rate = null, refCfg = null;
+  try { const o = await env.FILES.get('config/mint-rate.json'); if (o) rate = JSON.parse(await o.text()); } catch {}
+  try { const o = await env.FILES.get('config/referral.json'); if (o) refCfg = JSON.parse(await o.text()); } catch {}
+  const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 });
+
+  return html(page(label, promptShareHtml(label, id, instruction), og, cta), 200, true);
+}
+
+export function promptShareHtml(label, code, instruction) {
+  const note = instruction.includes('{{')
+    ? '<p class="muted" style="font-size:.85rem">花括号（如 {{LINE}}、{{QUOTE}}）是占位符，代表你操作时选中的那一行或那张图，AI 会自动对上。</p>'
+    : '';
+  return `<article>
+<h1>${esc(label)}</h1>
+<p class="muted">一条 VoiceDrop AI 指令 · 分享码</p>
+<div class="vd-code">${esc(code)}</div>
+<div class="vd-prompt">${mdToHtml(instruction)}</div>
+${note}
+<h2>怎么用</h2>
+<ol>
+<li>打开 VoiceDrop，进入任意一篇文章，<strong>长按屏幕按住说话</strong>，说：「用 ${esc(code)} 改这段」——AI 会按上面这条指令干活。只管这一次，不会改动你自己的任何设置。</li>
+<li>想长期用：打开 VoiceDrop 的 <strong>设置 → AI 指令</strong>，选一个动作，把上面的指令内容粘贴进「我的指令」，以后长按菜单里随手可用。</li>
+</ol>
+</article>`;
 }
 
 // Strip [[photo:<token>]] markers from text (for excerpts / fallback). Token is a
@@ -290,6 +350,9 @@ strong{font-weight:650}
 hr{border:none;border-top:1px solid #e6e3dd;margin:2.4rem 0}
 .vd-photo{margin:1.4rem 0}
 .vd-photo img{width:100%;height:auto;border-radius:12px;display:block}
+.vd-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:2.4rem;font-weight:700;letter-spacing:.3em;text-align:center;margin:1.2rem 0 1.6rem;text-indent:.3em}
+.vd-prompt{background:#f1efe9;border-radius:12px;padding:14px 16px;margin:0 0 1.05rem}
+.vd-prompt p:last-child{margin-bottom:0}
 .muted{color:#86868b}
 footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid #ececec;
   color:#a1a1a6;font-size:.82rem}
