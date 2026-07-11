@@ -111,6 +111,15 @@ export async function usageSummary(db, userSub) {
   return r.results;
 }
 
+// ASR 扣费幂等：同一条录音（stem）终生只扣一次转写费。LLM 失败重试的 pass
+// 不该再扣（2026-07-09 事故：一条 2h12m 录音被重复扣 13 次共 529 算力）。
+export async function asrCharged(db, userSub, stem) {
+  const row = await db.prepare(
+    "SELECT COUNT(*) AS n FROM ledger WHERE user_sub=? AND reason='asr' AND json_extract(detail,'$.stem')=?"
+  ).bind(userSub, stem).first();
+  return !!(row && row.n > 0);
+}
+
 export async function editCount(db, userSub, stem) {
   const row = await db.prepare(
     "SELECT COUNT(DISTINCT json_extract(detail,'$.turn_id')) AS n FROM ledger WHERE user_sub=? AND reason='edit' AND json_extract(detail,'$.stem')=?"

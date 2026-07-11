@@ -26,6 +26,11 @@ export function isGeoBlock(status, bodyText) {
 
 // The bare HTTP call, shared by the direct path here and by the relay DO.
 // Returns {ok, status, json, errorText} and never throws.
+//
+// 永远 stream:true：非流式时 Anthropic 门口的 Cloudflare 约 100 秒等不到响应
+// 字节就掐线（HTTP 524）——超长录音挖矿生成超 2 分钟必死（2026-07-09 事故：
+// 2h12m 录音 156 个 pass 全灭）。流式后首 token 几秒即达、字节持续流动，连接
+// 不会被掐。SSE 在这里聚合回非流式的响应形状，所有调用方零改动。
 export async function anthropicFetch(apiKey, reqBody, fetchImpl = fetch) {
   try {
     const resp = await fetchImpl("https://api.anthropic.com/v1/messages", {
@@ -35,15 +40,87 @@ export async function anthropicFetch(apiKey, reqBody, fetchImpl = fetch) {
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
       },
-      body: JSON.stringify(reqBody),
+      body: JSON.stringify({ ...reqBody, stream: true }),
     });
     if (!resp.ok) {
       return { ok: false, status: resp.status, json: null, errorText: (await resp.text()).slice(0, 2000) };
     }
-    return { ok: true, status: resp.status, json: await resp.json(), errorText: "" };
+    const ct = (resp.headers && resp.headers.get && resp.headers.get("content-type")) || "";
+    // 非 SSE（测试 fake / 中间代理剥流）或无 body 流 → 按老路径直接解析 JSON。
+    const json = ct.includes("event-stream") && resp.body ? await aggregateSse(resp) : await resp.json();
+    return { ok: true, status: resp.status, json, errorText: "" };
   } catch (e) {
     return { ok: false, status: 0, json: null, errorText: String((e && e.message) || e) };
   }
+}
+
+// 把 Messages API 的 SSE 事件流聚合回非流式响应对象。流中途的 error 事件
+// throw —— 外层 catch 转成 {ok:false,status:0}，调用方按网络错误重试。
+async function aggregateSse(resp) {
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let base = null;                 // message_start 的 message 骨架
+  const blocks = [];               // index → content block
+  const partialJson = new Map();   // index → tool_use 未拼完的 input JSON 串
+
+  const handle = (ev) => {
+    switch (ev.type) {
+      case "message_start":
+        base = ev.message || {};
+        break;
+      case "content_block_start":
+        blocks[ev.index] = { ...(ev.content_block || {}) };
+        break;
+      case "content_block_delta": {
+        const b = blocks[ev.index] || (blocks[ev.index] = {});
+        const d = ev.delta || {};
+        if (d.type === "text_delta") b.text = (b.text || "") + (d.text || "");
+        else if (d.type === "input_json_delta") partialJson.set(ev.index, (partialJson.get(ev.index) || "") + (d.partial_json || ""));
+        else if (d.type === "thinking_delta") b.thinking = (b.thinking || "") + (d.thinking || "");
+        else if (d.type === "signature_delta") b.signature = (b.signature || "") + (d.signature || "");
+        break;
+      }
+      case "content_block_stop": {
+        const j = partialJson.get(ev.index);
+        if (j !== undefined) {
+          try { blocks[ev.index].input = JSON.parse(j || "{}"); } catch { /* 留 content_block_start 里的 input */ }
+          partialJson.delete(ev.index);
+        }
+        break;
+      }
+      case "message_delta":
+        if (base) {
+          Object.assign(base, ev.delta || {});
+          base.usage = { ...(base.usage || {}), ...(ev.usage || {}) };
+        }
+        break;
+      case "error":
+        throw new Error(`Anthropic stream ${ev.error?.type || "error"}: ${ev.error?.message || ""}`);
+      default: // ping / message_stop / 未来新事件：跳过
+        break;
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) !== -1) {
+      const chunk = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      for (const line of chunk.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
+        handle(ev);
+      }
+    }
+  }
+  if (!base) throw new Error("Anthropic stream ended without message_start");
+  base.content = blocks.filter(Boolean);
+  return base;
 }
 
 async function relayCall(env, apiKey, reqBody) {

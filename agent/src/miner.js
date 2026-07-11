@@ -16,7 +16,7 @@ import { loadPrompts } from "./prompts/loader.js";
 import { writeLlmLog } from "./llmlog.js";
 import { callAnthropic } from "./anthropic.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
-import { ensureAccount, debit } from "./usage_store.js";
+import { ensureAccount, debit, asrCharged } from "./usage_store.js";
 import { sendPush } from "./push.js";
 import { hmacSign } from "../../functions/lib/auth.js";
 import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
@@ -165,6 +165,41 @@ function emptyKeyFor(key) {
 // `.json`/`.empty` markers, so the audio stays "unprocessed" until truly done.
 export function asrTaskKeyFor(key) {
   return `${baseScope(key)}articles/${stemOf(key)}.asr.json`;
+}
+
+// ASR 完成后的 checkpoint：{transcript, srt, asrDurMs}。ASR 一完成立刻落盘，
+// 后续步骤（LLM 等）失败重试时直接复用——不重问火山、不重复扣费。挖矿终局
+// （mined/empty）时删除。2026-07-09 事故：没有它，LLM 524 死循环把一条录音
+// 的 ASR 重复扣了 13 次。
+export function asrCkptKeyFor(key) {
+  return `${baseScope(key)}articles/${stemOf(key)}.asrdone.json`;
+}
+
+// 连续失败熔断：同一条录音连续 MINE_FAIL_MAX 个 pass 以 error 收场 → 写
+// .blocked(mine-failed) 停止重试 + 给 ADMIN_SCOPE 推一条报警。确定性失败
+//（超长生成、坏输入）不该无限重试。成功/判空时清零。
+export const MINE_FAIL_MAX = 5;
+export function mineFailKeyFor(key) {
+  return `${baseScope(key)}articles/${stemOf(key)}.minefail`;
+}
+
+export async function bumpMineFail(env, audioKey, lastError) {
+  const k = mineFailKeyFor(audioKey);
+  let count = 0;
+  try {
+    const obj = await env.FILES.get(k);
+    if (obj) count = (JSON.parse(await obj.text()).count | 0);
+  } catch (_) {}
+  count += 1;
+  try {
+    await env.FILES.put(k, JSON.stringify({ count, lastTs: Date.now(), lastError: String(lastError || "").slice(0, 300) }),
+      { httpMetadata: { contentType: "application/json" } });
+  } catch (_) {}
+  return count;
+}
+
+export async function clearMineFail(env, audioKey) {
+  try { await env.FILES.delete(mineFailKeyFor(audioKey)); } catch (_) {}
 }
 
 // Per-user 训练风格 corpus entry for a shared style submission. The sample file's
@@ -1083,6 +1118,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
   };
 
   let result = "error";
+  let mineErr = null;
   try {
     // Strongly-consistent check before doing any work
     if (await env.FILES.head(articleKeyFor(audioKey)) || await env.FILES.head(emptyKeyFor(audioKey))) {
@@ -1107,8 +1143,25 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // ── Balance gate (pre-ASR) ────────────────────────────────────────────────
     const durSec = audioDurationSeconds(audioKey);
     const decision = await meteredMineGate(env.USAGE, scope, durSec ?? 0, Date.now());
-    if (decision === "too-long") { await writeBlocked(audioKey, "too-long", env); return; }
-    if (decision === "no-credit") { await writeBlocked(audioKey, "no-credit", env); return; }
+    if (decision === "too-long") { await writeBlocked(audioKey, "too-long", env); result = "blocked"; return; }
+    if (decision === "no-credit") { await writeBlocked(audioKey, "no-credit", env); result = "blocked"; return; }
+
+    // ── 连续失败熔断 ─────────────────────────────────────────────────────────
+    // 同一条录音连续 MINE_FAIL_MAX 个 pass 失败 → 确定性问题，别再重试烧钱。
+    // 写 .blocked(mine-failed) 给 App 显示；解除 = 删 .minefail（或修复后手动删）。
+    {
+      let failCount = 0;
+      try {
+        const f = await env.FILES.get(mineFailKeyFor(audioKey));
+        if (f) failCount = (JSON.parse(await f.text()).count | 0);
+      } catch (_) {}
+      if (failCount >= MINE_FAIL_MAX) {
+        await writeBlocked(audioKey, "mine-failed", env);
+        log("连续失败熔断", { count: failCount });
+        result = "blocked";
+        return;
+      }
+    }
     // Drop stale .blocked marker before proceeding (e.g. user topped up)
     try { await env.FILES.delete(`${baseScope(audioKey)}articles/${stemOf(audioKey)}.blocked`); } catch (_) {}
 
@@ -1121,6 +1174,17 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       transcript = ""; srt = ""; asrDurMs = 0;
       log("0 秒静音占位,跳过 ASR");
     } else {
+      // checkpoint 复用：上个 pass ASR 已完成但后续步骤（LLM 等）失败 → 直接
+      // 拿现成转写续跑，不重问火山、不重复扣费。
+      try {
+        const ckpt = await env.FILES.get(asrCkptKeyFor(audioKey));
+        if (ckpt) {
+          ({ transcript, srt, asrDurMs } = JSON.parse(await ckpt.text()));
+          log("ASR checkpoint 复用", { chars: (transcript || "").length });
+        }
+      } catch (_) { transcript = undefined; }
+    }
+    if (transcript === undefined) {
       await notifyStatus(scope, stem, "asr", env);
       try {
         const tAsr = Date.now();
@@ -1146,20 +1210,29 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         log("ASR 失败(非确定性,下趟重试)", { name: e?.name, message: String(e?.message ?? e).slice(0, 200) });
         throw e;
       }
-    }
 
-    // Debit ASR cost (best-effort; uses actual ASR duration or filename estimate).
-    // asrDurMs is in MILLISECONDS (Volcano ASR audio_info.duration unit).
-    try {
-      if (env.USAGE) {
-        const rawSec = (asrDurMs ?? (durSec ?? 0) * 1000) / 1000;
-        // Sanity clamp: a malformed/huge value must not cause 1000x overcharge.
-        // Fall back to the filename-parsed durSec (or 0) for absurd values (>6h).
-        const asrSec = (Number.isFinite(rawSec) && rawSec >= 0 && rawSec <= 6 * 3600)
-          ? rawSec : (durSec ?? 0);
-        await debit(env.USAGE, scope, asrCostUY(asrSec), "asr", { asr_sec: Math.round(asrSec), stem }, Date.now());
-      }
-    } catch (_) {}
+      // ASR 刚完成：先落 checkpoint 和 SRT 再扣费——顺序保证「扣过费的转写一定
+      // 已持久化」，后续失败的重试 pass 走上面的复用分支，永不二次扣费。
+      try {
+        await env.FILES.put(asrCkptKeyFor(audioKey), JSON.stringify({ transcript, srt, asrDurMs }),
+          { httpMetadata: { contentType: "application/json" } });
+        if (srt) await writeSrt(audioKey, srt, env);
+      } catch (_) {}
+
+      // Debit ASR cost (best-effort; uses actual ASR duration or filename estimate).
+      // asrDurMs is in MILLISECONDS (Volcano ASR audio_info.duration unit).
+      // 幂等：ledger 里同 stem 已有 asr 扣费（历史重试残留）→ 不再扣。
+      try {
+        if (env.USAGE && !(await asrCharged(env.USAGE, scope, stem))) {
+          const rawSec = (asrDurMs ?? (durSec ?? 0) * 1000) / 1000;
+          // Sanity clamp: a malformed/huge value must not cause 1000x overcharge.
+          // Fall back to the filename-parsed durSec (or 0) for absurd values (>6h).
+          const asrSec = (Number.isFinite(rawSec) && rawSec >= 0 && rawSec <= 6 * 3600)
+            ? rawSec : (durSec ?? 0);
+          await debit(env.USAGE, scope, asrCostUY(asrSec), "asr", { asr_sec: Math.round(asrSec), stem }, Date.now());
+        }
+      } catch (_) {}
+    }
 
     if (!transcript) {
       // 没听出语音：如果这条录音带了照片（场景照片，或「只拍照不说话」的录音），就看图
@@ -1313,11 +1386,33 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     result = "mined";
     return "mined";
 
+  } catch (e) {
+    // 记下真实错误再抛给 runMine：以前 minelog 只有 result:"error"、error:null，
+    // 524 事故排查得去 llmlogs 交叉对时间戳。
+    mineErr = String((e && e.message) || e).slice(0, 300);
+    throw e;
   } finally {
+    // 熔断记账：error → 计数 +1，到阈值下个 pass 拦停并给 admin 推一条；
+    // mined/empty（终局成功/判空）→ 清计数 + 删 ASR checkpoint。
+    if (result === "error") {
+      const n = await bumpMineFail(env, audioKey, mineErr);
+      if (n === MINE_FAIL_MAX && env.ADMIN_SCOPE) {
+        try {
+          await sendPush(env, env.ADMIN_SCOPE, {
+            title: "挖矿连续失败熔断",
+            body: `${stem} 连续失败 ${n} 次，已停止重试：${(mineErr || "?").slice(0, 80)}`,
+            threadId: "ops",
+          });
+        } catch (_) {}
+      }
+    } else if (result === "mined" || result === "empty") {
+      await clearMineFail(env, audioKey);
+      try { await env.FILES.delete(asrCkptKeyFor(audioKey)); } catch (_) {}
+    }
     // "skip" = already processed; "pending" = ASR still running (would spam a log
-    // every resume pass). Only log terminal outcomes (mined / empty / error).
+    // every resume pass). Only log terminal outcomes (mined / empty / error / blocked).
     if (result !== "skip" && result !== "pending") {
-      await writeMineLog(env, { ts: t0, stem, audioKey, result, elapsed_ms: Date.now() - t0, events });
+      await writeMineLog(env, { ts: t0, stem, audioKey, result, elapsed_ms: Date.now() - t0, ...(mineErr ? { error: mineErr } : {}), events });
     }
   }
 }
