@@ -219,6 +219,9 @@ describe("POST community/share — write gate", () => {
 // ── POST auth/wechat — Android sign-in, independent from Apple ───────────────
 
 describe("POST auth/wechat", () => {
+  const MINI_APP_ID_FIXTURE = "mini-app";
+  const MINI_APP_CREDENTIAL_FIXTURE = "fixture-wechat-credential";
+
   function stubWechatExchange(body) {
     vi.stubGlobal("fetch", vi.fn(async (url) => {
       expect(String(url)).toContain("api.weixin.qq.com/sns/oauth2/access_token");
@@ -252,6 +255,48 @@ describe("POST auth/wechat", () => {
 
     const sess = JSON.parse(b64urlToString(body.session.split(".")[1]));
     expect(sess.apple).toBeFalsy();
+    expect(sess.wechat).toBe(true);
+  });
+
+  it("exchanges Mini Program js_code via jscode2session without changing the auth route", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      const u = new URL(String(url));
+      expect(`${u.origin}${u.pathname}`).toBe("https://api.weixin.qq.com/sns/jscode2session");
+      expect(u.searchParams.get("appid")).toBe(MINI_APP_ID_FIXTURE);
+      expect(u.searchParams.get("secret")).toBe(MINI_APP_CREDENTIAL_FIXTURE);
+      expect(u.searchParams.get("js_code")).toBe("mini-code");
+      expect(u.searchParams.get("grant_type")).toBe("authorization_code");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ openid: "mini-open-1", unionid: "mini-union-1", session_key: "sk" }),
+      };
+    }));
+    const anon = "anon_" + "b".repeat(28);
+    const context = reqCtx("POST", ["auth", "wechat"], {
+      token: anon,
+      body: {
+        code: "mini-code",
+        platform: "mini_program",
+        appid: MINI_APP_ID_FIXTURE,
+        nickname: "小程序用户",
+        avatar: "https://example.com/mini.jpg",
+      },
+      env: { WECHAT_MINI_APP_ID: MINI_APP_ID_FIXTURE, WECHAT_MINI_APP_SECRET: MINI_APP_CREDENTIAL_FIXTURE },
+    });
+
+    const resp = await onRequest(context);
+    const body = await resp.json();
+    expect(resp.status).toBe(200);
+    expect(body.scope).toMatch(/^users\/anon-[0-9a-f]{32}\/$/);
+    expect(context.env.FILES._store.has("links/wechat-unionid-mini-union-1.json")).toBe(true);
+
+    const account = JSON.parse(context.env.FILES._store.get(`${body.scope}ACCOUNT.json`));
+    expect(account.wechatUnionid).toBe("mini-union-1");
+    expect(account.wechatOpenid).toBe("mini-open-1");
+    expect(account.name).toBe("小程序用户");
+
+    const sess = JSON.parse(b64urlToString(body.session.split(".")[1]));
     expect(sess.wechat).toBe(true);
   });
 });

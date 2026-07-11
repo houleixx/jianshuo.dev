@@ -10,6 +10,9 @@
 // Routes:
 //   POST   /files/api/auth/apple       body {identityToken} -> verify w/ Apple JWKS,
 //                                       mint a long-lived session JWT for this user.
+//   POST   /files/api/auth/wechat      body {code[,platform,appid,nickname,avatar]}
+//                                       -> verify with WeChat Open Platform or Mini Program,
+//                                       mint a long-lived WeChat session JWT.
 //   GET    /files/api/list             -> JSON list (admin: all keys; user: own prefix)
 //   PUT    /files/api/upload/<name>    -> upload (raw body)
 //   GET    /files/api/download/<name>  -> download
@@ -107,23 +110,31 @@ async function handleRequest(context) {
     return json({ session, scope });
   }
 
-  // ---- Unauthenticated: exchange a WeChat Android login code for a session ----
+  // ---- Unauthenticated: exchange a WeChat login code for a session ----
   if (request.method === 'POST' && action === 'auth' && sub2 === 'wechat') {
     if (!env.SESSION_SECRET) return json({ error: 'server misconfigured: no SESSION_SECRET' }, 500);
-    if (!env.WECHAT_OPEN_APP_ID || !env.WECHAT_OPEN_APP_SECRET) {
-      return json({ error: 'server misconfigured: no wechat app credentials' }, 500);
-    }
-    let code = '', nickname = null, avatar = null;
+    let code = '', nickname = null, avatar = null, platform = '', appid = '';
     try {
       const body = await request.json();
       code = (body && body.code) || '';
       nickname = (body && body.nickname) || null;
       avatar = (body && body.avatar) || null;
+      platform = (body && body.platform) || '';
+      appid = (body && body.appid) || '';
     } catch {}
     if (!code) return json({ error: 'missing code' }, 400);
+    const isMiniProgram = String(platform).toLowerCase() === 'mini_program';
+    if (isMiniProgram) {
+      if (!env.WECHAT_MINI_APP_ID || !env.WECHAT_MINI_APP_SECRET) {
+        return json({ error: 'server misconfigured: no wechat mini program credentials' }, 500);
+      }
+      if (appid && appid !== env.WECHAT_MINI_APP_ID) return json({ error: 'wechat appid mismatch' }, 400);
+    } else if (!env.WECHAT_OPEN_APP_ID || !env.WECHAT_OPEN_APP_SECRET) {
+      return json({ error: 'server misconfigured: no wechat app credentials' }, 500);
+    }
     let wx;
     try {
-      wx = await exchangeWechatCode(code, env);
+      wx = isMiniProgram ? await exchangeWechatMiniCode(code, env) : await exchangeWechatCode(code, env);
     } catch (e) {
       return json({ error: 'invalid wechat code', detail: String(e.message || e) }, 401);
     }
@@ -1304,6 +1315,24 @@ async function exchangeWechatCode(code, env) {
     grant_type: 'authorization_code',
   });
   const resp = await fetch(`https://api.weixin.qq.com/sns/oauth2/access_token?${qs.toString()}`);
+  if (!resp.ok) throw new Error(`wechat HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (data.errcode) throw new Error(data.errmsg || `wechat errcode ${data.errcode}`);
+  if (!data.openid) throw new Error('wechat missing openid');
+  return {
+    openid: data.openid,
+    unionid: data.unionid || null,
+  };
+}
+
+async function exchangeWechatMiniCode(code, env) {
+  const qs = new URLSearchParams({
+    appid: env.WECHAT_MINI_APP_ID,
+    secret: env.WECHAT_MINI_APP_SECRET,
+    js_code: code,
+    grant_type: 'authorization_code',
+  });
+  const resp = await fetch(`https://api.weixin.qq.com/sns/jscode2session?${qs.toString()}`);
   if (!resp.ok) throw new Error(`wechat HTTP ${resp.status}`);
   const data = await resp.json();
   if (data.errcode) throw new Error(data.errmsg || `wechat errcode ${data.errcode}`);
