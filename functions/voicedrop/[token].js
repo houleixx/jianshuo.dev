@@ -361,7 +361,7 @@ footer a{color:#86868b;text-decoration:none}
 </style></head>
 <body><div class="wrap">
 ${inner}
-<footer>由 <a href="https://voicedrop.cn/">VoiceDrop</a> 口述生成${extra}<br/><span style="font-size:.78rem">© 2026 王建硕 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">沪ICP备06019413号-118</a></span></footer>
+<footer>由 <a href="https://voicedrop.cn/">VoiceDrop</a> 口述生成${extra}<br/><span style="font-size:.78rem"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">沪ICP备06019413号-118</a></span></footer>
 </div></body></html>`;
 }
 
