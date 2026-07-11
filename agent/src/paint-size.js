@@ -17,3 +17,33 @@ export function snapSize(size, fallback = "1024x1024") {
   if (!m) return fallback;
   return `${snapDim(m[1])}x${snapDim(m[2])}`;
 }
+
+// JPEG SOF 头解析：顺着段结构找 SOFn 取宽高，不解码像素。给 edit_photo 用——
+// 相册导入的图不再是方的（App b07ad15 起），输出写死 1024x1024 会把横竖图
+// 重画成方形；按原图比例出尺寸才对。非 JPEG / 结构异常返回 null，调用方回退方图。
+export function jpegDims(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < b.length) {
+    if (b[i] !== 0xff) { i += 1; continue; }
+    const m = b[i + 1];
+    if (m === 0xff) { i += 1; continue; }                              // padding
+    if (m === 0x01 || (m >= 0xd0 && m <= 0xd9)) { i += 2; continue; } // 无长度段
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+      const h = (b[i + 5] << 8) | b[i + 6], w = (b[i + 7] << 8) | b[i + 8];
+      return w > 0 && h > 0 ? { w, h } : null;
+    }
+    const len = (b[i + 2] << 8) | b[i + 3];
+    if (len < 2) return null;
+    i += 2 + len;
+  }
+  return null;
+}
+
+// 按原图宽高比出目标尺寸：长边缩到 longSide，两边吸附 16 倍数并夹紧上下限。
+export function fitSize(w, h, longSide = 1024) {
+  if (!(w > 0 && h > 0)) return null;
+  const k = longSide / Math.max(w, h);
+  return `${snapDim(w * k)}x${snapDim(h * k)}`;
+}

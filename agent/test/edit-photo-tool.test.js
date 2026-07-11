@@ -159,3 +159,36 @@ describe("new_photo tool", () => {
     expect(calls.put.body.articles[0].body).toBe(`第一段。\n[[photo:${OLD}]]\n第二段。`);
   });
 });
+
+// ── 输出尺寸对齐原图比例（相册导入的横竖图不再被 AI 改成方形）──────────────
+function sofJpeg(w, h) {
+  return new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, h >> 8, h & 0xff, w >> 8, w & 0xff, 0x03, 0,0,0, 0,0,0, 0,0,0, 0xff, 0xd9]);
+}
+
+describe("edit_photo keeps source aspect ratio", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("4:3 原图 → paint size 1024x768", async () => {
+    const ctx = await makeCtx();
+    ctx.env.FILES._store.set(SCOPE + OLD, sofJpeg(4000, 3000));
+    const calls = stubFetch();
+    const r = await runTool("edit_photo", { key: OLD, prompt: "x" }, ctx);
+    expect(r.ok).toBe(true);
+    expect(calls.paint.body.size).toBe("1024x768");
+  });
+
+  it("3:4 竖图 → paint size 768x1024", async () => {
+    const ctx = await makeCtx();
+    ctx.env.FILES._store.set(SCOPE + OLD, sofJpeg(3000, 4000));
+    const calls = stubFetch();
+    await runTool("edit_photo", { key: OLD, prompt: "x" }, ctx);
+    expect(calls.paint.body.size).toBe("768x1024");
+  });
+
+  it("原图缺失/头解析失败 → 回退 1024x1024（老行为）", async () => {
+    const ctx = await makeCtx();   // 不 seed 照片
+    const calls = stubFetch();
+    await runTool("edit_photo", { key: OLD, prompt: "x" }, ctx);
+    expect(calls.paint.body.size).toBe("1024x1024");
+  });
+});

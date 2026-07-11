@@ -8,7 +8,7 @@ import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
 import { restyleArticle, ensurePhotoMarkers } from "./miner.js";
 import { silentM4aBytes } from "./silent-m4a.js";
-import { snapSize } from "./paint-size.js";
+import { snapSize, jpegDims, fitSize } from "./paint-size.js";
 import { MERGE_ARTICLES_DESC, ADD_FOLLOWUPS_DESC, EDIT_PHOTO_DESC, NEW_PHOTO_DESC } from "./prompts/tool-desc.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
@@ -341,7 +341,17 @@ register(
     const werr = await putArticleDoc(doc, ctx);
     if (werr) return werr;
 
-    const resp = await postPaintJob(ctx, { prompt, newKey, oldKey: key });
+    // 输出尺寸对齐原图比例：相册导入的图不是方的（App b07ad15 起），写死
+    // 1024x1024 会把横竖图重画成方形。读 R2 原图的 JPEG 头拿宽高；读不到
+    // （缺图/非 JPEG）回退方图，即老行为。
+    let size;
+    try {
+      const photo = await env.FILES.get(`${scope}${key}`);
+      const dims = photo ? jpegDims(await photo.arrayBuffer()) : null;
+      if (dims) size = fitSize(dims.w, dims.h) || undefined;
+    } catch { /* 尺寸探测失败不阻塞编辑 */ }
+
+    const resp = await postPaintJob(ctx, { prompt, newKey, oldKey: key, size });
 
     if (!resp || resp.status !== 202) {
       // 回退指针：把 newKey 换回 oldKey，保持文档与"没有在跑的任务"一致
