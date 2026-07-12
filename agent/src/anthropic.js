@@ -152,8 +152,9 @@ async function relayCall(env, apiKey, reqBody, onEvent = null) {
 }
 
 // Which colo is this isolate in? cdn-cgi/trace answers from the local colo.
-// Failure-path only, so healthy calls never pay for it.
-async function currentColo(fetchImpl) {
+// Failure-path only, so healthy calls never pay for it. (Exported: realtime.js
+// logs the same evidence when its OpenAI direct path gets geo-blocked.)
+export async function currentColo(fetchImpl = fetch) {
   try {
     const t = await (await fetchImpl("https://www.cloudflare.com/cdn-cgi/trace", { signal: AbortSignal.timeout(2000) })).text();
     return (t.match(/^colo=(\w+)/m) || [])[1] || "";

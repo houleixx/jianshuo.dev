@@ -5,6 +5,7 @@
 import { toSendablePayload } from "./asr-proxy.js";
 import { realtimeCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
+import { currentColo } from "./anthropic.js";
 
 // 采访员系统提示词。以后调这段就是调采访员的行为。
 // 版本史：07-08 安静版（默认沉默、卡住才插话）→ 07-09 健谈版（用户反馈「不太会
@@ -92,12 +93,87 @@ export function newUsageAcc() {
   return { audio_in: 0, audio_in_cached: 0, audio_out: 0, text_in: 0, text_in_cached: 0, text_out: 0 };
 }
 
-// WS 中转：认证已在调用前（index.js）做完，这里拿到 scope。ctx 用于 waitUntil 计费。
-export async function proxyRealtimeWebSocket(request, env, scope, ctx) {
+// ── ENAM 中继 fallback ──────────────────────────────────────────────────────
+// api.openai.com 和 Anthropic 一样按出口 IP 封地区：worker isolate 落在 HKG 等被封
+// colo 时，出站 WS upgrade 直接 403，采访功能整段不可用（同 anthropic.js 的
+// geo-block，见该文件头注释）。对策也相同：直连 403 就把同一个客户端 upgrade 请求
+// 转进钉在 ENAM（美东）的 RealtimeRelay DO（relay.js），由它在被允许的 colo 连
+// OpenAI。直连仍是首选——健康 colo 零额外一跳；本 isolate 吃过一次 403 后转
+// relay-first（封锁按 colo，isolate 不挪窝）。带合法 Bearer key 的 upgrade 只会因
+// 地区封锁吃 403（key 错是 401、参数错是 400），所以按状态码判定，不赌 body 文案；
+// 误判的代价只是多试一次中继。
+export const RT_RELAY_LOCATION_HINT = "enam";
+
+let preferRelay = false; // per-isolate：吃过一次 geo-403 = 本 colo 被 OpenAI 封
+
+export function isOpenAIGeoBlock(status) {
+  return status === 403;
+}
+
+// Test hook: geo state is per-isolate module state.
+export function _resetRealtimeGeoState() {
+  preferRelay = false;
+}
+
+// 把客户端的 WS upgrade 原样转进 ENAM 中继 DO。每个采访一个独立 DO 实例
+// （newUniqueId + locationHint，placement 在首次创建时生效）：音频帧每秒几十条，
+// 全挤单实例的事件循环会把并发采访拖垮；DO 无状态，用完即弃。scope 走查询参数
+// 带过去（认证在 worker 已做完，DO 只信 worker 转来的这条）。
+function relayViaDO(request, env, scope) {
+  const u = new URL(request.url);
+  u.searchParams.set("scope", scope);
+  const stub = env.RT_RELAY.get(env.RT_RELAY.newUniqueId(), { locationHint: RT_RELAY_LOCATION_HINT });
+  return stub.fetch(new Request(u, request));
+}
+
+const isWs = (resp) => Boolean(resp && (resp.webSocket || resp.status === 101));
+
+// 路由入口（index.js 调这个）：直连优先，geo-403 时同一请求内切 ENAM 中继，
+// 客户端零感知、连接不失败。
+export async function handleRealtimeSession(request, env, scope, ctx, fetchImpl = fetch) {
+  if (preferRelay && env.RT_RELAY) {
+    // relay-first：本 isolate 已知被封，跳过注定失败的直连。中继挂了再拿直连兜底
+    // （最坏再吃一个瞬时 403）；直连成活说明恢复了，翻回 direct-first。
+    let relayed;
+    try { relayed = await relayViaDO(request, env, scope); }
+    catch (e) { relayed = new Response(`relay: ${String(e?.message || e)}`, { status: 502 }); }
+    if (isWs(relayed)) return relayed;
+    const direct = await proxyRealtimeWebSocket(request, env, scope, ctx, fetchImpl);
+    if (isWs(direct)) { preferRelay = false; return direct; }
+    return relayed;
+  }
+
+  const direct = await proxyRealtimeWebSocket(request, env, scope, ctx, fetchImpl);
+  if (isWs(direct) || !env.RT_RELAY || !isOpenAIGeoBlock(direct.status)) return direct;
+  preferRelay = true;
+  const colo = await currentColo(fetchImpl); // 取证：到底是哪个 colo 被封（对照 llmlog）
+  console.log("[realtime] direct OpenAI 403, falling back to ENAM relay DO", JSON.stringify({ scope, colo }));
+  try { return await relayViaDO(request, env, scope); }
+  catch (e) { return new Response(`relay: ${String(e?.message || e)}`, { status: 502 }); }
+}
+
+// health 探针：从「当前位置」（worker 边缘 or 中继 DO）看 api.openai.com 是否可达。
+// GET /v1/models 免费且轻量，被封时和 realtime upgrade 一样吃 403。
+export async function probeOpenAI(env, fetchImpl = fetch) {
+  if (!env.OPENAI_API_KEY) return { ok: false, status: 0, errorText: "no OPENAI_API_KEY" };
+  try {
+    const r = await fetchImpl("https://api.openai.com/v1/models", {
+      headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    return { ok: r.ok, status: r.status, errorText: r.ok ? undefined : (await r.text().catch(() => "")).slice(0, 300) };
+  } catch (e) {
+    return { ok: false, status: 0, errorText: String(e?.message || e) };
+  }
+}
+
+// WS 中转：认证已在调用前（index.js / RealtimeRelay DO）做完，这里拿到 scope。
+// ctx 用于 waitUntil 计费。fetchImpl 可注入（测试 + 保持单一出站路径）。
+export async function proxyRealtimeWebSocket(request, env, scope, ctx, fetchImpl = fetch) {
   if (!env.OPENAI_API_KEY) return new Response("realtime unavailable", { status: 503 });
 
   let upstreamResp;
-  try { upstreamResp = await fetch(buildUpstreamRequest(env)); }
+  try { upstreamResp = await fetchImpl(buildUpstreamRequest(env)); }
   catch (e) { return new Response(String(e?.message || e), { status: 502 }); }
 
   const upstream = upstreamResp.webSocket;

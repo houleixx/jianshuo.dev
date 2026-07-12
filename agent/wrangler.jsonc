@@ -36,7 +36,12 @@
       // DO's colo egress IP is in an unsupported region (HKG for mainland-China
       // users). This DO is created with locationHint "enam" and replays blocked
       // calls from a US colo. See src/anthropic.js.
-      { "name": "RELAY",         "class_name": "AnthropicRelay" }
+      { "name": "RELAY",         "class_name": "AnthropicRelay" },
+      // Same geo-block, OpenAI edition: api.openai.com 403s from HKG-type colos,
+      // which kills the Realtime 采访员 WS. handleRealtimeSession forwards the
+      // client's WS upgrade into this DO (one fresh instance per session,
+      // locationHint "enam") when the direct path is blocked. See src/realtime.js.
+      { "name": "RT_RELAY",      "class_name": "RealtimeRelay" }
     ]
   },
 
@@ -46,7 +51,8 @@
     { "tag": "v3", "new_sqlite_classes": ["Miner"] },
     { "tag": "v4", "new_sqlite_classes": ["LinkBroker"] },
     { "tag": "v5", "new_sqlite_classes": ["LibraryAgent"] },
-    { "tag": "v6", "new_sqlite_classes": ["AnthropicRelay"] }
+    { "tag": "v6", "new_sqlite_classes": ["AnthropicRelay"] },
+    { "tag": "v7", "new_sqlite_classes": ["RealtimeRelay"] }
   ],
 
   "triggers": {

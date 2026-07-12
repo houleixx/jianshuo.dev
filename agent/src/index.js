@@ -42,9 +42,9 @@ import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { xhsPack } from "./xhs.js";
 import { handlePromptLab } from "./prompt-lab.js";
-import { proxyRealtimeWebSocket } from "./realtime.js";
+import { handleRealtimeSession, probeOpenAI, RT_RELAY_LOCATION_HINT } from "./realtime.js";
 import { REVISE_SYSTEM, EDIT_SYSTEM as SYSTEM } from "./prompts/edit.js";
-export { AnthropicRelay } from "./relay.js";
+export { AnthropicRelay, RealtimeRelay } from "./relay.js";
 
 // Fallback model when no config/model.json is set. Editing is Anthropic-only
 // (tool-use loop), so the live model is resolved per-turn from the admin config
@@ -940,10 +940,27 @@ export default {
           relay = { error: String((e && e.message) || e) };
         }
       }
+      // OpenAI 这条腿（realtime 采访）：同样直连 + ENAM 中继 DO 各探一次，
+      // HKG geo-block 回归时这里一眼看穿（见 src/realtime.js）。
+      const openaiDirect = await probeOpenAI(env);
+      let openaiRelay = { error: "no-binding" };
+      if (env.RT_RELAY) {
+        try {
+          const rtStub = env.RT_RELAY.get(env.RT_RELAY.newUniqueId(), { locationHint: RT_RELAY_LOCATION_HINT });
+          const [rtColoResp, rtProbeResp] = await Promise.all([
+            rtStub.fetch("https://relay/colo"),
+            rtStub.fetch("https://relay/probe"),
+          ]);
+          openaiRelay = { colo: (await rtColoResp.json()).colo, ...(await rtProbeResp.json()) };
+        } catch (e) {
+          openaiRelay = { error: String((e && e.message) || e) };
+        }
+      }
       return Response.json({
         workerColo,
         direct: { ok: d.ok, status: d.status, errorText: d.ok ? undefined : d.errorText },
         relay,
+        openai: { direct: openaiDirect, relay: openaiRelay },
       });
     }
 
@@ -1017,7 +1034,7 @@ export default {
       const token = bearerToken(request);
       const scope = await resolveScope(token, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
-      return proxyRealtimeWebSocket(request, env, scope, ctx);
+      return handleRealtimeSession(request, env, scope, ctx);
     }
 
     // ── /agent/prompt-registry ── 线上 prompt 注册表（管理 token）。GET 打平列出
