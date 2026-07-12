@@ -35,7 +35,7 @@ import { handlePromptShareRoutes } from "./prompt-share.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
-import { callAnthropic, anthropicFetch, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
+import { callAnthropic, anthropicFetch, relayCall, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
 import { makePreviewPusher, makeEditPreview } from "./preview.js";
 import { loadUIConfigFor } from "./ui-config.js";
 import { handleUIConfigCustom } from "./ui-config-custom.js";
@@ -954,12 +954,13 @@ export default {
       if (env.RELAY) {
         try {
           const stub = env.RELAY.get(env.RELAY.idFromName(RELAY_INSTANCE), { locationHint: RELAY_LOCATION_HINT });
-          const [coloResp, msgResp] = await Promise.all([
+          // relayCall 会把中继回流的 SSE 聚合掉（Phase3 后 /messages 是流式回流，
+          // 在这里裸 .json() 会炸），返回和直连同形状的 {ok,status,errorText}。
+          const [coloResp, r] = await Promise.all([
             stub.fetch("https://relay/colo"),
-            stub.fetch("https://relay/messages", { method: "POST", body: JSON.stringify({ apiKey: env.CLAUDE_API_KEY, reqBody: ping }) }),
+            relayCall(env, env.CLAUDE_API_KEY, ping),
           ]);
           const relayColo = (await coloResp.json()).colo;
-          const r = await msgResp.json();
           relay = { colo: relayColo, ok: r.ok, status: r.status, errorText: r.ok ? undefined : r.errorText };
         } catch (e) {
           relay = { error: String((e && e.message) || e) };

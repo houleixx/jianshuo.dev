@@ -130,7 +130,7 @@ export async function aggregateSse(resp, onEvent = null) {
   return base;
 }
 
-async function relayCall(env, apiKey, reqBody, onEvent = null) {
+export async function relayCall(env, apiKey, reqBody, onEvent = null) {
   try {
     const stub = env.RELAY.get(env.RELAY.idFromName(RELAY_INSTANCE), { locationHint: RELAY_LOCATION_HINT });
     const resp = await stub.fetch("https://relay/messages", {
