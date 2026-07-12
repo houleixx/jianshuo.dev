@@ -81,6 +81,18 @@ describe("GET /articles — list", () => {
     expect(body.articles.find((a) => a.stem === "s1").tags).toEqual(["创业"]);
     expect("tags" in body.articles.find((a) => a.stem === "s2")).toBe(false);
   });
+
+  it("excludes .asr.json / .asrdone.json miner sidecars from the list", async () => {
+    const context = ctx("GET", "");
+    seedArticle(context.env, "s1", { createdAt: 1000 });
+    context.env.FILES._store.set("users/u/articles/s1.asr.json",
+      JSON.stringify({ taskId: "t", logId: "l", submittedAt: 1, articles: [] }));
+    context.env.FILES._store.set("users/u/articles/s1.asrdone.json",
+      JSON.stringify({ transcript: "tx", srt: "", asrDurMs: 1 }));
+    context.params.path = ["articles", "u"];
+    const body = await (await onRequest(context)).json();
+    expect(body.articles.map((a) => a.stem)).toEqual(["s1"]);
+  });
 });
 
 // ── read ────────────────────────────────────────────────────────────────────

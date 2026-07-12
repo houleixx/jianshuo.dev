@@ -1421,6 +1421,10 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     } else if (result === "mined" || result === "empty") {
       await clearMineFail(env, audioKey);
       try { await env.FILES.delete(asrCkptKeyFor(audioKey)); } catch (_) {}
+      // 终局兜底：.asr.json 任务边车正常在 transcribeResumable 成功/AsrError 时删，
+      // 但绕过 ASR 的终局路径（如 checkpoint 复用后的 pass）会留下孤儿——
+      // 2026-07-06 就漏了 3 个，被 /articles 列表当成「无题待处理」显示在 App 里。
+      try { await env.FILES.delete(asrTaskKeyFor(audioKey)); } catch (_) {}
     }
     // "skip" = already processed; "pending" = ASR still running (would spam a log
     // every resume pass). Only log terminal outcomes (mined / empty / error / blocked).

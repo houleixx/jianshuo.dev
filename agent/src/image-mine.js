@@ -42,7 +42,7 @@ export async function fetchRecentTitles(env, scope, { excludeStem = "", max = MA
   try {
     const listed = await env.FILES.list({ prefix: `${scope}articles/`, limit: 1000 });
     const keys = (listed.objects || []).map((o) => o.key)
-      .filter((k) => k.endsWith(".json") && !k.endsWith(".asr.json") && !k.endsWith(`/${excludeStem}.json`))
+      .filter((k) => k.endsWith(".json") && !k.endsWith(".asr.json") && !k.endsWith(".asrdone.json") && !k.endsWith(`/${excludeStem}.json`))
       .sort().slice(-max);
     const docs = await Promise.all(keys.map(async (k) => {
       try { const obj = await env.FILES.get(k); return obj ? JSON.parse(await obj.text()) : null; }

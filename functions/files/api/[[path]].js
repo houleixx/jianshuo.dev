@@ -28,6 +28,12 @@ import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMark
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
 
+// Miner sidecars that live under articles/ and end in .json but are NOT article
+// docs: <stem>.asr.json (resumable-ASR task) and <stem>.asrdone.json (ASR
+// checkpoint). They must never be listed as articles nor run through
+// readArticleDoc/migrateToV3.
+const isAsrSidecar = (key) => key.endsWith('.asr.json') || key.endsWith('.asrdone.json');
+
 export async function onRequest(context) {
   // 报警打点包裹：任何 4xx/5xx 响应 fire-and-forget 通知 voicedrop-agent 的
   // ops 计数器（分钟桶），worker 的 */5 cron 聚合并按阈值 APNs 报警——
@@ -536,7 +542,7 @@ async function handleRequest(context) {
     // .json (e.g. the resumable-ASR task sidecar <stem>.asr.json) — those must be
     // served RAW, never run through readArticleDoc/migrateToV3 (which would wrap them
     // in a misleading {head,versions,articles} shape).
-    if (request.method === 'GET' && /\/articles\/[^/]+\.json$/.test(key) && !key.endsWith('.asr.json')) {
+    if (request.method === 'GET' && /\/articles\/[^/]+\.json$/.test(key) && !isAsrSidecar(key)) {
       const doc = await readArticleDoc(env, key);
       if (doc) return json(withTopLevelArticles(doc));
     }
@@ -1124,7 +1130,7 @@ async function handleRequest(context) {
       } while (cursor);
       // Read the docs in parallel batches — the old sequential loop was O(N)
       // round-trips and took seconds at ~100 articles.
-      const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json'));
+      const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json') && !isAsrSidecar(o.key));
       const articles = [];
       const BATCH = 20;
       for (let i = 0; i < jsonObjects.length; i += BATCH) {
