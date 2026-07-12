@@ -49,32 +49,52 @@
   <!-- ============ 中文 ============ -->
   <span class="lang-tag">中文</span>
   <h1>VoiceDrop 隐私政策</h1>
-  <div class="updated">最近更新：2026 年 6 月 20 日</div>
+  <div class="updated">最近更新：2026 年 7 月 12 日</div>
 
-  <div class="tldr">一句话：<b>你的录音是你的。</b>VoiceDrop 不卖、不分析、不拿去做广告，也不接入任何第三方追踪。</div>
+  <div class="tldr">一句话：<b>你的录音是你的。</b>VoiceDrop 不卖你的数据、不做广告、不接入任何第三方追踪。为了把录音变成文章，录音和文字会交给下面列明的处理服务商——只为给你出结果，不做任何别的用途。</div>
 
   <section>
     <h2>我们收集什么</h2>
     <ul>
-      <li><b>录音</b>：你主动按下录制时产生的音频。录音会上传到<b>属于你自己的</b>私有存储空间（按你的账户隔离），并镜像到你的 iCloud。除了为你存储和回传，我们不会以任何其他目的访问它。</li>
+      <li><b>录音</b>：你主动按下录制时产生的音频。录音会上传到<b>属于你自己的</b>私有存储空间（按你的账户隔离），并镜像到你的 iCloud。为了完成转写和整理成文，录音和转写文字会发送给下方「替我们处理数据的服务商」；除此之外，我们不会以其他目的访问它。</li>
+      <li><b>照片（可选）</b>：你主动添加到文章里的照片，上传到同一私有存储空间，仅用于展示在你的文章里。</li>
       <li><b>位置（可选）</b>：若你授权定位，App 会把当前位置反向地理编码成一个<b>粗略地名（城市/城区）</b>，<b>仅用于给录音文件命名</b>，方便日后辨认。精确坐标不会被存储或上传。你可以拒绝定位，录音照常工作。</li>
-      <li><b>麦克风</b>：用于录音，这是 App 的核心功能。</li>
-      <li><b>身份标识</b>：为了把文件归到你名下，App 使用一个匿名标识符，或「通过 Apple 登录」返回的稳定匿名标识（Apple sub）。我们不要求、也不存储你的姓名或邮箱，没有密码。</li>
+      <li><b>麦克风</b>：用于录音；若你使用「AI 采访」功能，采访期间的麦克风音频会实时发送给 OpenAI，用于生成采访者的语音回应。</li>
+      <li><b>身份标识</b>：为了把文件归到你名下，App 使用一个匿名标识符、「通过 Apple 登录」返回的稳定匿名标识（Apple sub），或（安卓版）「微信登录」返回的开放标识（openid / unionid）。我们不要求、也不存储你的姓名或邮箱，没有密码。</li>
+      <li><b>邀请归因</b>：若你通过邀请链接安装，首次启动时 App 会读取一次剪贴板中的邀请码（iOS 会弹出系统提示），服务器还会用你的 IP 地址做短时间的安装归因匹配——仅用于给邀请双方发放奖励，不用于其他目的。</li>
+      <li><b>用量记录</b>：为了计算算力消耗，我们记录各 AI 功能的用量（如 token 数与时长），其中不含你的录音或文章内容。</li>
     </ul>
+  </section>
+
+  <section>
+    <h2>替我们处理数据的服务商</h2>
+    <p>把一段录音变成文章，需要经过以下服务商的处理。它们只为完成对应功能而处理你的数据，我们与它们没有任何广告或数据买卖关系：</p>
+    <ul>
+      <li><b>Cloudflare</b>（美国）：文件存储（R2）与网络分发。</li>
+      <li><b>火山引擎 / 字节跳动</b>（中国）：语音转写。你的录音音频会发送到其位于中国的服务器完成转写。</li>
+      <li><b>Anthropic</b>（美国）：用 Claude 把转写文字整理成文章草稿，以及追问、文风等 AI 功能。</li>
+      <li><b>OpenAI</b>（美国）：「AI 采访」的实时语音对话，以及部分 AI 配图生成。</li>
+    </ul>
+    <p style="margin-top:10px">跨境提示：这意味着你的录音与文字会在<b>中国和美国</b>的服务器上处理。继续使用 VoiceDrop 即表示你知悉并同意上述处理方式。</p>
   </section>
 
   <section>
     <h2>我们不做什么</h2>
     <ul>
-      <li>不向任何第三方出售或共享你的录音与数据。</li>
+      <li>不出售你的录音与数据；除上面列明的处理服务商外，不与任何第三方共享。</li>
       <li>App 内没有广告 SDK、没有第三方分析或追踪。</li>
       <li>不为投放广告而追踪你跨 App / 跨网站的行为。</li>
     </ul>
   </section>
 
   <section>
+    <h2>社区与公开分享</h2>
+    <p>只有你主动分享的内容才会公开——生成公开链接、分享到社区、或发布到公众号。其余录音与文章默认私有。公开内容可被其他用户看到和回复，你可以随时删除。</p>
+  </section>
+
+  <section>
     <h2>数据存储与删除</h2>
-    <p>录音存放在 Cloudflare R2（你的专属前缀下）并镜像到你的 iCloud。你可以随时在文件中转站删除单条录音。若希望删除全部数据，邮件联系
+    <p>录音存放在 Cloudflare R2（你的专属前缀下）并镜像到你的 iCloud。你可以随时删除单条录音或文章；在 App 内「账户」页可以一键<b>永久删除账户及全部数据</b>。也可以邮件联系
     <a class="inline" href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a>，我会尽快处理。</p>
   </section>
 
@@ -93,32 +113,52 @@
   <!-- ============ English ============ -->
   <span class="lang-tag">English</span>
   <h1>VoiceDrop Privacy Policy</h1>
-  <div class="updated">Last updated: June 20, 2026</div>
+  <div class="updated">Last updated: July 12, 2026</div>
 
-  <div class="tldr">In one line: <b>your recordings are yours.</b> VoiceDrop does not sell, analyze, or advertise against them, and includes no third-party tracking.</div>
+  <div class="tldr">In one line: <b>your recordings are yours.</b> VoiceDrop never sells your data, shows no ads, and includes no third-party tracking. To turn recordings into articles, your audio and text pass through the processors listed below — solely to produce your results, nothing else.</div>
 
   <section>
     <h2>What we collect</h2>
     <ul>
-      <li><b>Recordings</b> — the audio you create by tapping record. Recordings are uploaded to a private storage area that belongs to <b>you</b> (scoped to your account) and mirrored to your iCloud. We never access them for any purpose other than storing them and returning them to you.</li>
+      <li><b>Recordings</b> — the audio you create by tapping record. Recordings are uploaded to a private storage area that belongs to <b>you</b> (scoped to your account) and mirrored to your iCloud. To transcribe them and turn them into articles, audio and transcript text are sent to the processors listed under "Processors we use" below; beyond that we never access them for any other purpose.</li>
+      <li><b>Photos (optional)</b> — photos you add to an article are uploaded to the same private storage, used only to display inside your article.</li>
       <li><b>Location (optional)</b> — if you grant location access, the app reverse-geocodes your current position into a <b>coarse place name (city / district)</b> used <b>only to name the recording file</b> so you can recognize it later. Precise coordinates are never stored or transmitted. You can deny location and recording still works.</li>
-      <li><b>Microphone</b> — used to record audio, the app's core function.</li>
-      <li><b>Identifier</b> — to scope your files to you, the app uses an anonymous identifier, or the stable anonymous identifier (Apple "sub") returned by Sign in with Apple. We do not request or store your name or email, and there is no password.</li>
+      <li><b>Microphone</b> — used to record audio; if you use the <b>AI Interviewer</b>, microphone audio during the interview is streamed to OpenAI in real time to generate the interviewer's spoken responses.</li>
+      <li><b>Identifier</b> — to scope your files to you, the app uses an anonymous identifier, the stable anonymous identifier (Apple "sub") returned by Sign in with Apple, or (on Android) the open identifier (openid / unionid) returned by WeChat Login. We do not request or store your name or email, and there is no password.</li>
+      <li><b>Referral attribution</b> — if you install via an invite link, the app reads an invite code from your clipboard once on first launch (iOS shows a system notice), and the server briefly matches your IP address for install attribution — used only to grant rewards to both sides of the invite, nothing else.</li>
+      <li><b>Usage records</b> — to meter AI credits we record per-feature usage (such as token counts and duration), which contains none of your recording or article content.</li>
     </ul>
+  </section>
+
+  <section>
+    <h2>Processors we use</h2>
+    <p>Turning a recording into an article requires these service providers. Each processes your data only to deliver the corresponding feature; we have no advertising or data-sale relationship with any of them:</p>
+    <ul>
+      <li><b>Cloudflare</b> (USA) — file storage (R2) and network delivery.</li>
+      <li><b>Volcano Engine / ByteDance</b> (China) — speech-to-text. Your recording audio is sent to their servers located in China for transcription.</li>
+      <li><b>Anthropic</b> (USA) — Claude turns transcripts into article drafts and powers follow-up questions, writing-style features and more.</li>
+      <li><b>OpenAI</b> (USA) — the AI Interviewer's real-time voice conversation, and some AI illustration generation.</li>
+    </ul>
+    <p style="margin-top:10px">Cross-border note: this means your audio and text are processed on servers in <b>China and the United States</b>. By using VoiceDrop you acknowledge and agree to this processing.</p>
   </section>
 
   <section>
     <h2>What we don't do</h2>
     <ul>
-      <li>We never sell or share your recordings or data with third parties.</li>
+      <li>We never sell your recordings or data, and never share them with any third party beyond the processors listed above.</li>
       <li>The app contains no advertising SDKs and no third-party analytics or tracking.</li>
       <li>We do not track you across other apps or websites for advertising.</li>
     </ul>
   </section>
 
   <section>
+    <h2>Community &amp; public sharing</h2>
+    <p>Only content you actively share becomes public — creating a public link, sharing to the community, or publishing to WeChat. Everything else stays private by default. Public content can be seen and replied to by other users, and you can delete it at any time.</p>
+  </section>
+
+  <section>
     <h2>Storage &amp; deletion</h2>
-    <p>Recordings are stored in Cloudflare R2 (under your own prefix) and mirrored to your iCloud. You can delete any recording from the file inbox at any time. To delete all of your data, email
+    <p>Recordings are stored in Cloudflare R2 (under your own prefix) and mirrored to your iCloud. You can delete any recording or article at any time, and the in-app <b>Account</b> page lets you permanently <b>delete your account and all data</b> in one tap. You can also email
     <a class="inline" href="mailto:jianshuo@hotmail.com">jianshuo@hotmail.com</a> and I'll take care of it promptly.</p>
   </section>
 
