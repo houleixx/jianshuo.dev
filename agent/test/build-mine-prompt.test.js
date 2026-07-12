@@ -20,7 +20,7 @@ describe("buildMinePrompt — anthropic 默认 (system cache)", () => {
   });
   it("非 force 带 json_schema output_config", () => {
     expect(p.output_config.format.type).toBe("json_schema");
-    expect(p.max_tokens).toBe(8000);
+    expect(p.max_tokens).toBe(24000);
   });
 });
 

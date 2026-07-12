@@ -605,7 +605,7 @@ export function buildMinePrompt({
     }
     return {
       model,
-      max_tokens: force ? 2000 : 8000,
+      max_tokens: force ? 2000 : 24000,  // 8000 会把超长录音的多篇输出拦腰截断(JSON 必坏);流式已解掉长生成的 524
       messages: [
         { role: "system", content: system },
         { role: "user", content: userContent },
@@ -637,7 +637,7 @@ export function buildMinePrompt({
     if (transcriptCache && styleTail) content.push({ type: "text", text: styleTail });
   }
   const payload = {
-    model, max_tokens: force ? 2000 : 8000,
+    model, max_tokens: force ? 2000 : 24000,  // 8000 会把超长录音的多篇输出拦腰截断(JSON 必坏);流式已解掉长生成的 524
     system: systemBlocks,
     messages: [{ role: "user", content }],
   };
@@ -680,6 +680,13 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
     if (!r.ok) throw new Error(`Claude ${r.status}: ${(r.errorText || "").slice(0, 200)}`);
     rawResp = r.json;
     text = (rawResp.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+  }
+
+  // 输出被 max_tokens 截断 → JSON 必坏。给 minelog 一个人话错误,别让
+  // parseArticles 的 "Expected ',' or ']'" 当谜语(2026-07-12 事故排查半天)。
+  const stopReason = rawResp?.stop_reason || rawResp?.choices?.[0]?.finish_reason;
+  if (stopReason === "max_tokens" || stopReason === "length") {
+    throw new Error(`LLM 输出被 max_tokens 截断(${text.length} chars)——上限还不够大或该分批`);
   }
 
   return { articles: parseArticles(text), latencyMs, rawResp, request: reqForLog };
