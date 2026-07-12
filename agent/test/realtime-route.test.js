@@ -70,11 +70,25 @@ describe("buildSessionUpdate", () => {
     expect(m).toBeGreaterThan(0);
     expect(m).toBeLessThanOrEqual(4096);
   });
-  it("instructions 是安静版（默认沉默、卡住才插话），没有填满冷场类指令", () => {
+  // 2026-07-12 按 OpenAI realtime prompting 指南重构：分节结构 + wait_for_user 工具。
+  // 「何时开口」交给 semantic_vad + wait_for_user 决策，prompt 里不再有模型执行
+  // 不了的计时指令（旧「停顿超过三秒」）；健谈系的填满冷场指令依然禁入。
+  it("instructions 是分节克制版：含 wait_for_user 指引，无计时指令、无填满冷场类指令", () => {
     const ins = buildSessionUpdate().session.instructions;
-    expect(ins).toMatch(/保持完全沉默/);
-    expect(ins).toMatch(/停顿超过三秒/);
+    expect(ins).toMatch(/# 角色与目标/);
+    expect(ins).toMatch(/# 何时不说话/);
+    expect(ins).toMatch(/wait_for_user/);
+    expect(ins).toMatch(/每次只问一个问题/);
+    expect(ins).toMatch(/始终用中文/);
+    expect(ins).not.toMatch(/停顿超过三秒/); // 模型测不了时长，那是 semantic_vad 的活
     expect(ins).not.toMatch(/不让对话冷场/);
     expect(ins).not.toMatch(/接住/);
+  });
+  it("session.tools 带 wait_for_user no-op 工具（prompt 提到的工具必须真的在工具表里）", () => {
+    const tools = buildSessionUpdate().session.tools;
+    expect(Array.isArray(tools)).toBe(true);
+    const wait = tools.find((t) => t.name === "wait_for_user");
+    expect(wait?.type).toBe("function");
+    expect(wait?.parameters).toEqual({ type: "object", properties: {}, required: [] });
   });
 });
