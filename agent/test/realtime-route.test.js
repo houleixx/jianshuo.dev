@@ -84,6 +84,14 @@ describe("buildSessionUpdate", () => {
     expect(ins).not.toMatch(/不让对话冷场/);
     expect(ins).not.toMatch(/接住/);
   });
+  // 2026-07-12 用户拍板：采访问宏观（为什么重要/背后逻辑/趋势/判断），不追细节。
+  it("问题方向是宏观：问为什么和趋势，不把数字时间地点当追问目标", () => {
+    const ins = buildSessionUpdate().session.instructions;
+    expect(ins).toMatch(/宏观/);
+    expect(ins).toMatch(/为什么/);
+    expect(ins).toMatch(/不要追问细节/);
+    expect(ins).not.toMatch(/例子、数字/); // 旧「往细处挖」措辞不再出现
+  });
   it("session.tools 带 wait_for_user no-op 工具（prompt 提到的工具必须真的在工具表里）", () => {
     const tools = buildSessionUpdate().session.tools;
     expect(Array.isArray(tools)).toBe(true);
