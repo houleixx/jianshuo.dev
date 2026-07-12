@@ -1544,25 +1544,13 @@ async function collectStyle(styleKey, uploaded, env) {
 
 // ── Main loop ──────────────────────────────────────────────────────────────────
 
-export async function runMine(env) {
-  const t0 = Date.now();
-  const modelCfg = await loadModelConfig(env);
-  console.log(`[mine] model: ${modelCfg.provider}/${modelCfg.model}`);
-
-  // Guard: the admin selected a provider whose API key secret isn't configured.
-  // Without this, every call would go out with an empty Bearer token, 401, and the
-  // recording would stay 待处理 forever — retried every run, with no surfaced cause.
-  // Abort loudly instead; recordings are untouched and process once the secret is set.
-  if (!modelCfg.apiKey) {
-    const envName = PROVIDER_ENV_KEY[modelCfg.providerKey] || "CLAUDE_API_KEY";
-    console.error(`[mine] ABORT: 供应商 "${modelCfg.providerKey}" 已选中，但 Worker Secret ${envName} 未配置（API key 为空）— 跳过本次挖文，录音保持待处理`);
-    return;
-  }
-
-  // Paginated list of all R2 objects
+// Paginated R2 list → the unprocessed work items, optionally scoped to one
+// user's prefix. Shared by the per-user mining pass (scope set) and the sweep
+// dispatcher (no scope → whole bucket, cron/manual only).
+async function scanUnprocessed(env, scope) {
   let cursor, allObjects = [];
   do {
-    const listed = await env.FILES.list({ limit: 1000, cursor });
+    const listed = await env.FILES.list({ ...(scope ? { prefix: scope } : {}), limit: 1000, cursor });
     allObjects.push(...listed.objects);
     cursor = listed.truncated ? listed.cursor : null;
   } while (cursor);
@@ -1581,6 +1569,39 @@ export async function runMine(env) {
   // dispatched by mineOneAudio→runTask. Marker keys (articles/<stem>.json|.empty) gate reruns.
   const tasks  = allKeys.filter(k => classifyKey(k) === "task")
                         .filter(a => !keySet.has(articleKeyFor(a)) && !keySet.has(emptyKeyFor(a)));
+
+  return { allKeys, uploaded, audios, todo, texts, styles, tasks };
+}
+
+// Sweep pass for the dispatcher singleton: one whole-bucket list, grouped into
+// the user scopes that still have unprocessed work. Costs 1 subrequest per 1000
+// objects and nothing else — the actual mining happens in the per-user shards.
+export async function scopesWithWork(env) {
+  const { todo, texts, styles, tasks } = await scanUnprocessed(env, null);
+  const scopes = new Set();
+  for (const k of [...todo, ...texts, ...styles, ...tasks]) {
+    const m = k.match(/^(users\/[^/]+\/)/);
+    if (m) scopes.add(m[1]);
+  }
+  return [...scopes];
+}
+
+export async function runMine(env, scope = null) {
+  const t0 = Date.now();
+  const modelCfg = await loadModelConfig(env);
+  console.log(`[mine] model: ${modelCfg.provider}/${modelCfg.model}${scope ? ` scope: ${scope}` : ""}`);
+
+  // Guard: the admin selected a provider whose API key secret isn't configured.
+  // Without this, every call would go out with an empty Bearer token, 401, and the
+  // recording would stay 待处理 forever — retried every run, with no surfaced cause.
+  // Abort loudly instead; recordings are untouched and process once the secret is set.
+  if (!modelCfg.apiKey) {
+    const envName = PROVIDER_ENV_KEY[modelCfg.providerKey] || "CLAUDE_API_KEY";
+    console.error(`[mine] ABORT: 供应商 "${modelCfg.providerKey}" 已选中，但 Worker Secret ${envName} 未配置（API key 为空）— 跳过本次挖文，录音保持待处理`);
+    return;
+  }
+
+  const { allKeys, uploaded, audios, todo, texts, styles, tasks } = await scanUnprocessed(env, scope);
 
   console.log(`[mine] list: ${audios.length} audio · ${texts.length} text · ${styles.length} style · ${tasks.length} task · ${todo.length + texts.length + styles.length + tasks.length} unprocessed (${((Date.now()-t0)/1000).toFixed(1)}s)`);
 

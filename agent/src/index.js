@@ -18,7 +18,7 @@ import { Agent, getAgentByName } from "agents";
 import { TOOL_DEFS, deleteArticleFiles } from "./tools.js";
 import { runCommandTurn } from "./command-turn.js";
 import { sendPush } from "./push.js";
-import { runMine, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
+import { runMine, scopesWithWork, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
@@ -560,8 +560,14 @@ export class StatusHub {
 }
 
 // ---------------------------------------------------------------------------
-// Miner: singleton Durable Object that serialises mine runs via alarm().
-// One alarm at a time prevents duplicate ASR calls when uploads burst.
+// Miner: sharded Durable Object that serialises mine runs via alarm().
+// One DO per user (idFromName "miner:<scope>") mines ONLY that user's prefix —
+// one user's long recording no longer queues everyone else, and each pass lists
+// one user's objects instead of the whole bucket. One alarm at a time per shard
+// still prevents duplicate ASR calls when uploads burst.
+// The legacy singleton (idFromName "miner") no longer mines: it is the sweep
+// dispatcher (cron/admin) — one whole-bucket list, then it pokes the shard of
+// every scope with unprocessed work. It also keeps the ops error counters.
 // ---------------------------------------------------------------------------
 export class Miner {
   constructor(state, env) {
@@ -634,18 +640,37 @@ export class Miner {
       return Response.json({ alerts });
     }
 
-    // ── 默认：挖矿排队（原行为）─────────────────────────────────────────────
+    // ── 默认：挖矿排队 ──────────────────────────────────────────────────────
+    // A user shard is told its scope on first poke and remembers it (the alarm
+    // handler has no request to read it from). No scope = the sweep dispatcher.
+    const scope = url.searchParams.get("scope") || "";
+    if (scope) await this.state.storage.put("scope", scope);
     const existing = await this.state.storage.getAlarm();
     if (!existing) await this.state.storage.setAlarm(Date.now() + 500);
     return new Response("queued", { status: 202 });
   }
 
   async alarm() {
-    // runMine processes a bounded slice (subrequest budget) and tells us if ASR is
-    // still cooking or work was deferred — if so, come back soon to resume so long
-    // audio finishes across passes instead of timing out in one invocation.
-    const r = await runMine(this.env);
-    if (r && r.moreWork) await this.state.storage.setAlarm(Date.now() + MINE_RESUME_MS);
+    const scope = await this.state.storage.get("scope");
+    if (scope) {
+      // Per-user shard: runMine processes a bounded slice (subrequest budget) of
+      // THIS user's prefix and tells us if ASR is still cooking or work was
+      // deferred — if so, come back soon to resume so long audio finishes across
+      // passes instead of timing out in one invocation.
+      const r = await runMine(this.env, scope);
+      if (r && r.moreWork) await this.state.storage.setAlarm(Date.now() + MINE_RESUME_MS);
+      return;
+    }
+    // Sweep dispatcher (cron/admin trigger): one whole-bucket list, then poke the
+    // shard of every scope that still has unprocessed work. Mining itself always
+    // happens in the shards, so a sweep can never double-process a recording that
+    // a shard is already working on.
+    const scopes = await scopesWithWork(this.env);
+    for (const s of scopes) {
+      const stub = this.env.Miner.get(this.env.Miner.idFromName("miner:" + s));
+      await stub.fetch(new Request("https://miner/?scope=" + encodeURIComponent(s), { method: "POST" }));
+    }
+    if (scopes.length) console.log(`[mine] sweep: poked ${scopes.length} shard(s)`);
   }
 }
 
@@ -1078,14 +1103,18 @@ export default {
     }
 
     // ── /agent/mine/trigger ── kick the miner (any authenticated user or admin) ──
+    // A user token kicks that user's OWN miner shard (mines only their prefix);
+    // an admin token kicks the sweep dispatcher (whole-bucket scan → poke shards).
     if (url.pathname === "/agent/mine/trigger") {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
       const tok = bearerToken(request);
       const isAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
       const scope   = isAdmin ? "admin" : await resolveScope(tok, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
-      const stub = env.Miner.get(env.Miner.idFromName("miner"));
-      return stub.fetch(request);
+      const shard = scope === "admin" ? "miner" : "miner:" + scope;
+      const stub = env.Miner.get(env.Miner.idFromName(shard));
+      const target = scope === "admin" ? "https://miner/" : "https://miner/?scope=" + encodeURIComponent(scope);
+      return stub.fetch(new Request(target, { method: "POST" }));
     }
 
     // ── /agent/restyle ── re-mine ONE recording from its stored transcript ──────

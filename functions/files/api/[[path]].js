@@ -1119,26 +1119,67 @@ async function handleRequest(context) {
       return `${articleScope}articles/${s}.json`;
     }
 
-    // GET /articles — list
+    // GET /articles — list.
+    // Backed by a per-user summary cache (users/<sub>/articles-index.json) so the
+    // steady state is 2 reads (prefix list + index) instead of one full-doc GET
+    // per article — each doc is a schema-3 envelope carrying up to 10 body
+    // versions plus the whole transcript, read here only to extract a title.
+    // The cache is self-healing, maintained by THIS route alone: the R2 listing
+    // stays authoritative, and any object whose fingerprint (etag) differs from
+    // the cached one is re-read. Writers never touch the index, so there is
+    // nothing to keep consistent — a stale entry costs one extra doc read on the
+    // next list call.
     if (request.method === 'GET' && !stem) {
       const prefix = `${articleScope}articles/`;
+      const indexKey = `${articleScope}articles-index.json`;
       let cursor, allObjects = [];
       do {
         const listed = await env.FILES.list({ prefix, limit: 1000, cursor });
         allObjects.push(...listed.objects);
         cursor = listed.truncated ? listed.cursor : null;
       } while (cursor);
-      // Read the docs in parallel batches — the old sequential loop was O(N)
-      // round-trips and took seconds at ~100 articles.
       const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json') && !isAsrSidecar(o.key));
+
+      let index = {};
+      try {
+        const io = await env.FILES.get(indexKey);
+        if (io) index = JSON.parse(await io.text()).items || {};
+      } catch { /* corrupt/missing cache → full rebuild below */ }
+      const fp = (o) => o.etag || `${o.size}:${o.uploaded?.toISOString?.() || ''}`;
+
       const articles = [];
+      const stale = [];
+      const liveStems = new Set();
+      for (const o of jsonObjects) {
+        const s = o.key.slice(prefix.length, -'.json'.length);
+        liveStems.add(s);
+        const cached = index[s];
+        if (cached && cached.fp === fp(o)) {
+          if (cached.entry) articles.push(cached.entry);
+        } else {
+          stale.push(o);
+        }
+      }
+      let dirty = stale.length > 0;
+      for (const s of Object.keys(index)) {
+        if (!liveStems.has(s)) { delete index[s]; dirty = true; }
+      }
+
+      // Read only new/changed docs, in parallel batches (an unbounded fan-out
+      // at ~100 articles used to saturate the subrequest budget).
       const BATCH = 20;
-      for (let i = 0; i < jsonObjects.length; i += BATCH) {
-        const entries = await Promise.all(jsonObjects.slice(i, i + BATCH).map(async (o) => {
+      for (let i = 0; i < stale.length; i += BATCH) {
+        await Promise.all(stale.slice(i, i + BATCH).map(async (o) => {
           const s = o.key.slice(prefix.length, -'.json'.length);
           const obj = await env.FILES.get(o.key);
-          if (!obj) return null;
-          let doc; try { doc = JSON.parse(await obj.text()); } catch { return null; }
+          if (!obj) { delete index[s]; return; }
+          let doc;
+          try { doc = JSON.parse(await obj.text()); }
+          catch {
+            // Unparseable object: cache the miss so it isn't re-fetched every list.
+            index[s] = { fp: fp(o), entry: null };
+            return;
+          }
           const currentArticles = resolveArticles(doc);
           const entry = {
             stem: s,
@@ -1149,10 +1190,20 @@ async function handleRequest(context) {
             count: currentArticles.length,
           };
           if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
-          return entry;
+          index[s] = { fp: fp(o), entry };
+          articles.push(entry);
         }));
-        articles.push(...entries.filter(Boolean));
       }
+
+      if (dirty) {
+        const persist = env.FILES.put(
+          indexKey,
+          JSON.stringify({ schema: 1, updatedAt: Date.now(), items: index }),
+          { httpMetadata: { contentType: 'application/json' } },
+        ).catch(() => {});
+        if (context.waitUntil) context.waitUntil(persist); else await persist;
+      }
+
       articles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       return json({ articles });
     }
