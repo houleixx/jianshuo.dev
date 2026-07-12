@@ -174,3 +174,185 @@ export function makePreviewPusher(post, { flushMs = 250, flushChars = 400 } = {}
     },
   };
 }
+
+// 行级语音编辑的打字机流：解析 edit_current_article 工具参数的 JSON 流
+// {"ops":[{"op":"replace_line","line":3,"text":"…"},…]}，把 replace/insert 的
+// text（和 set_title 的 title）增量剥出，带上 op 与行号。delete_lines 无文本。
+// 事件：{i, op, line, text}。同 PreviewExtractor：任意切断安全、永不 throw。
+export class EditOpsExtractor {
+  constructor() { this.reset(); }
+
+  reset() {
+    this.started = false; this.done = false;
+    this.depth = 0; this.inString = false; this.esc = false; this.uBuf = null;
+    this.strBuf = "";
+    this.opsDepth = null;        // "ops" 数组元素所在深度
+    this.oIdx = -1;              // 当前 op 下标
+    this.curOp = null;           // 当前元素的 op 值
+    this.curLine = null;         // 当前元素的 line 值
+    this.numBuf = null;          // line 数字累积
+    this.pendingKey = null; this.curKey = null; this.expectValue = false;
+    this.capturing = null;       // "text" | "title" | null
+    this.heldText = "";          // op 未知时先攒着（模型基本按 op→line→text 出）
+    this._out = []; this._cur = null;
+  }
+
+  feed(chunk) {
+    try {
+      for (const ch of String(chunk)) {
+        if (this.done) break;
+        this._char(ch);
+      }
+    } catch (_) { this.done = true; }
+    const out = this._out;
+    if (this._cur && this._cur.text) { out.push(this._cur); this._cur = null; }
+    this._out = [];
+    return out;
+  }
+
+  _allowed() {
+    if (this.capturing === "title") return this.curOp === "set_title";
+    return this.curOp === "replace_line" || this.curOp === "insert_after";
+  }
+  _needsLine() { return this.capturing === "text"; }
+
+  _emit(ch) {
+    if (this.curOp === null || (this._needsLine() && this.curLine === null)) { this.heldText += ch; return; }
+    if (!this._allowed()) return;
+    if (this._cur && this._cur.i !== this.oIdx) { this._out.push(this._cur); this._cur = null; }
+    if (!this._cur) this._cur = { i: this.oIdx, op: this.curOp, line: this._needsLine() ? this.curLine : null, text: "" };
+    this._cur.text += ch;
+  }
+  _flushHeld() {
+    if (!this.heldText) return;
+    const held = this.heldText; this.heldText = "";
+    if (this.capturing || this._allowed()) { for (const ch of held) this._emit(ch); }
+  }
+
+  _endNum() {
+    if (this.numBuf === null) return;
+    const n = parseInt(this.numBuf, 10);
+    if (this.curKey === "line" && Number.isFinite(n)) { this.curLine = n; this._flushHeld(); }
+    this.numBuf = null;
+  }
+
+  _char(ch) {
+    if (!this.started) { if (ch === "{") { this.started = true; this.depth = 1; } return; }
+    if (this.inString) return this._inString(ch);
+    if (this.numBuf !== null) {
+      if (/[0-9]/.test(ch)) { this.numBuf += ch; return; }
+      this._endNum();  // 数字结束，继续按结构字符处理 ch
+    }
+    switch (ch) {
+      case '"':
+        this.inString = true; this.strBuf = "";
+        if (this.expectValue) {
+          this.expectValue = false;
+          if ((this.curKey === "text" || this.curKey === "title")
+              && this.oIdx >= 0 && this.opsDepth !== null && this.depth === this.opsDepth + 1) {
+            this.capturing = this.curKey;
+          } else if (this.curKey === "op" && this.oIdx >= 0 && this.depth === (this.opsDepth ?? -99) + 1) {
+            this.capturing = "__op";
+          }
+        }
+        break;
+      case ":":
+        this.curKey = this.pendingKey; this.pendingKey = null; this.expectValue = true;
+        if (this.curKey === "line" && this.oIdx >= 0) this.numBuf = null;   // 等数字
+        break;
+      case "[":
+        if (this.expectValue && this.curKey === "ops" && this.opsDepth === null) this.opsDepth = this.depth + 1;
+        this.depth++; this.expectValue = false;
+        break;
+      case "{":
+        if (this.opsDepth !== null && this.depth === this.opsDepth) {
+          this.oIdx++; this.curOp = null; this.curLine = null; this.heldText = "";
+        }
+        this.depth++; this.expectValue = false;
+        break;
+      case "]": case "}":
+        this.depth--;
+        if (this.depth <= 0) this.done = true;
+        break;
+      case ",": this.expectValue = false; break;
+      default:
+        if (this.expectValue && this.curKey === "line" && /[0-9-]/.test(ch)) this.numBuf = (this.numBuf ?? "") + ch;
+        break;
+    }
+  }
+
+  _inString(ch) {
+    if (this.uBuf !== null) {
+      this.uBuf += ch;
+      if (this.uBuf.length === 4) {
+        const cp = parseInt(this.uBuf, 16);
+        this._strCh(Number.isNaN(cp) ? "�" : String.fromCharCode(cp));
+        this.uBuf = null;
+      }
+      return;
+    }
+    if (this.esc) {
+      this.esc = false;
+      if (ch === "u") { this.uBuf = ""; return; }
+      const m = { n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", '"': '"', "\\": "\\", "/": "/" };
+      this._strCh(m[ch] ?? ch);
+      return;
+    }
+    if (ch === "\\") { this.esc = true; return; }
+    if (ch === '"') {
+      this.inString = false;
+      if (this.capturing === "__op") { this.curOp = this.strBuf; this._flushHeld(); }
+      else if (!this.capturing) this.pendingKey = this.strBuf;
+      this.capturing = null;
+      this.strBuf = "";
+      return;
+    }
+    this._strCh(ch);
+  }
+
+  _strCh(ch) {
+    if (this.capturing === "text" || this.capturing === "title") this._emit(ch);
+    else if (this.strBuf.length < 64) this.strBuf += ch;
+  }
+}
+
+// 编辑 DO 里的实时预览分发器：挂在 callAnthropic 的 onEvent 上，识别工具块——
+// write_article（整篇重写）→ 幽灵稿协议（preview-delta，同换风格）；
+// edit_current_article（行级修改）→ 打字机协议（edit-preview）。
+// DO 内直接 broadcast，无 HTTP 跳；全程 best-effort。
+export function makeEditPreview(broadcast, { flushMs = 150, flushChars = 240 } = {}) {
+  let extractor = null, kind = null, sawGhost = false;
+  let pend = [], pendChars = 0, timer = null;
+  const flush = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (!pend.length) return;
+    try { broadcast({ type: kind === "ghost" ? "preview-delta" : "edit-preview", items: pend }); } catch (_) {}
+    pend = []; pendChars = 0;
+  };
+  return {
+    onEvent(ev) {
+      try {
+        if (ev.type === "content_block_start" && ev.content_block?.type === "tool_use") {
+          flush();
+          if (ev.content_block.name === "write_article") {
+            extractor = new PreviewExtractor(); kind = "ghost"; sawGhost = true;
+            try { broadcast({ type: "preview-reset" }); } catch (_) {}
+          } else if (ev.content_block.name === "edit_current_article") {
+            extractor = new EditOpsExtractor(); kind = "ops";
+          } else { extractor = null; kind = null; }
+        } else if (ev.type === "content_block_delta" && ev.delta?.type === "input_json_delta" && extractor) {
+          for (const e of extractor.feed(ev.delta.partial_json || "")) { pend.push(e); pendChars += (e.text || "").length; }
+          if (pendChars >= flushChars) flush();
+          else if (pend.length && !timer) timer = setTimeout(flush, flushMs);
+        } else if (ev.type === "content_block_stop" && extractor) {
+          flush(); extractor = null; kind = null;
+        }
+      } catch (_) {}
+    },
+    // 整个编辑回合结束（工具已执行、updated 马上广播）：幽灵稿宣告完成。
+    finish() {
+      flush();
+      if (sawGhost) { try { broadcast({ type: "preview-done", ok: true }); } catch (_) {} }
+    },
+  };
+}

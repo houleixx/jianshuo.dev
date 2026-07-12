@@ -31,17 +31,22 @@ export function isGeoBlock(status, bodyText) {
 // 字节就掐线（HTTP 524）——超长录音挖矿生成超 2 分钟必死（2026-07-09 事故：
 // 2h12m 录音 156 个 pass 全灭）。流式后首 token 几秒即达、字节持续流动，连接
 // 不会被掐。SSE 在这里聚合回非流式的响应形状，所有调用方零改动。
+// 裸请求（永远 stream:true），直连路径与 relay DO 共用。
+export function anthropicRequest(apiKey, reqBody, fetchImpl = fetch) {
+  return fetchImpl("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ ...reqBody, stream: true }),
+  });
+}
+
 export async function anthropicFetch(apiKey, reqBody, fetchImpl = fetch, onEvent = null) {
   try {
-    const resp = await fetchImpl("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ ...reqBody, stream: true }),
-    });
+    const resp = await anthropicRequest(apiKey, reqBody, fetchImpl);
     if (!resp.ok) {
       return { ok: false, status: resp.status, json: null, errorText: (await resp.text()).slice(0, 2000) };
     }
@@ -56,7 +61,7 @@ export async function anthropicFetch(apiKey, reqBody, fetchImpl = fetch, onEvent
 
 // 把 Messages API 的 SSE 事件流聚合回非流式响应对象。流中途的 error 事件
 // throw —— 外层 catch 转成 {ok:false,status:0}，调用方按网络错误重试。
-async function aggregateSse(resp, onEvent = null) {
+export async function aggregateSse(resp, onEvent = null) {
   const reader = resp.body.getReader();
   const dec = new TextDecoder();
   let buf = "";
@@ -125,13 +130,20 @@ async function aggregateSse(resp, onEvent = null) {
   return base;
 }
 
-async function relayCall(env, apiKey, reqBody) {
+async function relayCall(env, apiKey, reqBody, onEvent = null) {
   try {
     const stub = env.RELAY.get(env.RELAY.idFromName(RELAY_INSTANCE), { locationHint: RELAY_LOCATION_HINT });
     const resp = await stub.fetch("https://relay/messages", {
       method: "POST",
       body: JSON.stringify({ apiKey, reqBody }),
     });
+    // 新 relay 把 Anthropic 的 SSE 原样管回来 → 在这里聚合（实时预览的增量也在这
+    // 一路拿到）；HTTP 错误/旧版 relay 仍是 JSON 形状,照旧解析。
+    const ct = (resp.headers && resp.headers.get && resp.headers.get("content-type")) || "";
+    if (ct.includes("event-stream") && resp.body) {
+      const json = await aggregateSse(resp, onEvent);
+      return { ok: true, status: 200, json, errorText: "", via: "relay" };
+    }
     const r = await resp.json();
     return { ...r, via: "relay" };
   } catch (e) {
@@ -159,7 +171,7 @@ export async function callAnthropic(env, reqBody, { apiKey, fetchImpl = fetch, o
     // This isolate already hit the geo block — skip the doomed direct attempt.
     // If the relay itself breaks, direct is a harmless backup (worst case
     // another instant 403); a direct success flips us back to direct-first.
-    const relayed = await relayCall(env, key, reqBody);
+    const relayed = await relayCall(env, key, reqBody, onEvent);
     if (relayed.ok) return relayed;
     const direct = await anthropicFetch(key, reqBody, fetchImpl, onEvent);
     if (direct.ok) {
@@ -175,7 +187,7 @@ export async function callAnthropic(env, reqBody, { apiKey, fetchImpl = fetch, o
   }
   preferRelay = true;
   const colo = await currentColo(fetchImpl); // hard evidence for llmlogs
-  const relayed = await relayCall(env, key, reqBody);
+  const relayed = await relayCall(env, key, reqBody, onEvent);
   return { ...relayed, colo };
 }
 

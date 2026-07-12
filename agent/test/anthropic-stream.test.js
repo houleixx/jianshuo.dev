@@ -1,7 +1,7 @@
 // 流式聚合：非流式 POST 会被 Anthropic 门口的 Cloudflare ~100s 掐断(HTTP 524)——
 // 2h 录音的挖矿生成超 2 分钟必死(2026-07-09 事故)。改 stream:true 后在
 // anthropicFetch 内部把 SSE 聚合回原响应形状,调用方零改动。
-import { describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach } from "vitest";
 import { callAnthropic, _resetGeoState } from "../src/anthropic.js";
 
 beforeEach(() => _resetGeoState());
@@ -119,5 +119,72 @@ describe("onEvent 外露(实时预览地基)", () => {
     const r = await callAnthropic(ENV, { model: "m" }, { fetchImpl: f, onEvent: () => { throw new Error("ui boom"); } });
     expect(r.ok).toBe(true);
     expect(r.json.content[0].text).toBe("你好，世界");
+  });
+});
+
+describe("relay 流式透传(Phase 3)", () => {
+  function geoBlockedThenRelaySse(events) {
+    // 直连撞地域 403 → callAnthropic 走 relay;relay 返回 SSE → 调用方聚合
+    const env = {
+      CLAUDE_API_KEY: "k",
+      RELAY: {
+        idFromName: (n) => `id:${n}`,
+        get: () => ({ fetch: async () => sseResponse(events) }),
+      },
+    };
+    const geo = async (url) => String(url).includes("cdn-cgi/trace")
+      ? new Response("colo=HKG\n", { status: 200 })
+      : new Response(JSON.stringify({ error: { type: "forbidden", message: "Request not allowed" } }), { status: 403 });
+    return { env, geo };
+  }
+
+  it("中转路径:SSE 在调用方聚合,onEvent 增量照样到手", async () => {
+    const { env, geo } = geoBlockedThenRelaySse(TEXT_EVENTS);
+    const seen = [];
+    const r = await callAnthropic(env, { model: "m" }, {
+      fetchImpl: geo,
+      onEvent: (ev) => { if (ev.type === "content_block_delta") seen.push(ev.delta.text); },
+    });
+    expect(r.ok).toBe(true);
+    expect(r.via).toBe("relay");
+    expect(r.json.content[0].text).toBe("你好，世界");
+    expect(seen.join("")).toBe("你好，世界");
+  });
+
+  it("中转返回 JSON(错误/旧版)仍按老形状解析", async () => {
+    const env = {
+      CLAUDE_API_KEY: "k",
+      RELAY: {
+        idFromName: (n) => `id:${n}`,
+        get: () => ({ fetch: async () => new Response(JSON.stringify({ ok: false, status: 429, json: null, errorText: "overloaded" }), { status: 200 }) }),
+      },
+    };
+    const geo = async (url) => String(url).includes("cdn-cgi/trace")
+      ? new Response("colo=HKG\n", { status: 200 })
+      : new Response(JSON.stringify({ error: { type: "forbidden", message: "Request not allowed" } }), { status: 403 });
+    const r = await callAnthropic(env, { model: "m" }, { fetchImpl: geo });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(429);
+    expect(r.via).toBe("relay");
+  });
+});
+
+describe("AnthropicRelay DO(Phase 3)", () => {
+  it("/messages 把 Anthropic 的 SSE 原样透传;HTTP 错误回 JSON 形状", async () => {
+    const { AnthropicRelay } = await import("../src/relay.js");
+    const relay = new AnthropicRelay({}, {});
+    const sse = sseBody(TEXT_EVENTS);
+    // 成功:SSE 透传
+    vi.stubGlobal("fetch", async () => new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } }));
+    const ok = await relay.fetch(new Request("https://relay/messages", { method: "POST", body: JSON.stringify({ apiKey: "k", reqBody: { model: "m" } }) }));
+    expect(ok.headers.get("content-type")).toContain("event-stream");
+    expect(await ok.text()).toBe(sse);
+    // 失败:JSON 形状
+    vi.stubGlobal("fetch", async () => new Response('{"error":{"message":"bad"}}', { status: 400 }));
+    const bad = await relay.fetch(new Request("https://relay/messages", { method: "POST", body: JSON.stringify({ apiKey: "k", reqBody: { model: "m" } }) }));
+    const j = await bad.json();
+    expect(j.ok).toBe(false);
+    expect(j.status).toBe(400);
+    vi.unstubAllGlobals();
   });
 });

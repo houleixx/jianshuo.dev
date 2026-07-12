@@ -5,7 +5,7 @@
 // well-known instance shared by all users; bump RELAY_INSTANCE to re-place it.
 // Plain class + fetch interface (same idiom as StatusHub/LinkBroker) so this
 // module stays importable outside workerd (vitest).
-import { anthropicFetch } from "./anthropic.js";
+import { anthropicRequest } from "./anthropic.js";
 
 export class AnthropicRelay {
   constructor(state, env) {
@@ -21,7 +21,20 @@ export class AnthropicRelay {
     if (url.pathname === "/messages") {
       const { apiKey, reqBody } = await request.json().catch(() => ({}));
       if (!apiKey || !reqBody) return Response.json({ ok: false, status: 0, json: null, errorText: "relay: bad request" });
-      return Response.json(await anthropicFetch(apiKey, reqBody));
+      // SSE 原样透传：聚合放回调用方做,这样实时预览的增量在中转路径也活着
+      // (Phase 3)。HTTP 错误保持老 JSON 形状;网络异常也是(status 0)。
+      try {
+        const resp = await anthropicRequest(apiKey, reqBody);
+        if (!resp.ok) {
+          return Response.json({ ok: false, status: resp.status, json: null, errorText: (await resp.text()).slice(0, 2000) });
+        }
+        return new Response(resp.body, {
+          status: 200,
+          headers: { "content-type": resp.headers.get("content-type") || "text/event-stream" },
+        });
+      } catch (e) {
+        return Response.json({ ok: false, status: 0, json: null, errorText: `relay: ${String((e && e.message) || e)}` });
+      }
     }
 
     // GET /colo → where did this relay actually land? (locationHint is

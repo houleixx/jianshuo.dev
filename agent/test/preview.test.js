@@ -82,3 +82,40 @@ describe("makePreviewPusher", () => {
     await expect(p.done(true)).resolves.toBeUndefined();
   });
 });
+
+// ── EditOpsExtractor:行级编辑工具参数流 → 打字机增量 ─────────────────────────
+import { EditOpsExtractor } from "../src/preview.js";
+
+function feedOps(chunks) {
+  const ex = new EditOpsExtractor();
+  const out = [];
+  for (const c of chunks) out.push(...ex.feed(c));
+  return out;
+}
+const OPS = '{"ops":[{"op":"replace_line","line":3,"text":"改后的第三行。"},{"op":"insert_after","line":7,"text":"插入的新段落"},{"op":"delete_lines","lines":[9,10]}]}';
+
+describe("EditOpsExtractor", () => {
+  it("整段喂入:replace/insert 的 text 带 op+line 剥出;delete 无文本不出事件", () => {
+    const out = feedOps([OPS]);
+    const g = (i) => out.filter((e) => e.i === i);
+    expect(g(0).map((e) => e.text).join("")).toBe("改后的第三行。");
+    expect(g(0)[0].op).toBe("replace_line");
+    expect(g(0)[0].line).toBe(3);
+    expect(g(1).map((e) => e.text).join("")).toBe("插入的新段落");
+    expect(g(1)[0].op).toBe("insert_after");
+    expect(g(1)[0].line).toBe(7);
+    expect(out.every((e) => e.i !== 2)).toBe(true);
+  });
+  it("逐字符切碎结果不变(转义/数字/跨界安全)", () => {
+    const out = feedOps([...OPS]);
+    expect(out.filter((e) => e.i === 0).map((e) => e.text).join("")).toBe("改后的第三行。");
+    expect(out.filter((e) => e.i === 1)[0].line).toBe(7);
+  });
+  it("set_title 的 title 字段也出事件(line=null)", () => {
+    const doc = '{"ops":[{"op":"set_title","title":"新标题"}]}';
+    const out = feedOps([doc]);
+    expect(out.map((e) => e.text).join("")).toBe("新标题");
+    expect(out[0].op).toBe("set_title");
+    expect(out[0].line).toBe(null);
+  });
+});

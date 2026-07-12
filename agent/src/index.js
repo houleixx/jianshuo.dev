@@ -36,7 +36,7 @@ import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "./silent-m4a.js";
 import { callAnthropic, anthropicFetch, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
-import { makePreviewPusher } from "./preview.js";
+import { makePreviewPusher, makeEditPreview } from "./preview.js";
 import { loadUIConfigFor } from "./ui-config.js";
 import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
@@ -183,7 +183,11 @@ export class ArticleEditor extends Agent {
 
     const turnId = `${Date.now()}-${rand6()}`;
     const editModel = resolveEditModel(await loadModelConfig(this.env));
-    const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction: row.text, model: editModel });
+    // 实时预览（Phase 2）：模型流式产出工具参数时，把 write_article 的整篇正文
+    // （幽灵稿）和 edit_current_article 的行级新文本（打字机）边生成边广播给
+    // 已连接的详情页。DO 内直连 broadcast，best-effort。
+    const editPreview = makeEditPreview((obj) => this.broadcast(JSON.stringify(obj)));
+    const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction: row.text, model: editModel, onEvent: editPreview.onEvent });
 
     let history = [];
     try {
@@ -197,6 +201,7 @@ export class ArticleEditor extends Agent {
       env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev",
       editId: row.id, instruction: row.text, images, articleIndex, system: SYSTEM, history, callClaude,
     });
+    editPreview.finish();   // 幽灵稿收尾（updated 紧随其后广播）
 
     // Log this turn's tool executions (name + input + result) — the terminal
     // short-circuit means a successful edit/write/publish never reaches another
@@ -257,14 +262,14 @@ export class ArticleEditor extends Agent {
   // errors) so the caller can both log the exchange and decide how to proceed.
   // callAnthropic falls back to the ENAM relay DO when this DO's colo is
   // geo-blocked by Anthropic (see anthropic.js).
-  async _callClaudeRaw(reqBody) {
-    return callAnthropic(this.env, reqBody);
+  async _callClaudeRaw(reqBody, onEvent = null) {
+    return callAnthropic(this.env, reqBody, { onEvent });
   }
 
   // A logging callClaude for runAgentLoop: builds the request body, calls the
   // API, records one llmlogs/ entry per HTTP call (grouped by turnId), then
   // returns the response JSON or throws (preserving the loop's prior behavior).
-  _makeLoggedCall({ turnId, scope, stem, instruction, model = MODEL }) {
+  _makeLoggedCall({ turnId, scope, stem, instruction, model = MODEL, onEvent = null }) {
     let step = 0;
     return async ({ system, messages, tools }) => {
       const reqBody = { model, max_tokens: 8000, system, messages, tools };
@@ -273,7 +278,7 @@ export class ArticleEditor extends Agent {
       if (tools && tools.length) reqBody.tool_choice = { type: "auto" };
       const myStep = step++;
       const ts = Date.now();
-      const r = await this._callClaudeRaw(reqBody);
+      const r = await this._callClaudeRaw(reqBody, onEvent);
       await writeLlmLog(this.env, {
         ts, source: "agent", user_scope: scope, model,
         latency_ms: Date.now() - ts, http_status: r.status, ok: r.ok,
@@ -474,8 +479,8 @@ export class LibraryAgent extends Agent {
   // errors) so the caller can both log the exchange and decide how to proceed.
   // callAnthropic falls back to the ENAM relay DO when this DO's colo is
   // geo-blocked by Anthropic (see anthropic.js).
-  async _callClaudeRaw(reqBody) {
-    return callAnthropic(this.env, reqBody);
+  async _callClaudeRaw(reqBody, onEvent = null) {
+    return callAnthropic(this.env, reqBody, { onEvent });
   }
 
   // A logging callClaude for runAgentLoop: builds the request body, calls the
