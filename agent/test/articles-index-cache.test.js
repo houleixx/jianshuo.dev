@@ -131,3 +131,66 @@ describe("GET /articles — summary cache", () => {
     expect(second[0].tags).toEqual(["创业"]);
   });
 });
+
+// ── 快路径（2026-07-13）：有 waitUntil 的运行时索引直出，listing 挪进后台对账 ──
+
+import { vi } from "vitest";
+
+describe("GET /articles — index fast path (waitUntil runtimes)", () => {
+  it("serves straight from the index (no R2 listing wait) and reconciles in the background", async () => {
+    const env = ctxEnv();
+    seedArticle(env, "s1", { createdAt: 1000 });
+    seedArticle(env, "s2", { createdAt: 2000 });
+    await list(env);                       // 建索引（同步对账路径）
+    seedArticle(env, "s3", { createdAt: 3000 });   // 绕过 API 直写 → 索引暂时不知道
+
+    const context = ctx("GET", "");
+    context.env = env;
+    context.params.path = ["articles", "u"];
+    context.waitUntil = vi.fn();
+    const resp = await onRequest(context);
+    const body = await resp.json();
+    // 快路径直出索引：s3 还没进索引，本次看不到（可接受的一拍延迟）
+    expect(body.articles.map((a) => a.stem)).toEqual(["s2", "s1"]);
+    // 后台对账被排上，跑完后 s3 入索引
+    expect(context.waitUntil).toHaveBeenCalled();
+    await Promise.all(context.waitUntil.mock.calls.map((c) => c[0]));
+    const idx = JSON.parse(env.FILES._store.get("users/u/articles-index.json")).items;
+    expect(Object.keys(idx).sort()).toEqual(["s1", "s2", "s3"]);
+  });
+
+  it("API writes keep the index fresh, so the fast path shows a just-mined article immediately", async () => {
+    const env = ctxEnv();
+    // 通过 API 写入（miner 的真实路径）——putArticleDoc 同步维护索引
+    const put = ctx("PUT", "u/VoiceDrop-new", { body: { articles: [{ title: "新文章", body: "b" }], createdAt: 5000 } });
+    put.env = env;
+    expect((await onRequest(put)).status).toBe(200);
+
+    const context = ctx("GET", "");
+    context.env = env;
+    context.params.path = ["articles", "u"];
+    context.waitUntil = vi.fn();
+    const body = await (await onRequest(context)).json();
+    expect(body.articles.map((a) => a.stem)).toEqual(["VoiceDrop-new"]);   // 不等对账就可见
+    expect(body.articles[0].title).toBe("新文章");
+  });
+
+  it("DELETE removes the index entry so the fast path drops the article at once", async () => {
+    const env = ctxEnv();
+    const put = ctx("PUT", "u/VoiceDrop-gone", { body: { articles: [{ title: "要删的", body: "b" }], createdAt: 5000 } });
+    put.env = env;
+    await onRequest(put);
+    const del = ctx("DELETE", "u/VoiceDrop-gone");
+    del.env = env;
+    expect((await onRequest(del)).status).toBe(200);
+
+    const context = ctx("GET", "");
+    context.env = env;
+    context.params.path = ["articles", "u"];
+    context.waitUntil = vi.fn();
+    const body = await (await onRequest(context)).json();
+    expect(body.articles).toEqual([]);
+  });
+});
+
+function ctxEnv() { return ctx("GET", "").env; }

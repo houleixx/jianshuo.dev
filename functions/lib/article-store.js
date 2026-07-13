@@ -77,6 +77,77 @@ export async function readArticleDoc(env, key) {
   try { return migrateToV3(JSON.parse(await obj.text())); } catch { return null; }
 }
 
+// ── 文章摘要索引（articles-index.json）────────────────────────────────────────
+// GET /articles 的快路径直接拿这份索引出列表（慢的大头是 R2 listing 本身，
+// 几百个对象一页 ~1s），所以每个写入口在下面的 putArticleDoc 里同步维护它。
+// 索引只是加速层：R2 listing 仍是权威，list 路由每次响应后在 waitUntil 里全量
+// 对账——写-写并发的 lost update、绕过 API 的直写（如 agent 的 style-intro
+// 文章）都在下一次打开时收敛。索引写失败绝不打断文章写主路径。
+export function articlesIndexKey(scope) { return `${scope}articles-index.json`; }
+
+// 列表条目的唯一出处——list 路由的对账和写入口的同步维护都用它，字段不漂。
+export function indexEntryFor(stem, doc) {
+  const currentArticles = resolveArticles(doc);
+  const entry = {
+    stem,
+    title: currentArticles[0]?.title || TITLE_FALLBACK,
+    head: doc.head || 1,
+    createdAt: doc.createdAt || 0,
+    updatedAt: doc.updatedAt || 0,
+    count: currentArticles.length,
+  };
+  if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
+  return entry;
+}
+
+// key = users/<sub>/articles/<stem>.json → { scope, stem }；不匹配 → null
+function scopeStemFromKey(key) {
+  const m = /^(.*\/)articles\/([^/]+)\.json$/.exec(key || "");
+  return m ? { scope: m[1], stem: m[2] } : null;
+}
+
+// fp 与 list 路由的指纹同源：R2 put 返回的 etag 就是之后 listing 里的 etag。
+// 拿不到时置 null → 下次对账判 stale 重读一次该 doc，自愈。
+async function upsertIndexEntry(env, key, doc, putResult) {
+  const loc = scopeStemFromKey(key);
+  if (!loc) return;
+  try {
+    const ik = articlesIndexKey(loc.scope);
+    let idx = { schema: 1, items: {} };
+    const io = await env.FILES.get(ik);
+    if (io) {
+      try { const parsed = JSON.parse(await io.text()); if (parsed && parsed.items) idx = parsed; } catch {}
+    }
+    idx.items[loc.stem] = { fp: (putResult && putResult.etag) || null, entry: indexEntryFor(loc.stem, doc) };
+    idx.updatedAt = Date.now();
+    await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
+  } catch { /* 索引是加速层，绝不打断写主路径 */ }
+}
+
+// 删文章时把索引条目一并摘掉（DELETE /articles/<stem> 路由调）。
+export async function removeIndexEntry(env, key) {
+  const loc = scopeStemFromKey(key);
+  if (!loc) return;
+  try {
+    const ik = articlesIndexKey(loc.scope);
+    const io = await env.FILES.get(ik);
+    if (!io) return;
+    const idx = JSON.parse(await io.text());
+    if (idx && idx.items && loc.stem in idx.items) {
+      delete idx.items[loc.stem];
+      idx.updatedAt = Date.now();
+      await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
+    }
+  } catch {}
+}
+
+// 文章 doc 的唯一落盘出口：写 doc + 同步维护摘要索引。
+async function putArticleDoc(env, key, doc) {
+  const put = await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  await upsertIndexEntry(env, key, doc, put);
+  return put;
+}
+
 // newDoc – the new version's content in `articles`, plus any metadata fields to set.
 //          A PARTIAL doc is fine: anything it omits is carried over from the stored doc.
 // source – "mine" | "agent" | "wechat"
@@ -111,7 +182,7 @@ export async function writeArticleDoc(env, key, newDoc, source = "unknown") {
   // An article minted by a partial writer has no createdAt at all, and the list
   // sorts it to 1970. Stamp it once, on the write that creates the doc.
   if (!doc.createdAt) doc.createdAt = new Date().toISOString();
-  await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  await putArticleDoc(env, key, doc);
   return doc;
 }
 
@@ -122,7 +193,7 @@ export async function setHead(env, key, newHead) {
   if (!current || !Array.isArray(current.versions)) return null;
   if (!current.versions.find((e) => e.v === newHead)) return null;
   const doc = { ...current, head: newHead, updatedAt: Date.now() };
-  await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  await putArticleDoc(env, key, doc);
   return doc;
 }
 
@@ -139,7 +210,7 @@ export async function setQuestionStatus(env, key, id, status) {
   const questions = current.questions.map((q) =>
     q && q.id === id ? { ...q, status, ...(status === "answered" ? { answeredAt: Date.now() } : {}) } : q);
   const doc = { ...current, questions, updatedAt: Date.now() };
-  await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  await putArticleDoc(env, key, doc);
   return doc;
 }
 
@@ -161,7 +232,7 @@ export async function appendQuestions(env, key, texts, articleIndex = 0) {
   }
   if (!added.length) return { doc: current, added: 0 };
   const doc = { ...current, questions: [...existing, ...added], updatedAt: now };
-  await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
+  await putArticleDoc(env, key, doc);
   return { doc, added: added.length };
 }
 

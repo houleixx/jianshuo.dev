@@ -22,7 +22,7 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst } from "../../lib/article-store.js";
+import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst, indexEntryFor, removeIndexEntry } from "../../lib/article-store.js";
 import { silentM4aBytes } from "../../lib/silent-m4a.js";
 import { shareIdFor, communityKey, reportKey, isShareId } from "../../lib/community-store.js";
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
@@ -1298,99 +1298,101 @@ async function handleRequest(context) {
     }
 
     // GET /articles — list.
-    // Backed by a per-user summary cache (users/<sub>/articles-index.json) so the
-    // steady state is 2 reads (prefix list + index) instead of one full-doc GET
-    // per article — each doc is a schema-3 envelope carrying up to 10 body
-    // versions plus the whole transcript, read here only to extract a title.
-    // The cache is self-healing, maintained by THIS route alone: the R2 listing
-    // stays authoritative, and any object whose fingerprint (etag) differs from
-    // the cached one is re-read. Writers never touch the index, so there is
-    // nothing to keep consistent — a stale entry costs one extra doc read on the
-    // next list call.
+    // 快路径：摘要索引（users/<sub>/articles-index.json）直出——R2 listing 本身
+    // 就要 ~1s（几百个对象一页），是这个接口慢的大头，所以稳态不再等它。索引
+    // 由每个写入口同步维护（article-store 的 putArticleDoc / 下面的 DELETE），
+    // 新挖出的文章在 miner PUT 返回前就已入索引，App 刷新即见。R2 listing 仍是
+    // 权威：响应发出后 waitUntil 里跑 reconcileArticles 全量对账，写-写并发的
+    // lost update、绕过 API 的直写（agent 的 style-intro）一次打开后收敛。
+    // 索引缺失/空/损坏，或运行时没有 waitUntil（测试）→ 同步对账，行为同旧版。
     if (request.method === 'GET' && !stem) {
       const prefix = `${articleScope}articles/`;
       const indexKey = `${articleScope}articles-index.json`;
-      // R2 listing 和摘要索引互不依赖，并发取——每次 R2 往返 ~0.2-0.4s，串行
-      // 白背一次（实测稳态 1.0-1.7s 里近一半是这个）。
-      const listAll = (async () => {
+      const fp = (o) => o.etag || `${o.size}:${o.uploaded?.toISOString?.() || ''}`;
+
+      // 对账（原同步逻辑原样搬入）：R2 list 全部对象 + 与索引比 etag 指纹，只
+      // 重读新/变的 doc，删掉已不存在的条目，脏了回写。返回排好序的列表。
+      async function reconcileArticles() {
         let cursor, allObjects = [];
         do {
           const listed = await env.FILES.list({ prefix, limit: 1000, cursor });
           allObjects.push(...listed.objects);
           cursor = listed.truncated ? listed.cursor : null;
         } while (cursor);
-        return allObjects;
-      })();
-      const readIndex = (async () => {
+        const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json') && !isAsrSidecar(o.key));
+
+        let index = {};
         try {
           const io = await env.FILES.get(indexKey);
-          if (io) return JSON.parse(await io.text()).items || {};
+          if (io) index = JSON.parse(await io.text()).items || {};
         } catch { /* corrupt/missing cache → full rebuild below */ }
-        return {};
-      })();
-      const [allObjects, index] = await Promise.all([listAll, readIndex]);
-      const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json') && !isAsrSidecar(o.key));
-      const fp = (o) => o.etag || `${o.size}:${o.uploaded?.toISOString?.() || ''}`;
 
-      const articles = [];
-      const stale = [];
-      const liveStems = new Set();
-      for (const o of jsonObjects) {
-        const s = o.key.slice(prefix.length, -'.json'.length);
-        liveStems.add(s);
-        const cached = index[s];
-        if (cached && cached.fp === fp(o)) {
-          if (cached.entry) articles.push(cached.entry);
-        } else {
-          stale.push(o);
-        }
-      }
-      let dirty = stale.length > 0;
-      for (const s of Object.keys(index)) {
-        if (!liveStems.has(s)) { delete index[s]; dirty = true; }
-      }
-
-      // Read only new/changed docs, in parallel batches (an unbounded fan-out
-      // at ~100 articles used to saturate the subrequest budget).
-      const BATCH = 20;
-      for (let i = 0; i < stale.length; i += BATCH) {
-        await Promise.all(stale.slice(i, i + BATCH).map(async (o) => {
+        const articles = [];
+        const stale = [];
+        const liveStems = new Set();
+        for (const o of jsonObjects) {
           const s = o.key.slice(prefix.length, -'.json'.length);
-          const obj = await env.FILES.get(o.key);
-          if (!obj) { delete index[s]; return; }
-          let doc;
-          try { doc = JSON.parse(await obj.text()); }
-          catch {
-            // Unparseable object: cache the miss so it isn't re-fetched every list.
-            index[s] = { fp: fp(o), entry: null };
-            return;
+          liveStems.add(s);
+          const cached = index[s];
+          if (cached && cached.fp === fp(o)) {
+            if (cached.entry) articles.push(cached.entry);
+          } else {
+            stale.push(o);
           }
-          const currentArticles = resolveArticles(doc);
-          const entry = {
-            stem: s,
-            title: currentArticles[0]?.title || TITLE_FALLBACK,
-            head: doc.head || 1,
-            createdAt: doc.createdAt || 0,
-            updatedAt: doc.updatedAt || 0,
-            count: currentArticles.length,
-          };
-          if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
-          index[s] = { fp: fp(o), entry };
-          articles.push(entry);
-        }));
+        }
+        let dirty = stale.length > 0;
+        for (const s of Object.keys(index)) {
+          if (!liveStems.has(s)) { delete index[s]; dirty = true; }
+        }
+
+        // Read only new/changed docs, in parallel batches (an unbounded fan-out
+        // at ~100 articles used to saturate the subrequest budget).
+        const BATCH = 20;
+        for (let i = 0; i < stale.length; i += BATCH) {
+          await Promise.all(stale.slice(i, i + BATCH).map(async (o) => {
+            const s = o.key.slice(prefix.length, -'.json'.length);
+            const obj = await env.FILES.get(o.key);
+            if (!obj) { delete index[s]; return; }
+            let doc;
+            try { doc = JSON.parse(await obj.text()); }
+            catch {
+              // Unparseable object: cache the miss so it isn't re-fetched every list.
+              index[s] = { fp: fp(o), entry: null };
+              return;
+            }
+            const entry = indexEntryFor(s, doc);
+            index[s] = { fp: fp(o), entry };
+            articles.push(entry);
+          }));
+        }
+
+        if (dirty) {
+          await env.FILES.put(
+            indexKey,
+            JSON.stringify({ schema: 1, updatedAt: Date.now(), items: index }),
+            { httpMetadata: { contentType: 'application/json' } },
+          ).catch(() => {});
+        }
+
+        articles.sort(byNewestFirst);
+        return articles;
       }
 
-      if (dirty) {
-        const persist = env.FILES.put(
-          indexKey,
-          JSON.stringify({ schema: 1, updatedAt: Date.now(), items: index }),
-          { httpMetadata: { contentType: 'application/json' } },
-        ).catch(() => {});
-        if (context.waitUntil) context.waitUntil(persist); else await persist;
+      if (waitUntil) {
+        try {
+          const io = await env.FILES.get(indexKey);
+          if (io) {
+            const items = JSON.parse(await io.text()).items || {};
+            const cached = Object.values(items).map((i) => i && i.entry).filter(Boolean);
+            if (cached.length) {
+              cached.sort(byNewestFirst);
+              waitUntil(reconcileArticles().catch(() => {}));
+              return json({ articles: cached });
+            }
+          }
+        } catch { /* 索引坏 → 下面同步对账重建 */ }
       }
-
-      articles.sort(byNewestFirst);
-      return json({ articles });
+      return json({ articles: await reconcileArticles() });
     }
 
     const key = articleKey(stem);
@@ -1483,6 +1485,7 @@ async function handleRequest(context) {
         env.FILES.delete(`${prefix}.empty`),
         env.FILES.delete(`${prefix}.blocked`),
         env.FILES.delete(`${prefix}.tags`),
+        removeIndexEntry(env, `${prefix}.json`),   // 摘要索引条目一并摘掉（list 快路径直出它）
       ]);
       return json({ ok: true });
     }
