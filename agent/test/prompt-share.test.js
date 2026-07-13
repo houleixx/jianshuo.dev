@@ -4,15 +4,14 @@
 import { vi, describe, it, expect } from "vitest";
 // vi.mock is hoisted before static imports — keeps the real `agents` package
 // (and its cloudflare:workers import) out of the Node/vitest module graph.
-// Same pattern as paint-callback-route.test.js / ui-config.test.js / mine-sharding.test.js.
+// Same pattern as paint-callback-route.test.js / mine-sharding.test.js.
 vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
 import { fakeEnv } from "./fakes.js";
 import { hmacSign, b64url } from "../../functions/lib/auth.js";
 import {
   PROMPT_SHARE_DEFAULTS, loadPromptShareConfig, mintCode,
-  handlePromptShareRoutes, resolvePromptShare, resolveSharedPromptBlock, refreshPromptShare,
+  handlePromptShareRoutes, resolvePromptShare, resolveSharedPromptBlock, refreshPromptShare, shareStates,
 } from "../src/prompt-share.js";
-import { handleUIConfigCustom } from "../src/ui-config-custom.js";
 import worker from "../src/index.js";
 
 const SECRET = "test-secret";
@@ -26,11 +25,12 @@ const OWNER = "users/anon-owner111/";
 // 内置系统项「改写这段 · 更简洁」（新模型，sys_* id），默认指令含 {{LINE}}/{{QUOTE}} 占位符——
 // 铸码/写穿这类需要 effectiveLeaf 解析生效内容的测试都走它。
 const SYS_ITEM = "sys_concise";
-// 重构前的老 dotted id（voice-editor.longpress.* 菜单路径当主键那一代）。effectiveLeaf 切到
-// 新解析器后已经不认得它——不能再铸新码/写穿同步。但 DELETE 与 shareStates()（GET /agent/
-// ui-config/custom 的分享状态附注）都只碰索引 + R2 head，完全不经过 effectiveLeaf，所以【已经
-// 存在的老码】依旧能正常开关/查看状态——ITEM 常量留着专门测这条边界（老魔法数字继续能兑换/
-// 开关，只是不能再铸新的）。
+// 重构前的老 dotted id（voice-editor.longpress.* 菜单路径当主键那一代，出自已退役的
+// ui-config 模型）。effectiveLeaf 切到新解析器后已经不认得它——不能再铸新码/写穿同步。
+// 但 DELETE 与 shareStates()（现供 prompt-routes.js 的 syncActiveShares 用来找"当前
+// 正在分享的条目"）都只碰索引 + R2 head，完全不经过 effectiveLeaf，所以【已经存在的
+// 老码】依旧能正常开关——ITEM 常量留着专门测这条边界（老魔法数字继续能兑换/开关，
+// 只是不能再铸新的）。
 const ITEM = "voice-editor.longpress.text.rewrite.concise";
 
 function makeEnv(seed = {}) {
@@ -303,46 +303,30 @@ describe("write-through on save (refreshPromptShare)", () => {
     await refreshPromptShare(e, OWNER, SYS_ITEM);
     expect(e.FILES._store.has(`shares/${code}`)).toBe(false);
   });
-  // ui-config-custom.js 仍是老 dotted-id 空间的调用方（该文件本身在 Task 9 范围之外——
-  // spec §「删除」明确排期把它整个删掉，"不管老 app"）。effectiveLeaf 切到新解析器之后
-  // 不再认得老 dotted id，所以老 PUT /agent/ui-config/custom 触发的"保存即同步"从此
-  // 静默失效——分享副本停在铸码当时那版，不报错也不再更新。这条测试把这个已知、已
-  // 接受的行为变化钉死，避免以后有人误以为它还在工作。
-  it("OLD ui-config-custom PUT 不再触发分享副本同步（effectiveLeaf 已不认老 dotted id）", async () => {
-    const before = sharedDoc();
-    const e = makeEnv({
-      [`${OWNER}prompt-shares.json`]: JSON.stringify({ byItem: { [ITEM]: { code: "4563567", createdAt: "2026-07-01T00:00:00Z" } }, mintLog: [] }),
-      "shares/4563567": before,
-    });
-    const put = new Request("https://jianshuo.dev/agent/ui-config/custom", {
-      method: "PUT", body: JSON.stringify({ id: ITEM, instruction: "保存即同步。", label: "同步版" }),
-    });
-    await handleUIConfigCustom(put, e, OWNER);
-    const doc = JSON.parse(e.FILES._store.get("shares/4563567"));
-    expect(doc.instruction).toBe(JSON.parse(before).instruction); // 未被覆盖——静默 no-op
-  });
 });
 
-describe("GET /agent/ui-config/custom carries sharing state（老 dotted id 空间；shareStates 只碰索引 + R2 head，不经过 effectiveLeaf）", () => {
-  it("shareCode + sharing reflect mint / toggle-off", async () => {
+// shareStates() 现由 prompt-routes.js 的 syncActiveShares（PUT /agent/prompts 保存后
+// 写穿同步）直接调用，用来在不逐条读 R2 的前提下找出"当前正在分享的条目"——只碰
+// 索引 + R2 head，不经过 effectiveLeaf，所以对老 dotted id 的存量码同样成立。
+describe("shareStates — itemId → {shareCode, sharing} 反映铸码/开关", () => {
+  it("shareCode + sharing 随铸码/关闭变化；未铸码的条目不出现在结果里", async () => {
     const code = "4563567";
     const e = makeEnv({
       [`${OWNER}prompt-shares.json`]: JSON.stringify({ byItem: { [ITEM]: { code, createdAt: "2026-07-01T00:00:00Z" } }, mintLog: [] }),
       [`shares/${code}`]: sharedDoc(),
     });
-    const get = () => handleUIConfigCustom(new Request("https://jianshuo.dev/agent/ui-config/custom"), e, OWNER);
-    let items = (await (await get()).json()).items;
-    let item = items.find((i) => i.id === ITEM);
-    expect(item.shareCode).toBe(code);
-    expect(item.sharing).toBe(true);
-    // 其他条目无码
-    expect(items.find((i) => i.id !== ITEM).shareCode).toBe(null);
+    let states = await shareStates(e, OWNER);
+    expect(states[ITEM]).toEqual({ shareCode: code, sharing: true });
+    expect(states[SYS_ITEM]).toBeUndefined(); // 从没铸过码的条目不出现
 
     await del(e, ITEM);
-    items = (await (await get()).json()).items;
-    item = items.find((i) => i.id === ITEM);
-    expect(item.shareCode).toBe(code);   // 码还在（再开同码）
-    expect(item.sharing).toBe(false);
+    states = await shareStates(e, OWNER);
+    expect(states[ITEM]).toEqual({ shareCode: code, sharing: false }); // 码还在（再开同码），但 shares/<码> 已删
+  });
+
+  it("从没有任何分享的 scope → 空表，只产生一次索引 GET", async () => {
+    const e = makeEnv();
+    expect(await shareStates(e, OWNER)).toEqual({});
   });
 });
 

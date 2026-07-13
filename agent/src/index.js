@@ -34,12 +34,9 @@ import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { handlePromptShareRoutes } from "./prompt-share.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
-import { classifyAppliesTo } from "./prompt-classify.js";
 import { silentM4aBytes } from "./silent-m4a.js";
 import { callAnthropic, anthropicFetch, relayCall, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
 import { makePreviewPusher, makeEditPreview } from "./preview.js";
-import { loadUIConfigFor } from "./ui-config.js";
-import { handleUIConfigCustom } from "./ui-config-custom.js";
 import { handlePromptsRoute, handlePromptImport } from "./prompt-routes.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { xhsPack } from "./xhs.js";
@@ -1066,7 +1063,7 @@ export default {
     }
 
     // ── /agent/prompt-registry ── 线上 prompt 注册表（管理 token）。GET 打平列出
-    // ui-config 生效版里的全部叶子指令；PUT 改一条并写回 R2 覆盖文件=零部署上线。
+    // prompt-template 生效版里的全部叶子指令；PUT 改一条并写回 R2 覆盖文件=零部署上线。
     if (url.pathname === "/agent/prompt-registry") {
       return handlePromptRegistry(request, env);
     }
@@ -1074,15 +1071,6 @@ export default {
     // ── /agent/prompt-lab/* ── 题图调优桥接页后端：文章列表 + paint 出图代理（管理 token）──
     if (url.pathname.startsWith("/agent/prompt-lab/")) {
       return handlePromptLab(request, env, url);
-    }
-
-    // ── /agent/ui-config/custom ── 该用户的指令自定义（iOS 设置页）：GET 列条目，
-    // PUT 写/删单条稀疏覆盖（空 = 恢复缺省）。存 users/<sub>/ui-config.json。
-    if (url.pathname === "/agent/ui-config/custom") {
-      const tok = bearerToken(request);
-      const scope = await resolveScope(tok, env);
-      if (!scope || !scope.startsWith("users/")) return new Response("unauthorized", { status: 401 });
-      return handleUIConfigCustom(request, env, scope);
     }
 
     // ── /agent/prompts ── 用户的一套有序提示词列表（ref 跟随模板 / 实体冻结）。
@@ -1095,67 +1083,6 @@ export default {
       if (!scope) return J({ error: "unauthorized" }, 401);
       if (url.pathname === "/agent/prompts/import") return handlePromptImport(request, env, scope);
       return handlePromptsRoute(request, env, scope, url);
-    }
-
-    // ── /agent/prompt-classify ── AI 猜这条提示词该在长按文字还是图片时出现（5c 的
-    // 预勾选 + 琥珀提示条）。best-effort：Claude 挂 / 无算力 / 返回垃圾 → 回退「都行」
-    // + 空 reason，【绝不挡住用户新建提示词】。spec §7
-    if (url.pathname === "/agent/prompt-classify") {
-      if (request.method !== "POST") return J({ error: "method not allowed" }, 405);
-      const scope = await resolveScope(bearerToken(request), env);
-      if (!scope) return J({ error: "unauthorized" }, 401);
-      const body = await request.json().catch(() => ({}));
-      if (typeof body.prompt !== "string" || !body.prompt.trim()) return J({ error: "expected {prompt}" }, 400);
-
-      const CLASSIFY_MODEL = "claude-haiku-4-5";
-      const usageSum = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
-      const claude = async ({ system, messages }) => {
-        const reqBody = { model: CLASSIFY_MODEL, max_tokens: 200, system, messages };
-        const t0 = Date.now();
-        const r = await callAnthropic(env, reqBody);
-        const j = r.json;
-        await writeLlmLog(env, {
-          ts: t0, source: "agent", user_scope: scope, model: CLASSIFY_MODEL,
-          latency_ms: Date.now() - t0, http_status: r.status, ok: r.ok,
-          via: r.via, ...(r.colo ? { colo: r.colo } : {}),
-          step: 0, request: reqBody, response: r.ok ? j : undefined,
-          error: r.ok ? undefined : r.errorText,
-          meta: { kind: "prompt-classify" },
-        });
-        if (!r.ok) throw new Error(`Claude HTTP ${r.status}`);
-        const u = j.usage || {};
-        usageSum.input_tokens += u.input_tokens || 0;
-        usageSum.output_tokens += u.output_tokens || 0;
-        usageSum.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
-        usageSum.cache_read_input_tokens += u.cache_read_input_tokens || 0;
-        return (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-      };
-
-      // classifyAppliesTo 永不抛（内部已回退），所以这里必定 200。
-      const result = await classifyAppliesTo(body.prompt, claude);
-
-      // 计费 best-effort：失败绝不影响响应。
-      try {
-        if (env.USAGE && usageSum.input_tokens) {
-          await ensureAccount(env.USAGE, scope, Date.now());
-          const cost = claudeCostUY(CLASSIFY_MODEL, usageSum.input_tokens, usageSum.output_tokens,
-                                    usageSum.cache_creation_input_tokens, usageSum.cache_read_input_tokens);
-          await debit(env.USAGE, scope, cost, "prompt-classify", {}, Date.now());
-        }
-      } catch (_) {}
-
-      return J(result);
-    }
-
-    // ── /agent/ui-config ── 长按菜单等 UI 配置（任意有效用户 token）。返回该用户的
-    // 最终生效版：内置缺省 ← 全局 R2 覆盖 ← 每用户稀疏覆盖（见 ui-config.js）。
-    if (url.pathname === "/agent/ui-config") {
-      if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
-      const tok = bearerToken(request);
-      const scope = await resolveScope(tok, env);
-      if (!scope) return new Response("unauthorized", { status: 401 });
-      const cfg = await loadUIConfigFor(env, scope);
-      return new Response(JSON.stringify(cfg), { headers: { "content-type": "application/json" } });
     }
 
     // ── /agent/ops/tick ── 服务端错误打点（Pages Functions 4xx/5xx 时 fire-and-forget）──

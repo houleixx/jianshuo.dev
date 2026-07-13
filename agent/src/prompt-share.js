@@ -3,8 +3,9 @@
 //
 // 与文章分享共用 shares/ 命名空间：文章条目值是纯文本 articleKey，指令条目值是
 // JSON {type:"prompt", sub, itemId, label, instruction, createdAt, updatedAt} ——
-// 当前生效文本的**写穿副本**（铸码时写入，作者保存指令时由 ui-config-custom 经
-// refreshPromptShare 同步），落地页与兑换都只读这一个对象，不再现算合并。
+// 当前生效文本的**写穿副本**（铸码时写入，作者保存指令时由 prompt-routes.js 的
+// syncActiveShares 经 refreshPromptShare 同步），落地页与兑换都只读这一个对象，
+// 不再现算合并。
 // 一条指令一辈子一个码：owner 索引 users/<sub>/prompt-shares.json 记 byItem，
 // 开关关 = 删 shares/<码>（码立即失效），索引保留，再开同码复活。
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
@@ -100,8 +101,9 @@ function sharedDocFor(scope, itemId, leaf, createdAt, importCount = 0) {
   }, null, 2);
 }
 
-/// 作者保存指令后同步分享副本（ui-config-custom PUT 调用）。只刷**处于分享中**的
-/// 条目（shares/<码> 还在）；开关已关的不复活。尽力而为，失败不打断保存。
+/// 作者保存指令后同步分享副本（prompt-routes.js 的 syncActiveShares，PUT /agent/prompts
+/// 调用）。只刷**处于分享中**的条目（shares/<码> 还在）；开关已关的不复活。
+/// 尽力而为，失败不打断保存。
 export async function refreshPromptShare(env, scope, itemId) {
   try {
     const { byItem } = await loadIndex(env, scope);
@@ -258,9 +260,9 @@ export async function handlePromptShareRoutes(url, request, env) {
   return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true });
 }
 
-/// GET /agent/ui-config/custom 的分享状态附注（ui-config-custom 调用）：
 /// itemId → { shareCode, sharing }。码在索引里就返回（再开同码），sharing 看
-/// shares/<码> 是否健在。
+/// shares/<码> 是否健在。供 prompt-routes.js 的 syncActiveShares 用来找出"当前
+/// 正在分享的条目"（一次 owner 索引 GET + 逐条 head，不经过 effectiveLeaf）。
 export async function shareStates(env, scope) {
   const { byItem } = await loadIndex(env, scope);
   const out = {};
