@@ -52,6 +52,21 @@ export function fakeRecoD1() {
         return { success: true };
       },
       async all() {
+        // community/replies 快路径：WHERE reply_to=? AND hidden=0 ORDER BY first_shared_at ASC
+        if (/WHERE reply_to=\?/.test(sql)) {
+          const rows = [...posts.values()]
+            .filter((r) => r.reply_to === args[0] && !r.hidden)
+            .sort((a, b) => (a.first_shared_at || 0) - (b.first_shared_at || 0));
+          return { results: rows };
+        }
+        // community/list 快路径：WHERE hidden=0 ORDER BY first_shared_at DESC LIMIT 200
+        if (/WHERE hidden=0/.test(sql)) {
+          const rows = [...posts.values()]
+            .filter((r) => !r.hidden)
+            .sort((a, b) => (b.first_shared_at || 0) - (a.first_shared_at || 0))
+            .slice(0, 200);
+          return { results: rows };
+        }
         // reindex 的 SELECT share_id FROM community_posts
         return { results: [...posts.values()].map((r) => ({ share_id: r.share_id })) };
       },

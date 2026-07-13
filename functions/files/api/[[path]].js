@@ -55,6 +55,8 @@ export async function onRequest(context) {
 
 async function handleRequest(context) {
   const { request, env, params } = context;
+  // 响应发出后继续跑的后台活（社区索引对账用）；测试里的裸 context 没有它 → null。
+  const waitUntil = typeof context.waitUntil === 'function' ? context.waitUntil.bind(context) : null;
   const segments = Array.isArray(params.path) ? params.path : [params.path || ''];
   const action = segments[0] || '';
   const sub2 = segments[1] || '';
@@ -810,9 +812,74 @@ async function handleRequest(context) {
     catch (e) { console.log('[community-index] owner-delete failed', String(e?.message || e)); }
   }
 
+  // 全量对账：R2 真源 → D1 展示索引。admin reindex 端点与 list 快路径的
+  // waitUntil 后台自愈共用这一个函数——读全部指针 + 活文章，逐行 upsert
+  // （hidden 随 report 标记），最后把 R2 已不存在的行从索引删掉。
+  async function reconcileIndex() {
+    const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
+    const hidden = new Set(listed.objects
+      .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
+      .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
+    const postObjects = listed.objects.filter(o => /^community\/[^/]+\.json$/.test(o.key));
+    const seen = new Set();
+    let indexed = 0;
+    await mapLimit(postObjects, 16, async (o) => {
+      try {
+        const obj = await env.FILES.get(o.key);
+        if (!obj) return;
+        const p = JSON.parse(await obj.text());
+        let articles = p.articles || [], photos = p.photos;
+        if (p.articleKey) {
+          const live = await liveDocForPointer(o.key, p);
+          if (!live) return;   // 孤儿已顺手清掉；重挖中的先不进索引
+          articles = resolveArticles(live);
+          photos = live.photos;
+        }
+        await indexUpsert(p, articles, photos, { hidden: hidden.has(p.shareId) });
+        seen.add(p.shareId);
+        indexed++;
+      } catch {}
+    });
+    let removed = 0;
+    try {
+      const { results } = await env.RECO_DB.prepare('SELECT share_id FROM community_posts').all();
+      for (const r of results || []) {
+        if (!seen.has(r.share_id)) { await indexDelete(r.share_id); removed++; }
+      }
+    } catch {}
+    return { indexed, removed };
+  }
+
   // List community posts (metadata only), newest-first by first-share time.
-  // Reads the live article for each schema-2 post to get current title and count.
+  // 快路径（2026-07-13）：一条 SQL 读 D1 展示索引出全列表——旧的 R2 逐帖拉
+  // 全文（指针 + 整篇文章 JSON）在 ~100 帖时要 7 秒，这里降到毫秒级，老版本
+  // app（不走 /reco/feed 的）也吃到。响应发出后 waitUntil 里全量对账
+  // （reconcileIndex），文章编辑/删除/重挖造成的索引漂移在每次打开后收敛。
+  // D1 缺失/出错/空表 → 原样走 R2 真源慢路径兜底，行为与旧版一致。
   if (request.method === 'GET' && action === 'community' && sub2 === 'list') {
+    if (env.RECO_DB) {
+      try {
+        const { results } = await env.RECO_DB.prepare(
+          `SELECT share_id, owner, author, title, preview, cover_photo_key, has_photo,
+                  article_count, first_shared_at, updated_at, reply_to
+           FROM community_posts WHERE hidden=0
+           ORDER BY first_shared_at DESC LIMIT 200`).all();
+        if (results && results.length) {
+          if (waitUntil) waitUntil(reconcileIndex().catch(() => {}));
+          return json({ posts: results.map(r => ({
+            shareId: r.share_id, author: r.author, title: r.title,
+            firstSharedAt: r.first_shared_at, updatedAt: r.updated_at || r.first_shared_at,
+            count: r.article_count, mine: r.owner === scope,
+            hasPhoto: !!r.has_photo,
+            ...(r.cover_photo_key ? { coverPhotoKey: r.cover_photo_key } : {}),
+            ...(r.preview ? { preview: r.preview } : {}),
+            ...(r.reply_to ? { replyTo: r.reply_to } : {}),
+          })) });
+        }
+      } catch (e) { console.log('[community-index] list read failed', String(e?.message || e)); }
+      // 索引空/坏 → 本次走 R2 慢路径，后台重建一次
+      if (waitUntil) waitUntil(reconcileIndex().catch(() => {}));
+    }
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
     // Apple 1.2: a reported post is HIDDEN immediately (pending owner review). Report
     // markers live at community/reports/<shareId>.json; drop those shareIds from the feed.
@@ -856,37 +923,7 @@ async function handleRequest(context) {
   if (request.method === 'POST' && action === 'community' && sub2 === 'reindex') {
     if (scope !== '') return json({ error: 'admin only' }, 403);
     if (!env.RECO_DB) return json({ error: 'no RECO_DB binding' }, 503);
-    const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
-    const hidden = new Set(listed.objects
-      .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
-      .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
-    const postObjects = listed.objects.filter(o => /^community\/[^/]+\.json$/.test(o.key));
-    const seen = new Set();
-    let indexed = 0;
-    await mapLimit(postObjects, 16, async (o) => {
-      try {
-        const obj = await env.FILES.get(o.key);
-        if (!obj) return;
-        const p = JSON.parse(await obj.text());
-        let articles = p.articles || [], photos = p.photos;
-        if (p.articleKey) {
-          const live = await liveDocForPointer(o.key, p);
-          if (!live) return;   // 孤儿已顺手清掉；重挖中的先不进索引
-          articles = resolveArticles(live);
-          photos = live.photos;
-        }
-        await indexUpsert(p, articles, photos, { hidden: hidden.has(p.shareId) });
-        seen.add(p.shareId);
-        indexed++;
-      } catch {}
-    });
-    let removed = 0;
-    try {
-      const { results } = await env.RECO_DB.prepare('SELECT share_id FROM community_posts').all();
-      for (const r of results || []) {
-        if (!seen.has(r.share_id)) { await indexDelete(r.share_id); removed++; }
-      }
-    } catch {}
+    const { indexed, removed } = await reconcileIndex();
     return json({ ok: true, indexed, removed });
   }
 
@@ -1011,9 +1048,23 @@ async function handleRequest(context) {
 
 
   // List posts that are responses to `shareId`, oldest-first.
+  // 快路径同 list：reply_to 列直接从 D1 索引查（毫秒级），旧路径要全量扫
+  // community/ 前缀再逐帖拉活文章。索引新鲜度由 share 时的同步双写 +
+  // list 打开时的后台对账保证；D1 缺失/出错 → 回退 R2 慢路径。
   if (request.method === 'GET' && action === 'community' && sub2 === 'replies') {
     const shareId = segments[2] || '';
     if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
+    if (env.RECO_DB) {
+      try {
+        const { results } = await env.RECO_DB.prepare(
+          `SELECT share_id, author, title, first_shared_at, reply_to
+           FROM community_posts WHERE reply_to=? AND hidden=0
+           ORDER BY first_shared_at ASC`).bind(shareId).all();
+        return json({ posts: (results || []).map(r => ({
+          shareId: r.share_id, author: r.author, title: r.title,
+          firstSharedAt: r.first_shared_at, replyTo: r.reply_to })) });
+      } catch (e) { console.log('[community-index] replies read failed', String(e?.message || e)); }
+    }
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
     const objs = listed.objects.filter(x => /^community\/[^/]+\.json$/.test(x.key));
     const results = await mapLimit(objs, 32, async (o) => {

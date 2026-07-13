@@ -455,3 +455,115 @@ describe("community D1 index dual-write", () => {
     expect(body.ok).toBe(true);
   });
 });
+
+// ── D1 快路径（2026-07-13）：list/replies 直接读展示索引，R2 慢路径只做兜底 ──
+
+describe("GET community/list — D1 fast path", () => {
+  function row(over = {}) {
+    return { share_id: "d1a000000001", owner: "users/u/", article_key: "users/u/articles/a.json",
+             author: "A", title: "索引帖", preview: "预览文字", cover_photo_key: "users/u/photos/1/1.jpg",
+             has_photo: 1, article_count: 2, first_shared_at: 9000, updated_at: 9500,
+             reply_to: null, hidden: 0, ...over };
+  }
+
+  it("serves the whole feed from the index — zero R2 article reads, hidden rows dropped", async () => {
+    const db = fakeRecoD1();
+    db._posts.set("d1a000000001", row());
+    db._posts.set("d1b000000001", row({ share_id: "d1b000000001", title: "被举报帖", hidden: 1 }));
+    db._posts.set("d1c000000001", row({ share_id: "d1c000000001", title: "旧帖", first_shared_at: 100,
+                                        has_photo: 0, cover_photo_key: null, preview: null, updated_at: null }));
+    const token = await session("users/u/");
+    const context = reqCtx("GET", ["community", "list"], { token, env: { RECO_DB: db } });
+    // 注意：R2 store 是空的——列表若碰 R2 就会全空，这正是「快路径不读 R2」的证明。
+
+    const body = await (await onRequest(context)).json();
+    expect(body.posts.map((p) => p.shareId)).toEqual(["d1a000000001", "d1c000000001"]); // 新→旧，hidden 掉了
+    expect(body.posts[0]).toMatchObject({
+      author: "A", title: "索引帖", count: 2, firstSharedAt: 9000, updatedAt: 9500,
+      hasPhoto: true, coverPhotoKey: "users/u/photos/1/1.jpg", preview: "预览文字", mine: true,
+    });
+    expect(body.posts[1].hasPhoto).toBe(false);
+    expect(body.posts[1].coverPhotoKey).toBeUndefined();
+    expect(body.posts[1].updatedAt).toBe(100);              // updated_at 空 → 回落 first_shared_at
+    expect(body.posts[1].mine).toBe(true);
+  });
+
+  it("kicks a background reconcile via waitUntil that heals drifted rows", async () => {
+    const db = fakeRecoD1();
+    db._posts.set("d1a000000001", row({ title: "过期标题" }));
+    db._posts.set("gone00000001", row({ share_id: "gone00000001" }));   // R2 里已不存在 → 应被对账清掉
+    const token = await session("users/u/");
+    const context = reqCtx("GET", ["community", "list"], { token, env: { RECO_DB: db } });
+    context.waitUntil = vi.fn();
+    // R2 真源：这篇活文章已改名
+    context.env.FILES._store.set("users/u/articles/a.json", schema3("新标题"));
+    context.env.FILES._store.set("community/d1a000000001.json", JSON.stringify({
+      schema: 2, shareId: "d1a000000001", owner: "users/u/",
+      articleKey: "users/u/articles/a.json", author: "A", firstSharedAt: 9000,
+    }));
+
+    const body = await (await onRequest(context)).json();
+    expect(body.posts[0].title).toBe("过期标题");            // 本次响应仍用索引（快）
+    expect(context.waitUntil).toHaveBeenCalled();
+    await Promise.all(context.waitUntil.mock.calls.map((c) => c[0]));   // 等后台对账跑完
+    expect(db._posts.get("d1a000000001").title).toBe("新标题");   // 漂移收敛
+    expect(db._posts.has("gone00000001")).toBe(false);            // 幽灵行清掉
+  });
+
+  it("empty index falls back to the R2 slow path (feed never blanks out)", async () => {
+    const db = fakeRecoD1();
+    const context = reqCtx("GET", ["community", "list"], { env: { RECO_DB: db } });
+    context.env.FILES._store.set("users/u/articles/s1.json", schema3("兜底帖"));
+    context.env.FILES._store.set("community/ptr000000009.json", JSON.stringify({
+      schema: 2, shareId: "ptr000000009", owner: "users/u/",
+      articleKey: "users/u/articles/s1.json", author: "B", firstSharedAt: 5000,
+    }));
+    const body = await (await onRequest(context)).json();
+    expect(body.posts.map((p) => p.shareId)).toEqual(["ptr000000009"]);
+    expect(body.posts[0].title).toBe("兜底帖");
+  });
+
+  it("broken D1 falls back to the R2 slow path", async () => {
+    const db = { prepare: () => ({ bind() { return this; }, async all() { throw new Error("boom"); },
+                                   async run() { throw new Error("boom"); } }) };
+    const context = reqCtx("GET", ["community", "list"], { env: { RECO_DB: db } });
+    context.env.FILES._store.set("users/u/articles/s1.json", schema3("容错帖"));
+    context.env.FILES._store.set("community/ptr000000008.json", JSON.stringify({
+      schema: 2, shareId: "ptr000000008", owner: "users/u/",
+      articleKey: "users/u/articles/s1.json", author: "B", firstSharedAt: 5000,
+    }));
+    const body = await (await onRequest(context)).json();
+    expect(body.posts.map((p) => p.shareId)).toEqual(["ptr000000008"]);
+  });
+});
+
+describe("GET community/replies — D1 fast path", () => {
+  it("returns replies oldest-first from the index without R2 reads", async () => {
+    const db = fakeRecoD1();
+    db._posts.set("root00000001", { share_id: "root00000001", owner: "users/u/", author: "根",
+                                    title: "根帖", first_shared_at: 100, reply_to: null, hidden: 0 });
+    db._posts.set("rep200000001", { share_id: "rep200000001", owner: "users/v/", author: "乙",
+                                    title: "后回", first_shared_at: 300, reply_to: "root00000001", hidden: 0 });
+    db._posts.set("rep100000001", { share_id: "rep100000001", owner: "users/w/", author: "甲",
+                                    title: "先回", first_shared_at: 200, reply_to: "root00000001", hidden: 0 });
+    db._posts.set("repX00000001", { share_id: "repX00000001", owner: "users/x/", author: "丙",
+                                    title: "被举报回复", first_shared_at: 250, reply_to: "root00000001", hidden: 1 });
+    const context = reqCtx("GET", ["community", "replies", "root00000001"], { env: { RECO_DB: db } });
+    const body = await (await onRequest(context)).json();
+    expect(body.posts.map((p) => p.shareId)).toEqual(["rep100000001", "rep200000001"]);  // 旧→新，hidden 掉了
+    expect(body.posts[0]).toMatchObject({ author: "甲", title: "先回", replyTo: "root00000001" });
+  });
+
+  it("without RECO_DB the R2 slow path still answers", async () => {
+    const context = reqCtx("GET", ["community", "replies", "root00000001"]);
+    const env = context.env;
+    env.FILES._store.set("users/u/articles/r1.json", schema3("回帖"));
+    env.FILES._store.set("community/rep100000001.json", JSON.stringify({
+      schema: 2, shareId: "rep100000001", owner: "users/u/", replyTo: "root00000001",
+      articleKey: "users/u/articles/r1.json", author: "甲", firstSharedAt: 200,
+    }));
+    const body = await (await onRequest(context)).json();
+    expect(body.posts.map((p) => p.shareId)).toEqual(["rep100000001"]);
+    expect(body.posts[0].title).toBe("回帖");
+  });
+});
