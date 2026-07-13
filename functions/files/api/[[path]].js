@@ -1025,8 +1025,10 @@ async function handleRequest(context) {
       title = articles[0]?.title ?? title;
       legacyPhotos = live.photos;
       // 展示索引自愈：live 文章此刻刚读过，顺手把最新标题/封面/预览刷回索引——
-      // 文章编辑后 feed 里的过期卡片在任何人打开详情时更新。
-      await indexUpsert(p, articles, legacyPhotos);
+      // 文章编辑后 feed 里的过期卡片在任何人打开详情时更新。放 waitUntil 后台跑：
+      // 它内部还有一次 R2 head（report 标记）+ D1 写，同步做要多背 ~0.3s。
+      const heal = indexUpsert(p, articles, legacyPhotos);
+      if (waitUntil) waitUntil(heal); else await heal;
     }
     // `owner` (= the photo files' "users/<sub>/" prefix) + `photos` let the client build
     // the full R2 key for each [[photo:…]] marker and load it from the public photo URL.
@@ -1308,19 +1310,26 @@ async function handleRequest(context) {
     if (request.method === 'GET' && !stem) {
       const prefix = `${articleScope}articles/`;
       const indexKey = `${articleScope}articles-index.json`;
-      let cursor, allObjects = [];
-      do {
-        const listed = await env.FILES.list({ prefix, limit: 1000, cursor });
-        allObjects.push(...listed.objects);
-        cursor = listed.truncated ? listed.cursor : null;
-      } while (cursor);
+      // R2 listing 和摘要索引互不依赖，并发取——每次 R2 往返 ~0.2-0.4s，串行
+      // 白背一次（实测稳态 1.0-1.7s 里近一半是这个）。
+      const listAll = (async () => {
+        let cursor, allObjects = [];
+        do {
+          const listed = await env.FILES.list({ prefix, limit: 1000, cursor });
+          allObjects.push(...listed.objects);
+          cursor = listed.truncated ? listed.cursor : null;
+        } while (cursor);
+        return allObjects;
+      })();
+      const readIndex = (async () => {
+        try {
+          const io = await env.FILES.get(indexKey);
+          if (io) return JSON.parse(await io.text()).items || {};
+        } catch { /* corrupt/missing cache → full rebuild below */ }
+        return {};
+      })();
+      const [allObjects, index] = await Promise.all([listAll, readIndex]);
       const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json') && !isAsrSidecar(o.key));
-
-      let index = {};
-      try {
-        const io = await env.FILES.get(indexKey);
-        if (io) index = JSON.parse(await io.text()).items || {};
-      } catch { /* corrupt/missing cache → full rebuild below */ }
       const fp = (o) => o.etag || `${o.size}:${o.uploaded?.toISOString?.() || ''}`;
 
       const articles = [];
