@@ -49,8 +49,18 @@ function fromTemplate(node) {
   return out;
 }
 
-/// 一个列表节点（ref 或实体）→ 解析结果；悬空 ref（模板已删）→ null（调用方丢掉）。
+/// 垃圾节点判定：不是"非空、非数组的朴素对象"就是垃圾——null / 数字 / 字符串 /
+/// 布尔 / 数组都算。resolveList/restoreDefaults 读的是【已经落盘】的旧文档，
+/// 可能是历史 bug、手改、或存储层损坏写进来的垃圾（语法仍是合法 JSON）；这两个
+/// 函数对任意 JSON 形状必须 total（不 throw）——垃圾节点的降级路径是"跳过"，
+/// 跟悬空 ref 一个待遇，不是拿它冒充数据去访问 .ref/.children 而崩成 500。
+function isJunkNode(node) {
+  return node === null || typeof node !== "object" || Array.isArray(node);
+}
+
+/// 一个列表节点（ref 或实体）→ 解析结果；悬空 ref（模板已删）/ 垃圾节点 → null（调用方丢掉）。
 function resolveNode(node, idx) {
+  if (isJunkNode(node)) return null;
   if (node.ref) {
     const t = idx.get(node.ref);
     return t ? fromTemplate(t) : null;
@@ -73,9 +83,12 @@ export function resolveList(template, userDoc) {
   const out = [];
   for (const node of userDoc.items) {
     const resolved = resolveNode(node, idx);
-    if (!resolved) continue;                       // 悬空 ref：模板删了这条
+    if (!resolved) continue;                       // 悬空 ref / 垃圾节点：跳过
     if (resolved.type === "group") {
-      resolved.children = (node.children || [])
+      // resolveNode 已经把垃圾挡在前面——能走到这里，node 保证是朴素对象。
+      // children 非数组（缺失 / null / 对象 / 数字…）一律当"没有 children"处理 = 空组。
+      const rawChildren = Array.isArray(node.children) ? node.children : [];
+      resolved.children = rawChildren
         .map((c) => resolveNode(c, idx))
         .filter(Boolean);
     }
@@ -206,7 +219,9 @@ function validateListUnsafe(template, items) {
 function collectCoverage(nodes) {
   const covered = new Set();
   const visit = (list) => {
-    for (const n of list || []) {
+    if (!Array.isArray(list)) return;
+    for (const n of list) {
+      if (isJunkNode(n)) continue;                  // 垃圾节点：跳过，绝不访问 .ref/.children
       if (n.ref) covered.add(n.ref);
       if (n.forkedFrom) covered.add(n.forkedFrom);
       if (n.children) visit(n.children);
@@ -221,7 +236,9 @@ function collectCoverage(nodes) {
 function countNodes(nodes) {
   let n = 0;
   const visit = (list) => {
-    for (const node of list || []) {
+    if (!Array.isArray(list)) return;
+    for (const node of list) {
+      if (isJunkNode(node)) continue;                // 垃圾节点：不计数，不访问 .children
       n++;
       if (node.children) visit(node.children);
     }
@@ -230,10 +247,20 @@ function countNodes(nodes) {
   return n;
 }
 
-/// 顶层节点的浅拷贝：group 节点自己的 children 数组也另起一份，
-/// 这样后面往里 push 缺的子项不会连带修改调用方传入的 items。
+/// 顶层节点的浅拷贝：group 节点自己的 children 数组也另起一份（同时把 children
+/// 里混进的垃圾元素过滤掉），这样后面往里 push 缺的子项不会连带修改调用方传入的
+/// items。垃圾顶层节点本身 → null（调用方 .filter(Boolean) 丢掉，不进入输出）。
+/// children 存在但不是数组（对象/数字/字符串/布尔）→ 当"没有 children"处理，
+/// 整个 key 丢掉——不能把这坨形状不对的东西留在输出里，后面 g.children 相关逻辑
+/// 全部假定 children 要么不存在要么是数组。
 function cloneTop(node) {
-  return node.children ? { ...node, children: [...node.children] } : { ...node };
+  if (isJunkNode(node)) return null;
+  if (!Array.isArray(node.children)) {
+    if (node.children === undefined) return { ...node };
+    const { children, ...rest } = node;
+    return rest;
+  }
+  return { ...node, children: node.children.filter((c) => !isJunkNode(c)) };
 }
 
 /// 返回【新的用户列表】（原始存储形状：ref / 实体，不是解析结果）：
@@ -248,7 +275,7 @@ function cloneTop(node) {
 ///      树里哪个位置，都能让对应的模板 id 被认作"已有"，不会因为它被
 ///      拖出了原来的组就被判定为"缺"而重复补。
 export function restoreDefaults(template, items) {
-  const out = (items || []).map(cloneTop);
+  const out = (items || []).map(cloneTop).filter(Boolean);   // 垃圾顶层节点：丢弃，不进入输出
   const covered = collectCoverage(out);
   let count = countNodes(out);
 
