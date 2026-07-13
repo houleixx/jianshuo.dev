@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveList } from "../src/prompts.js";
+import { resolveList, validateList } from "../src/prompts.js";
 
 // 小模板，测试自带，不依赖真模板的内容（真模板的内容由 prompt-template.test.js 盯）
 const TPL = {
@@ -122,5 +122,106 @@ describe("resolveList — 实体（fork / 自建）", () => {
 
   it("空 items → 空列表（用户把所有条目都删了）", () => {
     expect(resolveList(TPL, { schema: 1, items: [] })).toEqual([]);
+  });
+});
+
+describe("resolveList — 防御性拷贝（不能让解析结果引用模板里的同一个数组/对象）", () => {
+  it("★ ref 解析出的节点，appliesTo 不是模板节点的同一个对象引用（否则一个请求改了输出会污染全局模板）", () => {
+    const out = resolveList(TPL, null);
+    const resolvedAction = out[0].children[0]; // sys_a
+    const templateAction = TPL.items[0].children[0]; // sys_a in template
+    expect(resolvedAction.appliesTo).toEqual(templateAction.appliesTo);
+    expect(resolvedAction.appliesTo).not.toBe(templateAction.appliesTo);
+  });
+
+  it("imageParams 同理，不共享引用", () => {
+    const tplWithParams = JSON.parse(JSON.stringify(TPL));
+    tplWithParams.items[0].children[0].imageParams = { size: "1024x1024" };
+    const out = resolveList(tplWithParams, null);
+    const resolvedAction = out[0].children[0];
+    expect(resolvedAction.imageParams).toEqual({ size: "1024x1024" });
+    expect(resolvedAction.imageParams).not.toBe(tplWithParams.items[0].children[0].imageParams);
+  });
+
+  it("fork（fromEntity）出的实体，appliesTo 也不是入参节点的同一个对象引用", () => {
+    const doc = { schema: 1, items: [
+      { id: "p_abc123", type: "action", label: "自建", prompt: "内容", appliesTo: ["text", "image"] },
+    ]};
+    const out = resolveList(TPL, doc);
+    expect(out[0].appliesTo).toEqual(["text", "image"]);
+    expect(out[0].appliesTo).not.toBe(doc.items[0].appliesTo);
+  });
+});
+
+describe("validateList — PUT 的守门人", () => {
+  const ok = (items) => validateList(TPL, items);
+  const entity = (over = {}) => ({ id: "p_abc123", type: "action", label: "我的", prompt: "内容", appliesTo: ["text"], ...over });
+
+  it("合法列表 → null", () => {
+    expect(ok([{ ref: "sys_g", children: [{ ref: "sys_a" }] }, entity()])).toBeNull();
+  });
+
+  it("非数组 → 报错", () => {
+    expect(validateList(TPL, null)).toMatch(/items/);
+    expect(validateList(TPL, "nope")).toMatch(/items/);
+  });
+
+  it("未知 ref → 报错", () => {
+    expect(ok([{ ref: "sys_nope" }])).toMatch(/unknown ref/);
+  });
+
+  it("实体 id 格式非法 → 报错", () => {
+    expect(ok([entity({ id: "abc" })])).toMatch(/id/);
+    expect(ok([entity({ id: "p_AB" })])).toMatch(/id/);       // 大写 + 太短
+    expect(ok([entity({ id: "sys_a" })])).toMatch(/id/);      // 不许冒充 sys_
+  });
+
+  it("id 全树重复 → 报错（含跨层级）", () => {
+    expect(ok([entity(), entity()])).toMatch(/duplicate/);
+    expect(ok([
+      { id: "p_grp001", type: "group", label: "组", children: [entity()] },
+      entity(),
+    ])).toMatch(/duplicate/);
+  });
+
+  it("两级封顶：group 套 group → 报错", () => {
+    expect(ok([{
+      id: "p_grp001", type: "group", label: "外", children: [
+        { id: "p_grp002", type: "group", label: "内", children: [] },
+      ],
+    }])).toMatch(/two levels|group/);
+  });
+
+  it("action 的 appliesTo 空 / 非法值 → 报错", () => {
+    expect(ok([entity({ appliesTo: [] })])).toMatch(/appliesTo/);
+    expect(ok([entity({ appliesTo: ["video"] })])).toMatch(/appliesTo/);
+    expect(ok([entity({ appliesTo: "text" })])).toMatch(/appliesTo/);
+  });
+
+  it("group 不许带 prompt / appliesTo → 报错", () => {
+    expect(ok([{ id: "p_grp001", type: "group", label: "组", prompt: "x", children: [] }])).toMatch(/group/);
+    expect(ok([{ id: "p_grp001", type: "group", label: "组", appliesTo: ["text"], children: [] }])).toMatch(/group/);
+  });
+
+  it("label > 40 / prompt > 4000 → 报错", () => {
+    expect(ok([entity({ label: "长".repeat(41) })])).toMatch(/label/);
+    expect(ok([entity({ prompt: "长".repeat(4001) })])).toMatch(/prompt/);
+  });
+
+  it("空 label → 报错", () => {
+    expect(ok([entity({ label: "  " })])).toMatch(/label/);
+  });
+
+  it("未知 type → 报错", () => {
+    expect(ok([entity({ type: "widget" })])).toMatch(/type/);
+  });
+
+  it("超过 200 条 → 报错", () => {
+    const many = Array.from({ length: 201 }, (_, i) => entity({ id: `p_x${String(i).padStart(5, "0")}` }));
+    expect(ok(many)).toMatch(/too many/);
+  });
+
+  it("空列表合法（用户可以删光）", () => {
+    expect(ok([])).toBeNull();
   });
 });
