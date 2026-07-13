@@ -198,9 +198,36 @@ function validateListUnsafe(template, items) {
 // 要修就得引入 deleted:[] 墓碑列表——多一个字段，换一个用户不可控的行为。
 // 一个显式按钮既是后悔药，又是新 prompt 的入口。见 spec §4。
 
-/// 这个模板 id 在列表里是否"已有"：被 ref，或被某个实体 fork。
-function covers(nodes, sysId) {
-  return (nodes || []).some((n) => n.ref === sysId || n.forkedFrom === sysId);
+/// 整棵树（顶层 + 所有 children）一次性收集"已覆盖"的模板 id 集合：
+/// 被 ref，或被某个实体 forkedFrom。树宽扫描——不管这个 ref/fork 现在躺在
+/// 哪一层、哪个组底下（哪怕是被用户从原来的组里拖出来的），都算数。
+/// 这比按"当前所在的那个 scope"分别判断更简单，也更对：一个模板 id
+/// 只要在树的任意位置已经被认领，就不该在别处被判定为"缺"而重复补。
+function collectCoverage(nodes) {
+  const covered = new Set();
+  const visit = (list) => {
+    for (const n of list || []) {
+      if (n.ref) covered.add(n.ref);
+      if (n.forkedFrom) covered.add(n.forkedFrom);
+      if (n.children) visit(n.children);
+    }
+  };
+  visit(nodes);
+  return covered;
+}
+
+/// 节点计数，口径与 validateList 的 walk 完全一致：每个节点（含每一层
+/// children 里的每个节点）都算 1。用来在追加时始终知道"现在数到几了"。
+function countNodes(nodes) {
+  let n = 0;
+  const visit = (list) => {
+    for (const node of list || []) {
+      n++;
+      if (node.children) visit(node.children);
+    }
+  };
+  visit(nodes);
+  return n;
 }
 
 /// 顶层节点的浅拷贝：group 节点自己的 children 数组也另起一份，
@@ -213,34 +240,63 @@ function cloneTop(node) {
 /// 模板里缺的顶层项按模板顺序补回末尾；组内缺的 action 补回该组末尾。
 /// 不修改 items（含嵌套 children 数组），也不修改 template（模块级字面量，
 /// 活过整个 Worker isolate——改了它会污染后面每一个请求读到的模板）。
+///
+/// 两条不变式，输出是要被直接持久化的，必须守住：
+///   1. 封顶感知——一路数着节点数（组和它的 children 都算），数到
+///      MAX_ITEMS 就停手，绝不吐出一份连自己的 validateList 都拒收的文档。
+///   2. "已覆盖"是全树口径（见 collectCoverage）——一个 ref/fork 不管在
+///      树里哪个位置，都能让对应的模板 id 被认作"已有"，不会因为它被
+///      拖出了原来的组就被判定为"缺"而重复补。
 export function restoreDefaults(template, items) {
   const out = (items || []).map(cloneTop);
+  const covered = collectCoverage(out);
+  let count = countNodes(out);
 
-  for (const t of template.items || []) {
+  // 尝试往 arr 里追加一个节点；数满了就拒绝（并让调用方知道该收手了）。
+  const push = (arr, node) => {
+    if (count >= MAX_ITEMS) return false;
+    arr.push(node);
+    count++;
+    return true;
+  };
+
+  fill: for (const t of template.items || []) {
     const isGroup = t.type === "group";
 
-    if (covers(out, t.id)) {
-      // 顶层已经有了（ref 命中，或某个实体 forkedFrom 命中）。
+    if (covered.has(t.id)) {
+      // 顶层已经有了（ref 命中，或某个实体 forkedFrom 命中，不管在树的哪个位置）。
       if (!isGroup) continue;
       const g = out.find((n) => n.ref === t.id || n.forkedFrom === t.id);
-      // g 理论上一定存在（covers 刚判定为真）；防一手脏数据——
-      // 万一是个 type 对不上的实体（forkedFrom 指向 group 但自己是 action），
-      // 不要把 children 塞进一个不该有 children 的节点。
+      // g 理论上一定存在（covered 刚判定为真，且命中的一定是顶层节点——
+      // covered 里的 id 若是靠某个 group 的 forkedFrom 命中，那个 group
+      // 节点本身必然在顶层）；防一手脏数据——万一是个 type 对不上的实体
+      // （forkedFrom 指向 group 但自己是 action），不要把 children 塞进
+      // 一个不该有 children 的节点。
       if (!g || (g.type && g.type !== "group")) continue;
       // 显式补上 children：ref 组没有 children 这个 key 会被 resolveList 解析成空组，
       // 这里既然要处理这个组（哪怕什么都不缺），就把它的 children 明确写出来。
       g.children = g.children ? [...g.children] : [];
       for (const c of t.children || []) {
-        if (!covers(g.children, c.id)) g.children.push({ ref: c.id });
+        if (covered.has(c.id)) continue;
+        if (!push(g.children, { ref: c.id })) break fill;
       }
       continue;
     }
 
-    // 顶层缺失 → 整个补回来；组的话把子项也按 ref 展开好（同样是为了让
-    // children 显式存在，不留给 resolveList 当空组解析）。
-    out.push(isGroup
-      ? { ref: t.id, children: (t.children || []).map((c) => ({ ref: c.id })) }
-      : { ref: t.id });
+    // 顶层缺失。组的话，只把"树宽范围内也仍然缺"的子项展开——如果某个
+    // 子项已经被用户拖出组、以 fork 的形式活在树的别处，它就不该在这里
+    // 被重新塞回一份 {ref:...}（否则 resolveList 后同一个模板项出现两次）。
+    if (isGroup) {
+      const missingChildren = (t.children || []).filter((c) => !covered.has(c.id));
+      if (missingChildren.length === 0) continue; // 每个子项都已在别处被覆盖，组本身不必补
+      const newGroup = { ref: t.id, children: [] };
+      if (!push(out, newGroup)) break fill;
+      for (const c of missingChildren) {
+        if (!push(newGroup.children, { ref: c.id })) break fill;
+      }
+    } else {
+      if (!push(out, { ref: t.id })) break fill;
+    }
   }
 
   return out;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveList, validateList, restoreDefaults } from "../src/prompts.js";
+import { resolveList, validateList, restoreDefaults, MAX_ITEMS } from "../src/prompts.js";
 import { DEFAULT_PROMPT_TEMPLATE } from "../src/prompt-template.js";
 
 // 小模板，测试自带，不依赖真模板的内容（真模板的内容由 prompt-template.test.js 盯）
@@ -555,5 +555,105 @@ describe("restoreDefaults — 补回模板里缺的（后悔药 + 拿系统新 p
       const twice = restoreDefaults(TPL, once);
       expect(twice).toEqual(once);
     }
+  });
+});
+
+/// 递归 Object.freeze：items/template 若被 restoreDefaults 手滑写了一下，
+/// 模块是 ES module（天然 strict mode），对冻结对象赋值会直接 throw TypeError——
+/// 比"跑完后 diff 快照"更硬的保证：写的那一刻就炸，不给"侥幸没被测到"的空间。
+function deepFreeze(obj) {
+  if (obj && typeof obj === "object" && !Object.isFrozen(obj)) {
+    Object.values(obj).forEach(deepFreeze);
+    Object.freeze(obj);
+  }
+  return obj;
+}
+
+describe("restoreDefaults — 深冻结 items 与 template，确认真的一个字节都不写", () => {
+  const frozenTpl = deepFreeze(JSON.parse(JSON.stringify(TPL)));
+
+  const cases = {
+    "空列表": [],
+    "已 fork 的 action": [{ ref: "sys_g", children: [
+      { id: "p_abc123", type: "action", label: "卡通风", prompt: "我的", appliesTo: ["image"], forkedFrom: "sys_a" },
+    ] }, { ref: "sys_c" }],
+    "已 fork 的 group": [{ id: "p_grp001", type: "group", label: "我的风格", forkedFrom: "sys_g", children: [{ ref: "sys_a" }] }],
+    "纯用户自建": [{ id: "p_zq1f6e", type: "action", label: "写成小红书", prompt: "我的", appliesTo: ["text"] }],
+    "部分清空的组": [{ ref: "sys_g", children: [{ ref: "sys_b" }] }, { ref: "sys_c" }],
+  };
+
+  for (const [label, items] of Object.entries(cases)) {
+    it(`${label}：items 与 template 都深冻结后调用不 throw，且不修改任何一方`, () => {
+      const frozenItems = deepFreeze(JSON.parse(JSON.stringify(items)));
+      expect(() => restoreDefaults(frozenTpl, frozenItems)).not.toThrow();
+    });
+  }
+});
+
+describe("restoreDefaults — CRITICAL① 输出不能超过 MAX_ITEMS，否则自己的 validateList 都会拒绝自己", () => {
+  it("195 条自建 + 整套模板（3 组 12 条）会超 200 → restoreDefaults 必须封顶，输出仍必须通过 validateList", () => {
+    const items = Array.from({ length: 195 }, (_, i) => ({
+      id: `p_cap${String(i).padStart(3, "0")}`, type: "action", label: `自建${i}`, prompt: "x", appliesTo: ["text"],
+    }));
+    const out = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, items);
+    expect(validateList(DEFAULT_PROMPT_TEMPLATE, out)).toBeNull();
+  });
+
+  it("封顶后的输出节点数（顶层+子项，按 validateList 的计数方式）不超过 MAX_ITEMS", () => {
+    const items = Array.from({ length: 195 }, (_, i) => ({
+      id: `p_cap${String(i).padStart(3, "0")}`, type: "action", label: `自建${i}`, prompt: "x", appliesTo: ["text"],
+    }));
+    const out = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, items);
+    const countNodes = (nodes) => (nodes || []).reduce((n, node) => n + 1 + countNodes(node.children), 0);
+    expect(countNodes(out)).toBeLessThanOrEqual(MAX_ITEMS);
+  });
+
+  it("封顶场景下仍然幂等：再跑一次不再新增（不会试图硬塞超过上限的条目）", () => {
+    const items = Array.from({ length: 195 }, (_, i) => ({
+      id: `p_cap${String(i).padStart(3, "0")}`, type: "action", label: `自建${i}`, prompt: "x", appliesTo: ["text"],
+    }));
+    const once = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, items);
+    const twice = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, once);
+    expect(twice).toEqual(once);
+  });
+});
+
+describe("restoreDefaults — IMPORTANT② 拖出组外的 fork 必须在整棵树范围内被认作「已覆盖」，不能被判定为缺失后重复补", () => {
+  it("卡通被 fork 出来拖到组外 → sys_style 判定为「缺」时，只补真正缺的子项，不把 sys_cartoon 也塞回来（否则 resolveList 后卡通出现两次）", () => {
+    const items = [{
+      id: "p_dragged1", type: "action", label: "我的卡通(拖出)", prompt: "自定义",
+      appliesTo: ["image"], forkedFrom: "sys_cartoon",
+    }];
+    const out = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, items);
+
+    // sys_cartoon 一定不能作为 {ref:"sys_cartoon"} 在任何层级再次出现
+    const flatRefs = out.flatMap((n) => [n.ref, ...(n.children || []).map((c) => c.ref)]);
+    expect(flatRefs).not.toContain("sys_cartoon");
+
+    // resolveList 之后，"卡通" 只应该出现一次（来自用户拖出的 fork）
+    const resolved = resolveList(DEFAULT_PROMPT_TEMPLATE, { schema: 1, items: out });
+    const flatten = (nodes) => nodes.flatMap((n) => [n, ...(n.children || [])]);
+    const cartoonLike = flatten(resolved).filter((n) => n.forkedFrom === "sys_cartoon" || n.id === "sys_cartoon");
+    expect(cartoonLike).toHaveLength(1);
+    expect(cartoonLike[0].id).toBe("p_dragged1");
+  });
+
+  it("输出必须通过 validateList（拖出场景，结果会被持久化）", () => {
+    const items = [{
+      id: "p_dragged1", type: "action", label: "我的卡通(拖出)", prompt: "自定义",
+      appliesTo: ["image"], forkedFrom: "sys_cartoon",
+    }];
+    const out = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, items);
+    expect(validateList(DEFAULT_PROMPT_TEMPLATE, out)).toBeNull();
+  });
+
+  it("拖出场景下幂等：再跑一次不再新增", () => {
+    const items = [{
+      id: "p_dragged1", type: "action", label: "我的卡通(拖出)", prompt: "自定义",
+      appliesTo: ["image"], forkedFrom: "sys_cartoon",
+    }];
+    const once = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, items);
+    const twice = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, once);
+    expect(twice).toEqual(once);
   });
 });
