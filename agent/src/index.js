@@ -39,6 +39,7 @@ import { callAnthropic, anthropicFetch, relayCall, RELAY_INSTANCE, RELAY_LOCATIO
 import { makePreviewPusher, makeEditPreview } from "./preview.js";
 import { loadUIConfigFor } from "./ui-config.js";
 import { handleUIConfigCustom } from "./ui-config-custom.js";
+import { handlePromptsRoute } from "./prompt-routes.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { xhsPack } from "./xhs.js";
 import { handlePromptLab } from "./prompt-lab.js";
@@ -1081,6 +1082,15 @@ export default {
       const scope = await resolveScope(tok, env);
       if (!scope || !scope.startsWith("users/")) return new Response("unauthorized", { status: 401 });
       return handleUIConfigCustom(request, env, scope);
+    }
+
+    // ── /agent/prompts ── 用户的一套有序提示词列表（ref 跟随模板 / 实体冻结）。
+    // GET 读解析后的列表；PUT 整树写（新建/删除/改名/排序/分组/fork 全走它）；
+    // POST /restore-defaults 补回模板里缺的。spec 2026-07-13-prompt-manager-redesign.md
+    if (url.pathname === "/agent/prompts" || url.pathname === "/agent/prompts/restore-defaults") {
+      const scope = await resolveScope(bearerToken(request), env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      return handlePromptsRoute(request, env, scope, url);
     }
 
     // ── /agent/ui-config ── 长按菜单等 UI 配置（任意有效用户 token）。返回该用户的

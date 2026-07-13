@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
+import worker from "../src/index.js";
+import { fakeEnv } from "./fakes.js";
 import { resolveList, validateList, restoreDefaults, MAX_ITEMS } from "../src/prompts.js";
 import { DEFAULT_PROMPT_TEMPLATE } from "../src/prompt-template.js";
 
@@ -655,5 +658,183 @@ describe("restoreDefaults — IMPORTANT② 拖出组外的 fork 必须在整棵�
     const once = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, items);
     const twice = restoreDefaults(DEFAULT_PROMPT_TEMPLATE, once);
     expect(twice).toEqual(once);
+  });
+});
+
+// ── 路由层：GET/PUT /agent/prompts + POST /agent/prompts/restore-defaults ──────
+// spec: voicedrop repo docs/superpowers/specs/2026-07-13-prompt-manager-redesign.md
+// 纯逻辑（resolveList/validateList/restoreDefaults）已经在上面测过；这里测 HTTP 外壳：
+// 鉴权、方法路由、body 解析、以及【GET 绝不落盘】这条最重要的不变式。
+const TOKEN = "Bearer anon_testtoken1234567890";
+const SCOPE_KEY = (env) => [...env.FILES._store.keys()].find((k) => k.endsWith("prompts.json"));
+const GET = (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", { headers: { Authorization: TOKEN } }), env);
+const PUT = (env, items) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+  method: "PUT", headers: { Authorization: TOKEN, "content-type": "application/json" },
+  body: JSON.stringify({ items }),
+}), env);
+const PUT_RAW = (env, rawBody) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+  method: "PUT", headers: { Authorization: TOKEN, "content-type": "application/json" },
+  body: rawBody,
+}), env);
+
+describe("GET /agent/prompts", () => {
+  it("无 token → 401", async () => {
+    const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompts"), fakeEnv());
+    expect(res.status).toBe(401);
+  });
+
+  it("新用户（无 prompts.json）→ 模板全量，全部 origin=system", async () => {
+    const res = await GET(fakeEnv());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.schema).toBe(1);
+    expect(body.items.length).toBe(DEFAULT_PROMPT_TEMPLATE.items.length);
+    expect(body.items.every((i) => i.origin === "system")).toBe(true);
+  });
+
+  it("★ 读盘不落盘：GET 不该给新用户创建 prompts.json", async () => {
+    const env = fakeEnv();
+    await GET(env);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+
+  it("坏 prompts.json → 当没有，回退模板（不 500）", async () => {
+    const env = fakeEnv();
+    const res0 = await PUT(env, []);          // 先建出 key，拿到真实 scope 路径
+    expect(res0.status).toBe(200);
+    env.FILES._store.set(SCOPE_KEY(env), "{oops");
+    const res = await GET(env);
+    expect(res.status).toBe(200);
+    expect((await res.json()).items.length).toBe(DEFAULT_PROMPT_TEMPLATE.items.length);
+  });
+});
+
+describe("PUT /agent/prompts", () => {
+  it("整树写入 → 200 + 返回解析结果；GET 读回一致", async () => {
+    const env = fakeEnv();
+    const items = [{ id: "p_zq1f6e", type: "action", label: "写成小红书", prompt: "我的", appliesTo: ["text"] }];
+    const put = await PUT(env, items);
+    expect(put.status).toBe(200);
+    const putBody = await put.json();
+    expect(putBody.items).toHaveLength(1);
+    expect(putBody.items[0].origin).toBe("user");
+
+    const got = await (await GET(env)).json();
+    expect(got.items).toEqual(putBody.items);
+  });
+
+  it("校验失败 → 400 且不落盘", async () => {
+    const env = fakeEnv();
+    const res = await PUT(env, [{ ref: "sys_nope" }]);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/unknown ref/);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+
+  it("body 不是 {items:[...]} → 400", async () => {
+    const env = fakeEnv();
+    const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+      method: "PUT", headers: { Authorization: TOKEN, "content-type": "application/json" }, body: "{oops",
+    }), env);
+    expect(res.status).toBe(400);
+  });
+
+  it("空列表可写（用户删光）", async () => {
+    const env = fakeEnv();
+    expect((await PUT(env, [])).status).toBe(200);
+    expect((await (await GET(env)).json()).items).toEqual([]);
+  });
+
+  it("DELETE → 405", async () => {
+    const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+      method: "DELETE", headers: { Authorization: TOKEN },
+    }), fakeEnv());
+    expect(res.status).toBe(405);
+  });
+
+  // ── 对抗性探测：不信任 body 的任何形状 ──────────────────────────────────
+  it("body 缺失（无 body）→ 400 且不落盘", async () => {
+    const env = fakeEnv();
+    const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+      method: "PUT", headers: { Authorization: TOKEN },
+    }), env);
+    expect(res.status).toBe(400);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+
+  it("body 是裸数组（没有 items 包一层）→ 400 且不落盘", async () => {
+    const env = fakeEnv();
+    const res = await PUT_RAW(env, JSON.stringify([{ ref: "sys_cartoon" }]));
+    expect(res.status).toBe(400);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+
+  it("items 不是数组（{items:'notanarray'}）→ 400 且不落盘", async () => {
+    const env = fakeEnv();
+    const res = await PUT_RAW(env, JSON.stringify({ items: "notanarray" }));
+    expect(res.status).toBe(400);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+
+  it("body 是 JSON null → 400 且不落盘", async () => {
+    const env = fakeEnv();
+    const res = await PUT_RAW(env, "null");
+    expect(res.status).toBe(400);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+
+  it("超过 MAX_ITEMS 的树 → 400 且不落盘", async () => {
+    const env = fakeEnv();
+    const items = Array.from({ length: MAX_ITEMS + 1 }, (_, i) => ({
+      id: `p_over${String(i).padStart(4, "0")}`, type: "action", label: `条目${i}`, prompt: "内容", appliesTo: ["text"],
+    }));
+    const res = await PUT(env, items);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/too many items/);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+});
+
+describe("POST /agent/prompts/restore-defaults", () => {
+  const RESTORE = (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts/restore-defaults", {
+    method: "POST", headers: { Authorization: TOKEN },
+  }), env);
+
+  it("删光后恢复 → 模板全量回来", async () => {
+    const env = fakeEnv();
+    await PUT(env, []);
+    const res = await RESTORE(env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.items.length).toBe(DEFAULT_PROMPT_TEMPLATE.items.length);
+    expect(body.items.every((i) => i.origin === "system")).toBe(true);
+    // 落盘了，GET 读回一致
+    expect((await (await GET(env)).json()).items).toEqual(body.items);
+  });
+
+  it("自建条目保留在前，补回来的排后面", async () => {
+    const env = fakeEnv();
+    await PUT(env, [{ id: "p_zq1f6e", type: "action", label: "写成小红书", prompt: "我的", appliesTo: ["text"] }]);
+    const body = await (await RESTORE(env)).json();
+    expect(body.items[0].origin).toBe("user");
+    expect(body.items.length).toBe(1 + DEFAULT_PROMPT_TEMPLATE.items.length);
+  });
+
+  it("无 token → 401", async () => {
+    expect((await worker.fetch(new Request("https://jianshuo.dev/agent/prompts/restore-defaults", { method: "POST" }), fakeEnv())).status).toBe(401);
+  });
+
+  it("新用户（无 prompts.json）→ no-op，不落盘", async () => {
+    const env = fakeEnv();
+    const res = await RESTORE(env);
+    expect(res.status).toBe(200);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+
+  it("GET 方法 → 405", async () => {
+    const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompts/restore-defaults", {
+      method: "GET", headers: { Authorization: TOKEN },
+    }), fakeEnv());
+    expect(res.status).toBe(405);
   });
 });
