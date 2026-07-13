@@ -34,14 +34,28 @@ async function apnsJwt(env) {
 
 /// 给某个用户 scope（"users/<sub>/"）推一条通知。尽力而为：任何失败只 console.log,
 /// 绝不向上抛（推送永远不该影响主流程）。410/BadDeviceToken 时清掉失效 token。
+// 每条路径都要说话 —— 成功、每种静默早退、每种失败。
+// 2026-07-13 被这个函数坑过一次：推送没到，但它成功时不打日志、几条早退也不打
+// 日志，于是完全无法从日志区分「压根没发」和「发了但手机没显示」，只能靠猜。
+// 一个投递路径不该是黑盒。
 export async function sendPush(env, scope, { title, body, threadId, link }) {
   try {
-    if (!env.APNS_KEY_P8 || !env.APNS_KEY_ID || !env.APNS_TEAM_ID || !env.FILES) return false;
+    if (!env.APNS_KEY_P8 || !env.APNS_KEY_ID || !env.APNS_TEAM_ID || !env.FILES) {
+      console.log("[push] skip: APNs 未配置（secrets 或 FILES 绑定缺失）", scope);
+      return false;
+    }
     const obj = await env.FILES.get(`${scope}push-token.json`);
-    if (!obj) return false;
+    if (!obj) {
+      console.log("[push] skip: 该用户没有 push-token.json", scope);
+      return false;
+    }
     const reg = JSON.parse(await obj.text());
-    if (!reg?.token) return false;
+    if (!reg?.token) {
+      console.log("[push] skip: push-token.json 里没有 token 字段", scope);
+      return false;
+    }
     const host = reg.env === "dev" ? "api.sandbox.push.apple.com" : "api.push.apple.com";
+    console.log(`[push] → ${host} env=${reg.env} title=${title}`, scope);
     const resp = await fetch(`https://${host}/3/device/${reg.token}`, {
       method: "POST",
       headers: {
@@ -62,9 +76,12 @@ export async function sendPush(env, scope, { title, body, threadId, link }) {
       return false;
     }
     if (!resp.ok) {
-      console.log("[push] apns", resp.status, (await resp.text()).slice(0, 200), scope);
+      console.log("[push] apns 拒收", resp.status, (await resp.text()).slice(0, 200), scope);
       return false;
     }
+    // APNs 收下了 ≠ 手机会显示（用户可能关了通知、开了专注模式）。这条日志只证明
+    // 「服务端确实发出去了」，把「没发」和「发了没显示」彻底分开。
+    console.log(`[push] apns 已受理 ${resp.status} apns-id=${resp.headers.get("apns-id") || "?"}`, scope);
     return true;
   } catch (e) {
     console.log("[push] error", String(e?.message || e).slice(0, 200));

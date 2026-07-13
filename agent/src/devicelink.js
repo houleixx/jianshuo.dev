@@ -35,6 +35,8 @@ export function pendingRecord(msg, now, ttlMs = CODE_TTL_MS) {
   return { pairingId: msg.pairingId, code: msg.code, pubkey: msg.pubkey, exp: now + ttlMs };
 }
 
+// 还活着的待处理配对。payload 里可能带 released:true —— 表示新设备已经验过码、
+// 服务端已经放行，只是当时手机不在线没接到 link_release。
 export function livePending(rec, now) {
   if (!rec || !rec.exp || rec.exp <= now) return null;
   const { exp: _exp, ...payload } = rec;

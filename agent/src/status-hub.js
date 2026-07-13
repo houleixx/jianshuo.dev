@@ -35,10 +35,18 @@ export class StatusHub {
       const [client, server] = Object.values(pair);
       this.state.acceptWebSocket(server);
 
-      // 补送：手机刚才可能在后台，错过了推送。
+      // 补送：手机刚才可能在后台，两条消息都错过了。
       const pending = await this.pending();
       if (pending) {
-        try { server.send(JSON.stringify(pending)); } catch (_) {}
+        const { released, ...request_ } = pending;
+        try {
+          // 顺序是死的：iOS 先靠 link_request 在 present() 里建好 pending（含 pubkey），
+          // 才有东西给 release() 用。反过来 release() 只会拿到 nil。
+          server.send(JSON.stringify(request_));
+          if (released) {
+            server.send(JSON.stringify({ type: "link_release", pairingId: pending.pairingId }));
+          }
+        } catch (_) {}
       }
 
       return new Response(null, { status: 101, webSocket: client });
@@ -51,6 +59,17 @@ export class StatusHub {
       // 配对请求要存住；挖矿状态之类不存。
       const rec = pendingRecord(msg, Date.now());
       if (rec) await this.state.storage.put(PENDING_KEY, rec);
+
+      // link_release 同样会丢：用户读完 4 位码就切去电脑上打字，App 一进后台
+      // socket 就断，这条推送没人接 → 手机永远不封 token、不 POST /complete →
+      // 新设备干等超时。（2026-07-13 真机第二次失败就是这么挂的。）
+      // 打个「已放行」标记，等手机回来一并补送。
+      if (msg?.type === "link_release") {
+        const cur = await this.state.storage.get(PENDING_KEY);
+        if (cur && cur.pairingId === msg.pairingId) {
+          await this.state.storage.put(PENDING_KEY, { ...cur, released: true });
+        }
+      }
 
       const wire = JSON.stringify(msg);
       for (const ws of this.state.getWebSockets()) {

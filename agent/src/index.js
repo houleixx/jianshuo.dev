@@ -1356,6 +1356,14 @@ export default {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ payload: { type: "link_release", pairingId } }),
         }));
+        // 第二次门铃：用户读完 4 位码就切去电脑上打字了，App 多半已经进后台，
+        // 那条 link_release 推送没人接。把他叫回来 —— 一回前台，StatusHub 就把
+        // link_request + link_release 一并补送，登录自动完成。
+        await sendPush(env, result.scope, {
+          title: "确认登录",
+          body: "点开完成新设备登录",
+          link: `voicedrop://link/${pairingId}`,
+        });
       }
       // never leak the matched scope to the new device
       return Response.json({ ok: !!result.ok, remaining: result.remaining, dead: result.dead, expired: result.expired });
