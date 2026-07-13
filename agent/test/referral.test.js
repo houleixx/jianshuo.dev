@@ -82,7 +82,7 @@ describe("referral constants", () => {
   });
   it("has defaults", () => {
     expect(REFERRAL_DEFAULTS).toEqual({
-      enabled: true, authorCoins: 12, newUserCoins: 6,
+      enabled: true, authorCoins: 9, newUserCoins: 9,
       dailyCapPerOwner: 30, requireDeviceCheck: true,
     });
   });

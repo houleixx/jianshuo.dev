@@ -129,8 +129,8 @@ export const pairDiscount = (prior) => (prior <= 0 ? 1 : prior === 1 ? 0.7 : 0.5
 // R2 config/referral.json 整体覆盖这些默认值（零部署调价/关闸）。
 export const REFERRAL_DEFAULTS = {
   enabled: true,
-  authorCoins: 12,        // 作者（分享 owner）得币
-  newUserCoins: 6,        // 新装用户得币
+  authorCoins: 9,         // 作者（分享 owner）得币
+  newUserCoins: 9,        // 新装用户得币
   dailyCapPerOwner: 30,   // owner 每日被奖励安装数上限（超出只发新人侧）
   requireDeviceCheck: true,
 };

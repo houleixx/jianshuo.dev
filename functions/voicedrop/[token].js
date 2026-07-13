@@ -22,9 +22,11 @@ const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
 // 剪贴板兜底归因（第 3 层）靠它。返回值拼在 footer 文案之后。
 export function ctaHtml(rate, cfg) {
   const on = cfg && cfg.enabled !== false && rate && rate.suanliPerCoin > 0;
-  const reward = on
-    ? `，你约得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力，作者约得 ${Math.round(cfg.authorCoins * rate.suanliPerCoin)} 算力`
-    : '';
+  // 双边同额（当前 9:9）→「下载和作者各得 X 算力」；不同额时回退双数字句式。
+  const equal = on && cfg.newUserCoins === cfg.authorCoins;
+  const reward = !on ? ''
+    : equal ? `和作者各得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力`
+    : `，你约得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力，作者约得 ${Math.round(cfg.authorCoins * rate.suanliPerCoin)} 算力`;
   return `。<a id="vd-dl" href="${APP_STORE}">下载</a>${reward}
 <script>document.getElementById('vd-dl').addEventListener('click',function(){
 try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}})</script>`;
@@ -361,7 +363,7 @@ footer a{color:#86868b;text-decoration:none}
 </style></head>
 <body><div class="wrap">
 ${inner}
-<footer>由 <a href="https://voicedrop.cn/">VoiceDrop</a> 口述生成${extra}<br/><span style="font-size:.78rem"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">沪ICP备06019413号-118</a></span></footer>
+<footer>由 <a href="https://voicedrop.cn/">VoiceDrop</a> 口述生成${extra}</footer>
 </div></body></html>`;
 }
 
