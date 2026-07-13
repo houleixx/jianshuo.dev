@@ -508,9 +508,21 @@ function bufToB64(buf) {
 }
 
 async function loadPhoto(photoKey, env) {
-  const obj = await env.FILES.get(photoKey);
-  if (!obj) return null;
-  const b64  = bufToB64(await obj.arrayBuffer());
+  // 给 LLM 看的图走边缘缩图（320 最大边 / q70，Cloudflare Image Transformations）：
+  // 视觉 token 按像素计，320 边 ≈ 1080 原图的 1/10；请求体也从 ~900KB/张降到
+  // ~20KB/张。上传的原图分辨率不动（1080），只是模型看小图。zone 开关没开、
+  // 转换失败或测试环境（fetch 被 stub 成 404）→ 回退 R2 原图，行为无损。
+  let buf = null;
+  try {
+    const r = await fetch(`${ORIGIN}/cdn-cgi/image/width=320,quality=70/files/api/photo/${encodeURI(photoKey)}`);
+    if (r.ok && (r.headers.get("content-type") || "").startsWith("image/")) buf = await r.arrayBuffer();
+  } catch {}
+  if (!buf) {
+    const obj = await env.FILES.get(photoKey);
+    if (!obj) return null;
+    buf = await obj.arrayBuffer();
+  }
+  const b64  = bufToB64(buf);
   const name = photoKey.split("/").pop().replace(/\.jpe?g$/i, "");
   const parts = name.split("-");
   const label = (parts.length >= 4 && parts[3]?.length === 6)

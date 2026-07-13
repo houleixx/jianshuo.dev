@@ -160,3 +160,65 @@ describe("runEditTurn", () => {
     expect(userText).not.toContain("系统备注");
   });
 });
+
+// ── 插图给模型：key-only → 服务端拉 320 边缘缩图；老 app 的 data 原样透传 ──────
+
+describe("runEditTurn images — 服务端 320 缩图", () => {
+  const DOC = { schema: 2, createdAt: 1, transcript: "原文", articles: [{ title: "T", body: "B" }] };
+
+  // 能回 headers/arrayBuffer 的图片响应（fakeFetch 只会 JSON，这里自己搭）。
+  function imageResp(bytes) {
+    return { ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === "content-type" ? "image/jpeg" : null) },
+      arrayBuffer: async () => new TextEncoder().encode(bytes).buffer };
+  }
+
+  async function runWith({ images, edgeOK }) {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify(DOC),
+    });
+    // fakeEnv 的 arrayBuffer 返回原字符串（历史行为，别的测试依赖它）；照片字节
+    // 要过 bufToB64，这里单独给这个 key 一个真 ArrayBuffer。
+    const realGet = env.FILES.get.bind(env.FILES);
+    env.FILES.get = async (k) => k === "users/u/photos/7/1.jpg"
+      ? { arrayBuffer: async () => new TextEncoder().encode("RAWJPEG").buffer }
+      : realGet(k);
+    let captured = null;
+    const callClaude = async (params) => { captured = params; return { content: [{ type: "text", text: "好" }] }; };
+    const orig = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("/cdn-cgi/image/")) {
+        return edgeOK ? imageResp("EDGE320") : { ok: false, status: 404, headers: { get: () => null } };
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => "{}" };
+    };
+    try {
+      await runEditTurn({
+        env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+        token: "t", origin: "https://jianshuo.dev", editId: "e-img",
+        instruction: "插图", images, system: "SYS", history: [], callClaude,
+      });
+    } finally { globalThis.fetch = orig; }
+    return captured;
+  }
+
+  it("key-only 图片 → 拉 320 边缘缩图 base64 给模型", async () => {
+    const p = await runWith({ images: [{ key: "photos/7/1.jpg" }], edgeOK: true });
+    const imgs = p.messages.find((m) => m.role === "user").content.filter((b) => b.type === "image");
+    expect(imgs).toHaveLength(1);
+    expect(imgs[0].source.data).toBe(btoa("EDGE320"));
+  });
+
+  it("老 app 带 data → 原样透传，不去拉边缘缩图", async () => {
+    const p = await runWith({ images: [{ key: "photos/7/1.jpg", data: "LEGACY64" }], edgeOK: false });
+    const imgs = p.messages.find((m) => m.role === "user").content.filter((b) => b.type === "image");
+    expect(imgs[0].source.data).toBe("LEGACY64");
+  });
+
+  it("边缘缩图 404（zone 没开）→ 回退 R2 原图", async () => {
+    const p = await runWith({ images: [{ key: "photos/7/1.jpg" }], edgeOK: false });
+    const imgs = p.messages.find((m) => m.role === "user").content.filter((b) => b.type === "image");
+    expect(imgs).toHaveLength(1);
+    expect(atob(imgs[0].source.data)).toBe("RAWJPEG");
+  });
+});

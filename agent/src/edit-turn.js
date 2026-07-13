@@ -11,6 +11,42 @@ import { resolveSharedPromptBlock } from "./prompt-share.js";
 
 const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo", "new_photo"];
 
+function bufToB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 8192)
+    bin += String.fromCharCode(...bytes.subarray(i, Math.min(i + 8192, bytes.length)));
+  return btoa(bin);
+}
+
+// 给模型看的插图统一 320 最大边（Cloudflare 边缘缩图）：新 app 只传 key（客户端
+// 不再自己压缩略图），这里按 key 现拉；老 app 仍带 data（320 方形拉伸的历史格式）
+// → 原样用。边缘转换失败 → 回退 R2 原图（1080，喂得起只是贵一点），再不行就跳过
+// 该图——正文里的 [[photo:<key>]] 标记照插，模型只是看不见画面。
+async function imageBlocks(images, { env, scope, origin }) {
+  const out = [];
+  for (const img of images) {
+    let data = img.data, mediaType = img.mediaType || "image/jpeg";
+    if (!data && img.key) {
+      try {
+        const r = await fetch(`${origin}/cdn-cgi/image/width=320,quality=70/files/api/photo/${encodeURI(scope + img.key)}`);
+        if (r.ok && (r.headers.get("content-type") || "").startsWith("image/")) {
+          data = bufToB64(await r.arrayBuffer());
+          mediaType = r.headers.get("content-type") || "image/jpeg";
+        }
+      } catch {}
+      if (!data) {
+        try {
+          const obj = await env.FILES.get(scope + img.key);
+          if (obj) data = bufToB64(await obj.arrayBuffer());
+        } catch {}
+      }
+    }
+    if (data) out.push({ type: "image", source: { type: "base64", media_type: mediaType, data } });
+  }
+  return out;
+}
+
 export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, system, history = [], callClaude }) {
   const obj = await env.FILES.get(articleKey);
   if (!obj) return { ok: false, reply: "", article: null, hadError: true };
@@ -80,7 +116,7 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   if (sharedBlock) varLines.push("", sharedBlock);
 
   const userContent = [
-    ...images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mediaType || "image/jpeg", data: img.data } })),
+    ...(await imageBlocks(images, { env, scope, origin })),
     { type: "text", text: varLines.join("\n") },
   ];
 

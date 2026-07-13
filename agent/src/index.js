@@ -231,7 +231,9 @@ export class ArticleEditor extends Agent {
     // Stable id: client-supplied (new app) or synthesized (old app — degrades
     // gracefully, no dedup but never worse than before).
     const id = (typeof msg.id === "string" && msg.id) ? msg.id : `srv-${Date.now()}-${rand6()}`;
-    const images = Array.isArray(msg.images) ? msg.images.filter((i) => i && i.data && i.key) : [];
+    // data（base64 缩略图）改为可选：新 app 只传 key，服务端 edit-turn 按 key 拉
+    // 320 边缘缩图给模型；老 app 仍带 data → 原样透传。
+    const images = Array.isArray(msg.images) ? msg.images.filter((i) => i && i.key) : [];
     // Which article the user is looking at — so the locator table numbers THAT one
     // (multi-article docs renumber 第1行 per article). Old apps omit it → 0.
     const article_index = Number.isInteger(msg.articleIndex) && msg.articleIndex >= 0 ? msg.articleIndex : 0;
