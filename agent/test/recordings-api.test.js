@@ -119,3 +119,37 @@ describe("GET /recordings — 轻量录音列表", () => {
     expect((await onRequest(c)).status).toBe(400);
   });
 });
+
+describe("recordings-index 同步维护", () => {
+  it("API 上传 .m4a → 有 waitUntil 也立即可见（不等对账）；直删 .m4a → 立即消失", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, text: async () => "" })));  // 上传会踢 miner
+    const env = ctx("GET", []).env;
+    await resolveScope(env);
+    // 先建一次索引（空库）
+    await call(env, "GET", ["recordings"]);
+    // 上传走 API：upload 路由同步写录音索引
+    await call(env, "PUT", ["upload", "VoiceDrop-fresh.m4a"], { body: "AUDIO", contentType: "audio/mp4" });
+    vi.unstubAllGlobals();
+    const waitUntil = vi.fn();   // 有 waitUntil → 走快路径（不做同步对账）
+    const body = await call(env, "GET", ["recordings"], { waitUntil });
+    expect(body.recordings.map((r) => r.name)).toEqual(["VoiceDrop-fresh.m4a"]);
+
+    await call(env, "DELETE", ["file", "VoiceDrop-fresh.m4a"]);
+    const after = await call(env, "GET", ["recordings"], { waitUntil: vi.fn() });
+    expect(after.recordings).toEqual([]);
+  });
+
+  it("绕过 API 直写的 .m4a 由后台对账收编", async () => {
+    const env = ctx("GET", []).env;
+    const scope = await resolveScope(env);
+    await call(env, "GET", ["recordings"]);                      // 建索引（空）
+    env.FILES._store.set(`${scope}VoiceDrop-direct.m4a`, "AUDIO"); // 直写，索引不知道
+
+    const waitUntil = vi.fn();
+    const first = await call(env, "GET", ["recordings"], { waitUntil });
+    expect(first.recordings).toEqual([]);                        // 快路径还看不到
+    await Promise.all(waitUntil.mock.calls.map((c) => c[0]));    // 对账跑完
+    const second = await call(env, "GET", ["recordings"], { waitUntil: vi.fn() });
+    expect(second.recordings.map((r) => r.name)).toEqual(["VoiceDrop-direct.m4a"]);
+  });
+});

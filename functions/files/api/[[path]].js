@@ -125,6 +125,55 @@ async function reconcileArticlesIndex(env, articleScope) {
   return articles;
 }
 
+// ── 录音索引（recordings-index.json）───────────────────────────────────────────
+// GET /recordings 的直出数据源：items = { "<leaf>.m4a": { uploaded } }。上传/删除
+// 路由同步增删；权威是根目录 delimiter listing，由下面的对账重建（并发上传的
+// lost update、绕过 API 的直写在下一次打开后收敛）。写失败不打断主路径。
+const recordingsIndexKey = (scope) => `${scope}recordings-index.json`;
+
+async function reconcileRecordingsIndex(env, scope) {
+  const items = {};
+  let cursor;
+  do {
+    const listed = await env.FILES.list({ prefix: scope, delimiter: '/', limit: 1000, ...(cursor ? { cursor } : {}) });
+    for (const o of listed.objects) {
+      const leaf = o.key.slice(scope.length);
+      if (leaf.startsWith('VoiceDrop-') && leaf.endsWith('.m4a')) {
+        items[leaf] = { uploaded: o.uploaded?.toISOString?.() || String(o.uploaded || '') };
+      }
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+  try {
+    let prev = null;
+    const io = await env.FILES.get(recordingsIndexKey(scope));
+    if (io) { try { prev = JSON.parse(await io.text()).items || null; } catch {} }
+    const same = prev && Object.keys(prev).length === Object.keys(items).length
+      && Object.keys(items).every((k) => prev[k] && prev[k].uploaded === items[k].uploaded);
+    if (!same) {
+      await env.FILES.put(recordingsIndexKey(scope),
+        JSON.stringify({ schema: 1, updatedAt: Date.now(), items }),
+        { httpMetadata: { contentType: 'application/json' } });
+    }
+  } catch { /* 加速层 */ }
+  return items;
+}
+
+// 上传/删除路由的同步维护（RMW；并发丢更新靠对账兜底）。
+async function updateRecordingsIndex(env, scope, leaf, meta /* null = 删 */) {
+  try {
+    let idx = { schema: 1, items: {} };
+    const io = await env.FILES.get(recordingsIndexKey(scope));
+    if (io) { try { const p = JSON.parse(await io.text()); if (p && p.items) idx = p; } catch {} }
+    if (meta) idx.items[leaf] = meta;
+    else if (leaf in idx.items) delete idx.items[leaf];
+    else return;
+    idx.updatedAt = Date.now();
+    await env.FILES.put(recordingsIndexKey(scope), JSON.stringify(idx),
+      { httpMetadata: { contentType: 'application/json' } });
+  } catch { /* 加速层 */ }
+}
+
 export async function onRequest(context) {
   // 报警打点包裹：任何 4xx/5xx 响应 fire-and-forget 通知 voicedrop-agent 的
   // ops 计数器（分钟桶），worker 的 */5 cron 聚合并按阈值 APNs 报警——
@@ -570,22 +619,20 @@ async function handleRequest(context) {
   // GET /recordings — 主界面「我的录音」的轻量列表（2026-07-13）。
   // 老路是 GET /list 全量翻用户所有 R2 对象（照片/文章/字幕全在内，~1500 个对象
   // 串行翻两页 + 170KB 回传 ≈ 2.5s），App 再自己筛出 .m4a 和 sidecar 存在性。
-  // 这里只做两件事、并发跑：① 根目录带 delimiter 的 listing——录音 .m4a 都在
-  // scope 根上，photos/、articles/ 子目录天然被 delimiter 排除，一页搞定；
-  // ② 读文章摘要索引拿每条录音的状态（成文/无语音/算力不足/预置标签）。
-  // 响应后 waitUntil 对账一次，老用户索引里缺的 sidecar 标记从这里回填。
+  // 这里并发读两个小索引直接出结果：录音索引（recordings-index.json，上传/删除
+  // 时同步维护）+ 文章摘要索引（四个状态位：成文/无语音/算力不足/预置标签）。
+  // 权威仍是 R2 listing：响应后 waitUntil 里两个索引各对账一次——录音索引用根
+  // 目录 delimiter listing（试过在请求路径里直接 list，R2 内部要扫过全部 ~1500
+  // 个 key，1.0-1.6s，不达标，所以也退到后台）；老数据的标记回填同理。
   if (request.method === 'GET' && action === 'recordings') {
     if (!scope) return json({ error: 'user token required' }, 400);
-    const [rootObjects, items] = await Promise.all([
+    const [recItems, artItems] = await Promise.all([
       (async () => {
-        const out = [];
-        let cursor;
-        do {
-          const listed = await env.FILES.list({ prefix: scope, delimiter: '/', limit: 1000, ...(cursor ? { cursor } : {}) });
-          out.push(...listed.objects);
-          cursor = listed.truncated ? listed.cursor : undefined;
-        } while (cursor);
-        return out;
+        try {
+          const io = await env.FILES.get(recordingsIndexKey(scope));
+          if (io) return JSON.parse(await io.text()).items || null;
+        } catch {}
+        return null;   // null = 索引还没建过（≠ 没有录音）
       })(),
       (async () => {
         try {
@@ -595,20 +642,23 @@ async function handleRequest(context) {
         return {};
       })(),
     ]);
-    const recordings = [];
-    for (const o of rootObjects) {
-      const leaf = o.key.slice(scope.length);
-      if (!leaf.startsWith('VoiceDrop-') || !leaf.endsWith('.m4a')) continue;
-      const it = items[leaf.slice(0, -4)] || {};
-      recordings.push({
+    let items = recItems;
+    if (items === null) {
+      items = await reconcileRecordingsIndex(env, scope);   // 首次：同步建（一次性 ~1.3s）
+    } else if (waitUntil) {
+      waitUntil(reconcileRecordingsIndex(env, scope).catch(() => {}));
+    }
+    const recordings = Object.entries(items).map(([leaf, meta]) => {
+      const it = artItems[leaf.slice(0, -4)] || {};
+      return {
         name: leaf,
-        uploaded: o.uploaded,
+        uploaded: meta.uploaded || '',
         hasArticles: !!it.entry,
         isEmpty: !!it.empty,
         blocked: !!it.blocked,
         hasTags: !!it.tags,
-      });
-    }
+      };
+    });
     if (waitUntil) waitUntil(reconcileArticlesIndex(env, scope).catch(() => {}));
     return json({ recordings });
   }
@@ -653,16 +703,23 @@ async function handleRequest(context) {
     }
     const key = keyFor(name);
     if (!key) return json({ error: 'bad name' }, 400);
-    await env.FILES.put(key, request.body, {
+    const putRes = await env.FILES.put(key, request.body, {
       httpMetadata: { contentType: request.headers.get('Content-Type') || 'application/octet-stream' },
     });
+    // 新录音同步进录音索引（GET /recordings 直出它）。key 形态对用户/admin 通用。
+    const mRec = /^(users\/[^/]+\/)(VoiceDrop-[^/]+\.m4a)$/.exec(key);
+    if (mRec) {
+      await updateRecordingsIndex(env, mRec[1], mRec[2],
+        { uploaded: putRes?.uploaded?.toISOString?.() || new Date().toISOString() });
+    }
     // A new recording → kick the miner. Fire-and-forget so the upload returns
     // immediately; the mine.yml `concurrency: mine` group coalesces bursts into
     // at most one running + one queued run.
     const leaf = name.split('/').pop() || name;
     if (leaf.startsWith('VoiceDrop-') && leaf.endsWith('.m4a')) {
       const userAuth = request.headers.get('Authorization') || '';
-      context.waitUntil(dispatchMine(userAuth));
+      const kick = dispatchMine(userAuth);
+      if (waitUntil) waitUntil(kick); else kick.catch(() => {});
     }
     // 挖矿前预置的标签 sidecar（articles/<stem>.tags）→ 索引打 tags 标记，
     // recordings 轻量接口靠它告诉 App「这条待处理录音带标签，去拉内容」。
@@ -707,10 +764,13 @@ async function handleRequest(context) {
     if (!key) return json({ error: 'bad name' }, 400);
     await env.FILES.delete(key);
     // 摘要索引联动：直删 sidecar 标记文件 → 摘掉对应标记；直删文章 doc →
-    // 摘掉整个条目（对账兜底，但立刻摘掉能让 recordings/articles 快路径即时正确）。
+    // 摘掉整个条目；直删录音 .m4a → 从录音索引摘掉。（对账兜底，但立刻摘掉
+    // 能让 recordings/articles 快路径即时正确。）
     const mFlag = /^(.*\/)articles\/([^/]+)\.(empty|blocked|tags)$/.exec(key);
+    const mRecDel = /^(users\/[^/]+\/)(VoiceDrop-[^/]+\.m4a)$/.exec(key);
     if (mFlag) await setIndexFlag(env, mFlag[1], mFlag[2], mFlag[3], false);
     else if (/^.*\/articles\/[^/]+\.json$/.test(key) && !isAsrSidecar(key)) await removeIndexEntry(env, key);
+    else if (mRecDel) await updateRecordingsIndex(env, mRecDel[1], mRecDel[2], null);
     return json({ ok: true });
   }
 
