@@ -9,11 +9,48 @@
 import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, MAX_LABEL, MAX_PROMPT } from "./prompts.js";
 import { loadUserPrompts, saveUserPrompts } from "./prompt-store.js";
-import { resolvePromptShare } from "./prompt-share.js";
+import { resolvePromptShare, refreshPromptShare, shareStates } from "./prompt-share.js";
 
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
 const resolved = (tpl, items) => J({ schema: 1, items: resolveList(tpl, { schema: 1, items }) });
+
+// ── 保存后同步分享副本（write-through on save）─────────────────────────────────
+// 老模型（ui-config-custom.js）在每次 PUT 都调 refreshPromptShare 同步分享副本；
+// 新模型的整树 PUT 起初没有接这条线，导致作者编辑一条正在分享的提示词后，
+// 分享副本（shares/<码>）停在铸码/上次刷新时的旧版本，直到读者兑换时都看不到最新内容。
+//
+// 树宽收集这次 PUT 里出现的全部 id（顶层 + group 的 children；ref 用 .ref，实体用 .id）——
+// 用来判断"这次保存动了哪些条目"，只刷新与之重合、且当前正处于分享中的那些。
+function collectSavedIds(items) {
+  const ids = new Set();
+  const visit = (list) => {
+    for (const n of list || []) {
+      if (!n || typeof n !== "object" || Array.isArray(n)) continue;
+      if (typeof n.ref === "string") ids.add(n.ref);
+      if (typeof n.id === "string") ids.add(n.id);
+      if (Array.isArray(n.children)) visit(n.children);
+    }
+  };
+  visit(items);
+  return ids;
+}
+
+// best-effort：绝不能让分享副本同步失败拖垮 PUT 本身（保存已经成功落盘）。
+// 没有任何分享的用户（绝大多数）只产生 shareStates 内部那一次 owner 索引 GET，
+// 不会因为这次 PUT 里有多少条目而多读一次 R2——shareStates 只在 byItem 非空
+// 时才逐条 head 判断是否仍在分享中，空索引直接返回空表。
+async function syncActiveShares(env, scope, items) {
+  try {
+    const states = await shareStates(env, scope);
+    const activeIds = Object.entries(states).filter(([, s]) => s.sharing).map(([id]) => id);
+    if (!activeIds.length) return;
+    const saved = collectSavedIds(items);
+    for (const id of activeIds) {
+      if (saved.has(id)) await refreshPromptShare(env, scope, id);
+    }
+  } catch (e) { console.error("[prompts] syncActiveShares failed:", e && e.message); }
+}
 
 export async function handlePromptsRoute(request, env, scope, url) {
   const tpl = await loadPromptTemplate(env);
@@ -57,6 +94,7 @@ export async function handlePromptsRoute(request, env, scope, url) {
     const err = validateList(tpl, body.items);
     if (err) return J({ error: err }, 400);
     await saveUserPrompts(env, scope, body.items);
+    await syncActiveShares(env, scope, body.items);   // best-effort, 见上方注释
     return resolved(tpl, body.items);
   }
 

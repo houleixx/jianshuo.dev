@@ -940,6 +940,80 @@ describe("PUT /agent/prompts", () => {
   });
 });
 
+// ── PUT /agent/prompts 保存后同步分享副本（write-through on save，Piece B）──────
+// 老模型（ui-config-custom.js，已退役）每次 PUT 都调 refreshPromptShare；新模型的
+// 整树 PUT 起初没接这条线——作者编辑一条正在分享的提示词后，分享副本（shares/<码>）
+// 停在旧版本，直到这里补上 syncActiveShares。
+describe("PUT /agent/prompts — 保存时刷新正在分享的条目", () => {
+  const MINT = (env, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
+    method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+  }), env);
+  const UNSHARE = (env, id) => worker.fetch(new Request(`https://jianshuo.dev/agent/prompt-share/${id}`, {
+    method: "DELETE", headers: { Authorization: TOKEN },
+  }), env);
+  const shareDocOf = (env) => {
+    const k = [...env.FILES._store.keys()].find((x) => x.startsWith("shares/"));
+    return k ? JSON.parse(env.FILES._store.get(k)) : null;
+  };
+
+  it("作者编辑正在分享的条目 → 分享副本随 PUT 同步更新（label/instruction/appliesTo），createdAt/importCount 保留", async () => {
+    const env = fakeEnv();
+    await PUT(env, [{ id: "p_share01", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
+    const { code } = await (await MINT(env, "p_share01")).json();
+    const before = shareDocOf(env);
+    // 模拟这条分享已经被别人导入过几次——改词不能把导入计数清零。
+    env.FILES._store.set(`shares/${code}`, JSON.stringify({ ...before, importCount: 5 }));
+
+    const res = await PUT(env, [{ id: "p_share01", type: "action", label: "新标题", prompt: "改过的内容", appliesTo: ["text", "image"] }]);
+    expect(res.status).toBe(200);
+
+    const after = shareDocOf(env);
+    expect(after.instruction).toBe("改过的内容");
+    expect(after.label).toBe("新标题");
+    expect(after.appliesTo).toEqual(["text", "image"]);
+    expect(after.createdAt).toBe(before.createdAt);
+    expect(after.importCount).toBe(5);
+  });
+
+  it("作者没有任何分享 → PUT 正常保存，不产生任何 shares/* 写入", async () => {
+    const env = fakeEnv();
+    const res = await PUT(env, [{ id: "p_noshare1", type: "action", label: "标题", prompt: "内容", appliesTo: ["text"] }]);
+    expect(res.status).toBe(200);
+    expect([...env.FILES._store.keys()].some((k) => k.startsWith("shares/"))).toBe(false);
+    const got = await (await GET(env)).json();
+    expect(got.items.find((i) => i.id === "p_noshare1").prompt).toBe("内容");
+  });
+
+  it("分享已关闭的条目被编辑 → 不复活分享（PUT 仍 200，shares/<码> 依旧不存在）", async () => {
+    const env = fakeEnv();
+    await PUT(env, [{ id: "p_share02", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
+    const { code } = await (await MINT(env, "p_share02")).json();
+    await UNSHARE(env, "p_share02");
+    expect(env.FILES._store.has(`shares/${code}`)).toBe(false);
+
+    const res = await PUT(env, [{ id: "p_share02", type: "action", label: "标题", prompt: "又改了一版", appliesTo: ["text"] }]);
+    expect(res.status).toBe(200);
+    expect(env.FILES._store.has(`shares/${code}`)).toBe(false);
+  });
+
+  it("刷新分享副本本身失败不影响 PUT（best-effort）：R2 写 shares/<码> 抛错，PUT 仍 200 且用户列表已保存", async () => {
+    const env = fakeEnv();
+    await PUT(env, [{ id: "p_share03", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
+    await MINT(env, "p_share03");
+    const origPut = env.FILES.put.bind(env.FILES);
+    env.FILES.put = async (key, value) => {
+      if (key.startsWith("shares/")) throw new Error("boom");
+      return origPut(key, value);
+    };
+    const res = await PUT(env, [{ id: "p_share03", type: "action", label: "标题", prompt: "又改了一版", appliesTo: ["text"] }]);
+    expect(res.status).toBe(200);
+    env.FILES.put = origPut;
+    const got = await (await GET(env)).json();
+    expect(got.items.find((i) => i.id === "p_share03").prompt).toBe("又改了一版");
+  });
+});
+
 describe("POST /agent/prompts/restore-defaults", () => {
   const RESTORE = (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts/restore-defaults", {
     method: "POST", headers: { Authorization: TOKEN },
