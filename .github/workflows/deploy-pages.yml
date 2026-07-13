@@ -1,13 +1,28 @@
-# voicedrop 相关文件推到 main 时自动部署 Cloudflare Pages。
+# Pages 项目（jianshuo-dev）的内容推到 main 时自动部署 Cloudflare Pages。
 # 主要服务云端夜间英文同步 routine（它只会 push，不部署）。
 # 需要仓库 secrets：CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID。
-# 其余目录仍维持手动 wrangler 部署的老习惯，不受此工作流影响。
+#
+# paths 必须覆盖 `wrangler pages deploy .` 真正会打包上去的一切，否则改了不部署、
+# 人还以为发了。2026-07-13 就被咬过一次：只监听 voicedrop/**，结果 functions/ 下
+# 的接口改动（社区 D1 双写、MCP 端点）合进 main 后静静躺着，谁都没发现没上线。
+#   voicedrop/**    静态站
+#   functions/**    Pages Functions（files API、分享页、MCP 端点…）
+#   mcp/**          被 functions/voicedrop/mcp.js import，会一起打进 bundle
+#   wrangler.jsonc  R2 / D1 绑定
+#   _headers,_redirects  Pages 配置
+#
+# agent/ 和 reco/ 是独立的 Worker，不归这个工作流管（各自手动 wrangler deploy）。
 name: deploy-pages
 on:
   push:
     branches: [main]
     paths:
       - 'voicedrop/**'
+      - 'functions/**'
+      - 'mcp/**'
+      - 'wrangler.jsonc'
+      - '_headers'
+      - '_redirects'
   workflow_dispatch:
 
 jobs:
