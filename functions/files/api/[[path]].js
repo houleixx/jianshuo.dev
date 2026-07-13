@@ -734,6 +734,32 @@ async function handleRequest(context) {
     return json({ ok: true, shareId });
   }
 
+  // 双排瀑布流卡片素材：从第一篇文章正文提取封面图与文字预览（design handoff
+  // 2026-07-13）。列表 CommunityPost 本来只有 metadata，客户端为每卡拉全文是 N 次
+  // 请求——所以在 list 侧一次补齐。marker 两代格式同 resolvePhotoKey：新 = token
+  // 即相对 key，旧 = photos 数组 1-based 序号。coverPhotoKey 返回完整 R2 key
+  // （owner 前缀已拼好），客户端直接走公开 /photo/<key> 端点。
+  function cardExtras(articles, photos, owner) {
+    const body = articles[0]?.body || '';
+    const m = body.match(/\[\[photo:([^\]]+)\]\]/);
+    let coverPhotoKey;
+    if (m) {
+      const rel = /^\d+$/.test(m[1]) ? (photos || [])[Number(m[1]) - 1] : m[1];
+      if (rel) coverPhotoKey = (owner || '') + rel;
+    }
+    const preview = body
+      .replace(/<!--[\s\S]*?-->/g, '')            // origin/meta comments
+      .replace(/\[\[photo:[^\]]+\]\]/g, '')       // photo markers
+      .replace(/^#{1,6}\s+/gm, '')                // markdown headings
+      .replace(/[*_`~]/g, '')                     // inline markdown
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 60);
+    return { hasPhoto: !!coverPhotoKey,
+             ...(coverPhotoKey ? { coverPhotoKey } : {}),
+             ...(preview ? { preview } : {}) };
+  }
+
   // List community posts (metadata only), newest-first by first-share time.
   // Reads the live article for each schema-2 post to get current title and count.
   if (request.method === 'GET' && action === 'community' && sub2 === 'list') {
@@ -755,15 +781,18 @@ async function handleRequest(context) {
         const p = JSON.parse(await obj.text());
         // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
         let title = p.title || '', count = (p.articles || []).length, updatedAt = p.updatedAt || p.firstSharedAt;
+        let extras = cardExtras(p.articles || [], p.photos, p.owner);
         if (p.articleKey) {
           const live = await liveDocForPointer(o.key, p);
           if (!live) return null;   // orphan (reaped) or mid-regeneration — drop the empty row
           const liveArticles = resolveArticles(live);
           title = liveArticles[0]?.title ?? title;
           count = liveArticles.length;
+          extras = cardExtras(liveArticles, live.photos, p.owner);
         }
         return { shareId: p.shareId, author: p.author, title,
                  firstSharedAt: p.firstSharedAt, updatedAt, count, mine: p.owner === scope,
+                 ...extras,
                  ...(p.replyTo ? { replyTo: p.replyTo } : {}) };
       } catch { return null; }
     });

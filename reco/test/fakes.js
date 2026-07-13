@@ -1,10 +1,15 @@
 // 内存版 D1,只实现 store.js 用到的 4 条语句。行 = {share_id,user_sub,action,created_at}。
+// bind 复刻真 D1 的 100 参数上限——社区过百帖时 IN (?,?,…) 整条炸掉的事故（2026-07-13）
+// 必须能在单测里复现,否则 fake 比真库宽松,测试全绿线上照样 500。
 export function fakeD1(seed = []) {
   const rows = [...seed];
   function stmt(sql) {
     let args = [];
     return {
-      bind(...a) { args = a; return this; },
+      bind(...a) {
+        if (a.length > 100) throw new Error(`too many SQL variables (${a.length} > 100)`);
+        args = a; return this;
+      },
       async run() {
         if (/^INSERT OR IGNORE/.test(sql)) {
           const [share_id, user_sub, action, created_at] = args;

@@ -54,6 +54,44 @@ describe("reco worker", () => {
     expect(j.liked).toContain("z");
   });
 
+  // 瀑布流卡片红心数（2026-07-13）：rank 顺路下发每帖被赞总数，0 赞不占键。
+  it("rank 返回每帖被赞数 likes（跨用户合计，0 不下发）", async () => {
+    const e = env();
+    const t1 = await token("users/u1/"), t2 = await token("users/u2/");
+    await worker.fetch(req("/reco/engage/hot", { body: { action: "like", on: true }, auth: t1 }), e);
+    await worker.fetch(req("/reco/engage/hot", { body: { action: "like", on: true }, auth: t2 }), e);
+    const now = Date.now();
+    const posts = [
+      { shareId: "hot", firstSharedAt: now, author: "A", replyCount: 0 },
+      { shareId: "cold", firstSharedAt: now, author: "B", replyCount: 0 },
+    ];
+    const r = await worker.fetch(req("/reco/rank", { body: { posts }, auth: t1 }), e);
+    const j = await r.json();
+    expect(j.likes.hot).toBe(2);
+    expect(j.likes.cold).toBeUndefined();
+  });
+
+  // 2026-07-13 事故回归：社区过百帖后 IN (?,?,…) 超出 D1 的 100 参数上限，rank
+  // 整条 500（app 静默回退：推荐退化成时间序、红心全 0）。分块后必须扛住 100+。
+  it("rank 100+ 帖不炸：IN 查询分块，likes/liked 跨块合并", async () => {
+    const e = env();
+    const t = await token("users/u1/");
+    await worker.fetch(req("/reco/engage/p003", { body: { action: "like", on: true }, auth: t }), e);
+    await worker.fetch(req("/reco/engage/p150", { body: { action: "like", on: true }, auth: t }), e);
+    const now = Date.now();
+    const posts = Array.from({ length: 160 }, (_, i) => (
+      { shareId: `p${String(i).padStart(3, "0")}`, firstSharedAt: now, author: "A", replyCount: 0 }
+    ));
+    const r = await worker.fetch(req("/reco/rank", { body: { posts }, auth: t }), e);
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.order.length).toBe(160);
+    expect(j.likes.p003).toBe(1);      // 第一块里的赞
+    expect(j.likes.p150).toBe(1);      // 第二块里的赞（跨块合并）
+    expect(j.liked).toContain("p003");
+    expect(j.liked).toContain("p150");
+  });
+
   it("engage report 被接受并写入,rank 把被举报帖排到最后", async () => {
     const e = env();
     const t = await token("users/u1/");

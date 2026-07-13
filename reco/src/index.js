@@ -36,14 +36,18 @@ export default {
     }
 
     // POST /reco/rank
+    // likes = 每帖被赞数（shareId → n，0 不下发）——瀑布流卡片的红心数从这里来，
+    // 顺路从已经算好的 engMap 里取，不多一次查询。
     if (request.method === "POST" && parts[1] === "rank") {
       const body = await request.json().catch(() => ({}));
       const posts = Array.isArray(body.posts) ? body.posts : [];
-      if (!posts.length) return json({ order: [], liked: [] });
-      if (!env.DB) return json({ order: posts.map((p) => p.shareId), liked: [] }); // 回退:保持输入序
+      if (!posts.length) return json({ order: [], liked: [], likes: {} });
+      if (!env.DB) return json({ order: posts.map((p) => p.shareId), liked: [], likes: {} }); // 回退:保持输入序
       const ids = posts.map((p) => p.shareId);
       const [engMap, likedSet] = await Promise.all([countsFor(env, ids), likedBy(env, scope, ids)]);
-      return json({ order: rankPosts(posts, engMap, Date.now()), liked: [...likedSet] });
+      const likes = {};
+      for (const [id, eng] of Object.entries(engMap)) if (eng.like) likes[id] = eng.like;
+      return json({ order: rankPosts(posts, engMap, Date.now()), liked: [...likedSet], likes });
     }
 
     return json({ error: "not found" }, 404);

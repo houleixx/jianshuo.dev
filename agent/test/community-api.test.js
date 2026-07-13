@@ -134,6 +134,54 @@ describe("GET community/list", () => {
     expect(body.posts[1].title).toBe("老帖");   // schema-1 title from stored copy
     expect(env.FILES._store.has("community/orphan000001.json")).toBe(false); // self-healed
   });
+
+  // 瀑布流卡片素材（2026-07-13）：list 每帖补 hasPhoto/coverPhotoKey/preview，
+  // 客户端不用为每张卡再拉一次全文。
+  it("photo post carries coverPhotoKey (owner-joined) + hasPhoto + marker-free preview", async () => {
+    const context = reqCtx("GET", ["community", "list"]);
+    const env = context.env;
+    env.FILES._store.set("users/u/articles/p1.json", JSON.stringify({
+      schema: 3, createdAt: 1000, head: 1,
+      versions: [{ v: 1, savedAt: 1000, source: "mine",
+        articles: [{ title: "有图帖", body: "开头一句。[[photo:photos/7/1.jpg]] 后文继续。" }] }],
+    }));
+    env.FILES._store.set("community/pic000000001.json", JSON.stringify({
+      schema: 2, shareId: "pic000000001", owner: "users/u/",
+      articleKey: "users/u/articles/p1.json", author: "P", firstSharedAt: 1000,
+    }));
+
+    const body = await (await onRequest(context)).json();
+    const post = body.posts.find((p) => p.shareId === "pic000000001");
+    expect(post.hasPhoto).toBe(true);
+    expect(post.coverPhotoKey).toBe("users/u/photos/7/1.jpg");   // owner prefix joined server-side
+    expect(post.preview).toContain("开头一句");
+    expect(post.preview).not.toContain("[[photo");               // markers stripped from preview
+  });
+
+  it("text-only post: hasPhoto=false, no coverPhotoKey; legacy [[photo:N]] resolves via photos array", async () => {
+    const context = reqCtx("GET", ["community", "list"]);
+    const env = context.env;
+    env.FILES._store.set("users/u/articles/t1.json", schema3("纯文帖"));
+    env.FILES._store.set("community/txt000000001.json", JSON.stringify({
+      schema: 2, shareId: "txt000000001", owner: "users/u/",
+      articleKey: "users/u/articles/t1.json", author: "T", firstSharedAt: 2000,
+    }));
+    // legacy schema-1 with numeric marker + photos array
+    env.FILES._store.set("community/leg000000002.json", JSON.stringify({
+      schema: 1, shareId: "leg000000002", author: "L", title: "老图帖", owner: "users/v/",
+      articles: [{ title: "老图帖", body: "看图 [[photo:1]]" }],
+      photos: ["photos/s/a.jpg"], firstSharedAt: 1500,
+    }));
+
+    const body = await (await onRequest(context)).json();
+    const txt = body.posts.find((p) => p.shareId === "txt000000001");
+    expect(txt.hasPhoto).toBe(false);
+    expect(txt.coverPhotoKey).toBeUndefined();
+    expect(txt.preview).toContain("body of 纯文帖");
+    const leg = body.posts.find((p) => p.shareId === "leg000000002");
+    expect(leg.hasPhoto).toBe(true);
+    expect(leg.coverPhotoKey).toBe("users/v/photos/s/a.jpg");    // 1-based index into photos
+  });
 });
 
 // ── POST community/share — the Apple write-gate + no-content-copy contract ─────
