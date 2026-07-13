@@ -274,6 +274,21 @@ function cloneTop(node) {
 ///   2. "已覆盖"是全树口径（见 collectCoverage）——一个 ref/fork 不管在
 ///      树里哪个位置，都能让对应的模板 id 被认作"已有"，不会因为它被
 ///      拖出了原来的组就被判定为"缺"而重复补。
+/// 供 import 端点复用：把【已经落盘的用户列表】清洗成可以安全追加的副本——
+/// 过滤掉垃圾顶层节点、垃圾 children 节点（跟 resolveList/restoreDefaults 对垃圾节点
+/// 的容忍度一致），不新增/不删除任何有效节点、不改变顺序。
+///
+/// 为什么需要这个：validateList 对垃圾节点是【零容忍】的（直接判 "bad node"），
+/// 但存量 prompts.json 可能是老版本代码或存储层损坏写进去的、混了垃圾的合法 JSON
+/// （resolveList/restoreDefaults 都对这种情况做了容忍）。import 端点如果直接把
+/// doc.items 原样拿来 push 一条再喂给 validateList，会让"用户本来就有的垃圾节点"
+/// 把这一次全新的、跟垃圾毫无关系的导入操作也一起拖成 400——必须先清洗。
+/// 同时顺手做一次浅层拷贝（顶层数组 + 每个 group 的 children 数组都是新的），
+/// 调用方可以放心 push，不会污染 loadUserPrompts 返回的原始对象。
+export function sanitizeStoredItems(items) {
+  return (items || []).map(cloneTop).filter(Boolean);
+}
+
 export function restoreDefaults(template, items) {
   const out = (items || []).map(cloneTop).filter(Boolean);   // 垃圾顶层节点：丢弃，不进入输出
   const covered = collectCoverage(out);

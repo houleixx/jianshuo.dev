@@ -967,3 +967,179 @@ describe("POST /agent/prompts/restore-defaults", () => {
     expect(styleGroup.children.some((c) => c.id === "sys_cartoon")).toBe(true);
   });
 });
+
+// ── POST /agent/prompts/import — 魔法数字导入成自建副本 ────────────────────────
+// spec §8：导入 = 独立实体副本（origin:user，无 forkedFrom）——原作者之后的编辑不影响你。
+describe("POST /agent/prompts/import — 魔法数字导入（4b）", () => {
+  const IMPORT = (env, code) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts/import", {
+    method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" },
+    body: JSON.stringify({ code }),
+  }), env);
+  const seedShare = (over = {}) => ({
+    "shares/4820135": JSON.stringify({
+      type: "prompt", sub: "anon-other", itemId: "p_orig01",
+      label: "改写成播客口播稿", instruction: "把文章改写成口播稿…",
+      appliesTo: ["text"], importCount: 128, ...over,
+    }),
+  });
+
+  it("★ 导入 → 追加一条实体副本（origin=user，无 forkedFrom）", async () => {
+    const env = fakeEnv(seedShare());
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const { item } = await res.json();
+    expect(item.label).toBe("改写成播客口播稿");
+    expect(item.prompt).toContain("口播稿");
+    expect(item.appliesTo).toEqual(["text"]);
+    expect(item.origin).toBe("user");
+    expect(item.forkedFrom).toBeUndefined();
+    expect(item.id).toMatch(/^p_[a-z0-9]{6,}$/);
+  });
+
+  it("★ 首次导入（用户还没 prompts.json）→ 模板项被物化成 ref，一条都不丢", async () => {
+    const env = fakeEnv(seedShare());
+    await IMPORT(env, "4820135");
+    const got = await (await GET(env)).json();
+    expect(got.items.length).toBe(DEFAULT_PROMPT_TEMPLATE.items.length + 1);
+    // 模板项仍是 system（= 仍是 ref、仍跟随最新），没被冻结
+    expect(got.items.filter((i) => i.origin === "system").length).toBe(DEFAULT_PROMPT_TEMPLATE.items.length);
+    expect(got.items[got.items.length - 1].origin).toBe("user");
+  });
+
+  it("已有列表 → 追加到末尾", async () => {
+    const env = fakeEnv(seedShare());
+    await PUT(env, []);
+    await IMPORT(env, "4820135");
+    const got = await (await GET(env)).json();
+    expect(got.items).toHaveLength(1);
+    expect(got.items[0].origin).toBe("user");
+  });
+
+  it("importCount +1 写回 shares/<码>", async () => {
+    const env = fakeEnv(seedShare());
+    await IMPORT(env, "4820135");
+    const doc = JSON.parse(env.FILES._store.get("shares/4820135"));
+    expect(doc.importCount).toBe(129);
+  });
+
+  it("老副本无 appliesTo → 导入成「都行」", async () => {
+    const env = fakeEnv(seedShare({ appliesTo: undefined }));
+    const { item } = await (await IMPORT(env, "4820135")).json();
+    expect(new Set(item.appliesTo)).toEqual(new Set(["text", "image"]));
+  });
+
+  it("无效码 → 404，不落盘", async () => {
+    const env = fakeEnv();
+    expect((await IMPORT(env, "9999999")).status).toBe(404);
+    expect(SCOPE_KEY(env)).toBeUndefined();
+  });
+
+  it("缺 code → 400；无 token → 401；GET → 405", async () => {
+    const env = fakeEnv(seedShare());
+    expect((await worker.fetch(new Request("https://jianshuo.dev/agent/prompts/import", {
+      method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" }, body: "{}",
+    }), env)).status).toBe(400);
+    expect((await worker.fetch(new Request("https://jianshuo.dev/agent/prompts/import", { method: "POST" }), env)).status).toBe(401);
+    expect((await worker.fetch(new Request("https://jianshuo.dev/agent/prompts/import", { headers: { Authorization: TOKEN } }), env)).status).toBe(405);
+  });
+
+  it("导入两次 → 两条独立副本（各自 id 不同）", async () => {
+    const env = fakeEnv(seedShare());
+    const a = (await (await IMPORT(env, "4820135")).json()).item;
+    const b = (await (await IMPORT(env, "4820135")).json()).item;
+    expect(a.id).not.toBe(b.id);
+    expect((await (await GET(env)).json()).items.filter((i) => i.origin === "user")).toHaveLength(2);
+  });
+
+  // ── 对抗性探测 ───────────────────────────────────────────────────────────
+  it("★ 存量 prompts.json 混进垃圾节点（顶层 + 嵌套 children）→ 导入不 500、不 400，垃圾被清掉，好节点原样保留", async () => {
+    const env = fakeEnv(seedShare());
+    await PUT(env, []);          // 先建出 key，拿到真实 scope 路径
+    env.FILES._store.set(SCOPE_KEY(env), JSON.stringify({
+      schema: 1,
+      items: [null, { ref: "sys_style", children: [null, { ref: "sys_cartoon" }, 5] }, 5, "junk"],
+    }));
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const got = await (await GET(env)).json();
+    // 垃圾没有复活成幽灵节点
+    expect(got.items.every((n) => n && typeof n === "object")).toBe(true);
+    const style = got.items.find((n) => n.id === "sys_style");
+    expect(style).toBeDefined();
+    expect(style.children.map((c) => c.id)).toEqual(["sys_cartoon"]);
+    // 新导入的那条在末尾
+    expect(got.items[got.items.length - 1].origin).toBe("user");
+    expect(got.items.filter((n) => n.origin === "user")).toHaveLength(1);
+  });
+
+  it("分享 label 超过 40 字 → 截断到 40，导入仍成功（不因为 validateList 拒收而 400）", async () => {
+    const longLabel = "很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的标题超过四十个字啦啦啦啦啦啦啦啦啦啦";
+    expect(longLabel.length).toBeGreaterThan(40);
+    const env = fakeEnv(seedShare({ label: longLabel }));
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const { item } = await res.json();
+    expect(item.label.length).toBeLessThanOrEqual(40);
+    expect(longLabel.startsWith(item.label)).toBe(true);
+  });
+
+  it("分享 instruction 超过 4000 字 → 截断到 4000，导入仍成功", async () => {
+    const longInstruction = "指".repeat(4100);
+    const env = fakeEnv(seedShare({ instruction: longInstruction }));
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const { item } = await res.json();
+    expect(item.prompt.length).toBeLessThanOrEqual(4000);
+    expect(longInstruction.startsWith(item.prompt)).toBe(true);
+  });
+
+  it("列表已满 MAX_ITEMS → 导入 400，不落盘一条截断/损坏的列表", async () => {
+    const env = fakeEnv(seedShare());
+    const items = Array.from({ length: MAX_ITEMS }, (_, i) => ({
+      id: `p_full${String(i).padStart(4, "0")}`, type: "action", label: `条目${i}`, prompt: "内容", appliesTo: ["text"],
+    }));
+    await PUT(env, items);
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(400);
+    const got = await (await GET(env)).json();
+    expect(got.items).toHaveLength(MAX_ITEMS);   // 没有被半途写坏
+  });
+
+  it("未知 kind 字段透传，不影响导入", async () => {
+    const env = fakeEnv(seedShare({ kind: "mystery-kind" }));
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const { item } = await res.json();
+    expect(item.kind).toBe("mystery-kind");
+  });
+
+  it("★ newUserId 撞上列表里已有的 id → 悄悄重摇一个新 id，而不是让 validateList 判 400", async () => {
+    const env = fakeEnv(seedShare());
+    await PUT(env, [{ id: "p_00000000", type: "action", label: "已有的", prompt: "已有的内容", appliesTo: ["text"] }]);
+    const spy = vi.spyOn(crypto, "getRandomValues").mockImplementationOnce((a) => { a[0] = 0; a[1] = 0; return a; })   // → p_00000000（撞车）
+      .mockImplementationOnce((a) => { a[0] = 1; a[1] = 0; return a; });                                                // → p_10000000（重摇后）
+    try {
+      const res = await IMPORT(env, "4820135");
+      expect(res.status).toBe(200);
+      const { item } = await res.json();
+      expect(item.id).not.toBe("p_00000000");
+      expect(item.id).toBe("p_10000000");
+    } finally { spy.mockRestore(); }
+  });
+
+  it("importCount 写回失败不影响导入本身（shares/<码> 在导入过程中消失）", async () => {
+    const env = fakeEnv(seedShare());
+    const origGet = env.FILES.get.bind(env.FILES);
+    let calls = 0;
+    env.FILES.get = async (key) => {
+      calls++;
+      // 第一次 get 给 resolvePromptShare 用，后续（importCount 回写读取）模拟消失
+      if (key === "shares/4820135" && calls > 1) return null;
+      return origGet(key);
+    };
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const { item } = await res.json();
+    expect(item.origin).toBe("user");
+  });
+});

@@ -7,8 +7,9 @@
 // 写操作只有【整树 PUT】：新建/删除/改名/改词/排序/分组/fork 全走它。客户端本来就
 // 整棵树拿在手里，所以不存在局部更新竞态。
 import { loadPromptTemplate } from "./prompt-template.js";
-import { resolveList, validateList, restoreDefaults } from "./prompts.js";
+import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, MAX_LABEL, MAX_PROMPT } from "./prompts.js";
 import { loadUserPrompts, saveUserPrompts } from "./prompt-store.js";
+import { resolvePromptShare } from "./prompt-share.js";
 
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
@@ -54,4 +55,113 @@ export async function handlePromptsRoute(request, env, scope, url) {
   }
 
   return J({ error: "method not allowed" }, 405);
+}
+
+// ── POST /agent/prompts/import — 魔法数字导入成自建副本 ─────────────────────────
+// spec §8：导入 = 独立实体副本（origin:user，无 forkedFrom）——它不是从系统模板
+// fork 的，原作者之后再改这条指令，【不会影响已经导入过的人】；可改名/改词/删。
+
+/// 新实体 id：p_ + 8 位 base36。客户端也生成同格式的 id（validateList 校验格式）。
+function newUserId() {
+  const a = new Uint32Array(2);
+  crypto.getRandomValues(a);
+  return "p_" + (a[0].toString(36) + a[1].toString(36)).replace(/[^a-z0-9]/g, "").slice(0, 8).padEnd(8, "0");
+}
+
+/// 树宽收集 items 里已经用掉的实体 id（顶层 + group 的 children，垃圾节点已经在
+/// materialize 阶段被 sanitizeStoredItems 清掉，这里不用再防）。用来给 newUserId
+/// 撞车让路——理论上 2×32 位随机源撞车概率极低，但"理论上极低"不等于"不用处理"：
+/// 撞了就该悄悄重摇一个新 id，而不是让 validateList 的 duplicate id 检查把整次
+/// 导入判成 400（那样用户会遇到一个自己完全没法理解、也无法自己修复的错误）。
+function collectEntityIds(items) {
+  const ids = new Set();
+  const visit = (list) => {
+    for (const n of list || []) {
+      if (n && typeof n === "object" && !Array.isArray(n)) {
+        if (n.id) ids.add(n.id);
+        if (Array.isArray(n.children)) visit(n.children);
+      }
+    }
+  };
+  visit(items);
+  return ids;
+}
+
+/// 撞见已占用的 id 就重摇，摇够多次还撞（几乎不可能）就直接返回最后一个——
+/// 让 validateList 兜底拒收，好过在这里死循环。
+function freshUserId(usedIds) {
+  for (let i = 0; i < 10; i++) {
+    const id = newUserId();
+    if (!usedIds.has(id)) return id;
+  }
+  return newUserId();
+}
+
+/// 把「当前生效的列表」物化成一份【用户列表】（存储原始形状：ref / 实体，不是解析结果）。
+/// 用户还没有 prompts.json 时，他的生效列表 = 模板全量 → 物化成全 ref——这样模板项
+/// 仍然跟随最新，只是现在显式列在他的文件里了。【关键陷阱】：物化出的 group ref
+/// 必须显式列出 children，否则 resolveList 会把没有 children 这个 key 的 group ref
+/// 解析成空组，等于把组里的每一条系统 prompt 都从用户菜单里丢了。
+///
+/// 用户已经有 prompts.json 时，不能把 doc.items 原样拿来用——它可能带着老版本
+/// 代码或存储层损坏留下的垃圾节点（resolveList/restoreDefaults 都容忍这类垃圾，
+/// 但 validateList 零容忍），必须先用 sanitizeStoredItems 清洗一遍，否则用户自己
+/// 早就有的、跟这次导入毫无关系的垃圾会把这次导入也一起拖成 400。
+function materialize(tpl, doc) {
+  if (doc && Array.isArray(doc.items)) return sanitizeStoredItems(doc.items);
+  return (tpl.items || []).map((t) => (t.type === "group"
+    ? { ref: t.id, children: (t.children || []).map((c) => ({ ref: c.id })) }
+    : { ref: t.id }));
+}
+
+/// POST /agent/prompts/import {code} —— 导入 = 独立自建副本（origin:user，无 forkedFrom）。
+/// 原作者之后的修改【不影响你】——这正是它区别于 ref 的地方。
+export async function handlePromptImport(request, env, scope) {
+  if (request.method !== "POST") return J({ error: "method not allowed" }, 405);
+  const body = await request.json().catch(() => ({}));
+  const code = String(body.code || "").trim();
+  if (!/^[1-9][0-9]{6}$/.test(code)) return J({ error: "expected {code}" }, 400);
+
+  const hit = await resolvePromptShare(env, code);
+  if (!hit) return J({ error: "not-found" }, 404);
+
+  const tpl = await loadPromptTemplate(env);
+  const doc = await loadUserPrompts(env, scope);
+  const items = materialize(tpl, doc);
+
+  // label/instruction 的上限本该在铸码/保存时就已经守住（MAX_LABEL/MAX_PROMPT ==
+  // 分享侧的 maxLength 默认值），但分享文档是【外部写入的既成事实】——旧码、被
+  // 后台配置改过上限之后铸的码、或者存储层被手改，都可能带来一份超限的内容。
+  // 这里选择【截断】而不是 400：截断只是丢掉尾巴，用户导入后是自己独立可编辑的
+  // 副本，能立刻看到、立刻改；400 则是把"别人分享的内容超限"这个跟当前导入者
+  // 毫无关系的历史问题，变成"你这条永远导不进来"——对导入者不公平，也没有他能
+  // 采取的补救动作。label/instruction 两者用同一策略，保持行为一致。
+  const label = (hit.label || "导入的提示词").slice(0, MAX_LABEL);
+  const prompt = String(hit.instruction || "").slice(0, MAX_PROMPT);
+
+  const item = {
+    id: freshUserId(collectEntityIds(items)), type: "action",
+    label, prompt,
+    appliesTo: hit.appliesTo,
+    ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
+  };
+  items.push(item);
+
+  const err = validateList(tpl, items);
+  if (err) return J({ error: err }, 400);
+  await saveUserPrompts(env, scope, items);
+
+  // importCount +1 —— best-effort。R2 没有原子自增，并发导入偶尔丢计数（虚荣数字，
+  // spec §8 已接受）。失败不影响导入本身：导入已经落盘了，回写计数只是锦上添花。
+  try {
+    const obj = await env.FILES.get(`shares/${code}`);
+    if (obj) {
+      const share = JSON.parse(await obj.text());
+      share.importCount = (share.importCount || 0) + 1;
+      await env.FILES.put(`shares/${code}`, JSON.stringify(share, null, 2));
+    }
+  } catch (e) { console.error("[prompts] importCount bump failed:", e && e.message); }
+
+  const resolvedItems = resolveList(tpl, { schema: 1, items });
+  return J({ item: resolvedItems[resolvedItems.length - 1] });
 }
