@@ -13,12 +13,26 @@ export function fakeEnv(seed = {}) {
     async put(key, value) { store.set(key, typeof value === "string" ? value : String(value)); },
     async head(key) { return store.has(key) ? {} : null; },
     async delete(key) { (Array.isArray(key) ? key : [key]).forEach((k) => store.delete(k)); },
-    async list({ prefix = "", limit = 1000 } = {}) {
-      const objects = [...store.keys()]
-        .filter((k) => k.startsWith(prefix))
+    async list({ prefix = "", limit = 1000, delimiter } = {}) {
+      let keys = [...store.keys()].filter((k) => k.startsWith(prefix));
+      // R2 delimiter 语义（recordings 路由用 '/' 只列根层对象）：prefix 之后
+      // 还含 delimiter 的 key 折叠进 delimitedPrefixes，不出现在 objects 里。
+      let delimitedPrefixes = [];
+      if (delimiter) {
+        const dirs = new Set();
+        keys = keys.filter((k) => {
+          const rest = k.slice(prefix.length);
+          const i = rest.indexOf(delimiter);
+          if (i === -1) return true;
+          dirs.add(prefix + rest.slice(0, i + delimiter.length));
+          return false;
+        });
+        delimitedPrefixes = [...dirs];
+      }
+      const objects = keys
         .slice(0, limit)
         .map((k) => ({ key: k, size: store.get(k).length, uploaded: new Date(0) }));
-      return { objects };
+      return { objects, delimitedPrefixes };
     },
     _store: store,
   };

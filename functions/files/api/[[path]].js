@@ -22,7 +22,7 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst, indexEntryFor, removeIndexEntry } from "../../lib/article-store.js";
+import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst, indexEntryFor, removeIndexEntry, setIndexFlag } from "../../lib/article-store.js";
 import { silentM4aBytes } from "../../lib/silent-m4a.js";
 import { shareIdFor, communityKey, reportKey, isShareId } from "../../lib/community-store.js";
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
@@ -34,6 +34,96 @@ import { checkArticlesShareable } from "../../lib/moderation.js";
 // checkpoint). They must never be listed as articles nor run through
 // readArticleDoc/migrateToV3.
 const isAsrSidecar = (key) => key.endsWith('.asr.json') || key.endsWith('.asrdone.json');
+
+// 文章摘要索引全量对账（GET /articles 与 GET /recordings 的后台自愈共用）。
+// R2 listing 是权威：扫 articles/ 前缀全部对象，与索引比 etag 指纹只重读新/变
+// 的 doc，删掉已不存在的条目；同一次 listing 顺手重建 empty/blocked/tags 三种
+// sidecar 标记（零额外 R2 成本），脏了回写。返回按时间倒序的文章列表。
+async function reconcileArticlesIndex(env, articleScope) {
+  const prefix = `${articleScope}articles/`;
+  const indexKey = `${articleScope}articles-index.json`;
+  const fp = (o) => o.etag || `${o.size}:${o.uploaded?.toISOString?.() || ''}`;
+
+  let cursor, allObjects = [];
+  do {
+    const listed = await env.FILES.list({ prefix, limit: 1000, cursor });
+    allObjects.push(...listed.objects);
+    cursor = listed.truncated ? listed.cursor : null;
+  } while (cursor);
+  const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json') && !isAsrSidecar(o.key));
+  // sidecar 标记文件 → stem → {empty?/blocked?/tags?}
+  const sidecars = {};
+  for (const o of allObjects) {
+    const m = /^([^/]+)\.(empty|blocked|tags)$/.exec(o.key.slice(prefix.length));
+    if (m) (sidecars[m[1]] ||= {})[m[2]] = true;
+  }
+
+  let index = {};
+  try {
+    const io = await env.FILES.get(indexKey);
+    if (io) index = JSON.parse(await io.text()).items || {};
+  } catch { /* corrupt/missing cache → full rebuild below */ }
+
+  const articles = [];
+  const stale = [];
+  const liveStems = new Set(Object.keys(sidecars));   // 只有标记没有 doc 的条目也算活
+  for (const o of jsonObjects) {
+    const s = o.key.slice(prefix.length, -'.json'.length);
+    liveStems.add(s);
+    const cached = index[s];
+    if (cached && cached.fp === fp(o)) {
+      if (cached.entry) articles.push(cached.entry);
+    } else {
+      stale.push(o);
+    }
+  }
+  let dirty = stale.length > 0;
+  for (const s of Object.keys(index)) {
+    if (!liveStems.has(s)) { delete index[s]; dirty = true; }
+  }
+
+  // Read only new/changed docs, in parallel batches (an unbounded fan-out
+  // at ~100 articles used to saturate the subrequest budget).
+  const BATCH = 20;
+  for (let i = 0; i < stale.length; i += BATCH) {
+    await Promise.all(stale.slice(i, i + BATCH).map(async (o) => {
+      const s = o.key.slice(prefix.length, -'.json'.length);
+      const obj = await env.FILES.get(o.key);
+      if (!obj) { delete index[s]; return; }
+      let doc;
+      try { doc = JSON.parse(await obj.text()); }
+      catch {
+        // Unparseable object: cache the miss so it isn't re-fetched every list.
+        index[s] = { ...(index[s] || {}), fp: fp(o), entry: null };
+        return;
+      }
+      const entry = indexEntryFor(s, doc);
+      index[s] = { ...(index[s] || {}), fp: fp(o), entry };
+      articles.push(entry);
+    }));
+  }
+
+  // sidecar 标记以 listing 为准：该打的打上，该掉的掉（标记文件已删）。
+  for (const s of liveStems) {
+    const f = sidecars[s] || {};
+    const it = index[s] || (index[s] = { fp: null, entry: null });
+    for (const flag of ['empty', 'blocked', 'tags']) {
+      if (f[flag] && !it[flag]) { it[flag] = true; dirty = true; }
+      if (!f[flag] && it[flag]) { delete it[flag]; dirty = true; }
+    }
+  }
+
+  if (dirty) {
+    await env.FILES.put(
+      indexKey,
+      JSON.stringify({ schema: 1, updatedAt: Date.now(), items: index }),
+      { httpMetadata: { contentType: 'application/json' } },
+    ).catch(() => {});
+  }
+
+  articles.sort(byNewestFirst);
+  return articles;
+}
 
 export async function onRequest(context) {
   // 报警打点包裹：任何 4xx/5xx 响应 fire-and-forget 通知 voicedrop-agent 的
@@ -477,6 +567,52 @@ async function handleRequest(context) {
     return json({ error: 'unknown minelog action' }, 404);
   }
 
+  // GET /recordings — 主界面「我的录音」的轻量列表（2026-07-13）。
+  // 老路是 GET /list 全量翻用户所有 R2 对象（照片/文章/字幕全在内，~1500 个对象
+  // 串行翻两页 + 170KB 回传 ≈ 2.5s），App 再自己筛出 .m4a 和 sidecar 存在性。
+  // 这里只做两件事、并发跑：① 根目录带 delimiter 的 listing——录音 .m4a 都在
+  // scope 根上，photos/、articles/ 子目录天然被 delimiter 排除，一页搞定；
+  // ② 读文章摘要索引拿每条录音的状态（成文/无语音/算力不足/预置标签）。
+  // 响应后 waitUntil 对账一次，老用户索引里缺的 sidecar 标记从这里回填。
+  if (request.method === 'GET' && action === 'recordings') {
+    if (!scope) return json({ error: 'user token required' }, 400);
+    const [rootObjects, items] = await Promise.all([
+      (async () => {
+        const out = [];
+        let cursor;
+        do {
+          const listed = await env.FILES.list({ prefix: scope, delimiter: '/', limit: 1000, ...(cursor ? { cursor } : {}) });
+          out.push(...listed.objects);
+          cursor = listed.truncated ? listed.cursor : undefined;
+        } while (cursor);
+        return out;
+      })(),
+      (async () => {
+        try {
+          const io = await env.FILES.get(`${scope}articles-index.json`);
+          if (io) return JSON.parse(await io.text()).items || {};
+        } catch {}
+        return {};
+      })(),
+    ]);
+    const recordings = [];
+    for (const o of rootObjects) {
+      const leaf = o.key.slice(scope.length);
+      if (!leaf.startsWith('VoiceDrop-') || !leaf.endsWith('.m4a')) continue;
+      const it = items[leaf.slice(0, -4)] || {};
+      recordings.push({
+        name: leaf,
+        uploaded: o.uploaded,
+        hasArticles: !!it.entry,
+        isEmpty: !!it.empty,
+        blocked: !!it.blocked,
+        hasTags: !!it.tags,
+      });
+    }
+    if (waitUntil) waitUntil(reconcileArticlesIndex(env, scope).catch(() => {}));
+    return json({ recordings });
+  }
+
   if (request.method === 'GET' && action === 'list') {
     const opts = { limit: 1000 };
     if (scope) opts.prefix = scope;
@@ -528,6 +664,10 @@ async function handleRequest(context) {
       const userAuth = request.headers.get('Authorization') || '';
       context.waitUntil(dispatchMine(userAuth));
     }
+    // 挖矿前预置的标签 sidecar（articles/<stem>.tags）→ 索引打 tags 标记，
+    // recordings 轻量接口靠它告诉 App「这条待处理录音带标签，去拉内容」。
+    const mTag = /^(.*\/)articles\/([^/]+)\.tags$/.exec(key);
+    if (mTag) await setIndexFlag(env, mTag[1], mTag[2], 'tags');
     return json({ ok: true, name });
   }
 
@@ -566,6 +706,11 @@ async function handleRequest(context) {
     const key = keyFor(name);
     if (!key) return json({ error: 'bad name' }, 400);
     await env.FILES.delete(key);
+    // 摘要索引联动：直删 sidecar 标记文件 → 摘掉对应标记；直删文章 doc →
+    // 摘掉整个条目（对账兜底，但立刻摘掉能让 recordings/articles 快路径即时正确）。
+    const mFlag = /^(.*\/)articles\/([^/]+)\.(empty|blocked|tags)$/.exec(key);
+    if (mFlag) await setIndexFlag(env, mFlag[1], mFlag[2], mFlag[3], false);
+    else if (/^.*\/articles\/[^/]+\.json$/.test(key) && !isAsrSidecar(key)) await removeIndexEntry(env, key);
     return json({ ok: true });
   }
 
@@ -1306,78 +1451,7 @@ async function handleRequest(context) {
     // lost update、绕过 API 的直写（agent 的 style-intro）一次打开后收敛。
     // 索引缺失/空/损坏，或运行时没有 waitUntil（测试）→ 同步对账，行为同旧版。
     if (request.method === 'GET' && !stem) {
-      const prefix = `${articleScope}articles/`;
       const indexKey = `${articleScope}articles-index.json`;
-      const fp = (o) => o.etag || `${o.size}:${o.uploaded?.toISOString?.() || ''}`;
-
-      // 对账（原同步逻辑原样搬入）：R2 list 全部对象 + 与索引比 etag 指纹，只
-      // 重读新/变的 doc，删掉已不存在的条目，脏了回写。返回排好序的列表。
-      async function reconcileArticles() {
-        let cursor, allObjects = [];
-        do {
-          const listed = await env.FILES.list({ prefix, limit: 1000, cursor });
-          allObjects.push(...listed.objects);
-          cursor = listed.truncated ? listed.cursor : null;
-        } while (cursor);
-        const jsonObjects = allObjects.filter((o) => o.key.endsWith('.json') && !isAsrSidecar(o.key));
-
-        let index = {};
-        try {
-          const io = await env.FILES.get(indexKey);
-          if (io) index = JSON.parse(await io.text()).items || {};
-        } catch { /* corrupt/missing cache → full rebuild below */ }
-
-        const articles = [];
-        const stale = [];
-        const liveStems = new Set();
-        for (const o of jsonObjects) {
-          const s = o.key.slice(prefix.length, -'.json'.length);
-          liveStems.add(s);
-          const cached = index[s];
-          if (cached && cached.fp === fp(o)) {
-            if (cached.entry) articles.push(cached.entry);
-          } else {
-            stale.push(o);
-          }
-        }
-        let dirty = stale.length > 0;
-        for (const s of Object.keys(index)) {
-          if (!liveStems.has(s)) { delete index[s]; dirty = true; }
-        }
-
-        // Read only new/changed docs, in parallel batches (an unbounded fan-out
-        // at ~100 articles used to saturate the subrequest budget).
-        const BATCH = 20;
-        for (let i = 0; i < stale.length; i += BATCH) {
-          await Promise.all(stale.slice(i, i + BATCH).map(async (o) => {
-            const s = o.key.slice(prefix.length, -'.json'.length);
-            const obj = await env.FILES.get(o.key);
-            if (!obj) { delete index[s]; return; }
-            let doc;
-            try { doc = JSON.parse(await obj.text()); }
-            catch {
-              // Unparseable object: cache the miss so it isn't re-fetched every list.
-              index[s] = { fp: fp(o), entry: null };
-              return;
-            }
-            const entry = indexEntryFor(s, doc);
-            index[s] = { fp: fp(o), entry };
-            articles.push(entry);
-          }));
-        }
-
-        if (dirty) {
-          await env.FILES.put(
-            indexKey,
-            JSON.stringify({ schema: 1, updatedAt: Date.now(), items: index }),
-            { httpMetadata: { contentType: 'application/json' } },
-          ).catch(() => {});
-        }
-
-        articles.sort(byNewestFirst);
-        return articles;
-      }
-
       if (waitUntil) {
         try {
           const io = await env.FILES.get(indexKey);
@@ -1386,13 +1460,13 @@ async function handleRequest(context) {
             const cached = Object.values(items).map((i) => i && i.entry).filter(Boolean);
             if (cached.length) {
               cached.sort(byNewestFirst);
-              waitUntil(reconcileArticles().catch(() => {}));
+              waitUntil(reconcileArticlesIndex(env, articleScope).catch(() => {}));
               return json({ articles: cached });
             }
           }
         } catch { /* 索引坏 → 下面同步对账重建 */ }
       }
-      return json({ articles: await reconcileArticles() });
+      return json({ articles: await reconcileArticlesIndex(env, articleScope) });
     }
 
     const key = articleKey(stem);
@@ -1465,6 +1539,7 @@ async function handleRequest(context) {
       const emptyKey = `${articleScope}articles/${stem}.empty`;
       let body; try { body = await request.json(); } catch { body = {}; }
       await env.FILES.put(emptyKey, JSON.stringify({ status: 'empty', reason: body.reason || 'no-speech' }), { httpMetadata: { contentType: 'application/json' } });
+      await setIndexFlag(env, articleScope, stem, 'empty');   // recordings 轻量接口的状态源
       return json({ ok: true });
     }
 
@@ -1473,6 +1548,7 @@ async function handleRequest(context) {
       const blockedKey = `${articleScope}articles/${stem}.blocked`;
       let body; try { body = await request.json(); } catch { body = {}; }
       await env.FILES.put(blockedKey, JSON.stringify({ status: 'blocked', reason: body.reason || 'no-credit' }), { httpMetadata: { contentType: 'application/json' } });
+      await setIndexFlag(env, articleScope, stem, 'blocked');
       return json({ ok: true });
     }
 

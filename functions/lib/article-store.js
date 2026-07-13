@@ -118,10 +118,40 @@ async function upsertIndexEntry(env, key, doc, putResult) {
     if (io) {
       try { const parsed = JSON.parse(await io.text()); if (parsed && parsed.items) idx = parsed; } catch {}
     }
-    idx.items[loc.stem] = { fp: (putResult && putResult.etag) || null, entry: indexEntryFor(loc.stem, doc) };
+    // 保留已有的 sidecar 标记（empty/blocked/tags）——它们由 setIndexFlag 维护，
+    // 文章 doc 的写入不该抹掉。
+    idx.items[loc.stem] = { ...(idx.items[loc.stem] || {}),
+      fp: (putResult && putResult.etag) || null, entry: indexEntryFor(loc.stem, doc) };
     idx.updatedAt = Date.now();
     await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
   } catch { /* 索引是加速层，绝不打断写主路径 */ }
+}
+
+// sidecar 标记（empty / blocked / tags）：articles/<stem>.<flag> 三种标记文件的
+// 存在性也进索引——recordings 轻量接口全靠它拿录音状态，免扫 articles/ 前缀。
+// 写标记的路由（/empty、/blocked、.tags 上传、对应删除）同步调它；历史数据与
+// 漂移由 list/recordings 的后台对账按 listing 权威重建。
+export async function setIndexFlag(env, scope, stem, flag, on = true) {
+  try {
+    const ik = articlesIndexKey(scope);
+    let idx = { schema: 1, items: {} };
+    const io = await env.FILES.get(ik);
+    if (io) {
+      try { const parsed = JSON.parse(await io.text()); if (parsed && parsed.items) idx = parsed; } catch {}
+    }
+    const it = idx.items[stem] || (idx.items[stem] = { fp: null, entry: null });
+    if (on) {
+      if (it[flag]) return;
+      it[flag] = true;
+    } else {
+      if (!(flag in it)) return;
+      delete it[flag];
+      // 条目既无文章也无任何标记 → 整个摘掉
+      if (!it.entry && !it.empty && !it.blocked && !it.tags) delete idx.items[stem];
+    }
+    idx.updatedAt = Date.now();
+    await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
+  } catch { /* 同上：加速层，绝不打断写主路径 */ }
 }
 
 // 删文章时把索引条目一并摘掉（DELETE /articles/<stem> 路由调）。
