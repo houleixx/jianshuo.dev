@@ -191,3 +191,57 @@ function validateListUnsafe(template, items) {
   }
   return null;
 }
+
+// ── 恢复默认（一个按钮两个用途：删多了的后悔药 + 拿系统新出的 prompt）──────────
+//
+// 【为什么不做"模板新增项自动追加"】自动追加会把用户【主动删掉】的条目塞回来，
+// 要修就得引入 deleted:[] 墓碑列表——多一个字段，换一个用户不可控的行为。
+// 一个显式按钮既是后悔药，又是新 prompt 的入口。见 spec §4。
+
+/// 这个模板 id 在列表里是否"已有"：被 ref，或被某个实体 fork。
+function covers(nodes, sysId) {
+  return (nodes || []).some((n) => n.ref === sysId || n.forkedFrom === sysId);
+}
+
+/// 顶层节点的浅拷贝：group 节点自己的 children 数组也另起一份，
+/// 这样后面往里 push 缺的子项不会连带修改调用方传入的 items。
+function cloneTop(node) {
+  return node.children ? { ...node, children: [...node.children] } : { ...node };
+}
+
+/// 返回【新的用户列表】（原始存储形状：ref / 实体，不是解析结果）：
+/// 模板里缺的顶层项按模板顺序补回末尾；组内缺的 action 补回该组末尾。
+/// 不修改 items（含嵌套 children 数组），也不修改 template（模块级字面量，
+/// 活过整个 Worker isolate——改了它会污染后面每一个请求读到的模板）。
+export function restoreDefaults(template, items) {
+  const out = (items || []).map(cloneTop);
+
+  for (const t of template.items || []) {
+    const isGroup = t.type === "group";
+
+    if (covers(out, t.id)) {
+      // 顶层已经有了（ref 命中，或某个实体 forkedFrom 命中）。
+      if (!isGroup) continue;
+      const g = out.find((n) => n.ref === t.id || n.forkedFrom === t.id);
+      // g 理论上一定存在（covers 刚判定为真）；防一手脏数据——
+      // 万一是个 type 对不上的实体（forkedFrom 指向 group 但自己是 action），
+      // 不要把 children 塞进一个不该有 children 的节点。
+      if (!g || (g.type && g.type !== "group")) continue;
+      // 显式补上 children：ref 组没有 children 这个 key 会被 resolveList 解析成空组，
+      // 这里既然要处理这个组（哪怕什么都不缺），就把它的 children 明确写出来。
+      g.children = g.children ? [...g.children] : [];
+      for (const c of t.children || []) {
+        if (!covers(g.children, c.id)) g.children.push({ ref: c.id });
+      }
+      continue;
+    }
+
+    // 顶层缺失 → 整个补回来；组的话把子项也按 ref 展开好（同样是为了让
+    // children 显式存在，不留给 resolveList 当空组解析）。
+    out.push(isGroup
+      ? { ref: t.id, children: (t.children || []).map((c) => ({ ref: c.id })) }
+      : { ref: t.id });
+  }
+
+  return out;
+}
