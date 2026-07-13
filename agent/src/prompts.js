@@ -21,9 +21,17 @@ function fromEntity(node) {
     out.prompt = node.prompt;
     out.appliesTo = Array.isArray(node.appliesTo) ? [...node.appliesTo] : node.appliesTo;
     if (node.kind !== undefined) out.kind = node.kind;
-    if (node.imageParams !== undefined) out.imageParams = { ...node.imageParams };
+    if (node.imageParams !== undefined) out.imageParams = deepCloneParams(node.imageParams);
   }
   return out;
+}
+
+/// 深拷贝 imageParams：值可能带嵌套对象/数组，浅拷贝（{...obj}）只保护顶层键，
+/// 嵌套值仍会与源对象（尤其是模块级 DEFAULT_PROMPT_TEMPLATE，活过整个 Worker isolate）共享引用。
+function deepCloneParams(obj) {
+  if (obj === null || typeof obj !== "object") return obj;
+  if (typeof structuredClone === "function") return structuredClone(obj);
+  return JSON.parse(JSON.stringify(obj));
 }
 
 /// 模板节点 → 对外的解析结果（origin=system；children 不在这里展开）。
@@ -36,7 +44,7 @@ function fromTemplate(node) {
     out.prompt = node.prompt;
     out.appliesTo = Array.isArray(node.appliesTo) ? [...node.appliesTo] : node.appliesTo;
     if (node.kind !== undefined) out.kind = node.kind;
-    if (node.imageParams !== undefined) out.imageParams = { ...node.imageParams };
+    if (node.imageParams !== undefined) out.imageParams = deepCloneParams(node.imageParams);
   }
   return out;
 }
@@ -108,6 +116,8 @@ export function validateList(template, items) {
           const err = walk(c, 1);
           if (err) return err;
         }
+      } else if (node.children !== undefined) {
+        return "action must not carry children";
       }
       return null;
     }
@@ -118,9 +128,9 @@ export function validateList(template, items) {
     seen.add(node.id);
 
     if (node.type !== "action" && node.type !== "group") return `bad type: ${node.type}`;
-    const label = typeof node.label === "string" ? node.label.trim() : "";
-    if (!label) return "label must not be empty";
-    if (label.length > MAX_LABEL) return `label too long (max ${MAX_LABEL})`;
+    const rawLabel = typeof node.label === "string" ? node.label : "";
+    if (!rawLabel.trim()) return "label must not be empty";
+    if (rawLabel.length > MAX_LABEL) return `label too long (max ${MAX_LABEL})`;
     if (node.forkedFrom !== undefined && !idx.has(node.forkedFrom)) return `unknown forkedFrom: ${node.forkedFrom}`;
 
     if (node.type === "group") {
@@ -135,6 +145,7 @@ export function validateList(template, items) {
     }
 
     // action
+    if (node.children !== undefined) return "action must not carry children";
     if (typeof node.prompt !== "string" || !node.prompt.trim()) return "prompt must not be empty";
     if (node.prompt.length > MAX_PROMPT) return `prompt too long (max ${MAX_PROMPT})`;
     if (!Array.isArray(node.appliesTo) || node.appliesTo.length === 0) return "appliesTo must be a non-empty array";

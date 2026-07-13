@@ -224,4 +224,77 @@ describe("validateList — PUT 的守门人", () => {
   it("空列表合法（用户可以删光）", () => {
     expect(ok([])).toBeNull();
   });
+
+  it("CRITICAL① label 上限不能被前导空白绕过（校验必须用原始长度，不是 trim 后的）", () => {
+    expect(ok([entity({ label: " ".repeat(10000) + "A" })])).toMatch(/label/);
+  });
+
+  it("空白 only 的 label 仍然算空（不能因为①的修复而误判合法空白）", () => {
+    expect(ok([entity({ label: "   " })])).toMatch(/label/);
+  });
+
+  it("CRITICAL② action 节点（ref 到 action）不许带 children —— 否则未校验的任意载荷直接进库", () => {
+    const badChildren = Array.from({ length: 500 }, (_, i) => ({
+      id: `not a valid id ${i}`,
+      type: "group",
+      label: "",
+      appliesTo: "not-an-array",
+    }));
+    expect(ok([{ ref: "sys_a", children: badChildren }])).toMatch(/children/);
+  });
+
+  it("CRITICAL② action 节点（实体 type:action）不许带 children", () => {
+    const badChildren = Array.from({ length: 500 }, (_, i) => ({
+      id: `not a valid id ${i}`,
+      type: "group",
+      label: "",
+      appliesTo: "not-an-array",
+    }));
+    expect(ok([entity({ children: badChildren })])).toMatch(/children/);
+  });
+
+  it("合法的 group 嵌套（group 带 children）依然通过，且 children 计入 200 条上限", () => {
+    expect(ok([{ ref: "sys_g", children: [{ ref: "sys_a" }, { ref: "sys_b" }] }])).toBeNull();
+
+    const many = Array.from({ length: 199 }, (_, i) => entity({ id: `p_x${String(i).padStart(5, "0")}` }));
+    const withGroup = [{ id: "p_grp001", type: "group", label: "组", children: [entity({ id: "p_child01" })] }, ...many];
+    // 1 (group) + 1 (child) + 199 = 201 > 200
+    expect(ok(withGroup)).toMatch(/too many/);
+  });
+});
+
+describe("validateList/resolveList — IMPORTANT③ imageParams 深拷贝（不能与模板共享嵌套引用）", () => {
+  const tplWithNestedParams = {
+    schema: 1,
+    items: [
+      { id: "sys_c", type: "action", label: "更简洁", prompt: "原始简洁", appliesTo: ["text"],
+        imageParams: { size: "1024x1024", nested: { seed: 1 }, tags: ["a", "b"] } },
+    ],
+  };
+
+  it("ref 解析出的 imageParams 嵌套对象不与模板节点共享引用", () => {
+    const out = resolveList(tplWithNestedParams, null);
+    const resolvedAction = out[0];
+    const templateAction = tplWithNestedParams.items[0];
+    expect(resolvedAction.imageParams).toEqual(templateAction.imageParams);
+    expect(resolvedAction.imageParams.nested).not.toBe(templateAction.imageParams.nested);
+    expect(resolvedAction.imageParams.tags).not.toBe(templateAction.imageParams.tags);
+
+    // 手滑改了解析结果的嵌套字段，不能污染模板（活过整个 Worker isolate）
+    resolvedAction.imageParams.nested.seed = 999;
+    expect(templateAction.imageParams.nested.seed).toBe(1);
+  });
+
+  it("fork（fromEntity）出的实体，imageParams 嵌套对象也不与入参共享引用", () => {
+    const doc = { schema: 1, items: [
+      { id: "p_abc123", type: "action", label: "自建", prompt: "内容", appliesTo: ["text"],
+        imageParams: { nested: { seed: 1 } } },
+    ]};
+    const out = resolveList(TPL, doc);
+    expect(out[0].imageParams).toEqual(doc.items[0].imageParams);
+    expect(out[0].imageParams.nested).not.toBe(doc.items[0].imageParams.nested);
+
+    out[0].imageParams.nested.seed = 999;
+    expect(doc.items[0].imageParams.nested.seed).toBe(1);
+  });
 });
