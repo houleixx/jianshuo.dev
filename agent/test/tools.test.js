@@ -51,6 +51,22 @@ describe("list_articles", () => {
     const r = await rt("list_articles", {}, CTX(env));
     expect(r.articles[0]).toMatchObject({ stem: "s3a", title: "NEW" });
   });
+
+  // 上面两条用数字 createdAt seed，但 miner 在生产里写的是 ISO 字符串
+  // （new Date().toISOString()）。字符串相减 = NaN → 排序静默失效。
+  // 这里更狠：排序在 slice(0,30) 之前，排错了就等于只把「最老的 30 篇」交给
+  // 语音 agent，用户让它「改最近那篇」时它根本看不到。
+  it("按 createdAt 倒序 —— 即使 createdAt 是 miner 写的 ISO 字符串", async () => {
+    const env = fakeEnv({
+      "users/u/articles/s1.json": JSON.stringify({ schema: 2, createdAt: "2026-06-20T07:01:41.489Z", articles: [{ title: "老", body: "b" }] }),
+      "users/u/articles/s2.json": JSON.stringify({ schema: 2, createdAt: "2026-07-06T07:29:25.673Z", articles: [{ title: "新", body: "b" }] }),
+      "users/u/articles/s3.json": JSON.stringify({ schema: 2, createdAt: "2026-06-21T03:50:00.685Z", articles: [{ title: "中", body: "b" }] }),
+    });
+
+    const r = await rt("list_articles", {}, CTX(env));
+
+    expect(r.articles.map((a) => a.stem)).toEqual(["s2", "s3", "s1"]);
+  });
 });
 
 describe("read_article", () => {

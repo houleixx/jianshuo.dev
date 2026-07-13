@@ -1,7 +1,7 @@
 // VoiceDrop agent tools — general primitives the article-editing agent composes.
 // Each handler takes (args, ctx) where ctx = {env, scope, articleKey, token, origin}.
 
-import { TITLE_FALLBACK, resolveArticles, appendQuestions } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles, appendQuestions, byNewestFirst } from "../../functions/lib/article-store.js";
 import { readStyleText, readStyleDoc } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
 import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
@@ -57,7 +57,8 @@ register(
       if (Array.isArray(doc.tags) && doc.tags.length) entry.tags = doc.tags;
       out.push(entry);
     }
-    out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // 排序必须先于 slice：排错了，取的就是最老的 30 篇而不是最新的 30 篇。
+    out.sort(byNewestFirst);
     return { articles: out.slice(0, 30) };
   }
 );

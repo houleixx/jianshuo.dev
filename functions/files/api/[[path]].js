@@ -22,7 +22,7 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles } from "../../lib/article-store.js";
+import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst } from "../../lib/article-store.js";
 import { shareIdFor, communityKey, reportKey, isShareId } from "../../lib/community-store.js";
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken } from "../../lib/auth.js";
@@ -1328,7 +1328,7 @@ async function handleRequest(context) {
         if (context.waitUntil) context.waitUntil(persist); else await persist;
       }
 
-      articles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      articles.sort(byNewestFirst);
       return json({ articles });
     }
 

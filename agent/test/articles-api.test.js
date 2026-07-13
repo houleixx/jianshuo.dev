@@ -61,6 +61,47 @@ describe("GET /articles — list", () => {
     expect(body.articles.map((a) => a.stem)).toEqual(["s2", "s1"]);
   });
 
+  // 生产里 createdAt 几乎全是 ISO 字符串——miner 写的就是
+  // `new Date().toISOString()`（miner.js:986/1072/1293/1384/1493）。
+  // 上面那条测试用数字 seed，所以一直是绿的，把错误的假设固化了：
+  // 真实数据下 `(b.createdAt||0) - (a.createdAt||0)` 是 字符串-字符串 = NaN，
+  // 比较器返回 NaN → 排序静默失效 → 列表退化成 R2 的 key 字典序（= 最老在前）。
+  it("按 createdAt 倒序 —— 即使 createdAt 是 miner 写的 ISO 字符串", async () => {
+    const context = ctx("GET", "");
+    seedArticle(context.env, "s1", { createdAt: "2026-06-20T07:01:41.489Z" });
+    seedArticle(context.env, "s2", { createdAt: "2026-07-06T07:29:25.673Z" });
+    seedArticle(context.env, "s3", { createdAt: "2026-06-21T03:50:00.685Z" });
+    context.params.path = ["articles", "u"];
+
+    const body = await (await onRequest(context)).json();
+
+    expect(body.articles.map((a) => a.stem)).toEqual(["s2", "s3", "s1"]);
+  });
+
+  it("ISO 字符串和 epoch 数字混在一起也要排对（历史数据两种都有）", async () => {
+    const context = ctx("GET", "");
+    seedArticle(context.env, "s1", { createdAt: "2026-06-20T00:00:00.000Z" });
+    seedArticle(context.env, "s2", { createdAt: Date.parse("2026-07-06T00:00:00.000Z") });
+    seedArticle(context.env, "s3", { createdAt: "2026-06-30T00:00:00.000Z" });
+    context.params.path = ["articles", "u"];
+
+    const body = await (await onRequest(context)).json();
+
+    expect(body.articles.map((a) => a.stem)).toEqual(["s2", "s3", "s1"]);
+  });
+
+  it("createdAt 缺失或不可解析的排到最后，不能把好数据挤乱", async () => {
+    const context = ctx("GET", "");
+    seedArticle(context.env, "s1", { createdAt: "2026-06-20T00:00:00.000Z" });
+    seedArticle(context.env, "s2", { createdAt: "垃圾" });
+    seedArticle(context.env, "s3", { createdAt: "2026-07-06T00:00:00.000Z" });
+    context.params.path = ["articles", "u"];
+
+    const body = await (await onRequest(context)).json();
+
+    expect(body.articles.map((a) => a.stem)).toEqual(["s3", "s1", "s2"]);
+  });
+
   it("DELETE /articles/<stem> also removes the .tags sidecar", async () => {
     const context = ctx("DELETE", "s1");
     seedArticle(context.env, "s1");

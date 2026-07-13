@@ -15,6 +15,26 @@ export const TITLE_FALLBACK = "(无题)";
 
 export const MAX_VERSIONS = 10;
 
+// doc.createdAt 有两种形态，必须都认：
+//   - ISO 字符串 —— miner 写的就是 new Date().toISOString()，生产里绝大多数是这个
+//   - epoch 毫秒数字 —— 少量历史文档
+// 直接拿它做减法（`b.createdAt - a.createdAt`）会得到 NaN，比较器返回 NaN 时
+// 排序静默失效，列表退化成 R2 的 key 字典序（= 最老在前）。踩过一次，别再踩。
+// 排序一律走这个函数，别在调用处自己 `|| 0`。
+export function articleTime(v) {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (typeof v === "string") {
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? 0 : t;
+  }
+  return 0;
+}
+
+// 按 createdAt 倒序（最新在前）。时间缺失/不可解析的沉底。
+export function byNewestFirst(a, b) {
+  return articleTime(b.createdAt) - articleTime(a.createdAt);
+}
+
 // Upgrade a schema-2 doc (top-level `articles` + `history` array) to schema-3
 // in memory. Called by readArticleDoc so callers are always schema-3.
 function migrateToV3(doc) {
