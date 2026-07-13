@@ -101,6 +101,9 @@ export function resolveList(template, userDoc) {
 export const MAX_ITEMS = 200;
 export const MAX_LABEL = 40;
 export const MAX_PROMPT = 4000;
+export const MAX_KIND = 24;
+export const MAX_IMAGE_PARAMS_KEYS = 8;
+export const MAX_IMAGE_PARAM_VALUE = 40;
 const USER_ID_RE = /^p_[a-z0-9]{6,}$/;
 const APPLIES = new Set(["text", "image"]);
 
@@ -110,6 +113,39 @@ const REF_ACTION_KEYS = new Set(["ref"]);
 const REF_GROUP_KEYS = new Set(["ref", "children"]);
 const ENTITY_ACTION_KEYS = new Set(["id", "type", "label", "prompt", "appliesTo", "kind", "imageParams", "forkedFrom"]);
 const ENTITY_GROUP_KEYS = new Set(["id", "type", "label", "children", "forkedFrom"]);
+
+/// kind/imageParams 只在字段白名单里对 action 放行——但白名单只挡键名，不挡值，
+/// 而这两个字段是唯一没有别的上限守住的自由字段（label/prompt 各有 MAX_LABEL/
+/// MAX_PROMPT）。没有值上限意味着一条已认证的 PUT 能在 200 个 item 上各挂一份
+/// 巨 blob 存进去，且此后每次 GET 都要为它们付一次 resolveList/deepCloneParams
+/// 的 structuredClone 代价——跟已经堵掉的"未知键名走私"是同一类滥用面。
+/// 注意：kind 这里【不做枚举限制】——spec 只要求它被存储 + 原样透传，未来新出
+/// 的 kind 值不能因为不在白名单里就被这个校验器 400 掉。
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/// imageParams 的值域：朴素对象、至多 MAX_IMAGE_PARAMS_KEYS 个自有键，每个值
+/// 只能是字符串（≤MAX_IMAGE_PARAM_VALUE）/ 有限数字 / 布尔——不允许嵌套对象或
+/// 数组（嵌套结构没有深度/大小上限，等于给巨 blob 开了后门）。
+function validateImageParams(v) {
+  if (!isPlainObject(v)) return "imageParams must be a plain object";
+  const keys = Object.keys(v);
+  if (keys.length > MAX_IMAGE_PARAMS_KEYS) return `imageParams has too many keys (max ${MAX_IMAGE_PARAMS_KEYS})`;
+  for (const k of keys) {
+    const val = v[k];
+    if (typeof val === "string") {
+      if (val.length > MAX_IMAGE_PARAM_VALUE) return `imageParams.${k} too long (max ${MAX_IMAGE_PARAM_VALUE})`;
+    } else if (typeof val === "number") {
+      if (!Number.isFinite(val)) return `imageParams.${k} must be a finite number`;
+    } else if (typeof val === "boolean") {
+      // ok
+    } else {
+      return `imageParams.${k} must be a string, finite number, or boolean`;
+    }
+  }
+  return null;
+}
 
 /// node 里第一个不在 allowed 白名单里的键名，没有则 null。node 此时保证是 JSON.parse 产出的
 /// 朴素对象（调用点已经过滤过 null/数组/原始值），Object.keys 不会抛。
@@ -195,6 +231,13 @@ function validateListUnsafe(template, items) {
     if (node.prompt.length > MAX_PROMPT) return `prompt too long (max ${MAX_PROMPT})`;
     if (!Array.isArray(node.appliesTo) || node.appliesTo.length === 0) return "appliesTo must be a non-empty array";
     for (const a of node.appliesTo) if (!APPLIES.has(a)) return `bad appliesTo value: ${a}`;
+    if (node.kind !== undefined) {
+      if (typeof node.kind !== "string" || node.kind.length > MAX_KIND) return `bad kind (want string, max ${MAX_KIND})`;
+    }
+    if (node.imageParams !== undefined) {
+      const err = validateImageParams(node.imageParams);
+      if (err) return err;
+    }
     return null;
   };
 

@@ -225,6 +225,19 @@ describe("resolvePromptShare", () => {
     expect(await resolvePromptShare(e, "9999999")).toBe(null);
     expect(await resolvePromptShare(e, "aB3xK9pQr2")).toBe(null);
   });
+
+  // ── appliesTo 值域清洗（跟 label/prompt 两行外的截断同一原则：坏值兜底，不 400 到死）─
+  it("appliesTo 全是非法值（如手改/损坏成 [\"banana\"]）→ 兜底成都行，而不是让下游 validateList 永远拒收", async () => {
+    const e = makeEnv({ "shares/4563566": sharedDoc({ appliesTo: ["banana"] }) });
+    const hit = await resolvePromptShare(e, "4563566");
+    expect(new Set(hit.appliesTo)).toEqual(new Set(["text", "image"]));
+  });
+
+  it("appliesTo 部分合法（[\"text\",\"banana\"]）→ 只保留合法值 [\"text\"]", async () => {
+    const e = makeEnv({ "shares/4563566": sharedDoc({ appliesTo: ["text", "banana"] }) });
+    const hit = await resolvePromptShare(e, "4563566");
+    expect(hit.appliesTo).toEqual(["text"]);
+  });
 });
 
 describe("resolveSharedPromptBlock", () => {

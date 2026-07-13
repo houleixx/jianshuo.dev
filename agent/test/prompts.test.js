@@ -368,6 +368,65 @@ describe("validateList — CRITICAL② 未知字段必须被拒绝（严格白�
   });
 });
 
+describe("validateList — kind/imageParams 值域校验（不止白名单，值也要有界；活的滥用面：一条 PUT 能在 200 个 item 上各挂一份巨 blob，GET 全量 structuredClone）", () => {
+  const entity = (over = {}) => ({ id: "p_abc123", type: "action", label: "我的", prompt: "内容", appliesTo: ["text"], ...over });
+
+  it("kind 是短 weird 字符串仍必须通过（spec：只落盘透传，不能枚举限制，未来新 kind 不能 400）", () => {
+    expect(validateList(TPL, [entity({ kind: "weird" })])).toBeNull();
+  });
+
+  it("kind 是 5MB 字符串 → 拒绝", () => {
+    const out = validateList(TPL, [entity({ kind: "K".repeat(5_000_000) })]);
+    expect(out).not.toBeNull();
+    expect(typeof out).toBe("string");
+  });
+
+  it("kind 不是字符串 → 拒绝", () => {
+    expect(validateList(TPL, [entity({ kind: 12345 })])).not.toBeNull();
+    expect(validateList(TPL, [entity({ kind: { nested: true } })])).not.toBeNull();
+  });
+
+  it("imageParams 带嵌套对象 → 拒绝", () => {
+    const out = validateList(TPL, [entity({ imageParams: { size: "1024x1024", nested: { seed: 1 } } })]);
+    expect(out).not.toBeNull();
+    expect(typeof out).toBe("string");
+  });
+
+  it("imageParams 带嵌套数组 → 拒绝", () => {
+    const out = validateList(TPL, [entity({ imageParams: { tags: ["a", "b"] } })]);
+    expect(out).not.toBeNull();
+  });
+
+  it("imageParams 本身是数组/null → 拒绝", () => {
+    expect(validateList(TPL, [entity({ imageParams: [] })])).not.toBeNull();
+    expect(validateList(TPL, [entity({ imageParams: null })])).not.toBeNull();
+  });
+
+  it("imageParams 超过 8 个自有键 → 拒绝", () => {
+    const wide = {};
+    for (let i = 0; i < 9; i++) wide[`k${i}`] = "v";
+    expect(validateList(TPL, [entity({ imageParams: wide })])).not.toBeNull();
+  });
+
+  it("imageParams 某个字符串值超过 40 字 → 拒绝", () => {
+    const out = validateList(TPL, [entity({ imageParams: { prompt: "长".repeat(41) } })]);
+    expect(out).not.toBeNull();
+  });
+
+  it("imageParams 值是非有限数字（Infinity/NaN）→ 拒绝", () => {
+    expect(validateList(TPL, [entity({ imageParams: { count: Infinity } })])).not.toBeNull();
+    expect(validateList(TPL, [entity({ imageParams: { count: NaN } })])).not.toBeNull();
+  });
+
+  it("imageParams: {aspect:\"16:9\", count: 4} → 通过（字符串/有限数字/布尔都合法）", () => {
+    expect(validateList(TPL, [entity({ imageParams: { aspect: "16:9", count: 4, hd: true } })])).toBeNull();
+  });
+
+  it("存量文档 kind/imageParams 都不带 → 照常通过（不因为新校验波及老数据）", () => {
+    expect(validateList(TPL, [entity()])).toBeNull();
+  });
+});
+
 describe("validateList — 必须是 total 函数：任何 JSON 可解析出的形状都不能 throw", () => {
   const hostileItems = [
     5, true, false, null, "x", [], [[]], [[[[[1]]]]],
@@ -1173,6 +1232,22 @@ describe("POST /agent/prompts/import — 魔法数字导入（4b）", () => {
     const env = fakeEnv(seedShare({ appliesTo: undefined }));
     const { item } = await (await IMPORT(env, "4820135")).json();
     expect(new Set(item.appliesTo)).toEqual(new Set(["text", "image"]));
+  });
+
+  it("分享文档 appliesTo 被手改成非法值 [\"banana\"] → 兜底都行，导入仍成功（不因 validateList 拒收而 400）", async () => {
+    const env = fakeEnv(seedShare({ appliesTo: ["banana"] }));
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const { item } = await res.json();
+    expect(new Set(item.appliesTo)).toEqual(new Set(["text", "image"]));
+  });
+
+  it("分享文档 appliesTo 部分合法 [\"text\",\"banana\"] → 只保留 [\"text\"]，导入成功", async () => {
+    const env = fakeEnv(seedShare({ appliesTo: ["text", "banana"] }));
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const { item } = await res.json();
+    expect(item.appliesTo).toEqual(["text"]);
   });
 
   it("无效码 → 404，不落盘", async () => {

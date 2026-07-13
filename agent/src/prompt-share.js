@@ -123,6 +123,20 @@ export async function refreshPromptShare(env, scope, itemId) {
   } catch (e) { console.error("[prompt-share] refresh failed:", e && e.message); }
 }
 
+// appliesTo 合法值域，与 prompts.js 的 APPLIES 同一口径（这里不 import——resolvePromptShare
+// 处理的是 shares/<code> 这份【外部既成事实】文档，跟 validateList 的输入是两类不同的东西，
+// 但值域必须一致）。
+const SHARE_APPLIES = new Set(["text", "image"]);
+
+/// appliesTo 值域清洗：与两行外 label/instruction 的截断同一原则——分享文档可能是
+/// 手改/存储层损坏/旧版本铸的码，任何元素不在合法值域内都【丢弃该元素】而不是让
+/// 整条 400 到死；元素全部非法（含压根不是数组）时兜底「都行」，跟老副本缺
+/// appliesTo 字段走的是同一条回退路径。
+function sanitizeAppliesTo(raw) {
+  const filtered = Array.isArray(raw) ? raw.filter((a) => SHARE_APPLIES.has(a)) : [];
+  return filtered.length ? filtered : ["text", "image"];
+}
+
 /// 兑换/落地读的解析：shares/<code> 是 JSON 且 type=prompt 才算（老式文章条目值
 /// 是纯 key 字符串，JSON.parse 失败自然跳过）。
 export async function resolvePromptShare(env, code) {
@@ -134,8 +148,8 @@ export async function resolvePromptShare(env, code) {
     return {
       code, sub: doc.sub, itemId: doc.itemId,
       label: doc.label || "分享指令", instruction: doc.instruction,
-      // 老副本（本次重构之前铸的码）没有 appliesTo → 回退「都行」。
-      appliesTo: Array.isArray(doc.appliesTo) && doc.appliesTo.length ? doc.appliesTo : ["text", "image"],
+      // 老副本（本次重构之前铸的码）没有 appliesTo → 回退「都行」；元素非法也一样。
+      appliesTo: sanitizeAppliesTo(doc.appliesTo),
       ...(doc.kind !== undefined ? { kind: doc.kind } : {}),
       importCount: doc.importCount || 0,
     };
