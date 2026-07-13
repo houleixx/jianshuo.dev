@@ -1,10 +1,18 @@
-import { vi, describe, it, expect } from "vitest";
+import { vi, describe, it, expect, afterEach } from "vitest";
 vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
 import { classifyAppliesTo } from "../src/prompt-classify.js";
 import worker from "../src/index.js";
 import { fakeEnv } from "./fakes.js";
 
 const claudeSaying = (s) => async () => s;
+
+function mockAnthropicUnauthorized() {
+  return vi.fn(async () => ({
+    ok: false,
+    status: 401,
+    text: async () => "Unauthorized",
+  }));
+}
 
 describe("classifyAppliesTo — 纯逻辑（注入 claude）", () => {
   it("模型说 text → {appliesTo:[text], reason}", async () => {
@@ -88,6 +96,7 @@ describe("classifyAppliesTo — 额外对抗性探针", () => {
 
 describe("POST /agent/prompt-classify route", () => {
   const TOKEN = "Bearer anon_testtoken1234567890";
+  afterEach(() => { vi.unstubAllGlobals(); });
 
   it("无 token → 401", async () => {
     const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompt-classify", { method: "POST" }), fakeEnv());
@@ -115,10 +124,12 @@ describe("POST /agent/prompt-classify route", () => {
   });
 
   it("★ 没有 CLAUDE_API_KEY（调用必挂）→ 仍 200 + 回退都行，绝不 500", async () => {
+    const env = { ...fakeEnv() };
+    vi.stubGlobal("fetch", mockAnthropicUnauthorized());
     const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompt-classify", {
       method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" },
       body: JSON.stringify({ prompt: "把这段改简洁" }),
-    }), fakeEnv());
+    }), env);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(new Set(body.appliesTo)).toEqual(new Set(["text", "image"]));
