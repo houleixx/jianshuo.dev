@@ -4,5 +4,10 @@
   "compatibility_date": "2026-06-01",
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "jianshuo-dev-files" }
+  ],
+  // 社区展示索引：与 voicedrop-reco worker 同一个 D1 库（community_posts 表）。
+  // files API 在 share/unshare/report/get 时双写索引，/reco/feed 从索引出列表。
+  "d1_databases": [
+    { "binding": "RECO_DB", "database_name": "voicedrop-reco", "database_id": "feeee5df-0f48-43ca-8845-473d8b4809c3" }
   ]
 }

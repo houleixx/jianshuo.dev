@@ -368,6 +368,7 @@ async function handleRequest(context) {
           communityPosts++;
         } catch {}
       });
+      await indexDeleteOwner(scope);
     }
 
     let shareLinks = 0;
@@ -684,7 +685,10 @@ async function handleRequest(context) {
     const liveObj = await env.FILES.get(p.articleKey);
     if (liveObj) { try { return JSON.parse(await liveObj.text()); } catch { return null; } }
     const audioKey = p.articleKey.replace('/articles/', '/').replace(/\.json$/, '.m4a');
-    if (!(await env.FILES.head(audioKey))) await env.FILES.delete(pointerKey);
+    if (!(await env.FILES.head(audioKey))) {
+      await env.FILES.delete(pointerKey);
+      await indexDelete(p.shareId);   // 孤儿指针连展示索引一起清
+    }
     return null;
   }
 
@@ -731,6 +735,7 @@ async function handleRequest(context) {
     const post = { schema: 2, shareId, owner: scope, articleKey, author, firstSharedAt,
                    ...(replyTo ? { replyTo } : {}) };
     await env.FILES.put(postKey, JSON.stringify(post), { httpMetadata: { contentType: 'application/json' } });
+    await indexUpsert(post, articles, doc.photos);
     return json({ ok: true, shareId });
   }
 
@@ -758,6 +763,50 @@ async function handleRequest(context) {
     return { hasPhoto: !!coverPhotoKey,
              ...(coverPhotoKey ? { coverPhotoKey } : {}),
              ...(preview ? { preview } : {}) };
+  }
+
+  // ── D1 社区展示索引（reco 同库，binding RECO_DB，表 community_posts）─────────
+  // R2 是真源；这张表只是 /reco/feed 用的展示索引。写失败一律吞掉（绝不打断主
+  // 路径），坏了/漂了用 POST community/reindex 全量重建。hidden 与 report 标记
+  // 同步；详情打开（community/get）时顺手 upsert 一次，文章编辑后的过期数据靠
+  // 这个自愈。
+  async function indexUpsert(p, articles, photos, { hidden = null } = {}) {
+    if (!env.RECO_DB) return;
+    try {
+      const ex = cardExtras(articles, photos, p.owner);
+      const title = articles[0]?.title ?? p.title ?? '';
+      const hid = hidden !== null ? (hidden ? 1 : 0)
+        : ((await env.FILES.head(reportKey(p.shareId))) ? 1 : 0);
+      await env.RECO_DB.prepare(
+        `INSERT INTO community_posts (share_id, owner, article_key, author, title, preview,
+           cover_photo_key, has_photo, article_count, first_shared_at, updated_at, reply_to, hidden)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(share_id) DO UPDATE SET
+           owner=excluded.owner, article_key=excluded.article_key, author=excluded.author,
+           title=excluded.title, preview=excluded.preview, cover_photo_key=excluded.cover_photo_key,
+           has_photo=excluded.has_photo, article_count=excluded.article_count,
+           first_shared_at=excluded.first_shared_at, updated_at=excluded.updated_at,
+           reply_to=excluded.reply_to, hidden=excluded.hidden`,
+      ).bind(p.shareId, p.owner || '', p.articleKey || null, p.author || '', title,
+             ex.preview || null, ex.coverPhotoKey || null, ex.hasPhoto ? 1 : 0,
+             articles.length || 1, p.firstSharedAt || null,
+             p.updatedAt || p.firstSharedAt || null, p.replyTo || null, hid).run();
+    } catch (e) { console.log('[community-index] upsert failed', String(e?.message || e)); }
+  }
+  async function indexDelete(shareId) {
+    if (!env.RECO_DB) return;
+    try { await env.RECO_DB.prepare('DELETE FROM community_posts WHERE share_id=?').bind(shareId).run(); }
+    catch (e) { console.log('[community-index] delete failed', String(e?.message || e)); }
+  }
+  async function indexSetHidden(shareId, hidden) {
+    if (!env.RECO_DB) return;
+    try { await env.RECO_DB.prepare('UPDATE community_posts SET hidden=? WHERE share_id=?').bind(hidden ? 1 : 0, shareId).run(); }
+    catch (e) { console.log('[community-index] hide failed', String(e?.message || e)); }
+  }
+  async function indexDeleteOwner(owner) {
+    if (!env.RECO_DB) return;
+    try { await env.RECO_DB.prepare('DELETE FROM community_posts WHERE owner=?').bind(owner).run(); }
+    catch (e) { console.log('[community-index] owner-delete failed', String(e?.message || e)); }
   }
 
   // List community posts (metadata only), newest-first by first-share time.
@@ -801,6 +850,45 @@ async function handleRequest(context) {
     return json({ posts });
   }
 
+  // Admin: 全量重建 D1 展示索引（幂等）。用途：首次回填、索引漂移兜底。
+  // 逻辑与 list 相同（读全部指针 + 活文章），额外把 R2 已不存在的行从索引删掉。
+  if (request.method === 'POST' && action === 'community' && sub2 === 'reindex') {
+    if (scope !== '') return json({ error: 'admin only' }, 403);
+    if (!env.RECO_DB) return json({ error: 'no RECO_DB binding' }, 503);
+    const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
+    const hidden = new Set(listed.objects
+      .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
+      .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
+    const postObjects = listed.objects.filter(o => /^community\/[^/]+\.json$/.test(o.key));
+    const seen = new Set();
+    let indexed = 0;
+    await mapLimit(postObjects, 16, async (o) => {
+      try {
+        const obj = await env.FILES.get(o.key);
+        if (!obj) return;
+        const p = JSON.parse(await obj.text());
+        let articles = p.articles || [], photos = p.photos;
+        if (p.articleKey) {
+          const live = await liveDocForPointer(o.key, p);
+          if (!live) return;   // 孤儿已顺手清掉；重挖中的先不进索引
+          articles = resolveArticles(live);
+          photos = live.photos;
+        }
+        await indexUpsert(p, articles, photos, { hidden: hidden.has(p.shareId) });
+        seen.add(p.shareId);
+        indexed++;
+      } catch {}
+    });
+    let removed = 0;
+    try {
+      const { results } = await env.RECO_DB.prepare('SELECT share_id FROM community_posts').all();
+      for (const r of results || []) {
+        if (!seen.has(r.share_id)) { await indexDelete(r.share_id); removed++; }
+      }
+    } catch {}
+    return json({ ok: true, indexed, removed });
+  }
+
   // Un-share (delete) a community post — owner only.
   if (request.method === 'POST' && action === 'community' && sub2 === 'unshare') {
     if (!scope) return json({ error: 'unauthorized' }, 403);
@@ -815,6 +903,7 @@ async function handleRequest(context) {
     try { owner = JSON.parse(await obj.text()).owner; } catch {}
     if (owner !== scope) return json({ error: 'not owner' }, 403);
     await env.FILES.delete(key);
+    await indexDelete(shareId);
     return json({ ok: true });
   }
 
@@ -834,6 +923,7 @@ async function handleRequest(context) {
     const by = scope || 'admin';
     if (!rec.reporters.some(r => r.by === by)) rec.reporters.push({ by, at: Date.now(), reason: String(reason).slice(0, 200) });
     await env.FILES.put(rk, JSON.stringify(rec), { httpMetadata: { contentType: 'application/json' } });
+    await indexSetHidden(shareId, true);
     return json({ ok: true });
   }
 
@@ -871,9 +961,11 @@ async function handleRequest(context) {
     if (act === 'remove') {
       await env.FILES.delete(communityKey(shareId)).catch(() => {});
       await env.FILES.delete(reportKey(shareId)).catch(() => {});
+      await indexDelete(shareId);
       return json({ ok: true, removed: true });
     }
     await env.FILES.delete(reportKey(shareId)).catch(() => {});
+    await indexSetHidden(shareId, false);
     return json({ ok: true, restored: true });
   }
 
@@ -894,6 +986,9 @@ async function handleRequest(context) {
       articles = resolveArticles(live).map(a => ({ title: a.title, body: a.body }));
       title = articles[0]?.title ?? title;
       legacyPhotos = live.photos;
+      // 展示索引自愈：live 文章此刻刚读过，顺手把最新标题/封面/预览刷回索引——
+      // 文章编辑后 feed 里的过期卡片在任何人打开详情时更新。
+      await indexUpsert(p, articles, legacyPhotos);
     }
     // `owner` (= the photo files' "users/<sub>/" prefix) + `photos` let the client build
     // the full R2 key for each [[photo:…]] marker and load it from the public photo URL.

@@ -25,6 +25,41 @@ export function fakeEnv(seed = {}) {
   return { FILES };
 }
 
+// 内存版社区展示索引 D1（RECO_DB binding）。只实现 files API 双写用到的语句，
+// _posts 是 Map<share_id, row>（row 字段同真表列名）供断言。
+export function fakeRecoD1() {
+  const posts = new Map();
+  function stmt(sql) {
+    let args = [];
+    return {
+      bind(...a) { args = a; return this; },
+      async run() {
+        if (/^INSERT INTO community_posts/.test(sql)) {
+          const [share_id, owner, article_key, author, title, preview, cover_photo_key,
+                 has_photo, article_count, first_shared_at, updated_at, reply_to, hidden] = args;
+          posts.set(share_id, { share_id, owner, article_key, author, title, preview,
+                                cover_photo_key, has_photo, article_count, first_shared_at,
+                                updated_at, reply_to, hidden });
+        } else if (/^UPDATE community_posts SET hidden/.test(sql)) {
+          const [hidden, share_id] = args;
+          const row = posts.get(share_id);
+          if (row) row.hidden = hidden;
+        } else if (/^DELETE FROM community_posts WHERE share_id/.test(sql)) {
+          posts.delete(args[0]);
+        } else if (/^DELETE FROM community_posts WHERE owner/.test(sql)) {
+          for (const [id, row] of [...posts]) if (row.owner === args[0]) posts.delete(id);
+        }
+        return { success: true };
+      },
+      async all() {
+        // reindex 的 SELECT share_id FROM community_posts
+        return { results: [...posts.values()].map((r) => ({ share_id: r.share_id })) };
+      },
+    };
+  }
+  return { prepare: (sql) => stmt(sql), _posts: posts };
+}
+
 // Route table: { "POST https://host/path": (req) => ({ ok, status, body }) }
 export function fakeFetch(routes) {
   const calls = [];

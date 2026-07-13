@@ -13,7 +13,7 @@ async function token(scope) {
   const p = b64url(JSON.stringify({ scope, apple: true, iat: now, exp: now + 3600 }));
   return `${h}.${p}.${await hmacSign(`${h}.${p}`, SECRET)}`;
 }
-function env(seed = []) { return { ...fakeD1(seed), SESSION_SECRET: SECRET }; }
+function env(seed = [], posts = []) { return { ...fakeD1(seed, posts), SESSION_SECRET: SECRET }; }
 function req(path, { method = "POST", body, auth } = {}) {
   return new Request("https://jianshuo.dev" + path, {
     method,
@@ -69,6 +69,46 @@ describe("reco worker", () => {
     const j = await r.json();
     expect(j.likes.hot).toBe(2);
     expect(j.likes.cold).toBeUndefined();
+  });
+
+  // ── GET /reco/feed（2026-07-14 D1 展示索引合一端点）────────────────────────
+  it("feed 返回可见帖（时间倒序）+ 推荐序 + 红心/回应数/我赞过/mine", async () => {
+    const now = Date.now();
+    const posts = [
+      { share_id: "a", owner: "users/u1/", author: "我", title: "甲", preview: "预览甲",
+        cover_photo_key: "users/u1/photos/1.jpg", has_photo: 1, article_count: 1,
+        first_shared_at: now - 1000, updated_at: now - 1000, reply_to: null, hidden: 0 },
+      { share_id: "b", owner: "users/u2/", author: "别人", title: "乙", preview: null,
+        cover_photo_key: null, has_photo: 0, article_count: 2,
+        first_shared_at: now, updated_at: now, reply_to: "a", hidden: 0 },
+      { share_id: "c", owner: "users/u3/", author: "路人", title: "被举报", preview: null,
+        cover_photo_key: null, has_photo: 0, article_count: 1,
+        first_shared_at: now, updated_at: now, reply_to: null, hidden: 1 },
+    ];
+    const e = env([], posts);
+    const t = await token("users/u1/");
+    await worker.fetch(req("/reco/engage/a", { body: { action: "like", on: true }, auth: t }), e);
+    const r = await worker.fetch(req("/reco/feed", { method: "GET", auth: t }), e);
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.posts.map((p) => p.shareId)).toEqual(["b", "a"]);   // 时间倒序,hidden 的 c 不出现
+    const a = j.posts.find((p) => p.shareId === "a");
+    expect(a.coverPhotoKey).toBe("users/u1/photos/1.jpg");
+    expect(a.hasPhoto).toBe(true);
+    expect(a.likes).toBe(1);
+    expect(a.liked).toBe(true);
+    expect(a.replies).toBe(1);          // b 回应了 a
+    expect(a.mine).toBe(true);          // owner == 我的 scope
+    const b = j.posts.find((p) => p.shareId === "b");
+    expect(b.replyTo).toBe("a");
+    expect(b.mine).toBe(false);
+    expect(new Set(j.order)).toEqual(new Set(["a", "b"]));       // 推荐序覆盖全部可见帖
+  });
+
+  it("feed 无 D1 → 503（app 回退老的 list+rank 路径）", async () => {
+    const t = await token("users/u1/");
+    const r = await worker.fetch(req("/reco/feed", { method: "GET", auth: t }), { SESSION_SECRET: SECRET });
+    expect(r.status).toBe(503);
   });
 
   // 2026-07-13 事故回归：社区过百帖后 IN (?,?,…) 超出 D1 的 100 参数上限，rank

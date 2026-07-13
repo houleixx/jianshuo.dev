@@ -1,7 +1,8 @@
-// 内存版 D1,只实现 store.js 用到的 4 条语句。行 = {share_id,user_sub,action,created_at}。
+// 内存版 D1,实现 store.js 用到的语句。engagement 行 = {share_id,user_sub,action,created_at};
+// posts = community_posts 展示索引行（feed 测试用,字段同真表列名）。
 // bind 复刻真 D1 的 100 参数上限——社区过百帖时 IN (?,?,…) 整条炸掉的事故（2026-07-13）
 // 必须能在单测里复现,否则 fake 比真库宽松,测试全绿线上照样 500。
-export function fakeD1(seed = []) {
+export function fakeD1(seed = [], posts = []) {
   const rows = [...seed];
   function stmt(sql) {
     let args = [];
@@ -23,6 +24,13 @@ export function fakeD1(seed = []) {
         return { success: true };
       },
       async all() {
+        if (/FROM community_posts/.test(sql)) {
+          // feed: WHERE hidden=0 ORDER BY first_shared_at DESC
+          const results = posts
+            .filter((p) => !p.hidden)
+            .sort((a, b) => (b.first_shared_at || 0) - (a.first_shared_at || 0));
+          return { results };
+        }
         if (/GROUP BY/.test(sql)) {
           // counts: WHERE share_id IN (...) GROUP BY share_id, action
           const ids = new Set(args);
@@ -47,5 +55,5 @@ export function fakeD1(seed = []) {
       },
     };
   }
-  return { DB: { prepare: (sql) => stmt(sql), _rows: rows } };
+  return { DB: { prepare: (sql) => stmt(sql), _rows: rows, _posts: posts } };
 }

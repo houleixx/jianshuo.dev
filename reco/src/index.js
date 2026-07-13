@@ -1,5 +1,5 @@
 import { resolveScope } from "./auth.js";
-import { recordEngagement, countsFor, likedBy } from "./store.js";
+import { recordEngagement, countsFor, likedBy, feedRows } from "./store.js";
 import { rankPosts } from "./ranking.js";
 
 const CORS = {
@@ -33,6 +33,35 @@ export default {
       if (!env.DB) return json({ ok: true });   // D1 缺失 → no-op,绝不崩
       await recordEngagement(env, shareId, scope, action, body.on, Date.now());
       return json(action === "like" ? { ok: true, liked: body.on !== false } : { ok: true });
+    }
+
+    // GET /reco/feed — 社区列表页的合一后台（2026-07-14）：D1 展示索引一次带回
+    // 列表元数据 + 推荐序 + 每帖红心/回应数 + 我赞过的。app 的 load+rank+赞数
+    // 三步并成这一步；R2 真源的 community/list 保留给老版本 app 与重建兜底。
+    if (request.method === "GET" && parts[1] === "feed") {
+      if (!env.DB) return json({ error: "feed unavailable" }, 503);
+      const rows = await feedRows(env);
+      const ids = rows.map((r) => r.share_id);
+      const replyCounts = {};
+      for (const r of rows) if (r.reply_to) replyCounts[r.reply_to] = (replyCounts[r.reply_to] || 0) + 1;
+      const [engMap, likedSet] = await Promise.all([countsFor(env, ids), likedBy(env, scope, ids)]);
+      const posts = rows.map((r) => ({
+        shareId: r.share_id, author: r.author, title: r.title,
+        ...(r.preview ? { preview: r.preview } : {}),
+        ...(r.cover_photo_key ? { coverPhotoKey: r.cover_photo_key } : {}),
+        hasPhoto: !!r.has_photo, count: r.article_count,
+        firstSharedAt: r.first_shared_at, updatedAt: r.updated_at || r.first_shared_at,
+        ...(r.reply_to ? { replyTo: r.reply_to } : {}),
+        mine: r.owner === scope,
+        likes: (engMap[r.share_id] || {}).like || 0,
+        replies: replyCounts[r.share_id] || 0,
+        liked: likedSet.has(r.share_id),
+      }));
+      const order = rankPosts(
+        rows.map((r) => ({ shareId: r.share_id, firstSharedAt: r.first_shared_at,
+                           author: r.author, replyCount: replyCounts[r.share_id] || 0 })),
+        engMap, Date.now());
+      return json({ posts, order });
     }
 
     // POST /reco/rank

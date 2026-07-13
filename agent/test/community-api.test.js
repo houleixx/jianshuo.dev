@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { onRequest } from "../../functions/files/api/[[path]].js";
-import { fakeEnv } from "./fakes.js";
+import { fakeEnv, fakeRecoD1 } from "./fakes.js";
 import { b64url, b64urlToString, hmacSign } from "../../functions/lib/auth.js";
 
 // The VD社区 (community) surface had NO test coverage, yet it carries the most
@@ -375,5 +375,83 @@ describe("POST community/unshare — owner only", () => {
     const resp = await onRequest(context);
     expect(resp.status).toBe(200);
     expect(context.env.FILES._store.has("community/p10000000001.json")).toBe(false);
+  });
+});
+
+// ── D1 展示索引双写（2026-07-14）：R2 真源不变，RECO_DB 是 /reco/feed 的物化索引 ──
+
+describe("community D1 index dual-write", () => {
+  it("share upserts an index row with cover/preview; unshare deletes it", async () => {
+    const token = await session("users/u/");
+    const db = fakeRecoD1();
+    const ctx1 = reqCtx("POST", ["community", "share", "articles", "s1.json"], { token, env: { RECO_DB: db } });
+    ctx1.env.FILES._store.set("users/u/articles/s1.json", JSON.stringify({
+      schema: 3, createdAt: 1000, head: 1,
+      versions: [{ v: 1, savedAt: 1000, source: "mine",
+        articles: [{ title: "有图分享", body: "开头。[[photo:photos/9/1.jpg]] 后文。" }] }],
+    }));
+    const id = await shareIdFor("users/u/articles/s1.json");
+    expect((await (await onRequest(ctx1)).json()).ok).toBe(true);
+
+    const row = db._posts.get(id);
+    expect(row.owner).toBe("users/u/");
+    expect(row.title).toBe("有图分享");
+    expect(row.cover_photo_key).toBe("users/u/photos/9/1.jpg");
+    expect(row.has_photo).toBe(1);
+    expect(row.preview).toContain("开头");
+    expect(row.hidden).toBe(0);
+
+    const ctx2 = reqCtx("POST", ["community", "unshare", id], { token, env: { RECO_DB: db } });
+    ctx2.env.FILES._store.set(`community/${id}.json`, JSON.stringify({ shareId: id, owner: "users/u/" }));
+    expect((await (await onRequest(ctx2)).json()).ok).toBe(true);
+    expect(db._posts.has(id)).toBe(false);
+  });
+
+  it("report hides the index row; resolve-restore unhides; resolve-remove deletes", async () => {
+    const token = await session("users/u2/");
+    const db = fakeRecoD1();
+    db._posts.set("rpt000000001", { share_id: "rpt000000001", owner: "users/u/", hidden: 0 });
+    const ctx = reqCtx("POST", ["community", "report", "rpt000000001"], { token, env: { RECO_DB: db } });
+    ctx.env.FILES._store.set("community/rpt000000001.json", JSON.stringify({ shareId: "rpt000000001", owner: "users/u/" }));
+    expect((await (await onRequest(ctx)).json()).ok).toBe(true);
+    expect(db._posts.get("rpt000000001").hidden).toBe(1);
+
+    const ctxRestore = reqCtx("POST", ["community", "resolve", "rpt000000001"], { body: { action: "restore" }, env: { RECO_DB: db } });
+    expect((await (await onRequest(ctxRestore)).json()).restored).toBe(true);
+    expect(db._posts.get("rpt000000001").hidden).toBe(0);
+
+    const ctxRemove = reqCtx("POST", ["community", "resolve", "rpt000000001"], { body: { action: "remove" }, env: { RECO_DB: db } });
+    expect((await (await onRequest(ctxRemove)).json()).removed).toBe(true);
+    expect(db._posts.has("rpt000000001")).toBe(false);
+  });
+
+  it("reindex rebuilds rows from R2 (hidden from report markers) and drops stale rows", async () => {
+    const db = fakeRecoD1();
+    db._posts.set("stale0000001", { share_id: "stale0000001", owner: "users/x/", hidden: 0 });  // R2 里已不存在
+    const context = reqCtx("POST", ["community", "reindex"], { env: { RECO_DB: db } });   // admin token
+    const env = context.env;
+    env.FILES._store.set("users/u/articles/p1.json", schema3("重建帖"));
+    env.FILES._store.set("community/idx000000001.json", JSON.stringify({
+      schema: 2, shareId: "idx000000001", owner: "users/u/",
+      articleKey: "users/u/articles/p1.json", author: "B", firstSharedAt: 5000,
+    }));
+    env.FILES._store.set("community/reports/idx000000001.json", JSON.stringify({ status: "pending" }));
+
+    const body = await (await onRequest(context)).json();
+    expect(body.ok).toBe(true);
+    expect(body.indexed).toBe(1);
+    expect(body.removed).toBe(1);                        // stale0000001 被清掉
+    const row = db._posts.get("idx000000001");
+    expect(row.title).toBe("重建帖");
+    expect(row.hidden).toBe(1);                          // report 标记 → hidden
+    expect(db._posts.has("stale0000001")).toBe(false);
+  });
+
+  it("no RECO_DB binding → community writes still work (index is best-effort)", async () => {
+    const token = await session("users/u/");
+    const context = reqCtx("POST", ["community", "share", "articles", "s1.json"], { token });
+    context.env.FILES._store.set("users/u/articles/s1.json", schema3("无索引分享"));
+    const body = await (await onRequest(context)).json();
+    expect(body.ok).toBe(true);
   });
 });

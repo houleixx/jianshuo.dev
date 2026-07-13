@@ -39,6 +39,18 @@ export async function countsFor(env, shareIds) {
   return out;
 }
 
+// 社区展示索引（community_posts,files API 双写维护）：feed 用的可见帖全量行,
+// 时间倒序。500 封顶——超过再谈分页,现在整个社区才百余帖。
+export async function feedRows(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT share_id, owner, author, title, preview, cover_photo_key, has_photo,
+            article_count, first_shared_at, updated_at, reply_to
+     FROM community_posts WHERE hidden=0
+     ORDER BY first_shared_at DESC LIMIT 500`,
+  ).all();
+  return results || [];
+}
+
 export async function likedBy(env, sub, shareIds) {
   const set = new Set();
   for (const ids of chunks(shareIds)) {
