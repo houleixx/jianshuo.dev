@@ -527,38 +527,10 @@ export class LibraryAgent extends Agent {
 // state. The hub broadcasts to all connected app sockets for that user.
 // Uses WebSocket Hibernation so idle hubs cost nothing.
 // ---------------------------------------------------------------------------
-export class StatusHub {
-  constructor(state, env) {
-    this.state = state;
-    this.env = env;
-  }
-
-  async fetch(request) {
-    const url = new URL(request.url);
-
-    if (request.headers.get("Upgrade") === "websocket") {
-      const pair = new WebSocketPair();
-      const [client, server] = Object.values(pair);
-      this.state.acceptWebSocket(server);
-      return new Response(null, { status: 101, webSocket: client });
-    }
-
-    if (request.method === "POST" && url.pathname.endsWith("/broadcast")) {
-      const body = await request.json();
-      const msg = JSON.stringify(buildBroadcastMessage(body));
-      for (const ws of this.state.getWebSockets()) {
-        try { ws.send(msg); } catch (_) {}
-      }
-      return new Response("ok");
-    }
-
-    return new Response("not found", { status: 404 });
-  }
-
-  webSocketMessage(_ws, _msg) {}
-  webSocketClose(_ws) {}
-  webSocketError(_ws) {}
-}
+// StatusHub 已抽到 ./status-hub.js —— index.js 引了 `agents`，它又引
+// `cloudflare:workers`，vitest 里加载不了，抽出去才测得到。
+// wrangler 的 DO 绑定认的是 main 模块的导出，所以这里 re-export。
+export { StatusHub } from "./status-hub.js";
 
 // ---------------------------------------------------------------------------
 // Miner: sharded Durable Object that serialises mine runs via alarm().
@@ -1336,8 +1308,26 @@ export default {
           method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ payload: { type: "link_request", pairingId, code, pubkey } }),
         }));
+        // 门铃：手机可能在后台（那条 status socket 一进后台就断），推送把用户叫回 App。
+        // 不带 4 位码——码要在 App 里看，因为放行那一步无论如何都得 App 在前台。
+        // sendPush 自带 try/catch，缺 secret 就静默 no-op，不会拖垮配对。
+        await sendPush(env, scope, {
+          title: "有新设备要登录",
+          body: "点开确认，查看验证码",
+          link: `voicedrop://link/${pairingId}`,
+        });
       }
       return Response.json({ ok: true, pairingId, matchCount: scopes.length });
+    }
+
+    // 手机主动捞「有没有正在等我的配对」。这是后台丢消息 + iOS 侧 pending 只存内存
+    // 这两个洞的共同解药：App 一进前台/一重启就问一次，拿回 pairingId + code + pubkey，
+    // 不必自己持久化任何东西。
+    if (url.pathname === "/agent/link/pending") {
+      const scope = await resolveScope(bearerToken(request), env);
+      if (!scope) return new Response("unauthorized", { status: 401 });
+      const hub = env.StatusHub.get(env.StatusHub.idFromName("status:" + scope));
+      return hub.fetch(new Request("https://status-hub/pending"));
     }
 
     if (url.pathname === "/agent/link/socket") {
@@ -1383,6 +1373,11 @@ export default {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ op: "complete", callerScope: caller, blob }),
       }));
+      // 放行成功 → 清掉这个用户的待处理配对，免得手机下次再捞到一个已经用掉的。
+      if (r.ok) {
+        const hub = env.StatusHub.get(env.StatusHub.idFromName("status:" + caller));
+        await hub.fetch(new Request("https://status-hub/clear-pending", { method: "POST" })).catch(() => {});
+      }
       return new Response(await r.text(), { status: r.status, headers: { "content-type": "application/json" } });
     }
 

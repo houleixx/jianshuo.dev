@@ -25,6 +25,22 @@ export function buildBroadcastMessage(body) {
   return body.payload ?? { type: "status_update", stem: body.stem, status: body.status };
 }
 
+// ── 待处理配对：StatusHub 存一份，让错过推送的手机还能捞回来 ──
+// broadcast 是纯扇出、零缓冲；而 iOS 一进后台就断开 socket。两者相加，
+// link_request 会永久丢失。存住它，连上来就补送、也能主动 GET。
+// pubkey 必须一起存：手机放行时要用它把 token 封给新设备。
+
+export function pendingRecord(msg, now, ttlMs = CODE_TTL_MS) {
+  if (!msg || msg.type !== "link_request") return null;
+  return { pairingId: msg.pairingId, code: msg.code, pubkey: msg.pubkey, exp: now + ttlMs };
+}
+
+export function livePending(rec, now) {
+  if (!rec || !rec.exp || rec.exp <= now) return null;
+  const { exp: _exp, ...payload } = rec;
+  return { type: "link_request", ...payload };
+}
+
 // List objects under users/anon-<6hex> and dedup the distinct users/anon-<32hex>/ scopes.
 // (Derived from object keys — works with both real R2 and the Map-backed test fake,
 // and avoids depending on R2 list delimiter support.)
