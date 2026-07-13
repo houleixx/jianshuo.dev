@@ -274,19 +274,42 @@ function cloneTop(node) {
 ///   2. "已覆盖"是全树口径（见 collectCoverage）——一个 ref/fork 不管在
 ///      树里哪个位置，都能让对应的模板 id 被认作"已有"，不会因为它被
 ///      拖出了原来的组就被判定为"缺"而重复补。
-/// 供 import 端点复用：把【已经落盘的用户列表】清洗成可以安全追加的副本——
-/// 过滤掉垃圾顶层节点、垃圾 children 节点（跟 resolveList/restoreDefaults 对垃圾节点
-/// 的容忍度一致），不新增/不删除任何有效节点、不改变顺序。
+/// 供 import / restore-defaults 端点复用：把【已经落盘的用户列表】清洗成可以安全
+/// 追加 / 再处理的副本——过滤掉垃圾顶层节点、垃圾 children 节点（跟 resolveList/
+/// restoreDefaults 对垃圾节点的容忍度一致），并且【悬空 ref】（模板热更后已经不
+/// 在 template 里的 sys_*）也当垃圾节点同等对待，一并丢弃——不新增/不删除任何
+/// 其余有效节点、不改变顺序。
 ///
-/// 为什么需要这个：validateList 对垃圾节点是【零容忍】的（直接判 "bad node"），
-/// 但存量 prompts.json 可能是老版本代码或存储层损坏写进去的、混了垃圾的合法 JSON
-/// （resolveList/restoreDefaults 都对这种情况做了容忍）。import 端点如果直接把
-/// doc.items 原样拿来 push 一条再喂给 validateList，会让"用户本来就有的垃圾节点"
-/// 把这一次全新的、跟垃圾毫无关系的导入操作也一起拖成 400——必须先清洗。
+/// 为什么需要这个：validateList 对垃圾节点、悬空 ref 都是【零容忍】的（直接判
+/// "bad node" / "unknown ref"），但 resolveList（读路径）对二者都是静默跳过——
+/// prompt-template.json 是 R2 里可热调的配置，一个 sys_* 从模板里退休，是完全合法
+/// 的运营动作，不该让所有还持有那条 ref 的用户永远卡在 400/500。存量 prompts.json
+/// 还可能混了老版本代码或存储层损坏写进去的垃圾节点。import / restore-defaults
+/// 如果直接把 doc.items 原样拿来处理再喂给 validateList，会让"用户本来就有的
+/// 垃圾节点 / 悬空 ref"把这一次全新的、跟它们毫无关系的写操作也一起拖成 400/500
+/// ——必须先清洗，写路径与读路径对这两类历史脏数据的处理必须一致。
+///
 /// 同时顺手做一次浅层拷贝（顶层数组 + 每个 group 的 children 数组都是新的），
 /// 调用方可以放心 push，不会污染 loadUserPrompts 返回的原始对象。
-export function sanitizeStoredItems(items) {
-  return (items || []).map(cloneTop).filter(Boolean);
+///
+/// template 参数：可以传整棵模板（{schema,items}）或已经打平的 templateIndex
+/// （Map<id,node>）——已经有 idx 在手的调用方不用再打平一遍。
+export function sanitizeStoredItems(items, template) {
+  const idx = template instanceof Map ? template : templateIndex(template);
+  const sanitizeChild = (c) => {
+    if (isJunkNode(c)) return null;               // cloneTop 已经过滤过一遍，这里是双重保险
+    if (c.ref && !idx.has(c.ref)) return null;     // 悬空 ref child：模板热更已经不认这个 id 了
+    return c;
+  };
+  const out = [];
+  for (const raw of items || []) {
+    const cloned = cloneTop(raw);
+    if (!cloned) continue;                         // 垃圾顶层节点
+    if (cloned.ref && !idx.has(cloned.ref)) continue; // 悬空顶层 ref：整条（含 children）一起丢
+    if (Array.isArray(cloned.children)) cloned.children = cloned.children.filter(sanitizeChild);
+    out.push(cloned);
+  }
+  return out;
 }
 
 export function restoreDefaults(template, items) {

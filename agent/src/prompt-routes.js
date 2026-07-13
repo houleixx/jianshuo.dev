@@ -24,7 +24,13 @@ export async function handlePromptsRoute(request, env, scope, url) {
     const doc = await loadUserPrompts(env, scope);
     // 还没有自己的文件 = 本来就全跟随模板，恢复默认是 no-op，也不落盘。
     if (!doc) return J({ schema: 1, items: resolveList(tpl, null) });
-    const next = restoreDefaults(tpl, doc.items);
+    // 先清洗：doc.items 可能带着垃圾节点，或者模板热更后已经退休的悬空 ref
+    // （config/prompt-template.json 是可实时调优的，sys_* 消失是合法运营动作，
+    // 不该让还持有那条 ref 的用户在这个端点上永远 400/500——resolveList 读路径
+    // 早就对悬空 ref 静默丢弃了，写路径必须待遇一致）。restoreDefaults 自己的
+    // cloneTop 不认模板，不清悬空 ref，所以这一步不能省。
+    const sanitized = sanitizeStoredItems(doc.items, tpl);
+    const next = restoreDefaults(tpl, sanitized);
     // 防御性纵深：restoreDefaults 的输出理论上总能过 validateList，但这个端点会落盘——
     // 绝不允许一份没过校验的文档被写进 R2。校验失败就当没发生过（不落盘），报 500
     // 好过悄悄写坏数据；这条分支不该被真实触发，触发了就是 restoreDefaults 自己的 bug。
@@ -97,6 +103,20 @@ function freshUserId(usedIds) {
   return newUserId();
 }
 
+/// 截断到最多 max 个 UTF-16 code unit——这必须跟 validateList 的计数口径一致
+/// （它用 .length，即 UTF-16 code unit 数，不是 code point 数），所以不能换成
+/// 数 code point 再截：那样会吐出一份自己都过不了 validateList 上限检查的字符串。
+/// 唯一的陷阱：截断点如果正好落在一个代理对（surrogate pair，如 emoji）中间，
+/// 会切出一个孤立的高位代理（\uD800-\uDBFF），下游拿去用会变成半个字符的乱码——
+/// 截完之后多看一步，孤立的高位代理整个丢掉（不补半个回来会超上限，留着半个是
+/// mojibake，两头都不对，唯一选择是丢）。
+function truncateUtf16(s, max) {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const last = cut.charCodeAt(cut.length - 1);
+  return (last >= 0xD800 && last <= 0xDBFF) ? cut.slice(0, -1) : cut;
+}
+
 /// 把「当前生效的列表」物化成一份【用户列表】（存储原始形状：ref / 实体，不是解析结果）。
 /// 用户还没有 prompts.json 时，他的生效列表 = 模板全量 → 物化成全 ref——这样模板项
 /// 仍然跟随最新，只是现在显式列在他的文件里了。【关键陷阱】：物化出的 group ref
@@ -108,7 +128,7 @@ function freshUserId(usedIds) {
 /// 但 validateList 零容忍），必须先用 sanitizeStoredItems 清洗一遍，否则用户自己
 /// 早就有的、跟这次导入毫无关系的垃圾会把这次导入也一起拖成 400。
 function materialize(tpl, doc) {
-  if (doc && Array.isArray(doc.items)) return sanitizeStoredItems(doc.items);
+  if (doc && Array.isArray(doc.items)) return sanitizeStoredItems(doc.items, tpl);
   return (tpl.items || []).map((t) => (t.type === "group"
     ? { ref: t.id, children: (t.children || []).map((c) => ({ ref: c.id })) }
     : { ref: t.id }));
@@ -135,9 +155,18 @@ export async function handlePromptImport(request, env, scope) {
   // 这里选择【截断】而不是 400：截断只是丢掉尾巴，用户导入后是自己独立可编辑的
   // 副本，能立刻看到、立刻改；400 则是把"别人分享的内容超限"这个跟当前导入者
   // 毫无关系的历史问题，变成"你这条永远导不进来"——对导入者不公平，也没有他能
-  // 采取的补救动作。label/instruction 两者用同一策略，保持行为一致。
-  const label = (hit.label || "导入的提示词").slice(0, MAX_LABEL);
-  const prompt = String(hit.instruction || "").slice(0, MAX_PROMPT);
+  // 采取的补救动作。label/instruction 两者用同一策略，保持行为一致。截断用
+  // truncateUtf16（不是裸 .slice）——纯 .slice 可能正好切断一个代理对（emoji），
+  // 留下半个字符的乱码。
+  //
+  // label 的空判断必须用 trim 后是否为空，不能只判 falsy：hit.label 是纯空白
+  // （比如 "     "，构造分享文档时手改/老数据留下的）时 falsy 判断挡不住——
+  // truthy 的空白字符串会原样流进 item.label，喂给 validateList 的
+  // "label must not be empty"（它按 trim 判空）直接 400，违背了本函数
+  // "截断不拒绝" 的设计初衷。
+  const rawLabel = typeof hit.label === "string" ? hit.label : "";
+  const label = truncateUtf16(rawLabel.trim() ? rawLabel : "导入的提示词", MAX_LABEL);
+  const prompt = truncateUtf16(String(hit.instruction || ""), MAX_PROMPT);
 
   const item = {
     id: freshUserId(collectEntityIds(items)), type: "action",
