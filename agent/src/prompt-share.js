@@ -275,8 +275,11 @@ export async function handlePromptShareRoutes(url, request, env) {
 }
 
 /// itemId → { shareCode, sharing }。码在索引里就返回（再开同码），sharing 看
-/// shares/<码> 是否健在。供 prompt-routes.js 的 syncActiveShares 用来找出"当前
-/// 正在分享的条目"（一次 owner 索引 GET + 逐条 head，不经过 effectiveLeaf）。
+/// shares/<码> 是否健在。两处调用方：① prompt-routes.js 的 syncActiveShares 用来
+/// 找出"当前正在分享的条目"（一次 owner 索引 GET + 逐条 head，不经过 effectiveLeaf）；
+/// ② index.js 的 GET /agent/prompt-shares 直接把这份结果暴露给 iOS 分享卡（字段名
+/// shareCode 在那条路由里对外改叫 code，两边的字段名故意不同——这里是内部实现
+/// 细节，那边是客户端契约）。
 export async function shareStates(env, scope) {
   const { byItem } = await loadIndex(env, scope);
   const out = {};
@@ -285,4 +288,50 @@ export async function shareStates(env, scope) {
     out[itemId] = { shareCode: entry.code, sharing: !!(await env.FILES.head(`shares/${entry.code}`)) };
   }
   return out;
+}
+
+/// items（顶层 + group children，两级封顶，与 collectSavedIds/collectCoverage 同一
+/// 扫描形状）里带 forkedFrom 的实体 → [{id, forkedFrom}]。
+function collectForkedEntities(items) {
+  const out = [];
+  const visit = (list) => {
+    for (const n of list || []) {
+      if (!n || typeof n !== "object" || Array.isArray(n)) continue;
+      if (typeof n.id === "string" && typeof n.forkedFrom === "string" && n.forkedFrom) {
+        out.push({ id: n.id, forkedFrom: n.forkedFrom });
+      }
+      if (Array.isArray(n.children)) visit(n.children);
+    }
+  };
+  visit(items);
+  return out;
+}
+
+/// fork 时把分享码从旧 key（被 fork 的 sys_* 或前一个实体 id）re-key 到新实体 id——
+/// 码本身永远不变（"一条指令一辈子一个码"），只是 owner 索引 byItem 的 key 挪了位置。
+/// 触发条件：byItem[forkedFrom] 存在 且 byItem[实体id] 不存在——后者已经占了就不抢，
+/// 这一条同时给了幂等（同一棵树重复 PUT，第二次 forkedFrom 的索引条目已经不在了，
+/// 天然 no-op）和"边界：fork 被删又对同一个系统项二次 fork"的接受行为（首次 fork
+/// 已经消费掉 byItem[forkedFrom]，二次 fork 拿不到分享，旧码冻结在首次 fork 的内容，
+/// 不做任何聪明的追溯）。
+///
+/// 调用方（prompt-routes.js 的 handlePromptsRoute）在 saveUserPrompts 之后、活同步
+/// refreshPromptShare 循环之前调用——re-key 先把索引挪好，紧接着的活同步才能在
+/// 同一次 PUT 里把 fork 后的新内容刷进 shares/<码>。best-effort：任何异常吞掉+
+/// console.error，绝不能让这一步拖垮已经落盘成功的 PUT。
+export async function rekeyForkedShares(env, scope, items) {
+  try {
+    const forked = collectForkedEntities(items);
+    if (!forked.length) return;
+    const idx = await loadIndex(env, scope);
+    let changed = false;
+    for (const { id, forkedFrom } of forked) {
+      if (idx.byItem[forkedFrom] && !idx.byItem[id]) {
+        idx.byItem[id] = idx.byItem[forkedFrom];
+        delete idx.byItem[forkedFrom];
+        changed = true;
+      }
+    }
+    if (changed) await env.FILES.put(indexKey(scope), JSON.stringify(idx, null, 2));
+  } catch (e) { console.error("[prompt-share] rekeyForkedShares failed:", e && e.message); }
 }

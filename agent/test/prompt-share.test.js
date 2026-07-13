@@ -566,3 +566,59 @@ describe("铸码 POST /agent/prompt-share — 新模型（自建项也能铸）"
     expect(docB.instruction).toBe("B的提示词内容");
   });
 });
+
+// ── GET /agent/prompt-shares — 只读分享状态一览（iOS 分享卡，Phase 2 Piece 1）───────
+// 直接暴露 shareStates() 的结果，key 从内部字段名 shareCode 映射成客户端契约的 code。
+// 鉴权惯例照抄 /agent/prompts：resolveScope 先行，401 无 token；非 GET 一律 405。
+describe("GET /agent/prompt-shares — 只读分享状态一览（iOS 分享卡）", () => {
+  const TOKEN = "Bearer anon_testtoken1234567890";
+  const STATES = (env, token = TOKEN) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-shares", {
+    headers: token ? { Authorization: token } : {},
+  }), env);
+  const MINT = (env, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
+    method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+  }), env);
+  const UNSHARE = (env, id) => worker.fetch(new Request(`https://jianshuo.dev/agent/prompt-share/${id}`, {
+    method: "DELETE", headers: { Authorization: TOKEN },
+  }), env);
+
+  it("无 token → 401", async () => {
+    expect((await STATES(fakeEnv(), null)).status).toBe(401);
+  });
+
+  it("非 GET（POST）→ 405", async () => {
+    const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompt-shares", {
+      method: "POST", headers: { Authorization: TOKEN },
+    }), fakeEnv());
+    expect(res.status).toBe(405);
+  });
+
+  it("没有任何分享的用户 → {byItem:{}}", async () => {
+    expect(await (await STATES(fakeEnv())).json()).toEqual({ byItem: {} });
+  });
+
+  it("铸码后 → byItem 带 code + sharing:true", async () => {
+    const env = fakeEnv();
+    const { code } = await (await MINT(env, "sys_cartoon")).json();
+    const body = await (await STATES(env)).json();
+    expect(body.byItem["sys_cartoon"]).toEqual({ code, sharing: true });
+  });
+
+  it("DELETE 关闭后 → sharing:false，码保留（不是被从 byItem 里整条删掉）", async () => {
+    const env = fakeEnv();
+    const { code } = await (await MINT(env, "sys_cartoon")).json();
+    await UNSHARE(env, "sys_cartoon");
+    const body = await (await STATES(env)).json();
+    expect(body.byItem["sys_cartoon"]).toEqual({ code, sharing: false });
+  });
+
+  it("路由精确匹配，不与 /agent/prompt-share（POST 铸码/DELETE 关闭）或 /agent/prompt-share/<code>（公开预览 GET）互相吞掉", async () => {
+    const env = fakeEnv();
+    const mintRes = await MINT(env, "sys_cartoon");
+    expect(mintRes.status).toBe(200); // /agent/prompt-share 的 POST 没被新路由拦截
+    const { code } = await mintRes.json();
+    const previewRes = await worker.fetch(new Request(`https://jianshuo.dev/agent/prompt-share/${code}`), env);
+    expect(previewRes.status).toBe(200); // /agent/prompt-share/<code> 的公开 GET 依旧不需要 token
+  });
+});
