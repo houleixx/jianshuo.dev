@@ -23,6 +23,7 @@
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
 import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst } from "../../lib/article-store.js";
+import { silentM4aBytes } from "../../lib/silent-m4a.js";
 import { shareIdFor, communityKey, reportKey, isShareId } from "../../lib/community-store.js";
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken } from "../../lib/auth.js";
@@ -1357,6 +1358,14 @@ async function handleRequest(context) {
       let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
       const source = !scope ? 'mine' : 'agent';
       const doc = await writeArticleDoc(env, key, body, source);
+      // 「我的录音」以 .m4a 为锚：没有同名录音的文章 doc 在列表里根本不显示。录音走正常
+      // 流程时锚早就在了；但 agent/MCP 拿一个全新 stem 直接建文章（write_article）时没有，
+      // 于是文章写进去了却谁也看不见。补一个 0s 静音占位，和 merge_articles、写作风格 intro
+      // 的做法一致。JSON 先写、m4a 后写 —— 反过来 miner 会把这个裸 m4a 当成新录音去转写。
+      const audioKey = `${articleScope}${stem}.m4a`;
+      if (!(await env.FILES.head(audioKey))) {
+        await env.FILES.put(audioKey, silentM4aBytes(), { httpMetadata: { contentType: 'audio/mp4' } });
+      }
       return json({ ok: true, head: doc.head });
     }
 

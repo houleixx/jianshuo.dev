@@ -7,7 +7,7 @@ import { applyArticleEdits } from "./linenum.js";
 import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
 import { restyleArticle, ensurePhotoMarkers } from "./miner.js";
-import { silentM4aBytes } from "./silent-m4a.js";
+import { silentM4aBytes } from "../../functions/lib/silent-m4a.js";
 import { snapSize, jpegDims, fitSize } from "./paint-size.js";
 import { MERGE_ARTICLES_DESC, ADD_FOLLOWUPS_DESC, EDIT_PHOTO_DESC, NEW_PHOTO_DESC } from "./prompts/tool-desc.js";
 

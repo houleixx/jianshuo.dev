@@ -39,8 +39,9 @@ export const TOOLS = [
   {
     name: "write_article",
     description:
-      "改写一篇文章。这是版本化写入：每次写都追加一个新版本、head 前移，旧版本还在（可用 " +
-      "article_history 看、set_article_version 撤销）。注意：正文里已有的 [[photo:...]] 标记要原样保留，" +
+      "写一篇文章：stem 已存在就改写，是新的就新建。这是版本化写入：每次写都追加一个新版本、" +
+      "head 前移，旧版本还在（可用 article_history 看、set_article_version 撤销）。新建时会自动补一个" +
+      "静音占位录音，文章才会出现在「我的录音」里。注意：正文里已有的 [[photo:...]] 标记要原样保留，" +
       "否则照片会从文章里消失。",
     inputSchema: obj(
       {

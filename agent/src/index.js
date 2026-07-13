@@ -34,7 +34,7 @@ import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { handlePromptShareRoutes } from "./prompt-share.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
-import { silentM4aBytes } from "./silent-m4a.js";
+import { silentM4aBytes } from "../../functions/lib/silent-m4a.js";
 import { callAnthropic, anthropicFetch, relayCall, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
 import { makePreviewPusher, makeEditPreview } from "./preview.js";
 import { loadUIConfigFor } from "./ui-config.js";
