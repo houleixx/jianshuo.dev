@@ -7,6 +7,7 @@
 import { createServer, PARSE_ERROR } from "./protocol.js";
 import { TOOLS } from "./tools.js";
 import { createClient } from "./vd-client.js";
+import { landingHtml } from "./landing.js";
 
 const SERVER_INFO = { name: "voicedrop", version: "1.0.0" };
 
@@ -44,7 +45,24 @@ export async function handleRequest(request, { fetch = globalThis.fetch, connect
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
   if (request.method !== "POST") {
-    // 无状态模式不提供服务端主动推流，所以 GET（SSE）明确回 405。
+    // 浏览器点进来 → 给张介绍页，别甩一坨 JSON 405 给人看。
+    //
+    // 这不破坏规范。MCP 规范（Streamable HTTP → Listening for Messages from the
+    // Server）要求：客户端发 GET 时 **MUST** 带 `Accept: text/event-stream`，
+    // 而服务端对**这样的** GET **MUST** 回 SSE 或 405。浏览器不带那个头，
+    // 所以按 Accept 分流两边都满足。
+    //
+    // 判据故意收紧成「明确要 text/html 才给页面」：万一有客户端不守规范漏发了
+    // Accept，它拿到的仍是 405，而不是被一坨 HTML 噎住。
+    const accept = request.headers.get("Accept") ?? "";
+    if (request.method === "GET" && accept.includes("text/html")) {
+      return new Response(landingHtml(), {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", ...CORS },
+      });
+    }
+
+    // 无状态模式不提供服务端主动推流，所以 MCP 客户端的 GET（SSE）一律 405。
     return rpcError(null, -32000, "本 MCP 是无状态的，只接受 POST。", 405);
   }
 
