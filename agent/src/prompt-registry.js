@@ -1,54 +1,48 @@
-// src/prompt-registry.js — 线上 prompt 注册表：把 ui-config 里的叶子指令暴露成
-// 可枚举、可回写的扁平列表，供 prompt.jianshuo.dev 及 jianshuo.dev/a/ 的调优桥接页用。
+// src/prompt-registry.js — 线上 prompt 注册表：把提示词模板（config/prompt-template.json）
+// 与核心 global 提示词（config/prompts.json）暴露成可枚举、可回写的扁平列表，供
+// prompt.jianshuo.dev 及 jianshuo.dev/a/ 的调优桥接页用。
 //
 // GET  /agent/prompt-registry           → { prompts: [{id, label, instruction}] }
-//      列表来自 loadUIConfig(env)（R2 覆盖优先），即「线上实际生效」的版本。
+//      列表 = loadPromptTemplate(env)（R2 覆盖优先，即「线上实际生效」的模板）打平出的
+//      全部 action 叶子，加上核心 global 提示词。
 // PUT  /agent/prompt-registry           → body {id, instruction}
-//      把生效配置中该叶子的 instruction 换掉后整体写回 R2 config/ui-config.json，
-//      沿用 ui-config 的零部署覆盖机制，写完即上线。
+//      id 命中模板叶子：把该叶子的 prompt 换掉后整棵模板写回 R2 config/prompt-template.json，
+//      沿用零部署覆盖机制，写完即上线（还没 fork 过这条的用户立刻吃到）。
+//      id 命中核心 global 提示词：走 config/prompts.json 的覆盖层（逻辑不变）。
 //
 // 两个方法都只认管理 token（Bearer FILES_TOKEN）。桥接页与 /agent 同源不需要
 // CORS；prompt.jianshuo.dev 是独立源，故放行该 Origin 以便优化器直连。
 import { bearerToken } from "../../functions/lib/auth.js";
-import { loadUIConfig } from "./ui-config.js";
+import { loadPromptTemplate } from "./prompt-template.js";
 import { loadPrompts, validateOverride } from "./prompts/loader.js";
 import { PROMPT_META } from "./prompts/catalog.js";
 
 const ALLOWED_ORIGIN = "https://prompt.jianshuo.dev";
 
-// 打平成 [{id, label, instruction}]。id 是层级路径（页.交互.节点[.父菜单].叶子），
-// 与 ui-config 的形状一一对应，updatePrompt 按同一路径规则写回。
-export function flattenPrompts(cfg) {
+// 打平成 [{id, label, instruction}] —— 只收 action（group 没有 instruction 不收）。
+// label 带父组前缀（`图片风格 · 卡通`），和老的层级 label 一致：调优页靠它认人。
+export function flattenTemplate(tpl) {
   const out = [];
-  for (const [page, interactions] of Object.entries(cfg.pages || {})) {
-    for (const [interaction, nodes] of Object.entries(interactions || {})) {
-      for (const [node, spec] of Object.entries(nodes || {})) {
-        const walk = (item, idPrefix, labelPrefix) => {
-          const id = `${idPrefix}.${item.id}`;
-          const label = labelPrefix ? `${labelPrefix} · ${item.label}` : item.label;
-          if (typeof item.instruction === "string") out.push({ id, label, instruction: item.instruction });
-          for (const child of item.children || []) walk(child, id, label);
-        };
-        for (const item of (spec.groups || []).flat()) walk(item, `${page}.${interaction}.${node}`, "");
+  for (const item of tpl.items || []) {
+    if (item.type === "action") {
+      out.push({ id: item.id, label: item.label, instruction: item.prompt });
+    }
+    for (const c of item.children || []) {
+      if (c.type === "action") {
+        out.push({ id: c.id, label: `${item.label} · ${c.label}`, instruction: c.prompt });
       }
     }
   }
   return out;
 }
 
-// 返回替换了目标叶子 instruction 的深拷贝配置；id 找不到返回 null。
-export function updatePrompt(cfg, id, instruction) {
-  const next = JSON.parse(JSON.stringify(cfg));
-  for (const [page, interactions] of Object.entries(next.pages || {})) {
-    for (const [interaction, nodes] of Object.entries(interactions || {})) {
-      for (const [node, spec] of Object.entries(nodes || {})) {
-        const walk = (item, idPrefix) => {
-          const itemId = `${idPrefix}.${item.id}`;
-          if (itemId === id && typeof item.instruction === "string") { item.instruction = instruction; return true; }
-          return (item.children || []).some((c) => walk(c, itemId));
-        };
-        if ((spec.groups || []).flat().some((item) => walk(item, `${page}.${interaction}.${node}`))) return next;
-      }
+// 返回替换了目标 action 的 prompt 的深拷贝；id 找不到 / 是 group → null。
+export function updateTemplatePrompt(tpl, id, instruction) {
+  const next = JSON.parse(JSON.stringify(tpl));
+  for (const item of next.items || []) {
+    if (item.id === id) return item.type === "action" ? ((item.prompt = instruction), next) : null;
+    for (const c of item.children || []) {
+      if (c.id === id) return c.type === "action" ? ((c.prompt = instruction), next) : null;
     }
   }
   return null;
@@ -75,12 +69,12 @@ export async function handlePromptRegistry(request, env) {
   }
 
   if (request.method === "GET") {
-    const cfg = await loadUIConfig(env);
+    const tpl = await loadPromptTemplate(env);
     const core = await loadPrompts(env);
     const corePrompts = Object.entries(PROMPT_META)
       .filter(([, m]) => m.tier === "global")
       .map(([id, m]) => ({ id, label: m.label, instruction: core[id] }));
-    return new Response(JSON.stringify({ prompts: [...flattenPrompts(cfg), ...corePrompts] }), { headers });
+    return new Response(JSON.stringify({ prompts: [...flattenTemplate(tpl), ...corePrompts] }), { headers });
   }
 
   if (request.method === "PUT") {
@@ -102,10 +96,10 @@ export async function handlePromptRegistry(request, env) {
       return new Response(JSON.stringify({ ok: true, id: body.id }), { headers });
     }
 
-    const cfg = await loadUIConfig(env);
-    const next = updatePrompt(cfg, body.id, body.instruction);
+    const tpl = await loadPromptTemplate(env);
+    const next = updateTemplatePrompt(tpl, body.id, body.instruction);
     if (!next) return new Response(JSON.stringify({ error: "unknown prompt id" }), { status: 404, headers });
-    await env.FILES.put("config/ui-config.json", JSON.stringify(next, null, 2));
+    await env.FILES.put("config/prompt-template.json", JSON.stringify(next, null, 2));
     return new Response(JSON.stringify({ ok: true, id: body.id }), { headers });
   }
 
