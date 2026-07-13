@@ -34,6 +34,7 @@ import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { handlePromptShareRoutes } from "./prompt-share.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
+import { classifyAppliesTo } from "./prompt-classify.js";
 import { silentM4aBytes } from "./silent-m4a.js";
 import { callAnthropic, anthropicFetch, relayCall, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
 import { makePreviewPusher, makeEditPreview } from "./preview.js";
@@ -1091,6 +1092,56 @@ export default {
       const scope = await resolveScope(bearerToken(request), env);
       if (!scope) return J({ error: "unauthorized" }, 401);
       return handlePromptsRoute(request, env, scope, url);
+    }
+
+    // ── /agent/prompt-classify ── AI 猜这条提示词该在长按文字还是图片时出现（5c 的
+    // 预勾选 + 琥珀提示条）。best-effort：Claude 挂 / 无算力 / 返回垃圾 → 回退「都行」
+    // + 空 reason，【绝不挡住用户新建提示词】。spec §7
+    if (url.pathname === "/agent/prompt-classify") {
+      if (request.method !== "POST") return J({ error: "method not allowed" }, 405);
+      const scope = await resolveScope(bearerToken(request), env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      if (typeof body.prompt !== "string" || !body.prompt.trim()) return J({ error: "expected {prompt}" }, 400);
+
+      const CLASSIFY_MODEL = "claude-haiku-4-5";
+      const usageSum = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+      const claude = async ({ system, messages }) => {
+        const reqBody = { model: CLASSIFY_MODEL, max_tokens: 200, system, messages };
+        const t0 = Date.now();
+        const r = await callAnthropic(env, reqBody);
+        const j = r.json;
+        await writeLlmLog(env, {
+          ts: t0, source: "agent", user_scope: scope, model: CLASSIFY_MODEL,
+          latency_ms: Date.now() - t0, http_status: r.status, ok: r.ok,
+          via: r.via, ...(r.colo ? { colo: r.colo } : {}),
+          step: 0, request: reqBody, response: r.ok ? j : undefined,
+          error: r.ok ? undefined : r.errorText,
+          meta: { kind: "prompt-classify" },
+        });
+        if (!r.ok) throw new Error(`Claude HTTP ${r.status}`);
+        const u = j.usage || {};
+        usageSum.input_tokens += u.input_tokens || 0;
+        usageSum.output_tokens += u.output_tokens || 0;
+        usageSum.cache_creation_input_tokens += u.cache_creation_input_tokens || 0;
+        usageSum.cache_read_input_tokens += u.cache_read_input_tokens || 0;
+        return (j.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+      };
+
+      // classifyAppliesTo 永不抛（内部已回退），所以这里必定 200。
+      const result = await classifyAppliesTo(body.prompt, claude);
+
+      // 计费 best-effort：失败绝不影响响应。
+      try {
+        if (env.USAGE && usageSum.input_tokens) {
+          await ensureAccount(env.USAGE, scope, Date.now());
+          const cost = claudeCostUY(CLASSIFY_MODEL, usageSum.input_tokens, usageSum.output_tokens,
+                                    usageSum.cache_creation_input_tokens, usageSum.cache_read_input_tokens);
+          await debit(env.USAGE, scope, cost, "prompt-classify", {}, Date.now());
+        }
+      } catch (_) {}
+
+      return J(result);
     }
 
     // ── /agent/ui-config ── 长按菜单等 UI 配置（任意有效用户 token）。返回该用户的
