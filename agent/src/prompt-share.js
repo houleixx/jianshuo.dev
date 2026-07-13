@@ -8,8 +8,9 @@
 // 一条指令一辈子一个码：owner 索引 users/<sub>/prompt-shares.json 记 byItem，
 // 开关关 = 删 shares/<码>（码立即失效），索引保留，再开同码复活。
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
-import { loadUIConfig, loadUserOverrides } from "./ui-config.js";
-import { flattenPrompts } from "./prompt-registry.js";
+import { loadPromptTemplate } from "./prompt-template.js";
+import { resolveList } from "./prompts.js";
+import { loadUserPrompts } from "./prompt-store.js";
 // author 显示名 —— SINGLE SOURCE OF TRUTH，见 style-store.js#readProfileName 上方
 // 注释："the share endpoint, miner, and mint all import this"。这里显式传
 // { fallback: "none" }：无名 → ""，而不是 miner/mint 默认走的 ID 前 6 位大写 —
@@ -62,21 +63,32 @@ async function loadIndex(env, scope) {
   return { byItem: {}, mintLog: [] };
 }
 
-/// 该用户此刻对某条指令的生效文本与菜单名（内置缺省 ← 全局覆盖 ← 用户覆盖）。
-/// 默认名 = 层级 label 的最后一段（与 iOS 设置页展示一致）。条目不存在 → null。
+/// 该用户此刻某条提示词的生效内容（走新解析器：ref 读模板 / 实体读自己）。
+/// itemId 可以是 sys_*（ref 的系统项）也可以是 p_*（自建或 fork）。
+/// 【这是「自建提示词也能铸码分享」的关键】——老实现在系统目录里找，自建项必然 null。
+/// group 没有 prompt → 返回 null（不能分享一个空壳）。resolveList 的输出已经把
+/// 悬空 ref / 存储层垃圾节点静默丢弃，这里按扁平树宽走一遍（顶层 + 组内 children）
+/// 找 itemId 即可，不需要再自己防垃圾。
 async function effectiveLeaf(env, scope, itemId) {
-  const flat = flattenPrompts(await loadUIConfig(env));
-  const leaf = flat.find((p) => p.id === itemId);
-  if (!leaf) return null;
-  const { overrides } = await loadUserOverrides(env, scope);
-  const ov = overrides[itemId] || {};
-  const defaultName = leaf.label.split("·").pop().trim();
-  return { label: ov.label || defaultName, instruction: ov.instruction || leaf.instruction };
+  const tpl = await loadPromptTemplate(env);
+  const doc = await loadUserPrompts(env, scope);
+  const flat = [];
+  for (const n of resolveList(tpl, doc)) {
+    flat.push(n);
+    for (const c of n.children || []) flat.push(c);
+  }
+  const hit = flat.find((n) => n.id === itemId);
+  if (!hit || hit.type !== "action") return null;
+  return {
+    label: hit.label, instruction: hit.prompt,
+    appliesTo: hit.appliesTo,
+    ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
+  };
 }
 
-// leaf.appliesTo / leaf.kind 目前来自 effectiveLeaf，该函数还读老 ui-config 模型、
-// 不产出这两个字段（Task 9 才会重接上）——这里先把管道接好：写穿副本带上这两个
-// key（缺省时 appliesTo 是 undefined，JSON.stringify 直接丢字段，等价于老副本）。
+// leaf.appliesTo / leaf.kind 来自 effectiveLeaf（新解析器的 action 节点自带这两个
+// 字段）——写穿副本原样带上（缺省时 appliesTo 是 undefined，JSON.stringify 直接
+// 丢字段，等价于老副本）。
 function sharedDocFor(scope, itemId, leaf, createdAt, importCount = 0) {
   const now = new Date().toISOString();
   return JSON.stringify({

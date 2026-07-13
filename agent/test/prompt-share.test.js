@@ -23,7 +23,14 @@ async function makeToken(scope) {
 }
 
 const OWNER = "users/anon-owner111/";
-// 内置叶子「改写这段 · 更简洁」，默认指令含 {{LINE}}/{{QUOTE}} 占位符。
+// 内置系统项「改写这段 · 更简洁」（新模型，sys_* id），默认指令含 {{LINE}}/{{QUOTE}} 占位符——
+// 铸码/写穿这类需要 effectiveLeaf 解析生效内容的测试都走它。
+const SYS_ITEM = "sys_concise";
+// 重构前的老 dotted id（voice-editor.longpress.* 菜单路径当主键那一代）。effectiveLeaf 切到
+// 新解析器后已经不认得它——不能再铸新码/写穿同步。但 DELETE 与 shareStates()（GET /agent/
+// ui-config/custom 的分享状态附注）都只碰索引 + R2 head，完全不经过 effectiveLeaf，所以【已经
+// 存在的老码】依旧能正常开关/查看状态——ITEM 常量留着专门测这条边界（老魔法数字继续能兑换/
+// 开关，只是不能再铸新的）。
 const ITEM = "voice-editor.longpress.text.rewrite.concise";
 
 function makeEnv(seed = {}) {
@@ -47,6 +54,19 @@ async function del(e, itemId, scope = OWNER) {
     headers: scope ? { Authorization: `Bearer ${await makeToken(scope)}` } : {},
   });
   return handlePromptShareRoutes(new URL(req.url), req, e);
+}
+
+// 整树 PUT /agent/prompts（新模型的唯一写口）——给这份测试文件里需要「用户已经 fork/自建
+// 一条」场景的用例落盘一份 users/<sub>/prompts.json。走真实路由（worker.fetch + index.js
+// 的 resolveScope），不是直接戳 R2，这样 scope 派生（session token → 精确 scope）跟 post()/
+// del() 用的是同一条真实路径。
+async function putPrompts(e, items, scope = OWNER) {
+  const req = new Request("https://jianshuo.dev/agent/prompts", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${await makeToken(scope)}`, "content-type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  return worker.fetch(req, e);
 }
 
 // 直接 seed 一份写穿后的 shares/<code> 文档（兑换/落地读的就是它）。
@@ -87,7 +107,7 @@ describe("mintCode", () => {
 
 describe("POST /agent/prompt-share", () => {
   it("401 without token", async () => {
-    const r = await post(makeEnv(), { id: ITEM }, null);
+    const r = await post(makeEnv(), { id: SYS_ITEM }, null);
     expect(r.status).toBe(401);
   });
   it("400 without id", async () => {
@@ -95,23 +115,21 @@ describe("POST /agent/prompt-share", () => {
     expect(r.status).toBe(400);
   });
   it("404 unknown id", async () => {
-    const r = await post(makeEnv(), { id: "voice-editor.longpress.text.rewrite.nope" });
+    const r = await post(makeEnv(), { id: "sys_nope" });
     expect(r.status).toBe(404);
   });
   it("503 when disabled by config", async () => {
     const e = makeEnv({ "config/prompt-share.json": JSON.stringify({ enabled: false }) });
-    expect((await post(e, { id: ITEM })).status).toBe(503);
+    expect((await post(e, { id: SYS_ITEM })).status).toBe(503);
   });
   it("413 when effective text exceeds maxLength", async () => {
-    const e = makeEnv({
-      "config/prompt-share.json": JSON.stringify({ maxLength: 10 }),
-      [`${OWNER}ui-config.json`]: JSON.stringify({ overrides: { [ITEM]: { instruction: "这一条自定义指令远远超过十个字符的上限了" } }, hidden: [] }),
-    });
-    expect((await post(e, { id: ITEM })).status).toBe(413);
+    // sys_concise 的内置默认指令本就远超 10 字，不需要额外 fork 就能触发上限。
+    const e = makeEnv({ "config/prompt-share.json": JSON.stringify({ maxLength: 10 }) });
+    expect((await post(e, { id: SYS_ITEM })).status).toBe(413);
   });
   it("200 mints: shares/<code> carries the DEFAULT effective text when no override", async () => {
     const e = makeEnv();
-    const r = await post(e, { id: ITEM });
+    const r = await post(e, { id: SYS_ITEM });
     expect(r.status).toBe(200);
     const { code, url, created, sharing } = await r.json();
     expect(code).toMatch(/^[1-9][0-9]{6}$/);
@@ -121,18 +139,17 @@ describe("POST /agent/prompt-share", () => {
     const doc = JSON.parse(e.FILES._store.get(`shares/${code}`));
     expect(doc.type).toBe("prompt");
     expect(doc.sub).toBe("anon-owner111");
-    expect(doc.itemId).toBe(ITEM);
-    expect(doc.label).toBe("更简洁");                       // 默认名 = 层级 label 最后一段
-    expect(doc.instruction).toContain("{{LINE}}");           // 内置默认指令
+    expect(doc.itemId).toBe(SYS_ITEM);
+    expect(doc.label).toBe("更简洁");                       // 模板 label，用户还没 fork
+    expect(doc.instruction).toContain("{{LINE}}");           // 模板内置默认指令
     const idx = JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`));
-    expect(idx.byItem[ITEM].code).toBe(code);
+    expect(idx.byItem[SYS_ITEM].code).toBe(code);
     expect(idx.mintLog).toHaveLength(1);
   });
-  it("200 mints with the user's override text + custom label", async () => {
-    const e = makeEnv({
-      [`${OWNER}ui-config.json`]: JSON.stringify({ overrides: { [ITEM]: { instruction: "改得更毒舌。", label: "更毒舌" } }, hidden: [] }),
-    });
-    const r = await post(e, { id: ITEM });
+  it("200 mints a forked item's own text + custom label (不是模板原文)", async () => {
+    const e = makeEnv();
+    await putPrompts(e, [{ id: "p_mood001", type: "action", label: "更毒舌", prompt: "改得更毒舌。", appliesTo: ["text"], forkedFrom: "sys_concise" }]);
+    const r = await post(e, { id: "p_mood001" });
     const { code } = await r.json();
     const doc = JSON.parse(e.FILES._store.get(`shares/${code}`));
     expect(doc.label).toBe("更毒舌");
@@ -140,47 +157,59 @@ describe("POST /agent/prompt-share", () => {
   });
   it("re-POST same id is idempotent: same code, created:false, mintLog unchanged", async () => {
     const e = makeEnv();
-    const first = await (await post(e, { id: ITEM })).json();
-    const again = await (await post(e, { id: ITEM })).json();
+    const first = await (await post(e, { id: SYS_ITEM })).json();
+    const again = await (await post(e, { id: SYS_ITEM })).json();
     expect(again.code).toBe(first.code);
     expect(again.created).toBe(false);
     expect(JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`)).mintLog).toHaveLength(1);
   });
   it("DELETE then POST revives the SAME code", async () => {
     const e = makeEnv();
-    const { code } = await (await post(e, { id: ITEM })).json();
-    await del(e, ITEM);
+    const { code } = await (await post(e, { id: SYS_ITEM })).json();
+    await del(e, SYS_ITEM);
     expect(e.FILES._store.has(`shares/${code}`)).toBe(false);
-    const revived = await (await post(e, { id: ITEM })).json();
+    const revived = await (await post(e, { id: SYS_ITEM })).json();
     expect(revived.code).toBe(code);
     expect(e.FILES._store.has(`shares/${code}`)).toBe(true);
   });
   it("429 past the daily cap (config-tunable), idempotent re-POST does not consume", async () => {
     const e = makeEnv({ "config/prompt-share.json": JSON.stringify({ dailyCapPerUser: 2 }) });
-    expect((await post(e, { id: "voice-editor.longpress.text.rewrite.concise" })).status).toBe(200);
-    expect((await post(e, { id: "voice-editor.longpress.text.rewrite.casual" })).status).toBe(200);
+    expect((await post(e, { id: "sys_concise" })).status).toBe(200);
+    expect((await post(e, { id: "sys_casual" })).status).toBe(200);
     // 幂等重复不占额度
-    expect((await post(e, { id: "voice-editor.longpress.text.rewrite.concise" })).status).toBe(200);
-    expect((await post(e, { id: "voice-editor.longpress.text.rewrite.formal" })).status).toBe(429);
+    expect((await post(e, { id: "sys_concise" })).status).toBe(200);
+    expect((await post(e, { id: "sys_formal" })).status).toBe(429);
   });
 });
 
 describe("DELETE /agent/prompt-share/<itemId>", () => {
   it("401 without token", async () => {
-    expect((await del(makeEnv(), ITEM, null)).status).toBe(401);
+    expect((await del(makeEnv(), SYS_ITEM, null)).status).toBe(401);
   });
   it("removes shares/<code> but keeps the owner index", async () => {
     const e = makeEnv();
-    const { code } = await (await post(e, { id: ITEM })).json();
-    const r = await del(e, ITEM);
+    const { code } = await (await post(e, { id: SYS_ITEM })).json();
+    const r = await del(e, SYS_ITEM);
     expect(r.status).toBe(200);
     expect((await r.json()).sharing).toBe(false);
     expect(e.FILES._store.has(`shares/${code}`)).toBe(false);
-    expect(JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`)).byItem[ITEM].code).toBe(code);
+    expect(JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`)).byItem[SYS_ITEM].code).toBe(code);
   });
   it("is idempotent for a never-shared item", async () => {
-    const r = await del(makeEnv(), ITEM);
+    const r = await del(makeEnv(), SYS_ITEM);
     expect(r.status).toBe(200);
+  });
+  it("老 dotted id 铸的码依旧能正常开关（DELETE 只碰索引 + R2 head，不经过 effectiveLeaf）", async () => {
+    const e = makeEnv({
+      [`${OWNER}prompt-shares.json`]: JSON.stringify({ byItem: { [ITEM]: { code: "4563567", createdAt: "2026-07-01T00:00:00Z" } }, mintLog: [] }),
+      "shares/4563567": sharedDoc(),
+    });
+    const r = await del(e, ITEM);
+    expect(r.status).toBe(200);
+    expect((await r.json()).sharing).toBe(false);
+    expect(e.FILES._store.has("shares/4563567")).toBe(false);
+    // 索引原样保留（关闭不清索引，同码可再开）。
+    expect(JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`)).byItem[ITEM].code).toBe("4563567");
   });
 });
 
@@ -241,41 +270,66 @@ describe("resolveSharedPromptBlock", () => {
   });
 });
 
-describe("write-through on save (refreshPromptShare + ui-config-custom PUT)", () => {
-  it("refreshPromptShare rewrites an ACTIVE share with the current effective text", async () => {
+describe("write-through on save (refreshPromptShare)", () => {
+  it("refreshPromptShare rewrites an ACTIVE share with the current effective text (fork 改词后保存)", async () => {
     const e = makeEnv();
-    const { code } = await (await post(e, { id: ITEM })).json();
-    // 作者改了自定义文本（直接写覆盖文件模拟）
-    e.FILES._store.set(`${OWNER}ui-config.json`, JSON.stringify({ overrides: { [ITEM]: { instruction: "新版毒舌。", label: "更毒舌" } }, hidden: [] }));
-    await refreshPromptShare(e, OWNER, ITEM);
+    await putPrompts(e, [{ id: "p_mood002", type: "action", label: "更毒舌", prompt: "改得更毒舌。", appliesTo: ["text"], forkedFrom: "sys_concise" }]);
+    const { code } = await (await post(e, { id: "p_mood002" })).json();
+    // 作者改了内容，重新整树 PUT（客户端保存走的就是这一条路：整树 PUT）。
+    await putPrompts(e, [{ id: "p_mood002", type: "action", label: "更毒舌", prompt: "新版毒舌。", appliesTo: ["text"], forkedFrom: "sys_concise" }]);
+    await refreshPromptShare(e, OWNER, "p_mood002");
     const doc = JSON.parse(e.FILES._store.get(`shares/${code}`));
     expect(doc.instruction).toBe("新版毒舌。");
     expect(doc.label).toBe("更毒舌");
   });
+  it("refreshPromptShare 保留 createdAt 与 importCount（作者改词不清零导入计数）", async () => {
+    const e = makeEnv();
+    await putPrompts(e, [{ id: "p_mood003", type: "action", label: "标题", prompt: "初版内容", appliesTo: ["text"] }]);
+    const { code } = await (await post(e, { id: "p_mood003" })).json();
+    const before = JSON.parse(e.FILES._store.get(`shares/${code}`));
+    // 模拟这条分享已经被别人导入过 3 次。
+    e.FILES._store.set(`shares/${code}`, JSON.stringify({ ...before, importCount: 3 }));
+    await putPrompts(e, [{ id: "p_mood003", type: "action", label: "标题", prompt: "改过的新版内容", appliesTo: ["text"] }]);
+    await refreshPromptShare(e, OWNER, "p_mood003");
+    const after = JSON.parse(e.FILES._store.get(`shares/${code}`));
+    expect(after.instruction).toBe("改过的新版内容");
+    expect(after.createdAt).toBe(before.createdAt);
+    expect(after.importCount).toBe(3);
+  });
   it("does NOT resurrect a toggled-off share", async () => {
     const e = makeEnv();
-    const { code } = await (await post(e, { id: ITEM })).json();
-    await del(e, ITEM);
-    await refreshPromptShare(e, OWNER, ITEM);
+    const { code } = await (await post(e, { id: SYS_ITEM })).json();
+    await del(e, SYS_ITEM);
+    await refreshPromptShare(e, OWNER, SYS_ITEM);
     expect(e.FILES._store.has(`shares/${code}`)).toBe(false);
   });
-  it("PUT /agent/ui-config/custom writes through to the shared doc", async () => {
-    const e = makeEnv();
-    const { code } = await (await post(e, { id: ITEM })).json();
+  // ui-config-custom.js 仍是老 dotted-id 空间的调用方（该文件本身在 Task 9 范围之外——
+  // spec §「删除」明确排期把它整个删掉，"不管老 app"）。effectiveLeaf 切到新解析器之后
+  // 不再认得老 dotted id，所以老 PUT /agent/ui-config/custom 触发的"保存即同步"从此
+  // 静默失效——分享副本停在铸码当时那版，不报错也不再更新。这条测试把这个已知、已
+  // 接受的行为变化钉死，避免以后有人误以为它还在工作。
+  it("OLD ui-config-custom PUT 不再触发分享副本同步（effectiveLeaf 已不认老 dotted id）", async () => {
+    const before = sharedDoc();
+    const e = makeEnv({
+      [`${OWNER}prompt-shares.json`]: JSON.stringify({ byItem: { [ITEM]: { code: "4563567", createdAt: "2026-07-01T00:00:00Z" } }, mintLog: [] }),
+      "shares/4563567": before,
+    });
     const put = new Request("https://jianshuo.dev/agent/ui-config/custom", {
       method: "PUT", body: JSON.stringify({ id: ITEM, instruction: "保存即同步。", label: "同步版" }),
     });
     await handleUIConfigCustom(put, e, OWNER);
-    const doc = JSON.parse(e.FILES._store.get(`shares/${code}`));
-    expect(doc.instruction).toBe("保存即同步。");
-    expect(doc.label).toBe("同步版");
+    const doc = JSON.parse(e.FILES._store.get("shares/4563567"));
+    expect(doc.instruction).toBe(JSON.parse(before).instruction); // 未被覆盖——静默 no-op
   });
 });
 
-describe("GET /agent/ui-config/custom carries sharing state", () => {
+describe("GET /agent/ui-config/custom carries sharing state（老 dotted id 空间；shareStates 只碰索引 + R2 head，不经过 effectiveLeaf）", () => {
   it("shareCode + sharing reflect mint / toggle-off", async () => {
-    const e = makeEnv();
-    const { code } = await (await post(e, { id: ITEM })).json();
+    const code = "4563567";
+    const e = makeEnv({
+      [`${OWNER}prompt-shares.json`]: JSON.stringify({ byItem: { [ITEM]: { code, createdAt: "2026-07-01T00:00:00Z" } }, mintLog: [] }),
+      [`shares/${code}`]: sharedDoc(),
+    });
     const get = () => handleUIConfigCustom(new Request("https://jianshuo.dev/agent/ui-config/custom"), e, OWNER);
     let items = (await (await get()).json()).items;
     let item = items.find((i) => i.id === ITEM);
@@ -397,5 +451,121 @@ describe("GET /agent/prompt-share/<code> — 4b 导入预览（公开，无需 t
     const env = fakeEnv({ "shares/4820135": shareDoc() });
     const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share/4820135", { method: "GET" }), env);
     expect(res.status).toBe(200);
+  });
+});
+
+describe("铸码 POST /agent/prompt-share — 新模型（自建项也能铸）", () => {
+  const TOKEN = "Bearer anon_testtoken1234567890";
+  const MINT = (env, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
+    method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+  }), env);
+  const PUTP = (env, items) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+    method: "PUT", headers: { Authorization: TOKEN, "content-type": "application/json" },
+    body: JSON.stringify({ items }),
+  }), env);
+  const shareDocOf = (env) => {
+    const k = [...env.FILES._store.keys()].find((x) => x.startsWith("shares/"));
+    return k ? JSON.parse(env.FILES._store.get(k)) : null;
+  };
+
+  it("★ 自建项能铸码（老实现会失败）", async () => {
+    const env = fakeEnv();
+    await PUTP(env, [{ id: "p_zq1f6e", type: "action", label: "写成小红书", prompt: "口语、emoji…", appliesTo: ["text"] }]);
+    const res = await MINT(env, "p_zq1f6e");
+    expect(res.status).toBe(200);
+    expect((await res.json()).code).toMatch(/^[1-9][0-9]{6}$/);
+    const doc = shareDocOf(env);
+    expect(doc.label).toBe("写成小红书");
+    expect(doc.instruction).toContain("口语");
+    expect(doc.appliesTo).toEqual(["text"]);
+  });
+
+  it("ref 系统项能铸码，副本里是模板【当前】内容", async () => {
+    const env = fakeEnv();
+    const res = await MINT(env, "sys_cartoon");      // 用户还没 prompts.json，全跟随模板
+    expect(res.status).toBe(200);
+    const doc = shareDocOf(env);
+    expect(doc.label).toBe("卡通");
+    expect(doc.instruction).toContain("宫崎骏");
+    expect(doc.appliesTo).toEqual(["image"]);
+    expect(doc.kind).toBe("image");
+  });
+
+  it("fork 过的系统项 → 副本里是【我改过的】内容", async () => {
+    const env = fakeEnv();
+    await PUTP(env, [{ id: "p_abc123", type: "action", label: "卡通风", prompt: "我改过的卡通", appliesTo: ["image"], forkedFrom: "sys_cartoon" }]);
+    await MINT(env, "p_abc123");
+    const doc = shareDocOf(env);
+    expect(doc.label).toBe("卡通风");
+    expect(doc.instruction).toBe("我改过的卡通");
+  });
+
+  it("不存在的 id → 404", async () => {
+    expect((await MINT(fakeEnv(), "p_nosuch")).status).toBe(404);
+  });
+
+  it("group 不能铸码 → 404（组没有 prompt）", async () => {
+    expect((await MINT(fakeEnv(), "sys_style")).status).toBe(404);
+  });
+
+  // ── 以下为对 brief 的对抗性补充：分组内嵌套 fork / 存量垃圾节点 / 跨用户隔离 ──
+
+  it("嵌套在分组里的 fork 项也能铸码（不止顶层）", async () => {
+    const env = fakeEnv();
+    await PUTP(env, [
+      { ref: "sys_style", children: [
+        { id: "p_nest01", type: "action", label: "赛博朋克", prompt: "我改过的赛博朋克风格", appliesTo: ["image"], forkedFrom: "sys_cartoon" },
+        { ref: "sys_ad" },
+      ] },
+    ]);
+    const res = await MINT(env, "p_nest01");
+    expect(res.status).toBe(200);
+    const doc = shareDocOf(env);
+    expect(doc.label).toBe("赛博朋克");
+    expect(doc.instruction).toBe("我改过的赛博朋克风格");
+  });
+
+  it("用户存量 prompts.json 里混了垃圾节点也不能让铸码崩溃（resolveList 静默跳过）", async () => {
+    const env = fakeEnv();
+    // 先走正常 PUT 落盘（这样才知道真实的 R2 key——scope 是 token 的 sha256，不能硬编码），
+    // 再直接篡改该 key 的内容，模拟历史脏数据/存储层损坏留下的垃圾顶层节点 + 悬空 ref。
+    await PUTP(env, [{ id: "p_ok00001", type: "action", label: "正常项", prompt: "这是正常的提示词", appliesTo: ["text"] }]);
+    const key = [...env.FILES._store.keys()].find((k) => k.endsWith("prompts.json"));
+    env.FILES._store.set(key, JSON.stringify({
+      schema: 1,
+      items: [
+        null, "garbage", 42,
+        { ref: "sys_retired_long_gone" },
+        { id: "p_ok00001", type: "action", label: "正常项", prompt: "这是正常的提示词", appliesTo: ["text"] },
+      ],
+    }));
+    const res = await MINT(env, "p_ok00001");
+    expect(res.status).toBe(200);
+    const doc = shareDocOf(env);
+    expect(doc.label).toBe("正常项");
+  });
+
+  it("两个用户各自的同名 p_ id 铸出各自的内容（作用域隔离）", async () => {
+    const env = fakeEnv();
+    const TOKEN_B = "Bearer anon_anotheruser000000";
+    const putAs = (token, items) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+      method: "PUT", headers: { Authorization: token, "content-type": "application/json" },
+      body: JSON.stringify({ items }),
+    }), env);
+    const mintAs = (token, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
+      method: "POST", headers: { Authorization: token, "content-type": "application/json" },
+      body: JSON.stringify({ id }),
+    }), env);
+    await putAs(TOKEN, [{ id: "p_same001", type: "action", label: "用户A的版本", prompt: "A的提示词内容", appliesTo: ["text"] }]);
+    await putAs(TOKEN_B, [{ id: "p_same001", type: "action", label: "用户B的版本", prompt: "B的提示词内容", appliesTo: ["text"] }]);
+    const resA = await (await mintAs(TOKEN, "p_same001")).json();
+    const resB = await (await mintAs(TOKEN_B, "p_same001")).json();
+    const docA = JSON.parse(env.FILES._store.get(`shares/${resA.code}`));
+    const docB = JSON.parse(env.FILES._store.get(`shares/${resB.code}`));
+    expect(docA.label).toBe("用户A的版本");
+    expect(docA.instruction).toBe("A的提示词内容");
+    expect(docB.label).toBe("用户B的版本");
+    expect(docB.instruction).toBe("B的提示词内容");
   });
 });
