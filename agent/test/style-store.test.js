@@ -190,6 +190,21 @@ describe("profile — non-versioned name (changing it must NOT mint a style vers
   it("readProfileName: 无名兜底 = ID 前 6 位大写", async () => {
     expect(await readProfileName(fakeEnv({}), SCOPE)).toBe("U");
   });
+
+  it("readProfileName: 默认 fallback（不传第三参）与显式 {fallback:'id'} 等价 —— 社区帖/投币账单零行为变化", async () => {
+    const env = fakeEnv({});
+    expect(await readProfileName(env, SCOPE, { fallback: "id" })).toBe(await readProfileName(env, SCOPE));
+    expect(await readProfileName(env, SCOPE, { fallback: "id" })).toBe("U");
+  });
+
+  it("readProfileName: {fallback:'none'} 无名 → 空串（魔法数字导入预览用，spec §8）", async () => {
+    expect(await readProfileName(fakeEnv({}), SCOPE, { fallback: "none" })).toBe("");
+  });
+
+  it("readProfileName: {fallback:'none'} 命中真名时仍原样返回（不影响正常路径）", async () => {
+    const env = fakeEnv({ [LEGACY]: "# 我的名字\n王建硕\n\n# 我的文风\nx" });
+    expect(await readProfileName(env, SCOPE, { fallback: "none" })).toBe("王建硕");
+  });
 });
 
 describe("style version label (the version itself is the articles[i].style FIELD now)", () => {

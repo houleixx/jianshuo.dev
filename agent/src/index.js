@@ -37,8 +37,7 @@ import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MI
 import { silentM4aBytes } from "../../functions/lib/silent-m4a.js";
 import { callAnthropic, anthropicFetch, relayCall, RELAY_INSTANCE, RELAY_LOCATION_HINT } from "./anthropic.js";
 import { makePreviewPusher, makeEditPreview } from "./preview.js";
-import { loadUIConfigFor } from "./ui-config.js";
-import { handleUIConfigCustom } from "./ui-config-custom.js";
+import { handlePromptsRoute, handlePromptImport } from "./prompt-routes.js";
 import { handlePromptRegistry } from "./prompt-registry.js";
 import { xhsPack } from "./xhs.js";
 import { handlePromptLab } from "./prompt-lab.js";
@@ -1064,7 +1063,7 @@ export default {
     }
 
     // ── /agent/prompt-registry ── 线上 prompt 注册表（管理 token）。GET 打平列出
-    // ui-config 生效版里的全部叶子指令；PUT 改一条并写回 R2 覆盖文件=零部署上线。
+    // prompt-template 生效版里的全部叶子指令；PUT 改一条并写回 R2 覆盖文件=零部署上线。
     if (url.pathname === "/agent/prompt-registry") {
       return handlePromptRegistry(request, env);
     }
@@ -1074,24 +1073,16 @@ export default {
       return handlePromptLab(request, env, url);
     }
 
-    // ── /agent/ui-config/custom ── 该用户的指令自定义（iOS 设置页）：GET 列条目，
-    // PUT 写/删单条稀疏覆盖（空 = 恢复缺省）。存 users/<sub>/ui-config.json。
-    if (url.pathname === "/agent/ui-config/custom") {
-      const tok = bearerToken(request);
-      const scope = await resolveScope(tok, env);
-      if (!scope || !scope.startsWith("users/")) return new Response("unauthorized", { status: 401 });
-      return handleUIConfigCustom(request, env, scope);
-    }
-
-    // ── /agent/ui-config ── 长按菜单等 UI 配置（任意有效用户 token）。返回该用户的
-    // 最终生效版：内置缺省 ← 全局 R2 覆盖 ← 每用户稀疏覆盖（见 ui-config.js）。
-    if (url.pathname === "/agent/ui-config") {
-      if (request.method !== "GET") return new Response("method not allowed", { status: 405 });
-      const tok = bearerToken(request);
-      const scope = await resolveScope(tok, env);
-      if (!scope) return new Response("unauthorized", { status: 401 });
-      const cfg = await loadUIConfigFor(env, scope);
-      return new Response(JSON.stringify(cfg), { headers: { "content-type": "application/json" } });
+    // ── /agent/prompts ── 用户的一套有序提示词列表（ref 跟随模板 / 实体冻结）。
+    // GET 读解析后的列表；PUT 整树写（新建/删除/改名/排序/分组/fork 全走它）；
+    // POST /restore-defaults 补回模板里缺的；POST /import 魔法数字导入成自建副本。
+    // spec 2026-07-13-prompt-manager-redesign.md
+    if (url.pathname === "/agent/prompts" || url.pathname === "/agent/prompts/restore-defaults"
+        || url.pathname === "/agent/prompts/import") {
+      const scope = await resolveScope(bearerToken(request), env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      if (url.pathname === "/agent/prompts/import") return handlePromptImport(request, env, scope);
+      return handlePromptsRoute(request, env, scope, url);
     }
 
     // ── /agent/ops/tick ── 服务端错误打点（Pages Functions 4xx/5xx 时 fire-and-forget）──

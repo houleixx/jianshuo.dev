@@ -3,13 +3,21 @@
 //
 // 与文章分享共用 shares/ 命名空间：文章条目值是纯文本 articleKey，指令条目值是
 // JSON {type:"prompt", sub, itemId, label, instruction, createdAt, updatedAt} ——
-// 当前生效文本的**写穿副本**（铸码时写入，作者保存指令时由 ui-config-custom 经
-// refreshPromptShare 同步），落地页与兑换都只读这一个对象，不再现算合并。
+// 当前生效文本的**写穿副本**（铸码时写入，作者保存指令时由 prompt-routes.js 的
+// syncActiveShares 经 refreshPromptShare 同步），落地页与兑换都只读这一个对象，
+// 不再现算合并。
 // 一条指令一辈子一个码：owner 索引 users/<sub>/prompt-shares.json 记 byItem，
 // 开关关 = 删 shares/<码>（码立即失效），索引保留，再开同码复活。
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
-import { loadUIConfig, loadUserOverrides } from "./ui-config.js";
-import { flattenPrompts } from "./prompt-registry.js";
+import { loadPromptTemplate } from "./prompt-template.js";
+import { resolveList } from "./prompts.js";
+import { loadUserPrompts } from "./prompt-store.js";
+// author 显示名 —— SINGLE SOURCE OF TRUTH，见 style-store.js#readProfileName 上方
+// 注释："the share endpoint, miner, and mint all import this"。这里显式传
+// { fallback: "none" }：无名 → ""，而不是 miner/mint 默认走的 ID 前 6 位大写 —
+// spec §8「读不到名字 → 不显示『来自』行」，客户端靠空串隐藏整行。调用处仍
+// try/catch 兜底空串，扛的是真正的读取异常（R2 抖动），是另一回事。
+import { readProfileName } from "../../functions/lib/style-store.js";
 
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
 
@@ -25,6 +33,8 @@ export async function loadPromptShareConfig(env) {
 
 // 7 位、首位非零（口播/显示无歧义），空间 900 万。
 const CODE_RE = /^[1-9][0-9]{6}$/;
+// GET 路由用：直接从 pathname 里抠码，$ 锚定避免 8 位号码被前 7 位截胡命中。
+const CODE_PATH_RE = /^\/agent\/prompt-share\/([1-9][0-9]{6})$/;
 
 function randomCode() {
   const a = new Uint32Array(1);
@@ -54,29 +64,46 @@ async function loadIndex(env, scope) {
   return { byItem: {}, mintLog: [] };
 }
 
-/// 该用户此刻对某条指令的生效文本与菜单名（内置缺省 ← 全局覆盖 ← 用户覆盖）。
-/// 默认名 = 层级 label 的最后一段（与 iOS 设置页展示一致）。条目不存在 → null。
+/// 该用户此刻某条提示词的生效内容（走新解析器：ref 读模板 / 实体读自己）。
+/// itemId 可以是 sys_*（ref 的系统项）也可以是 p_*（自建或 fork）。
+/// 【这是「自建提示词也能铸码分享」的关键】——老实现在系统目录里找，自建项必然 null。
+/// group 没有 prompt → 返回 null（不能分享一个空壳）。resolveList 的输出已经把
+/// 悬空 ref / 存储层垃圾节点静默丢弃，这里按扁平树宽走一遍（顶层 + 组内 children）
+/// 找 itemId 即可，不需要再自己防垃圾。
 async function effectiveLeaf(env, scope, itemId) {
-  const flat = flattenPrompts(await loadUIConfig(env));
-  const leaf = flat.find((p) => p.id === itemId);
-  if (!leaf) return null;
-  const { overrides } = await loadUserOverrides(env, scope);
-  const ov = overrides[itemId] || {};
-  const defaultName = leaf.label.split("·").pop().trim();
-  return { label: ov.label || defaultName, instruction: ov.instruction || leaf.instruction };
+  const tpl = await loadPromptTemplate(env);
+  const doc = await loadUserPrompts(env, scope);
+  const flat = [];
+  for (const n of resolveList(tpl, doc)) {
+    flat.push(n);
+    for (const c of n.children || []) flat.push(c);
+  }
+  const hit = flat.find((n) => n.id === itemId);
+  if (!hit || hit.type !== "action") return null;
+  return {
+    label: hit.label, instruction: hit.prompt,
+    appliesTo: hit.appliesTo,
+    ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
+  };
 }
 
-function sharedDocFor(scope, itemId, leaf, createdAt) {
+// leaf.appliesTo / leaf.kind 来自 effectiveLeaf（新解析器的 action 节点自带这两个
+// 字段）——写穿副本原样带上（缺省时 appliesTo 是 undefined，JSON.stringify 直接
+// 丢字段，等价于老副本）。
+function sharedDocFor(scope, itemId, leaf, createdAt, importCount = 0) {
   const now = new Date().toISOString();
   return JSON.stringify({
     type: "prompt", sub: scope.slice("users/".length, -1), itemId,
     label: leaf.label, instruction: leaf.instruction,
+    appliesTo: leaf.appliesTo, ...(leaf.kind !== undefined ? { kind: leaf.kind } : {}),
+    importCount,
     createdAt: createdAt || now, updatedAt: now,
   }, null, 2);
 }
 
-/// 作者保存指令后同步分享副本（ui-config-custom PUT 调用）。只刷**处于分享中**的
-/// 条目（shares/<码> 还在）；开关已关的不复活。尽力而为，失败不打断保存。
+/// 作者保存指令后同步分享副本（prompt-routes.js 的 syncActiveShares，PUT /agent/prompts
+/// 调用）。只刷**处于分享中**的条目（shares/<码> 还在）；开关已关的不复活。
+/// 尽力而为，失败不打断保存。
 export async function refreshPromptShare(env, scope, itemId) {
   try {
     const { byItem } = await loadIndex(env, scope);
@@ -84,12 +111,30 @@ export async function refreshPromptShare(env, scope, itemId) {
     if (!code) return;
     const existing = await env.FILES.get(`shares/${code}`);
     if (!existing) return; // 已关闭
-    let createdAt;
-    try { createdAt = JSON.parse(await existing.text()).createdAt; } catch { /* 重建时间 */ }
+    let createdAt, importCount = 0;
+    try {
+      const prev = JSON.parse(await existing.text());
+      createdAt = prev.createdAt;
+      importCount = prev.importCount || 0; // 作者改文本不能把导入计数清零
+    } catch { /* 重建时间/计数 */ }
     const leaf = await effectiveLeaf(env, scope, itemId);
     if (!leaf) return;
-    await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, createdAt));
+    await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, createdAt, importCount));
   } catch (e) { console.error("[prompt-share] refresh failed:", e && e.message); }
+}
+
+// appliesTo 合法值域，与 prompts.js 的 APPLIES 同一口径（这里不 import——resolvePromptShare
+// 处理的是 shares/<code> 这份【外部既成事实】文档，跟 validateList 的输入是两类不同的东西，
+// 但值域必须一致）。
+const SHARE_APPLIES = new Set(["text", "image"]);
+
+/// appliesTo 值域清洗：与两行外 label/instruction 的截断同一原则——分享文档可能是
+/// 手改/存储层损坏/旧版本铸的码，任何元素不在合法值域内都【丢弃该元素】而不是让
+/// 整条 400 到死；元素全部非法（含压根不是数组）时兜底「都行」，跟老副本缺
+/// appliesTo 字段走的是同一条回退路径。
+function sanitizeAppliesTo(raw) {
+  const filtered = Array.isArray(raw) ? raw.filter((a) => SHARE_APPLIES.has(a)) : [];
+  return filtered.length ? filtered : ["text", "image"];
 }
 
 /// 兑换/落地读的解析：shares/<code> 是 JSON 且 type=prompt 才算（老式文章条目值
@@ -100,7 +145,14 @@ export async function resolvePromptShare(env, code) {
     if (!o) return null;
     const doc = JSON.parse(await o.text());
     if (!doc || doc.type !== "prompt" || typeof doc.instruction !== "string") return null;
-    return { code, sub: doc.sub, itemId: doc.itemId, label: doc.label || "分享指令", instruction: doc.instruction };
+    return {
+      code, sub: doc.sub, itemId: doc.itemId,
+      label: doc.label || "分享指令", instruction: doc.instruction,
+      // 老副本（本次重构之前铸的码）没有 appliesTo → 回退「都行」；元素非法也一样。
+      appliesTo: sanitizeAppliesTo(doc.appliesTo),
+      ...(doc.kind !== undefined ? { kind: doc.kind } : {}),
+      importCount: doc.importCount || 0,
+    };
   } catch { return null; }
 }
 
@@ -139,9 +191,33 @@ async function resolveUserScope(request, env) {
   return scope && scope.startsWith("users/") ? scope : null;
 }
 
+// GET /agent/prompt-share/<code> —— 4b 的导入预览。【公开、无需 token】：导入前
+// 用户可能还没登录，且落地页（voicedrop.cn/<码>）早就把同样的内容公开了，这里
+// 不引入新的暴露面。放在 isPost/isDelete 判断之前，方法不同本不会撞车，但顺序上
+// 先处理 GET 更清楚——也确保它绝不会先掉进下面的 resolveUserScope 401 分支。
+async function handlePromptShareGet(url, env) {
+  if (!url.pathname.startsWith("/agent/prompt-share/")) return null; // not this route
+  const m = url.pathname.match(CODE_PATH_RE);
+  if (!m) return J({ error: "not-found" }, 404); // 非法格式（非 7 位/首位 0/非数字）
+  const hit = await resolvePromptShare(env, m[1]);
+  if (!hit) return J({ error: "not-found" }, 404);
+  let author = "";
+  try { author = await readProfileName(env, `users/${hit.sub}/`, { fallback: "none" }) || ""; } catch { /* 无名不影响预览 */ }
+  return J({
+    label: hit.label, prompt: hit.instruction, appliesTo: hit.appliesTo,
+    ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
+    author, importCount: hit.importCount,
+  });
+}
+
 // POST /agent/prompt-share {id} → 开分享（幂等同码）；
 // DELETE /agent/prompt-share/<itemId> → 关分享（删 shares/<码>，索引保留）。
 export async function handlePromptShareRoutes(url, request, env) {
+  if (request.method === "GET") {
+    const hit = await handlePromptShareGet(url, env);
+    if (hit) return hit;
+  }
+
   const isPost = url.pathname === "/agent/prompt-share" && request.method === "POST";
   const isDelete = url.pathname.startsWith("/agent/prompt-share/") && request.method === "DELETE";
   if (!isPost && !isDelete) return null;
@@ -186,13 +262,21 @@ export async function handlePromptShareRoutes(url, request, env) {
     await env.FILES.put(indexKey(scope), JSON.stringify(idx, null, 2));
   }
 
-  await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, existing?.createdAt));
+  // 幂等重开（sharing 已经是 true，这条 POST 只是重放）不能把 importCount 清零——
+  // 和 refreshPromptShare 保留 importCount 是同一条道理，只是这里读的是即将被
+  // 覆盖的旧副本本身（被删过就真的没有了，那本就该从 0 起，见 spec 的取舍）。
+  let importCount = 0;
+  try {
+    const prevDoc = await env.FILES.get(`shares/${code}`);
+    if (prevDoc) importCount = JSON.parse(await prevDoc.text()).importCount || 0;
+  } catch { /* 坏文档当没有，从 0 起 */ }
+  await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, existing?.createdAt, importCount));
   return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true });
 }
 
-/// GET /agent/ui-config/custom 的分享状态附注（ui-config-custom 调用）：
 /// itemId → { shareCode, sharing }。码在索引里就返回（再开同码），sharing 看
-/// shares/<码> 是否健在。
+/// shares/<码> 是否健在。供 prompt-routes.js 的 syncActiveShares 用来找出"当前
+/// 正在分享的条目"（一次 owner 索引 GET + 逐条 head，不经过 effectiveLeaf）。
 export async function shareStates(env, scope) {
   const { byItem } = await loadIndex(env, scope);
   const out = {};
