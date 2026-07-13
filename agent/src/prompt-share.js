@@ -11,9 +11,10 @@ import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/
 import { loadUIConfig, loadUserOverrides } from "./ui-config.js";
 import { flattenPrompts } from "./prompt-registry.js";
 // author 显示名 —— SINGLE SOURCE OF TRUTH，见 style-store.js#readProfileName 上方
-// 注释："the share endpoint, miner, and mint all import this"。无名兜底是 ID 前
-// 6 位大写 / "匿名"（和社区帖、投币账单同一约定），不是空串；调用处仍 try/catch
-// 兜底空串，只是为了扛真正的读取异常（R2 抖动），不是"没设置名字"这个平常情况。
+// 注释："the share endpoint, miner, and mint all import this"。这里显式传
+// { fallback: "none" }：无名 → ""，而不是 miner/mint 默认走的 ID 前 6 位大写 —
+// spec §8「读不到名字 → 不显示『来自』行」，客户端靠空串隐藏整行。调用处仍
+// try/catch 兜底空串，扛的是真正的读取异常（R2 抖动），是另一回事。
 import { readProfileName } from "../../functions/lib/style-store.js";
 
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
@@ -173,7 +174,7 @@ async function handlePromptShareGet(url, env) {
   const hit = await resolvePromptShare(env, m[1]);
   if (!hit) return J({ error: "not-found" }, 404);
   let author = "";
-  try { author = await readProfileName(env, `users/${hit.sub}/`) || ""; } catch { /* 无名不影响预览 */ }
+  try { author = await readProfileName(env, `users/${hit.sub}/`, { fallback: "none" }) || ""; } catch { /* 无名不影响预览 */ }
   return J({
     label: hit.label, prompt: hit.instruction, appliesTo: hit.appliesTo,
     ...(hit.kind !== undefined ? { kind: hit.kind } : {}),

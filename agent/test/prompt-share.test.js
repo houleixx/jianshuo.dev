@@ -292,10 +292,13 @@ describe("GET /agent/ui-config/custom carries sharing state", () => {
   });
 });
 
-// author 走共用的 functions/lib/style-store.js#readProfileName（"the share endpoint,
-// miner, and mint all import this" —— 见该函数上方注释）：无名兜底是 ID 前 6 位大写
-// / "匿名"，不是空串。这与 mint.test.js「没设置名字 → ID 前 6 位大写」是同一约定，
-// 这里按真实实现断言，而不是假设一个「读不到就空串」的独立 profile 读取器。
+// author 走共用的 functions/lib/style-store.js#readProfileName——但预览端点显式传
+// { fallback: "none" }，与 miner/mint/社区帖那条「无名兜底 ID 前 6 位大写」的默认
+// 路径分道：那条 ID 短标签是稳定身份约定（同一用户账单/社区帖前后一致的代号），
+// 搬到这条公开导入预览里就成了「来自 ABC」这种没有信息量的乱码，且客户端无法
+// 区分它是真名还是兜底——spec §8 明说「读不到名字 → 不显示『来自』行」，也就是
+// author 必须是空串，交给 iOS 客户端据此隐藏整行。miner/mint 的默认行为不受影响，
+// 见 style-store.test.js 里 readProfileName 的独立单测。
 describe("GET /agent/prompt-share/<code> — 4b 导入预览（公开，无需 token）", () => {
   const shareDoc = (over = {}) => JSON.stringify({
     type: "prompt", sub: "anon-abc", itemId: "p_zq1f6e",
@@ -328,10 +331,19 @@ describe("GET /agent/prompt-share/<code> — 4b 导入预览（公开，无需 t
     expect(b.importCount).toBe(0);
   });
 
-  it("没设置名字 → 兜底 ID 前 6 位大写（与社区帖/投币账单同一 readProfileName 约定）", async () => {
+  it("没设置名字 → author 为空串（spec §8：读不到名字 → 不显示「来自」行）", async () => {
     const env = fakeEnv({ "shares/4820135": shareDoc() }); // 没有 CLAUDE.md/CLAUDE.json
     const b = await (await GETC(env, "4820135")).json();
-    expect(b.author).toBe("ABC"); // anon-abc → 去掉 anon- 前缀 → "abc" → 前 6 位大写
+    expect(b.author).toBe(""); // 不是 ID 前 6 位大写兜底——那是 miner/mint 的默认约定，这里显式关闭
+  });
+
+  it("设置了真名 → author 原样透出（fallback:'none' 不影响真实姓名命中）", async () => {
+    const env = fakeEnv({
+      "shares/4820135": shareDoc(),
+      "users/anon-abc/CLAUDE.json": JSON.stringify({ schema: 3, head: 1, versions: [{ v: 1, savedAt: 1, source: "app", style: "x" }], createdAt: 1, updatedAt: 1, profile: { name: "老周" } }),
+    });
+    const b = await (await GETC(env, "4820135")).json();
+    expect(b.author).toBe("老周");
   });
 
   it("readProfileName 读取异常不影响预览：捕获后 author 兜底空串", async () => {

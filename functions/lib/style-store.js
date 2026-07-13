@@ -189,9 +189,14 @@ export async function writeStyleDoc(env, scope, style, source = "unknown") {
 // ("users/<sub>/") only; storage keys (CLAUDE.json / legacy CLAUDE.md) and the
 // no-name fallback are this module's private convention — callers never spell
 // them out and never need a `|| "匿名"` of their own.
-// 顺序：CLAUDE.json profile.name → legacy CLAUDE.md「# 我的名字」→
-// 身份 ID 前 6 位大写（如 "AE209A"，来自 users/anon-<hash>/ 的 hash）。
-export async function readProfileName(env, scope) {
+// 顺序：CLAUDE.json profile.name → legacy CLAUDE.md「# 我的名字」→ fallback 策略：
+//   "id"（默认，miner/mint/社区帖用）：身份 ID 前 6 位大写（如 "AE209A"，来自
+//     users/anon-<hash>/ 的 hash），穷举到空也兜底"匿名"——这里的 ID 短标签是
+//     稳定身份约定，同一用户前后一致，适合账单/社区帖这类"总要有个代号"的场景。
+//   "none"（魔法数字导入预览用）：无名 → 返回 ""，不编出一个看似真名的 ID 短标签。
+//     该端点面向陌生人展示"来自 X"，一个没有信息量的机器代号（如"来自 ABC"）
+//     反而比不显示更误导——调用方按 spec 用空串隐藏整行「来自」。
+export async function readProfileName(env, scope, { fallback = "id" } = {}) {
   const doc = await readStyleDoc(env, scope);
   const n = doc && doc.profile && doc.profile.name;
   if (typeof n === "string" && n.trim()) return n.trim();
@@ -200,6 +205,7 @@ export async function readProfileName(env, scope) {
     const m = legacy.match(/#\s*我的名字\s*\n+([^\n#]+)/);
     if (m && m[1].trim()) return m[1].trim();
   }
+  if (fallback === "none") return "";
   const id = String(scope).replace(/^users\//, "").replace(/^anon-/, "").replace(/\/+$/, "");
   return id.slice(0, 6).toUpperCase() || "匿名";
 }
