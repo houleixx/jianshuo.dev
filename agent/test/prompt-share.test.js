@@ -1,7 +1,11 @@
 // test/prompt-share.test.js — 指令分享码（魔法数字）：铸码 / 发布与撤销路由 /
 // 兑换识别与注入块 / 保存写穿。spec：voicedrop repo
 // docs/superpowers/specs/2026-07-11-prompt-share-magic-number-design.md
-import { describe, it, expect } from "vitest";
+import { vi, describe, it, expect } from "vitest";
+// vi.mock is hoisted before static imports — keeps the real `agents` package
+// (and its cloudflare:workers import) out of the Node/vitest module graph.
+// Same pattern as paint-callback-route.test.js / ui-config.test.js / mine-sharding.test.js.
+vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
 import { fakeEnv } from "./fakes.js";
 import { hmacSign, b64url } from "../../functions/lib/auth.js";
 import {
@@ -9,6 +13,7 @@ import {
   handlePromptShareRoutes, resolvePromptShare, resolveSharedPromptBlock, refreshPromptShare,
 } from "../src/prompt-share.js";
 import { handleUIConfigCustom } from "../src/ui-config-custom.js";
+import worker from "../src/index.js";
 
 const SECRET = "test-secret";
 async function makeToken(scope) {
@@ -284,5 +289,101 @@ describe("GET /agent/ui-config/custom carries sharing state", () => {
     item = items.find((i) => i.id === ITEM);
     expect(item.shareCode).toBe(code);   // 码还在（再开同码）
     expect(item.sharing).toBe(false);
+  });
+});
+
+// author 走共用的 functions/lib/style-store.js#readProfileName（"the share endpoint,
+// miner, and mint all import this" —— 见该函数上方注释）：无名兜底是 ID 前 6 位大写
+// / "匿名"，不是空串。这与 mint.test.js「没设置名字 → ID 前 6 位大写」是同一约定，
+// 这里按真实实现断言，而不是假设一个「读不到就空串」的独立 profile 读取器。
+describe("GET /agent/prompt-share/<code> — 4b 导入预览（公开，无需 token）", () => {
+  const shareDoc = (over = {}) => JSON.stringify({
+    type: "prompt", sub: "anon-abc", itemId: "p_zq1f6e",
+    label: "改写成播客口播稿", instruction: "把文章改写成适合朗读的口播稿…",
+    appliesTo: ["text"], importCount: 128,
+    createdAt: "2026-07-01T00:00:00Z", updatedAt: "2026-07-01T00:00:00Z",
+    ...over,
+  });
+  const GETC = (env, code) => worker.fetch(new Request(`https://jianshuo.dev/agent/prompt-share/${code}`), env);
+
+  it("有效码 → 200 + 预览负载（无需 Authorization）", async () => {
+    const env = fakeEnv({
+      "shares/4820135": shareDoc(),
+      "users/anon-abc/CLAUDE.md": "# 我的名字\n老周\n\n# 我的文风\n随性",
+    });
+    const res = await GETC(env, "4820135");
+    expect(res.status).toBe(200);
+    const b = await res.json();
+    expect(b.label).toBe("改写成播客口播稿");
+    expect(b.prompt).toContain("口播稿");
+    expect(b.appliesTo).toEqual(["text"]);
+    expect(b.importCount).toBe(128);
+    expect(b.author).toBe("老周");
+  });
+
+  it("★ 老副本没有 appliesTo → 回退都行；没有 importCount → 0", async () => {
+    const env = fakeEnv({ "shares/4820135": shareDoc({ appliesTo: undefined, importCount: undefined }) });
+    const b = await (await GETC(env, "4820135")).json();
+    expect(new Set(b.appliesTo)).toEqual(new Set(["text", "image"]));
+    expect(b.importCount).toBe(0);
+  });
+
+  it("没设置名字 → 兜底 ID 前 6 位大写（与社区帖/投币账单同一 readProfileName 约定）", async () => {
+    const env = fakeEnv({ "shares/4820135": shareDoc() }); // 没有 CLAUDE.md/CLAUDE.json
+    const b = await (await GETC(env, "4820135")).json();
+    expect(b.author).toBe("ABC"); // anon-abc → 去掉 anon- 前缀 → "abc" → 前 6 位大写
+  });
+
+  it("readProfileName 读取异常不影响预览：捕获后 author 兜底空串", async () => {
+    const env = fakeEnv({ "shares/4820135": shareDoc() });
+    const origGet = env.FILES.get.bind(env.FILES);
+    env.FILES.get = async (key) => {
+      if (key.startsWith("users/anon-abc/")) throw new Error("boom"); // 模拟 profile 读取抖动
+      return origGet(key);
+    };
+    const res = await GETC(env, "4820135");
+    expect(res.status).toBe(200); // profile 读取失败不能连累整个预览 404
+    expect((await res.json()).author).toBe("");
+  });
+
+  it("查无此码 → 404", async () => {
+    expect((await GETC(fakeEnv(), "9999999")).status).toBe(404);
+  });
+
+  it("码指向的是文章分享（纯字符串值），不是提示词 → 404", async () => {
+    const env = fakeEnv({ "shares/4820135": "users/anon-x/articles/foo.json" });
+    expect((await GETC(env, "4820135")).status).toBe(404);
+  });
+
+  it("码指向 JSON 但 type:prompt 且缺 instruction → 404（不是半成品预览）", async () => {
+    const env = fakeEnv({ "shares/4820135": JSON.stringify({ type: "prompt", sub: "anon-abc", itemId: "x", label: "坏文档" }) });
+    expect((await GETC(env, "4820135")).status).toBe(404);
+  });
+
+  it("sub 带路径字符（../）不逃逸到别的 scope 前缀之外", async () => {
+    const evil = JSON.stringify({
+      type: "prompt", sub: "../../etc", itemId: "p1", label: "坏", instruction: "坏指令",
+      createdAt: "2026-07-01T00:00:00Z", updatedAt: "2026-07-01T00:00:00Z",
+    });
+    const env = fakeEnv({ "shares/4820135": evil });
+    const res = await GETC(env, "4820135");
+    expect(res.status).toBe(200); // 预览本身仍应正常返回（不因奇怪的 sub 而 500/404）
+    const b = await res.json();
+    // R2 key 是扁平字符串，"../" 不构成真实目录穿越；拼出的 scope 在 fakeEnv 里查无
+    // 任何 profile 文件，兜底走 ID 前 6 位，不抛异常、不 404、不读到别的用户的名字。
+    expect(typeof b.author).toBe("string");
+    expect(b.author).not.toMatch(/老周|老周文风/);
+  });
+
+  it("码格式非法 → 404", async () => {
+    expect((await GETC(fakeEnv(), "abc")).status).toBe(404);
+    expect((await GETC(fakeEnv(), "0123456")).status).toBe(404);   // 首位 0
+    expect((await GETC(fakeEnv(), "48201356")).status).toBe(404); // 8 位
+  });
+
+  it("POST/DELETE 分支不被 GET 分流误伤：GET 不需要 Authorization 也不会撞进 401", async () => {
+    const env = fakeEnv({ "shares/4820135": shareDoc() });
+    const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share/4820135", { method: "GET" }), env);
+    expect(res.status).toBe(200);
   });
 });
