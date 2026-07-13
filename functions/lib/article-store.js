@@ -77,7 +77,8 @@ export async function readArticleDoc(env, key) {
   try { return migrateToV3(JSON.parse(await obj.text())); } catch { return null; }
 }
 
-// newDoc – the full doc with all metadata fields; newDoc.articles = the new version's content.
+// newDoc – the new version's content in `articles`, plus any metadata fields to set.
+//          A PARTIAL doc is fine: anything it omits is carried over from the stored doc.
 // source – "mine" | "agent" | "wechat"
 export async function writeArticleDoc(env, key, newDoc, source = "unknown") {
   const current = await readArticleDoc(env, key);
@@ -98,9 +99,18 @@ export async function writeArticleDoc(env, key, newDoc, source = "unknown") {
     head = 1;
   }
 
-  // Strip old schema fields; preserve all metadata (transcript, photos, etc.)
+  // Strip old schema fields, then MERGE onto the stored doc — never replace it.
+  // Not every writer sends a full doc: the MCP write_article tool sends only
+  // { articles }, so a plain spread of newDoc silently wiped transcript, srt,
+  // createdAt, sourceAudio, photos, status and model off any recording-backed
+  // article an agent touched. iOS and the miner always send the whole doc, so
+  // their fields still win — this only stops a partial write from deleting the
+  // fields it never mentioned.
   const { articles: _a, history: _h, version: _v, _source: _s, ...rest } = newDoc;
-  const doc = { ...rest, head, versions, updatedAt: Date.now() };
+  const doc = { ...(current || {}), ...rest, head, versions, updatedAt: Date.now() };
+  // An article minted by a partial writer has no createdAt at all, and the list
+  // sorts it to 1970. Stamp it once, on the write that creates the doc.
+  if (!doc.createdAt) doc.createdAt = new Date().toISOString();
   await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
   return doc;
 }
