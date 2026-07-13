@@ -1,5 +1,6 @@
 .DS_Store
 .dev.vars
+node_modules/
 .gstack/
 .claude/
 .wrangler/

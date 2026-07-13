@@ -1,0 +1,14 @@
+{
+  "name": "voicedrop-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "VoiceDrop 的远程 MCP server。源码零依赖（要跟着 Pages Function 一起打包），SDK 只在测试里当真客户端用。",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "vitest": "^2"
+  }
+}
