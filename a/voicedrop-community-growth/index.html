@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="VoiceDrop 社区增长的方法——从一次小红书式改版说起：视觉发现、热度排序、双向铸币、老带新、实名门槛。文章想法 × 代码实际实现的对照。">
+<title>VoiceDrop · 社区增长的方法</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#FAF6EF; --bg2:#EDE6D9; --ink:#2A2521; --muted:#6b5f51; --faint:#8A8175; --soft:#A89E8E;
+    --accent:#D8593B; --accent-soft:#F6E4DC; --accent-line:#F0D2C6;
+    --line:#ECE3D5; --card:#fff; --green:#5E8A6A; --green-soft:#E3EDE5;
+    --blue:#2A78D6; --blue-soft:#E1EBF9; --amber:#B45309; --amber-soft:#F8ECD4;
+  }
+  html{scroll-snap-type:y mandatory;scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+  .slide{min-height:100vh;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:center;padding:76px clamp(22px,6.5vw,104px) 64px;position:relative;max-width:1240px;margin:0 auto}
+  .kicker{display:inline-flex;align-items:center;gap:8px;font:600 11.5px -apple-system;letter-spacing:.05em;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);padding:7px 13px;border-radius:999px;width:max-content;margin-bottom:18px}
+  .kicker .dot{width:7px;height:7px;border-radius:50%;background:#E5392E}
+  h1{font:600 clamp(34px,5.4vw,58px)/1.12 -apple-system;letter-spacing:-.03em}
+  h2{font:600 clamp(24px,3.4vw,36px)/1.2 -apple-system;letter-spacing:-.02em;margin-bottom:10px}
+  h3{font:600 16.5px -apple-system;letter-spacing:-.01em;margin-bottom:6px}
+  .sub{margin-top:14px;font:500 clamp(15px,1.8vw,19px)/1.6 -apple-system;color:var(--soft)}
+  .lead{margin-top:8px;font:400 15.5px/1.75 -apple-system;color:var(--muted);max-width:46em}
+  p,li{font:400 14.5px/1.7 -apple-system;color:var(--muted)}
+  b{color:var(--ink)}
+  .grid{display:grid;gap:16px;margin-top:26px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px;box-shadow:0 6px 18px -10px rgba(60,40,20,.12)}
+  .tag{display:inline-block;font:600 11px -apple-system;letter-spacing:.06em;padding:4px 11px;border-radius:999px;margin-bottom:10px}
+  .tag.o{background:var(--accent-soft);color:var(--accent)}
+  .tag.g{background:var(--green-soft);color:var(--green)}
+  .tag.b{background:var(--blue-soft);color:var(--blue)}
+  .tag.a{background:var(--amber-soft);color:var(--amber)}
+  .num{font:600 clamp(26px,3vw,34px) -apple-system;letter-spacing:-.02em;color:var(--accent);font-variant-numeric:tabular-nums}
+  .quote{border-left:3px solid var(--accent);padding:4px 0 4px 18px;margin-top:22px;font:500 clamp(15px,1.9vw,18.5px)/1.75 -apple-system;color:var(--ink);max-width:44em}
+  .quote .who{display:block;margin-top:10px;font:500 12.5px -apple-system;color:var(--faint)}
+  table{width:100%;border-collapse:collapse;margin-top:18px;background:var(--card);border-radius:14px;overflow:hidden;box-shadow:0 6px 18px -10px rgba(60,40,20,.12)}
+  th{font:600 12.5px -apple-system;color:var(--faint);text-align:left;padding:12px 16px;background:#FDFAF4;border-bottom:1px solid var(--line);letter-spacing:.03em}
+  td{font:400 13.5px/1.55 -apple-system;color:var(--muted);padding:11px 16px;border-bottom:1px solid #F4EEE3;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .ok{color:var(--green);font-weight:600}
+  .no{color:#C0392B;font-weight:600}
+  .formula{margin-top:20px;background:#2A2521;color:#F5EFE4;border-radius:14px;padding:20px 24px;font:500 clamp(13px,1.7vw,16px)/1.8 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-x:auto;box-shadow:0 14px 30px -14px rgba(42,37,33,.5)}
+  .formula .hl{color:#F5A623}
+  .formula .cm{color:#9A9387}
+  .waves{display:inline-flex;align-items:flex-end;gap:2.5px;height:24px}
+  .waves span{width:3px;background:var(--accent);border-radius:2px}
+  footer.slidefoot{position:absolute;left:0;right:0;bottom:0;max-width:1240px;margin:0 auto;padding:0 clamp(22px,6.5vw,104px) 22px;display:flex;justify-content:space-between;align-items:center;font:500 11.5px -apple-system;color:#B4AA9A}
+  .brand{display:flex;align-items:flex-end;gap:8px}
+  .brand .waves{height:15px}.brand .waves span{width:2.5px}
+  .brand b{font:600 12.5px -apple-system;color:#9A9083}
+  .pill-list{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .pill{font:500 12.5px -apple-system;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 15px}
+  .pill b{color:var(--accent)}
+  .flow{display:flex;flex-wrap:wrap;gap:0;align-items:stretch;margin-top:24px}
+  .flow .step{flex:1 1 150px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px;position:relative;margin-right:34px;box-shadow:0 6px 18px -10px rgba(60,40,20,.12)}
+  .flow .step:last-child{margin-right:0}
+  .flow .step::after{content:"→";position:absolute;right:-27px;top:50%;transform:translateY(-50%);color:#C9BFAE;font:600 17px -apple-system}
+  .flow .step:last-child::after{content:""}
+  .flow .step .t{font:600 13.5px -apple-system;color:var(--ink);margin-bottom:5px}
+  .flow .step .d{font:400 12px/1.55 -apple-system;color:var(--faint)}
+  .masonry{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:320px}
+  .mcard{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 5px 14px -8px rgba(60,40,20,.16)}
+  .mcard .ph{background:linear-gradient(135deg,#E8C8A8,#D8936A);height:92px;display:flex;align-items:center;justify-content:center;font-size:26px}
+  .mcard.tall .ph{height:132px;background:linear-gradient(135deg,#B9CDBA,#7FA184)}
+  .mcard.p3 .ph{background:linear-gradient(135deg,#D9C4E3,#9C7FB8);height:110px}
+  .mcard.txt .ph{display:none}
+  .mcard .cap{padding:9px 11px;font:500 11px/1.5 -apple-system;color:var(--ink)}
+  .mcard .meta{padding:0 11px 9px;font:400 9.5px -apple-system;color:var(--soft)}
+  .mcard.txt{background:#FDFAF4}
+  .mcard.txt .cap{font:400 10px/1.62 -apple-system;color:var(--faint);padding-top:11px}
+  .split{display:flex;flex-wrap:wrap;gap:40px;align-items:center;margin-top:10px}
+  .split>div{flex:1 1 330px;min-width:290px}
+  .vs{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;margin-top:26px}
+  .check{list-style:none;margin-top:12px}
+  .check li{padding-left:24px;position:relative;margin-bottom:9px}
+  .check li::before{content:"";position:absolute;left:2px;top:8px;width:6px;height:6px;border-radius:50%;background:var(--green)}
+  .check.warn li::before{background:var(--accent)}
+  @media(max-width:640px){.flow .step{margin-right:0;flex-basis:100%}.flow{gap:10px}.flow .step::after{content:""}}
+</style>
+</head>
+<body>
+
+<!-- ============ 1 · 封面 ============ -->
+<section class="slide">
+  <div style="display:flex;align-items:flex-end;gap:9px;margin-bottom:44px">
+    <span class="waves"><span style="height:10px"></span><span style="height:18px"></span><span style="height:24px"></span><span style="height:15px"></span><span style="height:8px"></span></span>
+    <span style="font:600 18px -apple-system;letter-spacing:-.01em">VoiceDrop</span>
+    <span style="font:500 13px -apple-system;color:var(--soft);margin-left:6px;padding-bottom:1px">社区</span>
+  </div>
+  <div class="kicker"><span class="dot"></span>2026-07 · 文章想法 × 代码实现</div>
+  <h1>社区增长的方法，<br>从一次改版说起。</h1>
+  <p class="sub">把社区改成了小红书那样，然后我开始担心一件事。</p>
+  <p class="lead">这份幻灯片把那篇口述文章里的主要想法整理出来，再对照 <b>reco / mint / referral</b> 的实际代码，看看每一个增长机制今天真正跑到了哪一步。</p>
+  <div class="pill-list">
+    <span class="pill">① 视觉发现</span><span class="pill">② 热度排序</span><span class="pill">③ 双向铸币</span><span class="pill">④ 老带新</span><span class="pill">⑤ 信任地基</span>
+  </div>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>01 / 10</span></footer>
+</section>
+
+<!-- ============ 2 · 起点：这次改版 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>起点</div>
+  <h2>把图片铺出来，让好内容自己跳出来</h2>
+  <div class="split">
+    <div>
+      <p class="lead">以前进社区，看到的全是文字标题——你得靠脑子去读、去判断这条值不值得点开。这次改版换成<b>小红书式的双列瀑布流</b>：封面图直接铺出来，一眼扫过去，吸引人的信息立刻跳出来。</p>
+      <ul class="check" style="margin-top:20px">
+        <li><b>要强化的是「发现好内容」</b>——不再只依赖开头那几行字</li>
+        <li>发现效率高了，浏览、互动、投币这些后面的飞轮才转得起来</li>
+        <li>代码里对应：分享时自动抽<b>第一张图作封面</b> + <b>60 字纯文本预览</b>，写进 D1 展示索引，列表 0.2–0.3 秒直出</li>
+      </ul>
+    </div>
+    <div style="display:flex;justify-content:center">
+      <div class="masonry">
+        <div class="mcard"><div class="ph">🏞️</div><div class="cap">从画室走到凉皮店</div><div class="meta">建硕 · ❤️ 12</div></div>
+        <div class="mcard tall"><div class="ph">🌃</div><div class="cap">东京的夜，安静得像农村</div><div class="meta">建硕 · ❤️ 8</div></div>
+        <div class="mcard txt"><div class="cap">一个索引，把 6 秒的加载压到 0.25 秒。真源在 R2，D1 只是可以随时重建的展示索引……</div><div class="meta">建硕 · ❤️ 5</div></div>
+        <div class="mcard p3"><div class="ph">🎨</div><div class="cap">图片提示词现在都能自己改了</div><div class="meta">建硕 · ❤️ 15</div></div>
+      </div>
+    </div>
+  </div>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>02 / 10</span></footer>
+</section>
+
+<!-- ============ 3 · 五个增长方法总览 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>方法总览</div>
+  <h2>社区增长的五个抓手</h2>
+  <p class="lead">文章聚焦在前两个（发现与排序），后三个是代码里已经在跑的增长机制——合在一起才是完整的飞轮。</p>
+  <div class="grid g3">
+    <div class="card"><span class="tag o">① 发现</span><h3>视觉优先的 Feed</h3><p>双列瀑布流 + 封面图，把「判断值不值得点开」的成本降到一眼。</p></div>
+    <div class="card"><span class="tag b">② 排序</span><h3>互动热度 × 时间衰减</h3><p>看的人多、互动多就往前排；新内容靠时间项天然有一段曝光窗口。</p></div>
+    <div class="card"><span class="tag a">③ 经济</span><h3>投币：双向铸币</h3><p>读者投币，作者 +2、读者自己 +0.5——双方都有动力，形成双边飞轮。</p></div>
+    <div class="card"><span class="tag g">④ 拉新</span><h3>邀请：老带新</h3><p>三层归因（链接 / IP / 剪贴板），作者和新人各得 9 币，同池同价。</p></div>
+    <div class="card"><span class="tag o">⑤ 地基</span><h3>实名与审核门槛</h3><p>写门槛实名、敏感词前置、举报即隐藏——信任是增长能持续的前提。</p></div>
+    <div class="card" style="background:#FDFAF4;border-style:dashed"><span class="tag b">⚠ 张力</span><h3>深度内容怎么办</h3><p>视觉 + 热度的机制里，认真写但「搞脑子」的内容会被挤到边缘——文章真正担心的事。</p></div>
+  </div>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>03 / 10</span></footer>
+</section>
+
+<!-- ============ 4 · 方法一：视觉发现 + 担忧 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>方法 ① · 视觉发现</div>
+  <h2>图片是加速器，也是新的门槛</h2>
+  <div class="vs">
+    <div class="card">
+      <span class="tag g">改版想要的</span>
+      <h3>发现效率</h3>
+      <p>图片铺出来之后，「更吸引人的信息」先被看到，发现好内容不再只靠开头几行字。对一个内容还不多的小社区，这直接决定新用户第一屏的留存。</p>
+    </div>
+    <div class="card">
+      <span class="tag o">改完就意识到的</span>
+      <h3>图片太主导了</h3>
+      <p>一旦视觉成了主角——<b>没有好图片，基本就等于没有好内容</b>。哪怕写的东西很有价值，只要没配图，在双列瀑布流里就自动占了下风。</p>
+    </div>
+  </div>
+  <div class="quote">「我只是想写点东西、说点东西，凭什么就要输给一张图？」<span class="who">—— 文章原话。这不是审美问题，是机制问题：视觉优先的 feed 会系统性地把纯文字表达推向边缘。</span></div>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>04 / 10</span></footer>
+</section>
+
+<!-- ============ 5 · 方法二：排序的实际实现 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>方法 ② · 排序 · 代码实况</div>
+  <h2>「看的人多就往前排」，代码里长这样</h2>
+  <p class="lead">文章里说现在靠推荐机制兜底。实际实现是 <b>reco</b> 服务里一条 Hacker News 式的公式——互动加权除以年龄冷却，再做作者打散：</p>
+  <div class="formula">score = (1 + <span class="hl">view·1</span> + <span class="hl">finish·4</span> + <span class="hl">like·3</span> + <span class="hl">reply·5</span> − <span class="hl">report·9</span>) / (小时数 + 2)<sup>1.5</sup><br><span class="cm">// 同一作者每多出现一次 ×0.5（打散）；互动按「人」去重，不是 PV</span></div>
+  <div class="grid g3">
+    <div class="card"><span class="tag b">千人一面</span><p>全局同一套顺序，<b>不分用户</b>。没有兴趣画像、没有关注关系、没有个性化——README 自己写明「千人一面」。</p></div>
+    <div class="card"><span class="tag g">可随时拔掉</span><p>reco 挂掉，App 自动回退到<b>纯时间倒序</b>（D1 展示索引直出）。推荐是增强层，不是依赖。</p></div>
+    <div class="card"><span class="tag a">深度已有一票</span><p>注意 <b>finish（看完）权重 4 &gt; like 的 3</b>——「被读完」已经是对认真内容最硬的一票，只是现在还没人特意讲它。</p></div>
+  </div>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>05 / 10</span></footer>
+</section>
+
+<!-- ============ 6 · 方法三：投币经济 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>方法 ③ · 双向铸币 · 代码实况</div>
+  <h2>投币：读者和作者都赚，才是病毒</h2>
+  <p class="lead">设计上刻意把两套信号分开：<b>红心</b>是纯质量信号（绝不碰钱），<b>投币</b>是价值分配（铸币入账）。红心能换钱就会被刷——Goodhart 定律。</p>
+  <div class="flow">
+    <div class="step"><div class="t">读者投币</div><div class="d">必须实名（Apple / 微信），不能投自己，一人一篇只能投一次</div></div>
+    <div class="step"><div class="t">双向到账</div><div class="d">作者 +2 币，投币者自己 +0.5 币——点的人也有收益</div></div>
+    <div class="step"><div class="t">同池定价</div><div class="d">币值 = 固定算力池 ÷ 近 7 天全网铸币量：人越多每枚越稀释，越早越值钱</div></div>
+    <div class="step"><div class="t">回到生产</div><div class="d">算力唯一出路是烧掉挖更多文章，90 天过期，use-or-lose</div></div>
+  </div>
+  <div class="pill-list">
+    <span class="pill">防刷：同对递减 <b>×0.7 / ×0.5</b></span>
+    <span class="pill">日池 <b>2000 算力</b>，发放超 5× 熔断</span>
+    <span class="pill">注册送 <b>500 算力</b>（1 年有效）</span>
+    <span class="pill">汇率 <b>23 算力 = ¥1</b>，成本铁顶可控</span>
+  </div>
+  <p style="margin-top:18px;font-size:13px;color:var(--faint)">注意：投币和排序是两套库、两套信号——投币影响的是作者的算力收入，<b>不直接进 feed 排序权重</b>。</p>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>06 / 10</span></footer>
+</section>
+
+<!-- ============ 7 · 方法四：邀请 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>方法 ④ · 老带新 · 代码实况</div>
+  <h2>邀请：把「作弊」逼成「拉真人」</h2>
+  <div class="split">
+    <div>
+      <h3 style="margin-bottom:14px">三层归因漏斗（iOS 端逐级降级）</h3>
+      <div class="flow" style="margin-top:0">
+        <div class="step"><div class="t">① 链接回点</div><div class="d">Universal link 带 token，确定归因</div></div>
+        <div class="step"><div class="t">② IP 指纹</div><div class="d">落地页记 24h 窗口，唯一 owner 才算</div></div>
+        <div class="step"><div class="t">③ 剪贴板</div><div class="d">兜底，同一条 token 路径、标记来源</div></div>
+      </div>
+    </div>
+    <div>
+      <h3 style="margin-bottom:14px">奖励与护栏</h3>
+      <ul class="check">
+        <li>邀请成功：<b>作者 9 币 + 新人 9 币</b>，与投币同池同价</li>
+        <li>每账号<b>一生只能被归因一次</b>；注册不满 24 小时才可归因</li>
+        <li>owner 每日封顶 <b>30</b> 个被奖励安装，超出只发新人侧</li>
+        <li>DeviceCheck 防删装重刷 + 当日保险丝</li>
+      </ul>
+      <p style="margin-top:14px;font-size:13px;color:var(--faint)">设计哲学：真人互助群敞开欢迎——想多赚就得拉更多真人、每人还得真产内容，刷量与增长同向。</p>
+    </div>
+  </div>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>07 / 10</span></footer>
+</section>
+
+<!-- ============ 8 · 方法五：信任地基 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>方法 ⑤ · 信任地基 · 代码实况</div>
+  <h2>门槛不挡增长，门槛保护增长</h2>
+  <div class="grid g3">
+    <div class="card"><span class="tag o">写门槛</span><h3>分享必须实名</h3><p>发到社区要 Apple / 微信登录；匿名可以看、可以录，但「价值落袋」那一刻才设闸——摩擦精确加在刷子身上。</p></div>
+    <div class="card"><span class="tag b">前置审核</span><h3>敏感词零成本过滤</h3><p>分享时先扫关键词（Apple 审核 1.2 的前置防线），命中直接拒绝；举报一键隐藏，管理员事后复核。</p></div>
+    <div class="card"><span class="tag g">活指针</span><h3>帖子永远是最新版</h3><p>社区帖只存指针，正文实时从源文章读——作者编辑立即生效，删了源录音帖子自愈清理。真源在 R2，D1 索引可随时重建。</p></div>
+  </div>
+  <p class="lead" style="margin-top:26px">这一层没有一条是「增长功能」，但每一条都决定增长能不能<b>持续</b>：内容可信、身份真实、系统随时可回退。</p>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>08 / 10</span></footer>
+</section>
+
+<!-- ============ 9 · 张力：肥皂剧 vs 搞脑子 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>真正的担心</div>
+  <h2>肥皂剧会赢，那认真写的东西呢？</h2>
+  <p class="lead">靠「看的人多」排序，最先被推到边缘的，恰恰是花了很多时间写、但「搞脑子」的内容。大家不愿意费脑子——文章的判断是：<b>这就是用户需求</b>，不该对抗。但满足需求不等于什么都不管。</p>
+  <div class="vs">
+    <div class="card">
+      <span class="tag a">文章留下的问题</span>
+      <p style="font:500 15px/1.75 -apple-system;color:var(--ink)">「在一个视觉优先、又要迎合轻松内容的机制里，怎么给那些认真写、值得读的东西留一个不被淹没的位置。<b>这个我还没想明白。</b>」</p>
+    </div>
+    <div class="card">
+      <span class="tag g">代码里已有的、和还缺的筹码</span>
+      <ul class="check">
+        <li>已有：<b>finish 权重 4</b>——读完率是深度内容的天然保护伞</li>
+        <li>已有：红心与钱分离——质量信号没被污染</li>
+        <li>缺：文字帖在瀑布流里的<b>专属卡片样式</b>（现在只有 60 字灰字预览）</li>
+        <li>缺：<b>探索位</b>（每屏留 1–2 个低热度位）——设计文档里有，代码未实现</li>
+      </ul>
+    </div>
+  </div>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>09 / 10</span></footer>
+</section>
+
+<!-- ============ 10 · 设计 vs 实现 + 下一步 ============ -->
+<section class="slide">
+  <div class="kicker"><span class="dot"></span>设计 vs 实现</div>
+  <h2>推荐系统：文档很完整，落地了最简的 20%</h2>
+  <table>
+    <tr><th>设计文档（recommendation_system.md）</th><th>状态</th><th>实际情况</th></tr>
+    <tr><td>互动加权排序 + 牛顿冷却</td><td class="ok">✅ 已实现</td><td>ranking.js 照抄文档 §3.1 权重，热度即时算、不落盘</td></tr>
+    <tr><td>作者打散（防同人刷屏）</td><td class="ok">✅ 已实现</td><td>贪心乘性惩罚，同作者 ×0.5</td></tr>
+    <tr><td>行为埋点</td><td class="ok">✅ 简化版</td><td>engagement 表仅 4 种动作、按人去重，非完整流水</td></tr>
+    <tr><td>兴趣画像 + 懒衰减</td><td class="no">❌ 未实现</td><td>无 user_interests 表、无衰减代码</td></tr>
+    <tr><td>四路召回（关注/标签/热门/新鲜）</td><td class="no">❌ 未实现</td><td>feed = 最近 500 条重排；无关注、无标签、无曝光去重</td></tr>
+    <tr><td>个性化（千人千面）</td><td class="no">❌ 未实现</td><td>全局一套顺序；Cron、冷启动选标签页也都没做</td></tr>
+  </table>
+  <p class="lead" style="margin-top:22px">这个差距不是欠债，是<b>正确的节奏</b>——文档自己写着：「先用规则把闭环跑通、把数据采起来，再逐步模型化。数据和闭环比算法更值钱。」下一步最值得做的三件事：<b>① 给纯文字帖设计专属卡片</b>（回应文章的担心），<b>② 加探索位</b>（防止热度垄断第一屏），<b>③ 攒够 engagement 数据后再上画像</b>。</p>
+  <footer class="slidefoot"><div class="brand"><span class="waves"><span style="height:6px"></span><span style="height:11px"></span><span style="height:15px"></span><span style="height:9px"></span></span><b>VoiceDrop</b></div><span>10 / 10</span></footer>
+</section>
+
+<script>
+  document.addEventListener('keydown', e => {
+    const slides = [...document.querySelectorAll('.slide')];
+    const cur = slides.findIndex(s => s.getBoundingClientRect().top > -innerHeight/2);
+    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); slides[Math.min(cur+1, slides.length-1)]?.scrollIntoView(); }
+    if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); slides[Math.max(cur-1, 0)]?.scrollIntoView(); }
+  });
+</script>
+</body>
+</html>
