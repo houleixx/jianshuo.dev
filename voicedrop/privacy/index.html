@@ -49,9 +49,9 @@
   <!-- ============ 中文 ============ -->
   <span class="lang-tag">中文</span>
   <h1>VoiceDrop 隐私政策</h1>
-  <div class="updated">最近更新：2026 年 7 月 12 日</div>
+  <div class="updated">最近更新：2026 年 7 月 14 日</div>
 
-  <div class="tldr">一句话：<b>你的录音是你的。</b>VoiceDrop 不卖你的数据、不做广告、不接入任何第三方追踪。为了把录音变成文章，录音和文字会交给下面列明的处理服务商——只为给你出结果，不做任何别的用途。</div>
+  <div class="tldr">一句话：<b>你的录音是你的。</b>VoiceDrop 不卖你的数据、不做广告、不为广告追踪你。为了把录音变成文章，录音和文字会交给下面列明的处理服务商——只为给你出结果，不做任何别的用途。</div>
 
   <section>
     <h2>我们收集什么</h2>
@@ -63,6 +63,7 @@
       <li><b>身份标识</b>：为了把文件归到你名下，App 使用一个匿名标识符、「通过 Apple 登录」返回的稳定匿名标识（Apple sub），或（安卓版）「微信登录」返回的开放标识（openid / unionid）。我们不要求、也不存储你的姓名或邮箱，没有密码。</li>
       <li><b>邀请归因</b>：若你通过邀请链接安装，首次启动时 App 会读取一次剪贴板中的邀请码（iOS 会弹出系统提示），服务器还会用你的 IP 地址做短时间的安装归因匹配——仅用于给邀请双方发放奖励，不用于其他目的。</li>
       <li><b>用量记录</b>：为了计算算力消耗，我们记录各 AI 功能的用量（如 token 数与时长），其中不含你的录音或文章内容。</li>
+      <li><b>使用分析</b>：为了改进产品，我们通过 PostHog（美国托管）记录功能使用事件——如打开 App、完成一次录音、使用一次语音修改——以及设备型号、系统版本、App 版本等环境信息。这些事件与你的账户标识符关联，但<b>绝不包含</b>你的录音、转写、文章正文或对话内容，也不用于广告。</li>
     </ul>
   </section>
 
@@ -74,6 +75,7 @@
       <li><b>火山引擎 / 字节跳动</b>（中国）：语音转写。你的录音音频会发送到其位于中国的服务器完成转写。</li>
       <li><b>Anthropic</b>（美国）：用 Claude 把转写文字整理成文章草稿，以及追问、文风等 AI 功能。</li>
       <li><b>OpenAI</b>（美国）：「AI 采访」的实时语音对话，以及部分 AI 配图生成。</li>
+      <li><b>PostHog</b>（美国）：产品使用分析。只接收功能使用事件与设备环境信息，接触不到你的录音与文章内容。</li>
     </ul>
     <p style="margin-top:10px">跨境提示：这意味着你的录音与文字会在<b>中国和美国</b>的服务器上处理。继续使用 VoiceDrop 即表示你知悉并同意上述处理方式。</p>
   </section>
@@ -82,7 +84,7 @@
     <h2>我们不做什么</h2>
     <ul>
       <li>不出售你的录音与数据；除上面列明的处理服务商外，不与任何第三方共享。</li>
-      <li>App 内没有广告 SDK、没有第三方分析或追踪。</li>
+      <li>App 内没有广告 SDK；产品分析只记录功能使用行为，不含你的任何内容。</li>
       <li>不为投放广告而追踪你跨 App / 跨网站的行为。</li>
     </ul>
   </section>
@@ -113,9 +115,9 @@
   <!-- ============ English ============ -->
   <span class="lang-tag">English</span>
   <h1>VoiceDrop Privacy Policy</h1>
-  <div class="updated">Last updated: July 12, 2026</div>
+  <div class="updated">Last updated: July 14, 2026</div>
 
-  <div class="tldr">In one line: <b>your recordings are yours.</b> VoiceDrop never sells your data, shows no ads, and includes no third-party tracking. To turn recordings into articles, your audio and text pass through the processors listed below — solely to produce your results, nothing else.</div>
+  <div class="tldr">In one line: <b>your recordings are yours.</b> VoiceDrop never sells your data, shows no ads, and never tracks you for advertising. To turn recordings into articles, your audio and text pass through the processors listed below — solely to produce your results, nothing else.</div>
 
   <section>
     <h2>What we collect</h2>
@@ -127,6 +129,7 @@
       <li><b>Identifier</b> — to scope your files to you, the app uses an anonymous identifier, the stable anonymous identifier (Apple "sub") returned by Sign in with Apple, or (on Android) the open identifier (openid / unionid) returned by WeChat Login. We do not request or store your name or email, and there is no password.</li>
       <li><b>Referral attribution</b> — if you install via an invite link, the app reads an invite code from your clipboard once on first launch (iOS shows a system notice), and the server briefly matches your IP address for install attribution — used only to grant rewards to both sides of the invite, nothing else.</li>
       <li><b>Usage records</b> — to meter AI credits we record per-feature usage (such as token counts and duration), which contains none of your recording or article content.</li>
+      <li><b>Usage analytics</b> — to improve the product we use PostHog (hosted in the USA) to record feature-usage events — such as opening the app, finishing a recording, or running a voice edit — together with device model, OS version and app version. These events are associated with your account identifier, but <b>never</b> contain your recordings, transcripts, article text or conversation content, and are never used for advertising.</li>
     </ul>
   </section>
 
@@ -138,6 +141,7 @@
       <li><b>Volcano Engine / ByteDance</b> (China) — speech-to-text. Your recording audio is sent to their servers located in China for transcription.</li>
       <li><b>Anthropic</b> (USA) — Claude turns transcripts into article drafts and powers follow-up questions, writing-style features and more.</li>
       <li><b>OpenAI</b> (USA) — the AI Interviewer's real-time voice conversation, and some AI illustration generation.</li>
+      <li><b>PostHog</b> (USA) — product usage analytics. Receives only feature-usage events and device environment info; it never touches your recordings or article content.</li>
     </ul>
     <p style="margin-top:10px">Cross-border note: this means your audio and text are processed on servers in <b>China and the United States</b>. By using VoiceDrop you acknowledge and agree to this processing.</p>
   </section>
@@ -146,7 +150,7 @@
     <h2>What we don't do</h2>
     <ul>
       <li>We never sell your recordings or data, and never share them with any third party beyond the processors listed above.</li>
-      <li>The app contains no advertising SDKs and no third-party analytics or tracking.</li>
+      <li>The app contains no advertising SDKs; product analytics records feature usage only and never includes any of your content.</li>
       <li>We do not track you across other apps or websites for advertising.</li>
     </ul>
   </section>
