@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop 社区发展计划——让尽量多的人用起来、用得好。北极星指标、增长飞轮、三阶段路线图与 30/60/90 天行动清单。">
+<title>VoiceDrop 社区发展计划</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#ef7d54;--amber:#b45309;--green:#3d7a4f;--blue:#2a78d6}
+  html{scroll-snap-type:y mandatory;scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased}
+  .slide{min-height:100vh;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:center;padding:64px clamp(24px,7vw,110px);position:relative;background:radial-gradient(ellipse 120% 80% at 50% -10%,#fdf0e0,var(--bg))}
+  .slide:nth-child(even){background:radial-gradient(ellipse 120% 80% at 50% 110%,#fdeee2,var(--bg))}
+  .kicker{font-family:'Quicksand',sans-serif;font-weight:700;font-size:.82rem;letter-spacing:.18em;color:var(--accent);text-transform:uppercase;margin-bottom:14px}
+  h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(2rem,5.5vw,3.6rem);letter-spacing:-.02em;line-height:1.15}
+  h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(1.5rem,3.4vw,2.3rem);letter-spacing:-.02em;margin-bottom:26px}
+  h3{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.06rem;margin-bottom:8px}
+  p,li{font-size:clamp(.94rem,1.4vw,1.05rem);color:#5f5346;font-weight:600;line-height:1.7}
+  .lead{font-size:clamp(1.05rem,1.9vw,1.3rem);color:#6f6253;font-weight:700;max-width:820px}
+  .grid{display:grid;gap:18px;margin-top:8px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .box{background:var(--card);border-radius:22px;padding:22px 24px;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.85)}
+  .box .em{color:var(--accent);font-weight:800}
+  .tag{display:inline-block;background:#fbe3d8;color:#b8492a;border-radius:999px;padding:3px 12px;font-size:.74rem;font-weight:800;margin-bottom:10px;font-family:'Quicksand',sans-serif}
+  .tag.g{background:#ddeee2;color:var(--green)} .tag.b{background:#dde9fd;color:var(--blue)} .tag.a{background:#fdf0d2;color:var(--amber)}
+  ul{list-style:none;display:flex;flex-direction:column;gap:9px;margin-top:6px}
+  li{padding-left:22px;position:relative}
+  li::before{content:"●";color:var(--accent);position:absolute;left:2px;font-size:.55rem;top:.55em}
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0}
+  .step{background:var(--card);border-radius:16px;padding:14px 18px;box-shadow:0 8px 22px rgba(74,63,53,.08);font-weight:800;font-size:.95rem;border:1.5px solid rgba(255,255,255,.85)}
+  .step small{display:block;font-weight:700;color:var(--soft);font-size:.74rem;margin-top:3px}
+  .arr{color:var(--accent);font-weight:800;font-size:1.2rem}
+  table{border-collapse:collapse;width:100%;margin-top:10px;background:var(--card);border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(74,63,53,.07)}
+  th,td{padding:12px 16px;text-align:left;font-size:clamp(.85rem,1.3vw,.98rem);font-weight:600;color:#5f5346;border-bottom:1px solid #f3e8da;line-height:1.5}
+  th{font-family:'Quicksand',sans-serif;font-weight:700;color:var(--ink);background:#fdf6ec;font-size:.86rem}
+  tr:last-child td{border-bottom:0}
+  .num{position:absolute;top:26px;right:34px;font-family:'Quicksand',sans-serif;font-weight:700;color:#d8c9b5;font-size:.85rem}
+  .big{font-family:'Quicksand',sans-serif;font-weight:700;font-size:clamp(1.6rem,3vw,2.2rem);color:var(--accent)}
+  .foot{position:absolute;bottom:24px;left:0;right:0;text-align:center;font-size:.74rem;color:var(--soft);font-weight:700}
+  .dots{position:fixed;right:14px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px;z-index:9}
+  .dots a{width:8px;height:8px;border-radius:50%;background:#dcccb8;transition:all .2s}
+  .dots a.on{background:var(--accent);transform:scale(1.4)}
+  @media (max-width:640px){.dots{display:none}.num{display:none}}
+  @media print{.slide{min-height:auto;page-break-after:always;padding:40px}.dots{display:none}}
+</style>
+</head>
+<body>
+
+<!-- 1 封面 -->
+<section class="slide" id="s1">
+  <div class="kicker">VoiceDrop · 2026 Q3</div>
+  <h1>社区发展计划</h1>
+  <p class="lead" style="margin-top:18px">让尽量多的人<b style="color:var(--accent)">用起来</b>，并且<b style="color:var(--accent)">用得好</b>。<br>一句话战略：<b>每一篇被读到的文章，都是一张安装邀请函。</b></p>
+  <p style="margin-top:30px;color:var(--soft)">王建硕 · 2026 年 7 月 14 日</p>
+</section>
+
+<!-- 2 一页看懂 -->
+<section class="slide" id="s2"><span class="num">02</span>
+  <h2>一页看懂整个计划</h2>
+  <div class="grid g3">
+    <div class="box"><span class="tag">北极星</span><h3>周活跃创作者</h3><p>每周至少口述产出 1 篇文章的人数。不是下载量，不是注册数——<span class="em">产出才算用起来</span>。</p></div>
+    <div class="box"><span class="tag g">飞轮</span><h3>内容即增长</h3><p>录音 → 成文 → 分享出去 → 读者看到「这是口述写成的」→ 装 App → 又产出内容。</p></div>
+    <div class="box"><span class="tag b">路线</span><h3>100 → 1,000 → 10,000</h3><p>种子期靠人拉人陪跑，增长期靠内容出口，扩散期靠社区自转。</p></div>
+  </div>
+  <div class="flow" style="margin-top:26px">
+    <div class="step">说一段话<small>门槛只有开口</small></div><span class="arr">→</span>
+    <div class="step">AI 写成文章<small>10 分钟内的魔法时刻</small></div><span class="arr">→</span>
+    <div class="step">分享 / 发公众号 / 小红书<small>内容带着链接出门</small></div><span class="arr">→</span>
+    <div class="step">读者变新用户<small>邀请双边奖励接住</small></div><span class="arr">↩</span>
+  </div>
+</section>
+
+<!-- 3 已有武器 -->
+<section class="slide" id="s3"><span class="num">03</span>
+  <h2>增长不用从零造：产品里已经埋好的六件武器</h2>
+  <div class="grid g3">
+    <div class="box"><h3>🔗 分享链接 + Universal Link</h3><p>每篇文章都有公开落地页，点开直接拉起 App，Smart Banner 兜底。<span class="em">落地页就是获客页。</span></p></div>
+    <div class="box"><h3>🎁 邀请双边奖励</h3><p>三层归因（链接/IP/剪贴板）已上线：作者 12 币、新人 6 币，按币价实时入账。</p></div>
+    <div class="box"><h3>🪙 投币经济</h3><p>给好文章投币：作者 +2 币、投币者自己也 +0.5 币——<span class="em">鼓励别人 = 奖励自己</span>，互助扩散。</p></div>
+    <div class="box"><h3>🔮 提示词魔法数字</h3><p>7 位数字码分享自己的提示词，别人口述时说出码就能用——<span class="em">UGC 模板的病毒外壳</span>。</p></div>
+    <div class="box"><h3>📤 公众号 / 小红书出口</h3><p>一键到公众号草稿箱；小红书文案+图卡包直达发布器。用户的分发就是我们的分发。</p></div>
+    <div class="box"><h3>📊 PostHog 漏斗（本周刚上线）</h3><p>identify + 24 个行为事件：安装→登录→首录→成文→分享，每一步从此可测可优化。</p></div>
+  </div>
+  <p style="margin-top:20px" class="lead">👉 计划的本质：把这六件武器<b>按顺序点火</b>，而不是再造新功能。</p>
+</section>
+
+<!-- 4 北极星与漏斗 -->
+<section class="slide" id="s4"><span class="num">04</span>
+  <h2>北极星指标与激活漏斗</h2>
+  <p class="lead">北极星：<span class="big">周活跃创作者</span>（周产出 ≥1 篇文章）</p>
+  <table style="margin-top:22px">
+    <tr><th>漏斗步骤</th><th>PostHog 事件</th><th>目标转化</th><th>主要抓手</th></tr>
+    <tr><td>安装 → 登录</td><td>Application Installed → 登录完成</td><td>≥ 70%</td><td>先体验后登录，上传前才要求 Apple 登录</td></tr>
+    <tr><td>登录 → 首次录音</td><td>录音完成（首次）</td><td>≥ 60%</td><td>首屏就是红色录音键；新手引导给「第一句话」提示</td></tr>
+    <tr><td>首录 → 首篇文章</td><td>文章打开（首次）</td><td>≥ 90%</td><td>挖矿速度 + 成文推送必达（技术上已稳）</td></tr>
+    <tr><td>首篇 → 首次分享</td><td>创建分享链接 / 发公众号</td><td>≥ 30%</td><td>读完文章的情绪高点弹分享引导</td></tr>
+    <tr><td>7 日留存（创作者）</td><td>第 2 周仍有 录音完成</td><td>≥ 40%</td><td>追问 + 采访让第二篇比第一篇更好</td></tr>
+  </table>
+  <p style="margin-top:16px">反虚荣声明：下载量、注册数、累计文章数<b>不进周报</b>——只看漏斗转化和周活跃创作者。</p>
+</section>
+
+<!-- 5 目标人群 -->
+<section class="slide" id="s5"><span class="num">05</span>
+  <h2>先打谁：三圈人群，由近及远</h2>
+  <div class="grid g3">
+    <div class="box"><span class="tag">第一圈 · 现在</span><h3>✍️ 公众号写作者</h3><p>最痛：有想法、没时间打字。钩子：<span class="em">「你的下一篇推文，散步的时候说完就写好了。」</span>从建硕自己的读者圈直接触达。</p></div>
+    <div class="box"><span class="tag a">第二圈 · 增长期</span><h3>🚶 通勤 / 散步思考者</h3><p>开车、走路、做饭时想法最多，落不下来。钩子：<span class="em">「想法在路上，文章到家就好了。」</span>小红书 / 视频号场景化内容打。</p></div>
+    <div class="box"><span class="tag g">第三圈 · 扩散期</span><h3>🎙️ 想留下点什么的口述者</h3><p>父母辈的回忆、创业者的复盘、老师的课后感。钩子：<span class="em">「不会打字没关系，会说话就会写作。」</span>由第一二圈用户带入（帮爸妈装）。</p></div>
+  </div>
+  <p style="margin-top:20px" class="lead">共同点：都有表达欲，都被「打字/成文」挡住。VoiceDrop 卖的不是工具，是<b>「说完即写完」的自由</b>。</p>
+</section>
+
+<!-- 6 种子期 -->
+<section class="slide" id="s6"><span class="num">06</span>
+  <h2>阶段一 · 种子期：0 → 100 位真实创作者（第 1–4 周）</h2>
+  <div class="grid g2">
+    <div class="box"><h3>1. 建硕本人 = 第一增长渠道</h3><ul>
+      <li>每篇口述而成的公众号文章，文末固定一句：<b>「本文由 VoiceDrop 口述写成」</b>+ 邀请链接</li>
+      <li>视频号 / X 发「一段散步录音 → 一篇文章」的真实过程演示</li>
+      <li>把「怎么用 VoiceDrop 写公众号」本身写成系列文章（工具的自举）</li></ul></div>
+    <div class="box"><h3>2. 一对一拉 20 位公众号朋友</h3><ul>
+      <li>微信亲自发，不群发：帮 TA 出第一篇，全程陪跑</li>
+      <li>目标不是安装，是 <b>TA 真发出一篇口述文章</b>并注明来自 VoiceDrop</li>
+      <li>每人送初始算力，写清「投币给别人自己也得币」</li></ul></div>
+    <div class="box"><h3>3. 种子微信群（≤50 人）</h3><ul>
+      <li>每天在群里贴一篇群友的好文章 + 投币示范</li>
+      <li>收集卡点：PostHog 漏斗数据 + 群反馈，每周一版修激活</li></ul></div>
+    <div class="box"><h3>本阶段唯一目标</h3><p style="margin-top:6px">跑通「陌生人也能 10 分钟出第一篇」。<br><span class="em">漏斗数字比用户数重要</span>：首录→首篇 ≥90%，首篇→分享 ≥30%，达标才进阶段二。</p></div>
+  </div>
+</section>
+
+<!-- 7 增长期 -->
+<section class="slide" id="s7"><span class="num">07</span>
+  <h2>阶段二 · 增长期：100 → 1,000（第 2–3 个月）</h2>
+  <div class="grid g2">
+    <div class="box"><h3>🔗 把每篇分享页变成获客页</h3><ul>
+      <li>落地页底部常驻：「这篇文章是作者口述、AI 整理的——你也可以」+ 下载按钮（邀请归因已接住）</li>
+      <li>页脚展示作者累计口述篇数，制造「TA 都写了 40 篇了」的社会证明</li></ul></div>
+    <div class="box"><h3>📕 小红书打「口述成文」话题</h3><ul>
+      <li>用户的小红书导出图卡自带角标；官方号持续发「说了 3 分钟，写出 1200 字」对比帖</li>
+      <li>提示词魔法数字当传播素材：「用这个码，你的文章会带金句小标题」</li></ul></div>
+    <div class="box"><h3>🎁 邀请奖励全量点火</h3><ul>
+      <li>真机验证 DeviceCheck 后开 requireDeviceCheck，防刷开闸</li>
+      <li>App 内加显性「邀请好友」入口（目前归因是暗线，缺明线按钮）</li>
+      <li>邀请文案强调双边：「你和朋友各得算力」</li></ul></div>
+    <div class="box"><h3>🤝 场景合作</h3><ul>
+      <li>写作社群 / 读书会 / 播客主：批量送算力包，办「七天口述挑战」</li>
+      <li>每个合作社群指定一位「班长」，复制种子群陪跑模式</li></ul></div>
+  </div>
+</section>
+
+<!-- 8 扩散期 -->
+<section class="slide" id="s8"><span class="num">08</span>
+  <h2>阶段三 · 扩散期：1,000 → 10,000（第 4–6 个月）</h2>
+  <div class="grid g2">
+    <div class="box"><h3>🌀 社区自转</h3><ul>
+      <li>投币榜 + 每周精选：好文章被看见，作者被激励，读者学会「原来可以这样说」</li>
+      <li>回应链做成「文章对话」：一篇引发一篇，社区内生内容循环</li></ul></div>
+    <div class="box"><h3>🧩 提示词模板市场</h3><ul>
+      <li>把魔法数字码从「口口相传」升级成 App 内可浏览的模板广场</li>
+      <li>模板作者按被导入次数得算力——<span class="em">让教别人用得好的人赚到</span></li></ul></div>
+    <div class="box"><h3>📱 降门槛铺面</h3><ul>
+      <li>Android 版从 APK 侧载转正规分发；网页端只读 → 轻创作</li>
+      <li>给第三圈人群做「极简模式」：一个键、说完自动成文自动分享给家人</li></ul></div>
+    <div class="box"><h3>🏆 周期性活动</h3><ul>
+      <li>月度主题挑战（如「我的第一份工作」），精选集结成合集页对外传播</li>
+      <li>年度「口述写作奖」：把最好的故事推回公众号 / 小红书主流视野</li></ul></div>
+  </div>
+</section>
+
+<!-- 9 用得好 -->
+<section class="slide" id="s9"><span class="num">09</span>
+  <h2>「用得好」= 激活深度，不只是留存</h2>
+  <p class="lead">Aha 时刻定义：<b>首次录音后 10 分钟内，读到一篇「像自己写的」文章。</b></p>
+  <div class="grid g3" style="margin-top:22px">
+    <div class="box"><span class="tag">第一篇</span><h3>新手三步引导</h3><p>① 给「第一句话」示例（「说说你今天最想记住的一件事」）② 录 1 分钟就够 ③ 成文推送点开即读。</p></div>
+    <div class="box"><span class="tag a">第二篇起</span><h3>追问 + AI 采访</h3><p>追问把细节织回正文；卡住时开采访让 AI 提宏观问题。<span class="em">第二篇比第一篇好，用户才留下。</span></p></div>
+    <div class="box"><span class="tag g">一直用</span><h3>文风蒸馏</h3><p>攒样本 → 提炼个人文风 → 文章越来越「像自己」。用得越久越难离开——这是真正的护城河。</p></div>
+  </div>
+  <p style="margin-top:20px">度量：分别看「用过追问」「用过采访」「设过文风」用户的周留存对比全体——用 PostHog 直接出对照，<b>数据证明哪个功能值得推给所有人</b>。</p>
+</section>
+
+<!-- 10 社区机制 -->
+<section class="slide" id="s10"><span class="num">10</span>
+  <h2>社区机制：让「用得好的人」教会「刚来的人」</h2>
+  <table>
+    <tr><th>机制</th><th>状态</th><th>下一步</th></tr>
+    <tr><td>🪙 投币互助（作者+2 / 投币者+0.5）</td><td>已上线</td><td>投币榜进社区首页，每周清零重排，制造新鲜感</td></tr>
+    <tr><td>↩️ 回应链（文章回应文章）</td><td>已上线</td><td>被回应时推送提醒作者；回应对做成对话页</td></tr>
+    <tr><td>🔮 提示词分享码</td><td>已上线</td><td>模板广场 + 导入次数排行 + 作者算力分成</td></tr>
+    <tr><td>⭐ 每周精选</td><td>未做</td><td>先人工（建硕选 3 篇写点评）→ 数据够了再算法化</td></tr>
+    <tr><td>🎓 新人陪跑</td><td>群里人肉</td><td>「师徒制」：老用户邀请码带 3 个新人出首篇，双方得币</td></tr>
+  </table>
+  <p style="margin-top:18px" class="lead">原则：<b>算力经济只奖励两件事——产出好内容，和帮别人产出好内容。</b></p>
+</section>
+
+<!-- 11 度量 -->
+<section class="slide" id="s11"><span class="num">11</span>
+  <h2>怎么知道有没有效：度量与节奏</h2>
+  <div class="grid g2">
+    <div class="box"><h3>📊 PostHog 三块看板（本周建）</h3><ul>
+      <li><b>激活漏斗</b>：安装→登录→首录→首篇→首分享，按周分组</li>
+      <li><b>创作者留存</b>：以「录音完成」为留存事件的周留存曲线</li>
+      <li><b>增长归因</b>：邀请归因成功按层（link/IP/剪贴板）+ 分享链接点击→安装</li></ul></div>
+    <div class="box"><h3>🗓️ 每周一次增长复盘（30 分钟）</h3><ul>
+      <li>只看三个数：周活跃创作者、首录→首篇转化、邀请带来的新创作者</li>
+      <li>每周最多两个实验，PostHog 事件先行——<span class="em">没埋点的实验不做</span></li>
+      <li>无效果的机制敢下线：指标不动的功能是负债</li></ul></div>
+  </div>
+  <div class="flow" style="margin-top:24px">
+    <div class="step">提假设<small>「分享页加下载钩子 → 安装+20%」</small></div><span class="arr">→</span>
+    <div class="step">埋点上线<small>事件先行</small></div><span class="arr">→</span>
+    <div class="step">看一周数据<small>PostHog 漏斗</small></div><span class="arr">→</span>
+    <div class="step">留 / 改 / 撤<small>周会拍板</small></div>
+  </div>
+</section>
+
+<!-- 12 30/60/90 -->
+<section class="slide" id="s12"><span class="num">12</span>
+  <h2>30 / 60 / 90 天行动清单</h2>
+  <table>
+    <tr><th style="width:110px">时间</th><th>做什么</th><th>达标线</th></tr>
+    <tr><td><b>第 1–30 天</b></td><td>公众号文末挂链接；一对一拉 20 位写作者；建种子群陪跑；PostHog 三看板建好；分享落地页加「你也可以」下载钩子</td><td>30 位周活跃创作者；首录→首篇 ≥90%</td></tr>
+    <tr><td><b>第 31–60 天</b></td><td>App 内显性邀请入口；DeviceCheck 验证后奖励全量开；小红书「口述成文」系列开发；首个社群合作「七天口述挑战」</td><td>100 位周活跃创作者；邀请带来 ≥30% 新创作者</td></tr>
+    <tr><td><b>第 61–90 天</b></td><td>每周精选上线（人工）；提示词模板广场设计；被回应推送；第二三个社群合作复制</td><td>300 位周活跃创作者；创作者 7 日留存 ≥40%</td></tr>
+  </table>
+  <p style="margin-top:20px" class="lead">本周就能做的第一步：<b>下一篇公众号文章文末，挂上「本文由 VoiceDrop 口述写成」和邀请链接。</b>飞轮从自己开始转。</p>
+</section>
+
+<!-- 13 结尾 -->
+<section class="slide" id="s13">
+  <div class="kicker">VoiceDrop</div>
+  <h1 style="font-size:clamp(1.8rem,4.5vw,3rem)">会说话，就会写作。</h1>
+  <p class="lead" style="margin-top:18px">增长的每一步都已埋好钩子，数据的每一步都已埋好事件。<br>剩下的，是把飞轮推起来——从下一篇文章的文末开始。</p>
+  <p style="margin-top:30px;color:var(--soft)">jianshuo.dev/a/voicedrop-growth · 2026-07</p>
+  <div class="foot">↑↓ 方向键 / 滚动翻页</div>
+</section>
+
+<nav class="dots" id="dots"></nav>
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dots=document.getElementById('dots');
+  slides.forEach((s,i)=>{const a=document.createElement('a');a.href='#'+s.id;dots.appendChild(a);});
+  const as=[...dots.children];
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){const i=slides.indexOf(e.target);as.forEach((a,j)=>a.classList.toggle('on',i===j));}}),{threshold:.6});
+  slides.forEach(s=>io.observe(s));
+  addEventListener('keydown',e=>{
+    const cur=as.findIndex(a=>a.classList.contains('on'));
+    if(['ArrowDown','ArrowRight','PageDown',' '].includes(e.key)&&cur<slides.length-1){e.preventDefault();slides[cur+1].scrollIntoView();}
+    if(['ArrowUp','ArrowLeft','PageUp'].includes(e.key)&&cur>0){e.preventDefault();slides[cur-1].scrollIntoView();}
+  });
+</script>
+</body>
+</html>
