@@ -31,7 +31,7 @@ import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, 
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, referralLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
-import { handlePromptShareRoutes } from "./prompt-share.js";
+import { handlePromptShareRoutes, shareStates } from "./prompt-share.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "../../functions/lib/silent-m4a.js";
@@ -1057,6 +1057,21 @@ export default {
       if (!scope) return J({ error: "unauthorized" }, 401);
       if (url.pathname === "/agent/prompts/import") return handlePromptImport(request, env, scope);
       return handlePromptsRoute(request, env, scope, url);
+    }
+
+    // ── /agent/prompt-shares ── 只读：当前用户全部分享状态一览（iOS 分享卡，5c）。
+    // 精确匹配，不与 /agent/prompt-share（POST 铸码/DELETE 关闭）或
+    // /agent/prompt-share/<code>（公开导入预览）互相吞掉——见 src/prompt-share.js。
+    // 鉴权惯例照抄上面的 /agent/prompts：resolveScope 先行，401 无 token；GET 专属，
+    // 其余方法 405。直接暴露 shareStates() 的结果，字段名 shareCode → code（客户端契约）。
+    if (url.pathname === "/agent/prompt-shares") {
+      const scope = await resolveScope(bearerToken(request), env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      if (request.method !== "GET") return J({ error: "method not allowed" }, 405);
+      const states = await shareStates(env, scope);
+      const byItem = {};
+      for (const [itemId, s] of Object.entries(states)) byItem[itemId] = { code: s.shareCode, sharing: s.sharing };
+      return J({ byItem });
     }
 
     // ── /agent/ops/tick ── 服务端错误打点（Pages Functions 4xx/5xx 时 fire-and-forget）──

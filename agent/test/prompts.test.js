@@ -1073,6 +1073,96 @@ describe("PUT /agent/prompts — 保存时刷新正在分享的条目", () => {
   });
 });
 
+// ── PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 re-key（Phase 2 Piece 2）──
+// voicedrop repo .superpowers/sdd/task-1-brief.md：用户分享一个 ref 的系统项（索引键
+// 是 sys_*），随后在新 UI 里编辑它——客户端把它 fork 成 p_x（forkedFrom 指回 sys_*）
+// 整树 PUT。sys_* 从用户列表里消失，effectiveLeaf("sys_*") 解析不到内容，若不 re-key，
+// 活同步 syncActiveShares 会 no-op，分享码从此冻结在 fork 前的旧内容，分享卡（按当前
+// 节点 id p_x 查）也看不到分享。rekeyForkedShares 把索引条目从 sys_* 挪到 p_x（码本身
+// 不变），紧跟着的活同步循环就能在同一次 PUT 里把 fork 后的新内容刷进 shares/<码>。
+describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 re-key（Piece 2）", () => {
+  const MINT = (env, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
+    method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+  }), env);
+  const STATES = (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-shares", {
+    headers: { Authorization: TOKEN },
+  }), env);
+  const shareDocOf = (env, code) => JSON.parse(env.FILES._store.get(`shares/${code}`));
+  const indexOf = (env) => JSON.parse(env.FILES._store.get([...env.FILES._store.keys()].find((k) => k.endsWith("prompt-shares.json"))));
+
+  it("★ 铸码于 sys_cartoon → PUT 把它 fork 成 p_x → 索引键从 sys_cartoon 挪到 p_x，码不变，shares/<码> 内容变成 fork 后的新词，GET /agent/prompt-shares 在 p_x 下能看到分享", async () => {
+    const env = fakeEnv();
+    const { code } = await (await MINT(env, "sys_cartoon")).json();
+
+    const res = await PUT(env, [{ id: "p_forkx1", type: "action", label: "卡通风·我的版本", prompt: "我改过的卡通提示词", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
+    expect(res.status).toBe(200);
+
+    const idx = indexOf(env);
+    expect(idx.byItem["sys_cartoon"]).toBeUndefined();
+    expect(idx.byItem["p_forkx1"].code).toBe(code);
+
+    const doc = shareDocOf(env, code);
+    expect(doc.itemId).toBe("p_forkx1");
+    expect(doc.label).toBe("卡通风·我的版本");
+    expect(doc.instruction).toBe("我改过的卡通提示词");
+
+    const states = await (await STATES(env)).json();
+    expect(states.byItem["p_forkx1"]).toEqual({ code, sharing: true });
+    expect(states.byItem["sys_cartoon"]).toBeUndefined();
+  });
+
+  it("重复 PUT 同一棵树（幂等）→ 索引/分享内容不再变化", async () => {
+    const env = fakeEnv();
+    const { code } = await (await MINT(env, "sys_cartoon")).json();
+    const tree = [{ id: "p_forkx1", type: "action", label: "卡通风·我的版本", prompt: "我改过的卡通提示词", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }];
+    await PUT(env, tree);
+    const res2 = await PUT(env, tree);
+    expect(res2.status).toBe(200);
+    const idx = indexOf(env);
+    expect(idx.byItem["p_forkx1"].code).toBe(code);
+    expect(idx.byItem["sys_cartoon"]).toBeUndefined();
+    expect(Object.keys(idx.byItem)).toHaveLength(1);
+    const doc = shareDocOf(env, code);
+    expect(doc.instruction).toBe("我改过的卡通提示词");
+  });
+
+  it("边界（接受的行为）：fork 被删除后再次 fork 同一个系统项 → 二次 fork 不 re-key（sys_cartoon 的索引条目已被首次 fork 消费），旧码停在首次 fork 的内容", async () => {
+    const env = fakeEnv();
+    const { code } = await (await MINT(env, "sys_cartoon")).json();
+    await PUT(env, [{ id: "p_forkx1", type: "action", label: "第一次 fork", prompt: "第一版内容", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
+    // p_x 从列表里被删掉（用户删了这条自建项），再 fork 一次 sys_cartoon 成 p_y。
+    await PUT(env, [{ id: "p_forky1", type: "action", label: "第二次 fork", prompt: "第二版内容", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
+
+    const idx = indexOf(env);
+    expect(idx.byItem["p_forkx1"].code).toBe(code); // 首次 fork 的索引条目原样保留（冻结）
+    expect(idx.byItem["p_forky1"]).toBeUndefined();  // 二次 fork 拿不到分享——不做聪明事
+    expect(idx.byItem["sys_cartoon"]).toBeUndefined();
+
+    const doc = shareDocOf(env, code);
+    expect(doc.instruction).toBe("第一版内容"); // 码内容停在第一次 fork，不受二次 fork 影响
+
+    const states = await (await STATES(env)).json();
+    expect(states.byItem["p_forkx1"]).toEqual({ code, sharing: true });
+    expect(states.byItem["p_forky1"]).toBeUndefined();
+  });
+
+  it("re-key 失败不影响 PUT 保存本身（best-effort）：写索引抛错，PUT 仍 200 且树已落盘", async () => {
+    const env = fakeEnv();
+    await MINT(env, "sys_cartoon");
+    const origPut = env.FILES.put.bind(env.FILES);
+    env.FILES.put = async (key, value) => {
+      if (key.endsWith("prompt-shares.json")) throw new Error("boom");
+      return origPut(key, value);
+    };
+    const res = await PUT(env, [{ id: "p_forkx1", type: "action", label: "卡通风", prompt: "我改过的", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
+    expect(res.status).toBe(200);
+    env.FILES.put = origPut;
+    const got = await (await GET(env)).json();
+    expect(got.items.find((i) => i.id === "p_forkx1").prompt).toBe("我改过的");
+  });
+});
+
 describe("POST /agent/prompts/restore-defaults", () => {
   const RESTORE = (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts/restore-defaults", {
     method: "POST", headers: { Authorization: TOKEN },

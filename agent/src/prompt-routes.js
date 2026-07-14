@@ -9,7 +9,7 @@
 import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, MAX_LABEL, MAX_PROMPT } from "./prompts.js";
 import { loadUserPrompts, saveUserPrompts } from "./prompt-store.js";
-import { resolvePromptShare, refreshPromptShare, shareStates } from "./prompt-share.js";
+import { resolvePromptShare, refreshPromptShare, shareStates, rekeyForkedShares } from "./prompt-share.js";
 
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
@@ -94,6 +94,11 @@ export async function handlePromptsRoute(request, env, scope, url) {
     const err = validateList(tpl, body.items);
     if (err) return J({ error: err }, 400);
     await saveUserPrompts(env, scope, body.items);
+    // re-key 必须先于活同步：fork 一个正在分享的系统项后，索引键要从旧 id（sys_*）
+    // 挪到新的实体 id，紧接着的 syncActiveShares 才能认出这个实体正处于分享中，
+    // 把 fork 后的新内容刷进 shares/<码>——否则分享码会永远冻结在 fork 前的旧内容。
+    // 也是 best-effort（函数内部已经 try/catch），见 prompt-share.js#rekeyForkedShares。
+    await rekeyForkedShares(env, scope, body.items);
     await syncActiveShares(env, scope, body.items);   // best-effort, 见上方注释
     return resolved(tpl, body.items);
   }
