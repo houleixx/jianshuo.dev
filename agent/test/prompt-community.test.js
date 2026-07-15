@@ -53,6 +53,17 @@ describe("publishPromptPost", () => {
   });
 });
 
+describe("previewOf（经 publishPromptPost 落 D1 行）", () => {
+  it("提示词里的 [[photo:...]] 占位标记不进卡片预览", async () => {
+    const e = makeEnv();
+    const sid = await publishPromptPost(e, OWNER, "4563566",
+      { label: "改图", instruction: "把这张图（[[photo:{{KEY}}]]）改成手绘风。", appliesTo: ["image"] });
+    const row = e.RECO_DB._posts.get(sid);
+    expect(row.preview).not.toContain("[[photo");
+    expect(row.preview).toContain("改成手绘风");
+  });
+});
+
 describe("retractPromptPost", () => {
   it("删帖删 D1 行；帖不存在时静默", async () => {
     const e = makeEnv();

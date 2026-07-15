@@ -1019,9 +1019,13 @@ async function handleRequest(context) {
   async function indexUpsert(p, articles, photos, { hidden = null, kind = null } = {}) {
     if (!env.RECO_DB) return;
     try {
-      const ex = cardExtras(articles, photos, p.owner);
-      const title = articles[0]?.title ?? p.title ?? '';
       const k = kind || p.kind || 'article';
+      // 提示词帖的"正文"是提示词文本——里面的 [[photo:{{KEY}}]] 之类是给 AI 的
+      // 占位标记，不是真图。绝不能拿去当封面（曾把 {{KEY}} 拼成假题图，
+      // 2026-07-16 真机 bug）；预览沿用 cardExtras 的清洗（顺带剥掉标记）。
+      const ex0 = cardExtras(articles, photos, p.owner);
+      const ex = k === 'prompt' ? { hasPhoto: false, ...(ex0.preview ? { preview: ex0.preview } : {}) } : ex0;
+      const title = articles[0]?.title ?? p.title ?? '';
       const hid = hidden !== null ? (hidden ? 1 : 0)
         : ((await env.FILES.head(reportKey(p.shareId))) ? 1 : 0);
       await env.RECO_DB.prepare(

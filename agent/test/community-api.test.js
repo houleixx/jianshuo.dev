@@ -125,6 +125,25 @@ describe("GET community/get/<id>", () => {
     expect(body.owner).toBe("users/u/");
   });
 
+  it("提示词文本里的 [[photo:...]] 不会被抠成假题图：get 自愈后 D1 行 has_photo=0 无封面", async () => {
+    const db = fakeRecoD1();
+    const context = reqCtx("GET", ["community", "get", "prm700000001"], { env: { RECO_DB: db } });
+    context.env.FILES._store.set("shares/4563577", JSON.stringify({
+      type: "prompt", sub: "u", itemId: "p_7", label: "改图｜手绘解释风",
+      instruction: "把这张图（[[photo:{{KEY}}]]）改成手绘解释风插画。", appliesTo: ["image"],
+    }));
+    context.env.FILES._store.set("community/prm700000001.json", JSON.stringify({
+      schema: 2, shareId: "prm700000001", owner: "users/u/", kind: "prompt",
+      promptCode: "4563577", author: "王建硕", firstSharedAt: 5000,
+    }));
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(200);
+    const row = db._posts.get("prm700000001");
+    expect(row.has_photo).toBe(0);
+    expect(row.cover_photo_key).toBeNull();
+    expect(row.preview).not.toContain("[[photo");   // 预览剥掉占位标记
+  });
+
   it("community/get：提示词码已失效（shares/<码> 没了）→ 404 且帖被自愈清掉", async () => {
     const db = fakeRecoD1();
     db._posts.set("prm200000001", { share_id: "prm200000001", owner: "users/u/", hidden: 0, kind: "prompt" });

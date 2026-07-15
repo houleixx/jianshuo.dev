@@ -11,7 +11,11 @@ import { readProfileName } from "../../functions/lib/style-store.js";
 export const promptShareId = (code, secret) => shareIdFor(`promptshare:${code}`, secret);
 
 // 卡片预览口径对齐 Pages 的 cardExtras：纯文本前 60 字。
-const previewOf = (s) => String(s || "").replace(/\s+/g, " ").trim().slice(0, 60);
+// 剥掉 [[photo:...]] 占位标记再截——提示词里的标记是给 AI 的，不是卡片素材
+//（口径对齐 Pages 的 cardExtras）。
+const previewOf = (s) => String(s || "")
+  .replace(/\[\[photo:[^\]]+\]\]/g, " ")
+  .replace(/\s+/g, " ").trim().slice(0, 60);
 
 /// 发帖（开分享/复活时调用）。失败吞掉返回 null——发帖是铸码的附属动作，
 /// 绝不能让它拖垮铸码本身；漂移由 reconcileIndex 收敛。

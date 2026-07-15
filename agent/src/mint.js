@@ -77,13 +77,26 @@ export async function handleMintRoutes(url, request, env) {
     const postObj = await env.FILES.get(communityKey(shareId));
     if (!postObj) return J({ error: "share not found" }, 404);
     let post; try { post = JSON.parse(await postObj.text()); } catch { return J({ error: "bad share" }, 500); }
-    if (!post.owner || !post.articleKey) return J({ error: "not feedable" }, 400); // legacy schema-1
+    // 提示词帖（kind:"prompt"）没有 articleKey——内容真源是 shares/<码>，同样可投。
+    // 【own 检查必须在 feedable 检查之前】：投自己的帖要得到 cannot_feed_own 这个
+    // 明确拒因，而不是先被 not feedable 拦成笼统失败（2026-07-16 真机 bug：
+    // 提示词帖对所有人都 not feedable，spec 明确要求可投币，各层 review 都漏了）。
+    if (!post.owner) return J({ error: "not feedable" }, 400);
     if (post.owner === feeder) return J({ error: "cannot_feed_own" }, 400);
-    // 读活文章（存在性检查 + 标题快照进账单明细，让「收到投币/投币奖励」看得出是哪篇）
-    const artObj = await env.FILES.get(post.articleKey);
-    if (!artObj) return J({ error: "article gone" }, 404);
+    // 内容存在性检查 + 标题快照进账单明细（「收到投币/投币奖励」看得出是哪篇/哪条）
     let title = "";
-    try { title = (resolveArticles(JSON.parse(await artObj.text()))[0] || {}).title || ""; } catch {}
+    let contentKey = post.articleKey || null;
+    if (post.kind === "prompt" && post.promptCode) {
+      contentKey = `shares/${post.promptCode}`;
+      const sh = await env.FILES.get(contentKey);
+      if (!sh) return J({ error: "article gone" }, 404);   // 码已死＝帖将亡（自愈在途）
+      try { title = JSON.parse(await sh.text()).label || ""; } catch {}
+    } else {
+      if (!post.articleKey) return J({ error: "not feedable" }, 400); // legacy schema-1
+      const artObj = await env.FILES.get(post.articleKey);
+      if (!artObj) return J({ error: "article gone" }, 404);
+      try { title = (resolveArticles(JSON.parse(await artObj.text()))[0] || {}).title || ""; } catch {}
+    }
     // 显示名走 readProfileName（兜底策略含在内），不再依赖 share 快照里的 author
     const authorName = await readProfileName(env, post.owner);
     const feederName = await readProfileName(env, feeder);
@@ -111,7 +124,7 @@ export async function handleMintRoutes(url, request, env) {
       "INSERT OR IGNORE INTO mint (kind,subject_key,share_id,actor_sub,beneficiary_sub,coins_uc,price_uy,actor_uy,beneficiary_uy,detail,ts) " +
       "VALUES ('feed',?,?,?,?,?,?,?,?,?,?)"
     ).bind(
-      post.articleKey, shareId, feeder, post.owner,
+      contentKey, shareId, feeder, post.owner,
       q.authorUC + q.feederUC, q.priceUY, q.actorUY, q.beneficiaryUY,
       JSON.stringify({ ...(q.disc < 1 ? { disc: q.disc } : {}), title }), now,
     ).run();

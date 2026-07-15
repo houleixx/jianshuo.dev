@@ -174,6 +174,38 @@ describe("POST /agent/feed", () => {
     expect((await r.json()).error).toBe("cannot_feed_own");
   });
 
+  // ── 提示词帖投币（kind:"prompt"，无 articleKey，内容真源 shares/<码>）────────
+  const PSHARE = "sharepppppp1";
+  async function seedPromptPost(e) {
+    await e.FILES.put(`community/${PSHARE}.json`, JSON.stringify({
+      schema: 2, shareId: PSHARE, owner: AUTHOR, kind: "prompt", promptCode: "4563566", author: "作者甲" }));
+    await e.FILES.put("shares/4563566", JSON.stringify({
+      type: "prompt", sub: "anon-author11", itemId: "p_x", label: "更毒舌", instruction: "改毒舌" }));
+  }
+
+  it("提示词帖可以投币：标题快照 = label，subject_key = shares/<码>", async () => {
+    await seedPromptPost(env);
+    const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: PSHARE });
+    expect((await r.json()).ok).toBe(true);
+    const row = db.prepare("SELECT * FROM mint").bind().first();
+    expect(row.subject_key).toBe("shares/4563566");
+    expect(JSON.parse(row.detail).title).toBe("更毒舌");
+  });
+
+  it("投自己的提示词帖 → cannot_feed_own（明确拒因，不是 not feedable）", async () => {
+    await seedPromptPost(env);
+    const r = await post("/agent/feed", await makeToken(AUTHOR), { share_id: PSHARE });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toBe("cannot_feed_own");
+  });
+
+  it("码已失效的提示词帖投币 → 404（帖将亡，自愈在途）", async () => {
+    await seedPromptPost(env);
+    await env.FILES.delete("shares/4563566");
+    const r = await post("/agent/feed", await makeToken(FEEDER), { share_id: PSHARE });
+    expect(r.status).toBe(404);
+  });
+
   it("匿名 token → 403 needs_apple_signin；非 Apple session 同样", async () => {
     const r1 = await post("/agent/feed", "anon_0123456789abcdef012345", { share_id: SHARE1 });
     expect(r1.status).toBe(403);
