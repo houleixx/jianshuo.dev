@@ -4,6 +4,18 @@ import worker from "../src/index.js";
 import { fakeEnv } from "./fakes.js";
 import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, MAX_ITEMS } from "../src/prompts.js";
 import { DEFAULT_PROMPT_TEMPLATE } from "../src/prompt-template.js";
+import { hmacSign, b64url } from "../../functions/lib/auth.js";
+
+// POST/DELETE /agent/prompt-share（铸码/关闭分享）现在要求验证过的身份（分享=
+// 发帖门槛，Task 4）——裸匿名 token 一律 403。makeToken() 造一个 apple:true 的
+// session token，供下面「保存时刷新正在分享的条目」「fork re-key」两组用例使用
+// （与 test/prompt-share.test.js 的同名基建同一手法）。
+const SECRET = "test-secret";
+async function makeToken(scope) {
+  const h = b64url(JSON.stringify({ alg: "HS256" }));
+  const p = b64url(JSON.stringify({ scope, apple: true }));
+  return `${h}.${p}.${await hmacSign(`${h}.${p}`, SECRET)}`;
+}
 
 // 小模板，测试自带，不依赖真模板的内容（真模板的内容由 prompt-template.test.js 盯）
 const TPL = {
@@ -1004,12 +1016,25 @@ describe("PUT /agent/prompts", () => {
 // 整树 PUT 起初没接这条线——作者编辑一条正在分享的提示词后，分享副本（shares/<码>）
 // 停在旧版本，直到这里补上 syncActiveShares。
 describe("PUT /agent/prompts — 保存时刷新正在分享的条目", () => {
-  const MINT = (env, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
-    method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" },
+  // 这组用例需要铸码/关闭分享（POST|DELETE /agent/prompt-share），现在要求验证过
+  // 的身份——改用 makeToken() 的 session token；PUT/GET 也要用同一个 scope 的
+  // token 才能读到同一份 prompts.json（VPUT/VGET 取代模块级用裸匿名 TOKEN 的 PUT/GET）。
+  const SCOPE = "users/anon-share-sync/";
+  const authHeader = async () => `Bearer ${await makeToken(SCOPE)}`;
+  const mkEnv = (seed) => { const e = fakeEnv(seed); e.SESSION_SECRET = SECRET; return e; };
+  const VPUT = async (env, items) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+    method: "PUT", headers: { Authorization: await authHeader(), "content-type": "application/json" },
+    body: JSON.stringify({ items }),
+  }), env);
+  const VGET = async (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+    headers: { Authorization: await authHeader() },
+  }), env);
+  const MINT = async (env, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
+    method: "POST", headers: { Authorization: await authHeader(), "content-type": "application/json" },
     body: JSON.stringify({ id }),
   }), env);
-  const UNSHARE = (env, id) => worker.fetch(new Request(`https://jianshuo.dev/agent/prompt-share/${id}`, {
-    method: "DELETE", headers: { Authorization: TOKEN },
+  const UNSHARE = async (env, id) => worker.fetch(new Request(`https://jianshuo.dev/agent/prompt-share/${id}`, {
+    method: "DELETE", headers: { Authorization: await authHeader() },
   }), env);
   const shareDocOf = (env) => {
     const k = [...env.FILES._store.keys()].find((x) => x.startsWith("shares/"));
@@ -1017,14 +1042,14 @@ describe("PUT /agent/prompts — 保存时刷新正在分享的条目", () => {
   };
 
   it("作者编辑正在分享的条目 → 分享副本随 PUT 同步更新（label/instruction/appliesTo），createdAt/importCount 保留", async () => {
-    const env = fakeEnv();
-    await PUT(env, [{ id: "p_share01", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
+    const env = mkEnv();
+    await VPUT(env, [{ id: "p_share01", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
     const { code } = await (await MINT(env, "p_share01")).json();
     const before = shareDocOf(env);
     // 模拟这条分享已经被别人导入过几次——改词不能把导入计数清零。
     env.FILES._store.set(`shares/${code}`, JSON.stringify({ ...before, importCount: 5 }));
 
-    const res = await PUT(env, [{ id: "p_share01", type: "action", label: "新标题", prompt: "改过的内容", appliesTo: ["text", "image"] }]);
+    const res = await VPUT(env, [{ id: "p_share01", type: "action", label: "新标题", prompt: "改过的内容", appliesTo: ["text", "image"] }]);
     expect(res.status).toBe(200);
 
     const after = shareDocOf(env);
@@ -1036,39 +1061,39 @@ describe("PUT /agent/prompts — 保存时刷新正在分享的条目", () => {
   });
 
   it("作者没有任何分享 → PUT 正常保存，不产生任何 shares/* 写入", async () => {
-    const env = fakeEnv();
-    const res = await PUT(env, [{ id: "p_noshare1", type: "action", label: "标题", prompt: "内容", appliesTo: ["text"] }]);
+    const env = mkEnv();
+    const res = await VPUT(env, [{ id: "p_noshare1", type: "action", label: "标题", prompt: "内容", appliesTo: ["text"] }]);
     expect(res.status).toBe(200);
     expect([...env.FILES._store.keys()].some((k) => k.startsWith("shares/"))).toBe(false);
-    const got = await (await GET(env)).json();
+    const got = await (await VGET(env)).json();
     expect(got.items.find((i) => i.id === "p_noshare1").prompt).toBe("内容");
   });
 
   it("分享已关闭的条目被编辑 → 不复活分享（PUT 仍 200，shares/<码> 依旧不存在）", async () => {
-    const env = fakeEnv();
-    await PUT(env, [{ id: "p_share02", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
+    const env = mkEnv();
+    await VPUT(env, [{ id: "p_share02", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
     const { code } = await (await MINT(env, "p_share02")).json();
     await UNSHARE(env, "p_share02");
     expect(env.FILES._store.has(`shares/${code}`)).toBe(false);
 
-    const res = await PUT(env, [{ id: "p_share02", type: "action", label: "标题", prompt: "又改了一版", appliesTo: ["text"] }]);
+    const res = await VPUT(env, [{ id: "p_share02", type: "action", label: "标题", prompt: "又改了一版", appliesTo: ["text"] }]);
     expect(res.status).toBe(200);
     expect(env.FILES._store.has(`shares/${code}`)).toBe(false);
   });
 
   it("刷新分享副本本身失败不影响 PUT（best-effort）：R2 写 shares/<码> 抛错，PUT 仍 200 且用户列表已保存", async () => {
-    const env = fakeEnv();
-    await PUT(env, [{ id: "p_share03", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
+    const env = mkEnv();
+    await VPUT(env, [{ id: "p_share03", type: "action", label: "标题", prompt: "初版", appliesTo: ["text"] }]);
     await MINT(env, "p_share03");
     const origPut = env.FILES.put.bind(env.FILES);
     env.FILES.put = async (key, value) => {
       if (key.startsWith("shares/")) throw new Error("boom");
       return origPut(key, value);
     };
-    const res = await PUT(env, [{ id: "p_share03", type: "action", label: "标题", prompt: "又改了一版", appliesTo: ["text"] }]);
+    const res = await VPUT(env, [{ id: "p_share03", type: "action", label: "标题", prompt: "又改了一版", appliesTo: ["text"] }]);
     expect(res.status).toBe(200);
     env.FILES.put = origPut;
-    const got = await (await GET(env)).json();
+    const got = await (await VGET(env)).json();
     expect(got.items.find((i) => i.id === "p_share03").prompt).toBe("又改了一版");
   });
 });
@@ -1081,21 +1106,33 @@ describe("PUT /agent/prompts — 保存时刷新正在分享的条目", () => {
 // 节点 id p_x 查）也看不到分享。rekeyForkedShares 把索引条目从 sys_* 挪到 p_x（码本身
 // 不变），紧跟着的活同步循环就能在同一次 PUT 里把 fork 后的新内容刷进 shares/<码>。
 describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 re-key（Piece 2）", () => {
-  const MINT = (env, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
-    method: "POST", headers: { Authorization: TOKEN, "content-type": "application/json" },
+  // 同上一组：铸码需要验证过的身份，PUT/STATES 也要用同一 scope 的 token（否则
+  // fork 写的树和铸码时读的树不是同一份 prompts.json，re-key 逻辑测不出来）。
+  const SCOPE = "users/anon-fork-rekey/";
+  const authHeader = async () => `Bearer ${await makeToken(SCOPE)}`;
+  const mkEnv = (seed) => { const e = fakeEnv(seed); e.SESSION_SECRET = SECRET; return e; };
+  const VPUT = async (env, items) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+    method: "PUT", headers: { Authorization: await authHeader(), "content-type": "application/json" },
+    body: JSON.stringify({ items }),
+  }), env);
+  const VGET = async (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompts", {
+    headers: { Authorization: await authHeader() },
+  }), env);
+  const MINT = async (env, id) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-share", {
+    method: "POST", headers: { Authorization: await authHeader(), "content-type": "application/json" },
     body: JSON.stringify({ id }),
   }), env);
-  const STATES = (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-shares", {
-    headers: { Authorization: TOKEN },
+  const STATES = async (env) => worker.fetch(new Request("https://jianshuo.dev/agent/prompt-shares", {
+    headers: { Authorization: await authHeader() },
   }), env);
   const shareDocOf = (env, code) => JSON.parse(env.FILES._store.get(`shares/${code}`));
   const indexOf = (env) => JSON.parse(env.FILES._store.get([...env.FILES._store.keys()].find((k) => k.endsWith("prompt-shares.json"))));
 
   it("★ 铸码于 sys_cartoon → PUT 把它 fork 成 p_x → 索引键从 sys_cartoon 挪到 p_x，码不变，shares/<码> 内容变成 fork 后的新词，GET /agent/prompt-shares 在 p_x 下能看到分享", async () => {
-    const env = fakeEnv();
+    const env = mkEnv();
     const { code } = await (await MINT(env, "sys_cartoon")).json();
 
-    const res = await PUT(env, [{ id: "p_forkx1", type: "action", label: "卡通风·我的版本", prompt: "我改过的卡通提示词", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
+    const res = await VPUT(env, [{ id: "p_forkx1", type: "action", label: "卡通风·我的版本", prompt: "我改过的卡通提示词", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
     expect(res.status).toBe(200);
 
     const idx = indexOf(env);
@@ -1113,11 +1150,11 @@ describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 
   });
 
   it("重复 PUT 同一棵树（幂等）→ 索引/分享内容不再变化", async () => {
-    const env = fakeEnv();
+    const env = mkEnv();
     const { code } = await (await MINT(env, "sys_cartoon")).json();
     const tree = [{ id: "p_forkx1", type: "action", label: "卡通风·我的版本", prompt: "我改过的卡通提示词", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }];
-    await PUT(env, tree);
-    const res2 = await PUT(env, tree);
+    await VPUT(env, tree);
+    const res2 = await VPUT(env, tree);
     expect(res2.status).toBe(200);
     const idx = indexOf(env);
     expect(idx.byItem["p_forkx1"].code).toBe(code);
@@ -1128,11 +1165,11 @@ describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 
   });
 
   it("边界（接受的行为）：fork 被删除后再次 fork 同一个系统项 → 二次 fork 不 re-key（sys_cartoon 的索引条目已被首次 fork 消费），旧码停在首次 fork 的内容", async () => {
-    const env = fakeEnv();
+    const env = mkEnv();
     const { code } = await (await MINT(env, "sys_cartoon")).json();
-    await PUT(env, [{ id: "p_forkx1", type: "action", label: "第一次 fork", prompt: "第一版内容", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
+    await VPUT(env, [{ id: "p_forkx1", type: "action", label: "第一次 fork", prompt: "第一版内容", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
     // p_x 从列表里被删掉（用户删了这条自建项），再 fork 一次 sys_cartoon 成 p_y。
-    await PUT(env, [{ id: "p_forky1", type: "action", label: "第二次 fork", prompt: "第二版内容", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
+    await VPUT(env, [{ id: "p_forky1", type: "action", label: "第二次 fork", prompt: "第二版内容", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
 
     const idx = indexOf(env);
     expect(idx.byItem["p_forkx1"].code).toBe(code); // 首次 fork 的索引条目原样保留（冻结）
@@ -1148,17 +1185,17 @@ describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 
   });
 
   it("re-key 失败不影响 PUT 保存本身（best-effort）：写索引抛错，PUT 仍 200 且树已落盘", async () => {
-    const env = fakeEnv();
+    const env = mkEnv();
     await MINT(env, "sys_cartoon");
     const origPut = env.FILES.put.bind(env.FILES);
     env.FILES.put = async (key, value) => {
       if (key.endsWith("prompt-shares.json")) throw new Error("boom");
       return origPut(key, value);
     };
-    const res = await PUT(env, [{ id: "p_forkx1", type: "action", label: "卡通风", prompt: "我改过的", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
+    const res = await VPUT(env, [{ id: "p_forkx1", type: "action", label: "卡通风", prompt: "我改过的", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
     expect(res.status).toBe(200);
     env.FILES.put = origPut;
-    const got = await (await GET(env)).json();
+    const got = await (await VGET(env)).json();
     expect(got.items.find((i) => i.id === "p_forkx1").prompt).toBe("我改过的");
   });
 });

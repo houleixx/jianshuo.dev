@@ -9,9 +9,11 @@
 // 一条指令一辈子一个码：owner 索引 users/<sub>/prompt-shares.json 记 byItem，
 // 开关关 = 删 shares/<码>（码立即失效），索引保留，再开同码复活。
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
+import { checkArticlesShareable } from "../../functions/lib/moderation.js";
 import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList } from "./prompts.js";
 import { loadUserPrompts } from "./prompt-store.js";
+import { publishPromptPost, retractPromptPost } from "./prompt-community.js";
 // author 显示名 —— SINGLE SOURCE OF TRUTH，见 style-store.js#readProfileName 上方
 // 注释："the share endpoint, miner, and mint all import this"。这里显式传
 // { fallback: "none" }：无名 → ""，而不是 miner/mint 默认走的 ID 前 6 位大写 —
@@ -183,12 +185,17 @@ export async function resolveSharedPromptBlock(env, instruction) {
   ].join("\n");
 }
 
+// 分享=发帖需要可追责身份——区分「验证过的」（Apple 登录会话）与「匿名」（裸设备
+// token）来源，POST/DELETE 分支据此收紧门槛（GET 公开预览不受影响，见下方路由）。
 async function resolveUserScope(request, env) {
   const tok = bearerToken(request);
-  let scope = null;
-  if (env.SESSION_SECRET) { const s = await verifySession(tok, env.SESSION_SECRET); if (s) scope = s.scope; }
-  if (!scope) scope = await anonScopeFromToken(tok);
-  return scope && scope.startsWith("users/") ? scope : null;
+  if (env.SESSION_SECRET) {
+    const s = await verifySession(tok, env.SESSION_SECRET);
+    if (s && s.scope && s.scope.startsWith("users/")) return { scope: s.scope, verified: true };
+  }
+  const anon = await anonScopeFromToken(tok);
+  if (anon && anon.startsWith("users/")) return { scope: anon, verified: false };
+  return null;
 }
 
 // GET /agent/prompt-share/<code> —— 4b 的导入预览。【公开、无需 token】：导入前
@@ -222,14 +229,21 @@ export async function handlePromptShareRoutes(url, request, env) {
   const isDelete = url.pathname.startsWith("/agent/prompt-share/") && request.method === "DELETE";
   if (!isPost && !isDelete) return null;
 
-  const scope = await resolveUserScope(request, env);
-  if (!scope) return J({ error: "unauthorized" }, 401);
+  const who = await resolveUserScope(request, env);
+  if (!who) return J({ error: "unauthorized" }, 401);
+  // 发社区帖需要可追责身份（与社区发帖同一道门槛）。匿名 token 连码也不再能铸——
+  // 分享 = 发帖是一个动作，不能半做。GET 公开预览不在此列（在上面已 return）。
+  if (!who.verified) return J({ error: "needs_apple_signin" }, 403);
+  const scope = who.scope;
 
   if (isDelete) {
     const itemId = decodeURIComponent(url.pathname.slice("/agent/prompt-share/".length));
     const { byItem } = await loadIndex(env, scope);
     const code = byItem[itemId]?.code;
-    if (code) await env.FILES.delete(`shares/${code}`);
+    if (code) {
+      await env.FILES.delete(`shares/${code}`);
+      await retractPromptPost(env, code);
+    }
     return J({ ok: true, code: code || null, sharing: false });
   }
 
@@ -243,6 +257,9 @@ export async function handlePromptShareRoutes(url, request, env) {
   const leaf = await effectiveLeaf(env, scope, itemId);
   if (!leaf) return J({ error: "unknown id" }, 404);
   if (leaf.instruction.length > cfg.maxLength) return J({ error: "too long" }, 413);
+  // 关键词审核（与文章分享同一把闸）：label+正文拼一篇"文章"扫一遍。
+  const kw = await checkArticlesShareable([{ title: leaf.label, body: leaf.instruction }], env);
+  if (kw.flagged) return J({ error: "content_flagged", term: kw.term }, 403);
 
   const idx = await loadIndex(env, scope);
   const existing = idx.byItem[itemId];
@@ -271,7 +288,9 @@ export async function handlePromptShareRoutes(url, request, env) {
     if (prevDoc) importCount = JSON.parse(await prevDoc.text()).importCount || 0;
   } catch { /* 坏文档当没有，从 0 起 */ }
   await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, existing?.createdAt, importCount));
-  return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true });
+  const communityShareId = await publishPromptPost(env, scope, code, leaf);
+  return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true,
+             ...(communityShareId ? { communityShareId } : {}) });
 }
 
 /// itemId → { shareCode, sharing }。码在索引里就返回（再开同码），sharing 看
