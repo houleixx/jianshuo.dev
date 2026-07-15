@@ -103,6 +103,41 @@ describe("GET community/get/<id>", () => {
     }));
     expect((await onRequest(context)).status).toBe(404);
   });
+
+  // 提示词社区帖（Task 5，2026-07-15）：内容零复制，实时读 shares/<码> 写穿副本。
+  it("community/get 对提示词帖返回合成 articles + kind + promptCode + appliesTo", async () => {
+    const context = reqCtx("GET", ["community", "get", "prm100000001"]);
+    context.env.FILES._store.set("shares/4563566", JSON.stringify({
+      type: "prompt", sub: "u", itemId: "p_1", label: "口语化",
+      instruction: "把这段改得更口语", appliesTo: ["text"],
+    }));
+    context.env.FILES._store.set("community/prm100000001.json", JSON.stringify({
+      schema: 2, shareId: "prm100000001", owner: "users/u/", kind: "prompt",
+      promptCode: "4563566", author: "王建硕", firstSharedAt: 5000,
+    }));
+    const resp = await onRequest(context);
+    const body = await resp.json();
+    expect(resp.status).toBe(200);
+    expect(body.articles).toEqual([{ title: "口语化", body: "把这段改得更口语" }]);
+    expect(body.kind).toBe("prompt");
+    expect(body.promptCode).toBe("4563566");
+    expect(body.appliesTo).toEqual(["text"]);
+    expect(body.owner).toBe("users/u/");
+  });
+
+  it("community/get：提示词码已失效（shares/<码> 没了）→ 404 且帖被自愈清掉", async () => {
+    const db = fakeRecoD1();
+    db._posts.set("prm200000001", { share_id: "prm200000001", owner: "users/u/", hidden: 0, kind: "prompt" });
+    const context = reqCtx("GET", ["community", "get", "prm200000001"], { env: { RECO_DB: db } });
+    context.env.FILES._store.set("community/prm200000001.json", JSON.stringify({
+      schema: 2, shareId: "prm200000001", owner: "users/u/", kind: "prompt",
+      promptCode: "7654321", author: "王建硕", firstSharedAt: 5000,
+    }));
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(404);
+    expect(context.env.FILES._store.has("community/prm200000001.json")).toBe(false);
+    expect(db._posts.has("prm200000001")).toBe(false);
+  });
 });
 
 // ── GET community/list — mixed schemas, ordering, self-heal ───────────────────
@@ -376,6 +411,22 @@ describe("POST community/unshare — owner only", () => {
     expect(resp.status).toBe(200);
     expect(context.env.FILES._store.has("community/p10000000001.json")).toBe(false);
   });
+
+  it("提示词帖：owner 撤帖连码同死", async () => {
+    const token = await session("users/u/");
+    const context = reqCtx("POST", ["community", "unshare", "prm300000001"], { token });
+    context.env.FILES._store.set("community/prm300000001.json", JSON.stringify({
+      schema: 2, shareId: "prm300000001", owner: "users/u/", kind: "prompt",
+      promptCode: "1112223", author: "王建硕", firstSharedAt: 1,
+    }));
+    context.env.FILES._store.set("shares/1112223", JSON.stringify({
+      type: "prompt", label: "口语化", instruction: "把这段改得更口语",
+    }));
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(200);
+    expect(context.env.FILES._store.has("community/prm300000001.json")).toBe(false);
+    expect(context.env.FILES._store.has("shares/1112223")).toBe(false);
+  });
 });
 
 // ── D1 展示索引双写（2026-07-14）：R2 真源不变，RECO_DB 是 /reco/feed 的物化索引 ──
@@ -465,16 +516,52 @@ describe("community D1 index dual-write", () => {
     expect((await (await onRequest(ctx1)).json()).ok).toBe(true);
     expect(db._posts.get(articleId).kind).toBe("article");
 
-    // 直接构造一条 kind:'prompt' 的 R2 帖，走 reindex（走同一个 indexUpsert）→ 行 kind 是 prompt。
+    // 提示词帖（kind:'prompt' + promptCode，Task 5 起真实形状）→ reindex 收编，
+    // 走同一个 indexUpsert，kind 是 prompt。
     const ctx2 = reqCtx("POST", ["community", "reindex"], { env: { RECO_DB: db } });
-    ctx2.env.FILES._store.set("users/u/articles/p1.json", schema3("提示词帖"));
+    ctx2.env.FILES._store.set("shares/1234567", JSON.stringify({
+      type: "prompt", label: "提示词帖", instruction: "指令正文",
+    }));
     ctx2.env.FILES._store.set("community/prm000000001.json", JSON.stringify({
-      schema: 2, shareId: "prm000000001", owner: "users/u/",
-      articleKey: "users/u/articles/p1.json", author: "B", firstSharedAt: 5000, kind: "prompt",
+      schema: 2, shareId: "prm000000001", owner: "users/u/", kind: "prompt",
+      promptCode: "1234567", author: "B", firstSharedAt: 5000,
     }));
     const body = await (await onRequest(ctx2)).json();
     expect(body.ok).toBe(true);
     expect(db._posts.get("prm000000001").kind).toBe("prompt");
+  });
+
+  it("reconcileIndex 收编提示词帖：从 shares/<码> 读 title/preview，kind=prompt", async () => {
+    const db = fakeRecoD1();
+    const context = reqCtx("POST", ["community", "reindex"], { env: { RECO_DB: db } });
+    context.env.FILES._store.set("shares/2223334", JSON.stringify({
+      type: "prompt", label: "更简洁", instruction: "把这段话改得更简洁一些",
+    }));
+    context.env.FILES._store.set("community/prm400000001.json", JSON.stringify({
+      schema: 2, shareId: "prm400000001", owner: "users/u/", kind: "prompt",
+      promptCode: "2223334", author: "王建硕", firstSharedAt: 6000,
+    }));
+    const body = await (await onRequest(context)).json();
+    expect(body.ok).toBe(true);
+    expect(body.indexed).toBe(1);
+    const row = db._posts.get("prm400000001");
+    expect(row.kind).toBe("prompt");
+    expect(row.title).toBe("更简洁");
+    expect(row.preview).toContain("把这段话改得更简洁一些");
+  });
+
+  it("reconcileIndex：码失效的提示词帖被清（R2 帖 + D1 行）", async () => {
+    const db = fakeRecoD1();
+    db._posts.set("prm500000001", { share_id: "prm500000001", owner: "users/u/", hidden: 0, kind: "prompt" });
+    const context = reqCtx("POST", ["community", "reindex"], { env: { RECO_DB: db } });
+    context.env.FILES._store.set("community/prm500000001.json", JSON.stringify({
+      schema: 2, shareId: "prm500000001", owner: "users/u/", kind: "prompt",
+      promptCode: "3334445", author: "王建硕", firstSharedAt: 6000,
+    }));
+    const body = await (await onRequest(context)).json();
+    expect(body.ok).toBe(true);
+    expect(context.env.FILES._store.has("community/prm500000001.json")).toBe(false);
+    expect(db._posts.has("prm500000001")).toBe(false);
   });
 });
 

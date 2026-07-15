@@ -900,6 +900,21 @@ async function handleRequest(context) {
     return null;
   }
 
+  // 提示词帖（kind:"prompt"）：内容实时读 shares/<码> 写穿副本。副本没了 = 码已关
+  // = 帖该死没死（agent 撤帖那步 best-effort 失败过）→ 自愈：清帖清索引，返回 null。
+  async function livePromptLeaf(pointerKey, p) {
+    try {
+      const o = await env.FILES.get(`shares/${p.promptCode}`);
+      if (o) {
+        const doc = JSON.parse(await o.text());
+        if (doc && doc.type === "prompt" && typeof doc.instruction === "string") return doc;
+      }
+    } catch {}
+    await env.FILES.delete(pointerKey);
+    await indexDelete(p.shareId);
+    return null;
+  }
+
   // Share (or re-share) one of the user's own articles. Writes a schema-2 pointer
   // with no content copy. shareId is HMAC-derived from the article key so re-sharing
   // updates the same post in place; firstSharedAt is preserved.
@@ -1034,6 +1049,16 @@ async function handleRequest(context) {
         const obj = await env.FILES.get(o.key);
         if (!obj) return;
         const p = JSON.parse(await obj.text());
+        if (p.kind === 'prompt') {
+          const o2 = await env.FILES.get(`shares/${p.promptCode}`);
+          let leaf = null;
+          try { const d = o2 && JSON.parse(await o2.text()); if (d?.type === 'prompt') leaf = d; } catch {}
+          if (!leaf) { await env.FILES.delete(o.key); await indexDelete(p.shareId); return; }
+          await indexUpsert(p, [{ title: leaf.label || '', body: leaf.instruction }], undefined,
+                            { hidden: hidden.has(p.shareId), kind: 'prompt' });
+          seen.add(p.shareId); indexed++;
+          return;
+        }
         let articles = p.articles || [], photos = p.photos;
         if (p.articleKey) {
           const live = await liveDocForPointer(o.key, p);
@@ -1144,9 +1169,14 @@ async function handleRequest(context) {
     const key = communityKey(shareId);
     const obj = await env.FILES.get(key);
     if (!obj) return json({ ok: true });
-    let owner = null;
-    try { owner = JSON.parse(await obj.text()).owner; } catch {}
+    let parsed = null; try { parsed = JSON.parse(await obj.text()); } catch {}
+    const owner = parsed?.owner ?? null;
     if (owner !== scope) return json({ error: 'not owner' }, 403);
+    if (parsed?.kind === 'prompt' && parsed.promptCode) {
+      // 同生同死的反方向：社区撤帖 = 关分享（码立即失效）。owner 索引保留，
+      // 提示词编辑页开关状态（按 shares/<码> head 判断）自动归位。
+      await env.FILES.delete(`shares/${parsed.promptCode}`);
+    }
     await env.FILES.delete(key);
     await indexDelete(shareId);
     return json({ ok: true });
@@ -1221,6 +1251,18 @@ async function handleRequest(context) {
     const obj = await env.FILES.get(communityKey(shareId));
     if (!obj) return json({ error: 'not found' }, 404);
     let p; try { p = JSON.parse(await obj.text()); } catch { return json({ error: 'bad post' }, 500); }
+    if (p.kind === 'prompt') {
+      const leaf = await livePromptLeaf(communityKey(shareId), p);
+      if (!leaf) return json({ error: 'not found' }, 404);
+      const articles = [{ title: leaf.label || '分享提示词', body: leaf.instruction }];
+      const heal = indexUpsert(p, articles, undefined, { kind: 'prompt' });
+      if (waitUntil) waitUntil(heal); else await heal;
+      return json({ shareId: p.shareId, author: p.author, title: articles[0].title,
+                    articles, owner: p.owner, firstSharedAt: p.firstSharedAt,
+                    kind: 'prompt', promptCode: p.promptCode,
+                    ...(Array.isArray(leaf.appliesTo) ? { appliesTo: leaf.appliesTo } : {}),
+                    ...(p.replyTo ? { replyTo: p.replyTo } : {}) });
+    }
     // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
     let articles = (p.articles || []).map(a => ({ title: a.title, body: a.body }));
     let title = p.title || articles[0]?.title || '';
