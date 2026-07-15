@@ -202,18 +202,19 @@ export const TOOLS = [
   {
     name: "share_prompt",
     description:
-      "把我的一条提示词分享出去：生成 7 位数字分享码（同时是 voicedrop.cn/<码> 短链）。" +
-      "一条提示词一辈子一个码——重复调用返回同一个码，关掉再开也是同码复活。" +
-      "别人拿到码后可以用 import_prompt 导入，或在语音指令里直接念码一次性借用。" +
-      "之后我改这条提示词，分享内容会自动跟着更新。id 用 list_prompts 拿。",
+      "把我的一条提示词分享出去：生成 7 位数字分享码（同时是 voicedrop.cn/<码> 短链），" +
+      "并【自动发一个社区帖】（社区里大家能看到、导入、投币、回应）。需要 Apple 或微信登录" +
+      "后的身份（匿名 token 会被拒并提示登录）。一条提示词一辈子一个码——重复调用返回同一个码，" +
+      "关掉再开也是同码复活、社区帖同步复活。之后我改这条提示词，分享内容和社区帖自动跟着更新。" +
+      "id 用 list_prompts 拿。返回里的 communityShareId 是社区帖 id。",
     inputSchema: obj({ id: str("提示词的 id（sys_* 或 p_*），从 list_prompts 拿。") }, ["id"]),
     handler: ({ id }, { client }) => client.agent("POST", "prompt-share", { body: { id } }),
   },
   {
     name: "unshare_prompt",
     description:
-      "停止分享一条提示词：分享码立即失效（别人再用码会被告知「分享已停止」）。" +
-      "码不会易主——之后再对同一条 share_prompt，还是原来那个码。",
+      "停止分享一条提示词：分享码立即失效（别人再用码会被告知「分享已停止」），社区帖同步撤下。" +
+      "码不会易主——之后再对同一条 share_prompt，还是原来那个码、原来那个帖。",
     inputSchema: obj({ id: str("提示词的 id（sys_* 或 p_*），从 list_prompts 拿。") }, ["id"]),
     handler: ({ id }, { client }) => client.agent("DELETE", ["prompt-share", id]),
   },
