@@ -9,7 +9,7 @@
 // 一条指令一辈子一个码：owner 索引 users/<sub>/prompt-shares.json 记 byItem，
 // 开关关 = 删 shares/<码>（码立即失效），索引保留，再开同码复活。
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
-import { checkArticlesShareable } from "../../functions/lib/moderation.js";
+import { checkArticlesShareable, loadShareBlocklist } from "../../functions/lib/moderation.js";
 import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList } from "./prompts.js";
 import { loadUserPrompts } from "./prompt-store.js";
@@ -256,16 +256,17 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
 
   // 三个读互不依赖，并行拉——这条链路曾经 15 个串行存储操作叠出「开分享 10 秒」
   //（2026-07-16 真机）。检查顺序保持不变：enabled → unknown id → too long → 审核 → 日上限。
-  const [cfg, leaf, idx] = await Promise.all([
+  const [cfg, leaf, idx, blocklist] = await Promise.all([
     loadPromptShareConfig(env),
     effectiveLeaf(env, scope, itemId),
     loadIndex(env, scope),
+    loadShareBlocklist(env),
   ]);
   if (!cfg.enabled) return J({ error: "disabled" }, 503);
   if (!leaf) return J({ error: "unknown id" }, 404);
   if (leaf.instruction.length > cfg.maxLength) return J({ error: "too long" }, 413);
-  // 关键词审核（与文章分享同一把闸）：label+正文拼一篇"文章"扫一遍。
-  const kw = await checkArticlesShareable([{ title: leaf.label, body: leaf.instruction }], env);
+  // 关键词审核（与文章分享同一把闸）：label+正文拼一篇"文章"扫一遍。表已预取，纯本地扫。
+  const kw = await checkArticlesShareable([{ title: leaf.label, body: leaf.instruction }], null, blocklist);
   if (kw.flagged) return J({ error: "content_flagged", term: kw.term }, 403);
 
   const existing = idx.byItem[itemId];
@@ -288,11 +289,14 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   // 幂等重开（sharing 已经是 true，这条 POST 只是重放）不能把 importCount 清零——
   // 和 refreshPromptShare 保留 importCount 是同一条道理，只是这里读的是即将被
   // 覆盖的旧副本本身（被删过就真的没有了，那本就该从 0 起，见 spec 的取舍）。
+  // 刚铸的新码不可能有旧副本（mintCode 刚 head 验过空位），跳过这次读。
   let importCount = 0;
-  try {
-    const prevDoc = await env.FILES.get(`shares/${code}`);
-    if (prevDoc) importCount = JSON.parse(await prevDoc.text()).importCount || 0;
-  } catch { /* 坏文档当没有，从 0 起 */ }
+  if (!created) {
+    try {
+      const prevDoc = await env.FILES.get(`shares/${code}`);
+      if (prevDoc) importCount = JSON.parse(await prevDoc.text()).importCount || 0;
+    } catch { /* 坏文档当没有，从 0 起 */ }
+  }
   // shares/<码> 必须同步落盘（响应一到，码就得能兑换/能被落地页读到）；
   // 发社区帖挪后台（本来就 best-effort，失败由 reconcile/get 自愈），
   // communityShareId 从码确定性派生，不用等发帖落地。

@@ -58,17 +58,26 @@ export function scanObjectionable(text, extraTerms = []) {
 }
 
 /**
- * Share-gate check over an article list. Concatenates titles + bodies and scans.
- * `env` (optional) lets us merge an R2 blocklist override (best-effort).
+ * R2 blocklist override（best-effort，读不到/坏 JSON = 空表，内置表照常生效）。
+ * 单独导出是给想把这次读并进自己 Promise.all 的调用方（prompt-share 的开分享
+ * 曾因串行读叠出 10 秒延迟）——读出的表原样传给 checkArticlesShareable 第三参。
  */
-export async function checkArticlesShareable(articles, env) {
-  let extra = [];
-  if (env && env.FILES) {
-    try {
-      const o = await env.FILES.get("config/community-blocklist.json");
-      if (o) { const a = JSON.parse(await o.text()); if (Array.isArray(a)) extra = a.filter(x => typeof x === "string"); }
-    } catch { /* ignore — built-in list still applies */ }
-  }
+export async function loadShareBlocklist(env) {
+  if (!(env && env.FILES)) return [];
+  try {
+    const o = await env.FILES.get("config/community-blocklist.json");
+    if (o) { const a = JSON.parse(await o.text()); if (Array.isArray(a)) return a.filter(x => typeof x === "string"); }
+  } catch { /* ignore — built-in list still applies */ }
+  return [];
+}
+
+/**
+ * Share-gate check over an article list. Concatenates titles + bodies and scans.
+ * `env` (optional) lets us merge an R2 blocklist override (best-effort)；调用方
+ * 已经预取过就传 `extraList`（省一次 R2 读，env 此时可省略）。
+ */
+export async function checkArticlesShareable(articles, env, extraList) {
+  const extra = Array.isArray(extraList) ? extraList : await loadShareBlocklist(env);
   const text = (articles || []).map(a => `${a.title || ""}\n${a.body || ""}`).join("\n\n");
   return scanObjectionable(text, extra);
 }
