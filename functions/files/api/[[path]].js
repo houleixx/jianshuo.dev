@@ -978,27 +978,28 @@ async function handleRequest(context) {
   // 路径），坏了/漂了用 POST community/reindex 全量重建。hidden 与 report 标记
   // 同步；详情打开（community/get）时顺手 upsert 一次，文章编辑后的过期数据靠
   // 这个自愈。
-  async function indexUpsert(p, articles, photos, { hidden = null } = {}) {
+  async function indexUpsert(p, articles, photos, { hidden = null, kind = null } = {}) {
     if (!env.RECO_DB) return;
     try {
       const ex = cardExtras(articles, photos, p.owner);
       const title = articles[0]?.title ?? p.title ?? '';
+      const k = kind || p.kind || 'article';
       const hid = hidden !== null ? (hidden ? 1 : 0)
         : ((await env.FILES.head(reportKey(p.shareId))) ? 1 : 0);
       await env.RECO_DB.prepare(
         `INSERT INTO community_posts (share_id, owner, article_key, author, title, preview,
-           cover_photo_key, has_photo, article_count, first_shared_at, updated_at, reply_to, hidden)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+           cover_photo_key, has_photo, article_count, first_shared_at, updated_at, reply_to, hidden, kind)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(share_id) DO UPDATE SET
            owner=excluded.owner, article_key=excluded.article_key, author=excluded.author,
            title=excluded.title, preview=excluded.preview, cover_photo_key=excluded.cover_photo_key,
            has_photo=excluded.has_photo, article_count=excluded.article_count,
            first_shared_at=excluded.first_shared_at, updated_at=excluded.updated_at,
-           reply_to=excluded.reply_to, hidden=excluded.hidden`,
+           reply_to=excluded.reply_to, hidden=excluded.hidden, kind=excluded.kind`,
       ).bind(p.shareId, p.owner || '', p.articleKey || null, p.author || '', title,
              ex.preview || null, ex.coverPhotoKey || null, ex.hasPhoto ? 1 : 0,
              articles.length || 1, p.firstSharedAt || null,
-             p.updatedAt || p.firstSharedAt || null, p.replyTo || null, hid).run();
+             p.updatedAt || p.firstSharedAt || null, p.replyTo || null, hid, k).run();
     } catch (e) { console.log('[community-index] upsert failed', String(e?.message || e)); }
   }
   async function indexDelete(shareId) {
@@ -1066,7 +1067,7 @@ async function handleRequest(context) {
       try {
         const { results } = await env.RECO_DB.prepare(
           `SELECT share_id, owner, author, title, preview, cover_photo_key, has_photo,
-                  article_count, first_shared_at, updated_at, reply_to
+                  article_count, first_shared_at, updated_at, reply_to, kind
            FROM community_posts WHERE hidden=0
            ORDER BY first_shared_at DESC LIMIT 200`).all();
         if (results && results.length) {
@@ -1075,7 +1076,7 @@ async function handleRequest(context) {
             shareId: r.share_id, author: r.author, title: r.title,
             firstSharedAt: r.first_shared_at, updatedAt: r.updated_at || r.first_shared_at,
             count: r.article_count, mine: r.owner === scope,
-            hasPhoto: !!r.has_photo,
+            hasPhoto: !!r.has_photo, kind: r.kind || 'article',
             ...(r.cover_photo_key ? { coverPhotoKey: r.cover_photo_key } : {}),
             ...(r.preview ? { preview: r.preview } : {}),
             ...(r.reply_to ? { replyTo: r.reply_to } : {}),
@@ -1114,6 +1115,7 @@ async function handleRequest(context) {
         }
         return { shareId: p.shareId, author: p.author, title,
                  firstSharedAt: p.firstSharedAt, updatedAt, count, mine: p.owner === scope,
+                 kind: p.kind || 'article',
                  ...extras,
                  ...(p.replyTo ? { replyTo: p.replyTo } : {}) };
       } catch { return null; }

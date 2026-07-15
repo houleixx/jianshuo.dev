@@ -454,6 +454,28 @@ describe("community D1 index dual-write", () => {
     const body = await (await onRequest(context)).json();
     expect(body.ok).toBe(true);
   });
+
+  it("indexUpsert 带 kind=prompt 时行的 kind 是 prompt；缺省是 article", async () => {
+    const token = await session("users/u/");
+    const db = fakeRecoD1();
+    // 普通分享（无 kind）→ 索引行 kind 缺省 article。
+    const ctx1 = reqCtx("POST", ["community", "share", "articles", "s1.json"], { token, env: { RECO_DB: db } });
+    ctx1.env.FILES._store.set("users/u/articles/s1.json", schema3("普通帖"));
+    const articleId = await shareIdFor("users/u/articles/s1.json");
+    expect((await (await onRequest(ctx1)).json()).ok).toBe(true);
+    expect(db._posts.get(articleId).kind).toBe("article");
+
+    // 直接构造一条 kind:'prompt' 的 R2 帖，走 reindex（走同一个 indexUpsert）→ 行 kind 是 prompt。
+    const ctx2 = reqCtx("POST", ["community", "reindex"], { env: { RECO_DB: db } });
+    ctx2.env.FILES._store.set("users/u/articles/p1.json", schema3("提示词帖"));
+    ctx2.env.FILES._store.set("community/prm000000001.json", JSON.stringify({
+      schema: 2, shareId: "prm000000001", owner: "users/u/",
+      articleKey: "users/u/articles/p1.json", author: "B", firstSharedAt: 5000, kind: "prompt",
+    }));
+    const body = await (await onRequest(ctx2)).json();
+    expect(body.ok).toBe(true);
+    expect(db._posts.get("prm000000001").kind).toBe("prompt");
+  });
 });
 
 // ── D1 快路径（2026-07-13）：list/replies 直接读展示索引，R2 慢路径只做兜底 ──
@@ -534,6 +556,17 @@ describe("GET community/list — D1 fast path", () => {
     }));
     const body = await (await onRequest(context)).json();
     expect(body.posts.map((p) => p.shareId)).toEqual(["ptr000000008"]);
+  });
+
+  it("community/list D1 快路径每帖带 kind", async () => {
+    const db = fakeRecoD1();
+    db._posts.set("d1a000000001", row({ kind: "prompt" }));
+    db._posts.set("d1c000000001", row({ share_id: "d1c000000001", first_shared_at: 100 }));  // 无 kind → 兜底 article
+    const token = await session("users/u/");
+    const context = reqCtx("GET", ["community", "list"], { token, env: { RECO_DB: db } });
+    const body = await (await onRequest(context)).json();
+    expect(body.posts.find((p) => p.shareId === "d1a000000001").kind).toBe("prompt");
+    expect(body.posts.find((p) => p.shareId === "d1c000000001").kind).toBe("article");
   });
 });
 

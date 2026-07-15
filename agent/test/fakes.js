@@ -50,10 +50,10 @@ export function fakeRecoD1() {
       async run() {
         if (/^INSERT INTO community_posts/.test(sql)) {
           const [share_id, owner, article_key, author, title, preview, cover_photo_key,
-                 has_photo, article_count, first_shared_at, updated_at, reply_to, hidden] = args;
+                 has_photo, article_count, first_shared_at, updated_at, reply_to, hidden, kind] = args;
           posts.set(share_id, { share_id, owner, article_key, author, title, preview,
                                 cover_photo_key, has_photo, article_count, first_shared_at,
-                                updated_at, reply_to, hidden });
+                                updated_at, reply_to, hidden, kind });
         } else if (/^UPDATE community_posts SET hidden/.test(sql)) {
           const [hidden, share_id] = args;
           const row = posts.get(share_id);
