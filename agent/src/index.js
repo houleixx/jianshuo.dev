@@ -24,7 +24,7 @@ import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
 import { buildBroadcastMessage, createPairing, verifyPairing, completePairing, resolveMatchingScopes, genDistinctCodes, CODE_TTL_MS } from "./devicelink.js";
 import { writeLlmLog } from "./llmlog.js";
-import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue } from "./queue.js";
+import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue, normalizeAnchor } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
@@ -99,6 +99,9 @@ export class ArticleEditor extends Agent {
     this.sql([QUEUE_TABLE_SQL]); // CREATE TABLE IF NOT EXISTS queue (...)
     // Migrate queue rows created before article_index existed (locator targeting).
     try { this.sql`ALTER TABLE queue ADD COLUMN article_index INTEGER`; } catch (_) {}
+    // Migrate queue rows created before anchor existed (锚点协议 spec §4.1) — same
+    // treatment as article_index above.
+    try { this.sql`ALTER TABLE queue ADD COLUMN anchor TEXT`; } catch (_) {}
     // Recover after hibernation/eviction: reset any leftover 'running' row and
     // drain whatever is pending — even with no client connected.
     if (this._queue.recover()) this.schedule(0, "drainQueue");
@@ -196,9 +199,16 @@ export class ArticleEditor extends Agent {
 
     const images = row.images ? (() => { try { return JSON.parse(row.images); } catch { return []; } })() : [];
     const articleIndex = Number.isInteger(row.article_index) ? row.article_index : 0;
+    // row.anchor is the JSON string normalizeAnchor() stored at submit time (or
+    // null — including rows written before the anchor column existed, since
+    // SQLite ALTER TABLE ... ADD COLUMN backfills NULL). Parse back to the object
+    // shape resolveAnchorLine() expects; any corruption falls back to null —
+    // best-effort, never blocks the edit.
+    let anchor = null;
+    try { anchor = row.anchor ? JSON.parse(row.anchor) : null; } catch (_) { anchor = null; }
     const res = await runEditTurn({
       env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev",
-      editId: row.id, instruction: row.text, images, articleIndex, system: SYSTEM, history, callClaude,
+      editId: row.id, instruction: row.text, images, articleIndex, anchor, system: SYSTEM, history, callClaude,
     });
     editPreview.finish();   // 幽灵稿收尾（updated 紧随其后广播）
 
@@ -237,8 +247,11 @@ export class ArticleEditor extends Agent {
     // Which article the user is looking at — so the locator table numbers THAT one
     // (multi-article docs renumber 第1行 per article). Old apps omit it → 0.
     const article_index = Number.isInteger(msg.articleIndex) && msg.articleIndex >= 0 ? msg.articleIndex : 0;
+    // 锚点协议（spec §3/§4）：长按图片/文字菜单动作随手势带的结构化定位，可选字段。
+    // 老 app / 语音自由指令没有这个字段 → normalizeAnchor 落 null，现状行为不变。
+    const anchor = normalizeAnchor(msg.anchor);
 
-    const r = await this._queue.submit({ id, text: instruction, images, article_index });
+    const r = await this._queue.submit({ id, text: instruction, images, article_index, anchor });
     if (r.kind === "replay") {
       // Already known — re-push its cached result to THIS caller, never re-run.
       const row = r.row;

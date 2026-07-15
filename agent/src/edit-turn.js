@@ -6,10 +6,41 @@
 
 import { runAgentLoop } from "./loop.js";
 import { TITLE_FALLBACK, resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
-import { inlineNumberedBody } from "./linenum.js";
+import { inlineNumberedBody, numberBodyRows } from "./linenum.js";
 import { resolveSharedPromptBlock } from "./prompt-share.js";
 
 const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo", "new_photo"];
+
+// 锚点协议 —— 校验 + 漂移自愈（spec §4.1，docs/superpowers/specs/2026-07-16-anchor-protocol-design.md）。
+// 全链路可选、best-effort：anchor 缺失/形状非法/校验失败一律返回 null（宁缺勿错），
+// 从不 4xx、从不阻断编辑——调用方不注入即可，现状照旧。
+//
+// rows 必须来自 linenum.js 的 numberBodyRows（与喂给模型的 inlineNumberedBody 同一份
+// 调用、同口径）：图文共用一个连续 1-based 计数器，「第 N 行」与模型在 edit_current_article
+// 工具里认的行号严格一致，否则用户长按第 2 张图，模型会改到别的地方。
+export function resolveAnchorLine(anchor, { rows, photoKeys }) {
+  if (!anchor || typeof anchor !== "object") return null;
+  if (anchor.type === "image") {
+    const key = typeof anchor.key === "string" ? anchor.key : "";
+    if (!key || !photoKeys.includes(key)) return null;
+    return `用户长按的图片：[[photo:${key}]]（指令里说的「这张图/这张照片」就是它）`;
+  }
+  if (anchor.type === "line") {
+    const text = String(anchor.text || "").slice(0, 2000);
+    if (!text) return null;
+    let n = Number.isInteger(anchor.line) ? anchor.line : -1;
+    const row = rows.find((r) => r.n === n);
+    if (!(row && row.kind === "text" && row.text.slice(0, 2000) === text)) {
+      // 行号对不上（正文在长按与送达之间被并发编辑动过）：按整行原文在正文里找
+      // 唯一精确匹配，找到即修正行号（自愈）；找不到或多处匹配 → 丢弃，宁缺勿错。
+      const hits = rows.filter((r) => r.kind === "text" && r.text.slice(0, 2000) === text).map((r) => r.n);
+      if (hits.length !== 1) { console.log("[anchor] line drift unresolved, dropped"); return null; }
+      n = hits[0];
+    }
+    return `用户长按的是第 ${n} 行（"${text}"）（指令里说的「这段/这行」就是它）`;
+  }
+  return null;
+}
 
 function bufToB64(buf) {
   const bytes = new Uint8Array(buf);
@@ -47,7 +78,7 @@ async function imageBlocks(images, { env, scope, origin }) {
   return out;
 }
 
-export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, system, history = [], callClaude }) {
+export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, anchor = null, system, history = [], callClaude }) {
   const obj = await env.FILES.get(articleKey);
   if (!obj) return { ok: false, reply: "", article: null, hadError: true };
   const doc = JSON.parse(await obj.text());
@@ -109,6 +140,13 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
       "",
     );
   }
+  // 锚点（长按图片/文字菜单动作随手势带上的结构化定位）：校验 + 漂移自愈后，紧挨
+  // 指令之前注入一条独立上下文行。rows 用 target（本次编辑这一篇）的 body 算，与
+  // 上面 inlineNumberedBody 给模型看的号同一份 numberBodyRows 调用、同口径。
+  const anchorRows = numberBodyRows(target?.body || "");
+  const photoKeys = anchorRows.filter((r) => r.kind === "photo").map((r) => r.token);
+  const anchorLine = resolveAnchorLine(anchor, { rows: anchorRows, photoKeys });
+  if (anchorLine) varLines.push("", anchorLine);
   varLines.push("", "这次的语音指令：", instruction);
 
   // 指令里报了 7 位分享码 → 追加对应的共享指令块（一次性参考；查无则软备注）。

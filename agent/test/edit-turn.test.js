@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runEditTurn } from "../src/edit-turn.js";
+import { runEditTurn, resolveAnchorLine } from "../src/edit-turn.js";
 import { fakeEnv, fakeFetch } from "./fakes.js";
 
 // A callClaude that drives exactly one write_article tool call, then stops.
@@ -220,5 +220,108 @@ describe("runEditTurn images — 服务端 320 缩图", () => {
     const imgs = p.messages.find((m) => m.role === "user").content.filter((b) => b.type === "image");
     expect(imgs).toHaveLength(1);
     expect(atob(imgs[0].source.data)).toBe("RAWJPEG");
+  });
+});
+
+// ── 锚点协议：透传 → 校验 + 漂移自愈 → 注入独立上下文行 ──────────────────────
+// spec: docs/superpowers/specs/2026-07-16-anchor-protocol-design.md §3/§4
+
+describe("resolveAnchorLine — 校验 + 漂移自愈", () => {
+  const rows = [
+    { n: 1, kind: "text", text: "第一段" },
+    { n: 2, kind: "photo", imgNo: 1, token: "photos/2026-07-01/1.jpg" },
+    { n: 3, kind: "text", text: "第三段" },
+    { n: 4, kind: "text", text: "重复段" },
+    { n: 5, kind: "text", text: "重复段" },
+  ];
+  const photoKeys = ["photos/2026-07-01/1.jpg"];
+
+  it("① image anchor 合法 → 注入行含 [[photo:<key>]]", () => {
+    const line = resolveAnchorLine({ type: "image", key: "photos/2026-07-01/1.jpg" }, { rows, photoKeys });
+    expect(line).toContain("用户长按的图片：[[photo:photos/2026-07-01/1.jpg]]");
+  });
+
+  it("② image key 不在本文 → 不注入", () => {
+    expect(resolveAnchorLine({ type: "image", key: "photos/other/9.jpg" }, { rows, photoKeys })).toBeNull();
+  });
+
+  it("③ line anchor 行号+text 一致 → 注入「用户长按的是第 N 行」", () => {
+    const line = resolveAnchorLine({ type: "line", line: 1, text: "第一段" }, { rows, photoKeys });
+    expect(line).toContain("用户长按的是第 1 行");
+    expect(line).toContain("第一段");
+  });
+
+  it("④ 行号不符但 text 在正文唯一匹配 → 注入修正后的行号（漂移自愈）", () => {
+    const line = resolveAnchorLine({ type: "line", line: 99, text: "第三段" }, { rows, photoKeys });
+    expect(line).toContain("用户长按的是第 3 行");
+  });
+
+  it("⑤ text 无匹配 → 不注入", () => {
+    expect(resolveAnchorLine({ type: "line", line: 1, text: "不存在的文本" }, { rows, photoKeys })).toBeNull();
+  });
+
+  it("⑤ text 多处匹配（行号也不一致）→ 不注入", () => {
+    expect(resolveAnchorLine({ type: "line", line: 1, text: "重复段" }, { rows, photoKeys })).toBeNull();
+  });
+
+  it("anchor 缺失/非对象/未知 type → 不注入", () => {
+    expect(resolveAnchorLine(null, { rows, photoKeys })).toBeNull();
+    expect(resolveAnchorLine(undefined, { rows, photoKeys })).toBeNull();
+    expect(resolveAnchorLine("bogus", { rows, photoKeys })).toBeNull();
+    expect(resolveAnchorLine({ type: "bogus" }, { rows, photoKeys })).toBeNull();
+  });
+});
+
+describe("runEditTurn — anchor 注入（varLines）", () => {
+  const BODY = ["第一段", "[[photo:photos/2026-07-01/1.jpg]]", "第三段"].join("\n\n");
+  async function runWith(anchor) {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "底稿", articles: [{ title: "T", body: BODY }] }),
+    });
+    let seen;
+    const callClaude = async (req) => { seen = req; return { content: [{ type: "text", text: "改好了" }] }; };
+    await runEditTurn({
+      env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+      token: "t", origin: "https://jianshuo.dev", editId: "e-anchor",
+      instruction: "把这张图重画成水彩", images: [], system: "SYS", history: [], callClaude,
+      anchor,
+    });
+    const userMsg = seen.messages.find((m) => m.role === "user");
+    return userMsg.content.map((b) => b.text || "").join("\n");
+  }
+
+  it("① 合法 image anchor → prompt 含「用户长按的图片：[[photo:<key>]]」", async () => {
+    const text = await runWith({ type: "image", key: "photos/2026-07-01/1.jpg" });
+    expect(text).toContain("用户长按的图片：[[photo:photos/2026-07-01/1.jpg]]");
+  });
+
+  it("② image key 不在本文 → 不注入（无「用户长按」字样）", async () => {
+    const text = await runWith({ type: "image", key: "photos/nope/9.jpg" });
+    expect(text).not.toContain("用户长按");
+  });
+
+  it("③ line anchor 行号+text 一致 → 注入「用户长按的是第 N 行」", async () => {
+    const text = await runWith({ type: "line", line: 1, text: "第一段" });
+    expect(text).toContain("用户长按的是第 1 行");
+  });
+
+  it("④ 行号漂移但 text 唯一匹配 → 注入修正后的行号", async () => {
+    const text = await runWith({ type: "line", line: 99, text: "第三段" });
+    expect(text).toContain("用户长按的是第 3 行");
+  });
+
+  it("⑤ text 无匹配/多处匹配 → 不注入", async () => {
+    const text = await runWith({ type: "line", line: 1, text: "查无此段" });
+    expect(text).not.toContain("用户长按");
+  });
+
+  it("⑥ 无 anchor → prompt 与「显式传 anchor:null」逐字节一致（回归锁）", async () => {
+    const withNone = await runWith(undefined);
+    const withNull = await runWith(null);
+    expect(withNone).toBe(withNull);
+    expect(withNone).not.toContain("用户长按");
+    // 逐字节对齐现状结构：正文照常内联编号出现，指令紧随其后，两者之间没有
+    // 被 anchor 行插进来。
+    expect(withNone).toContain("第1行：第一段\n第2行 = 图1：[[photo:photos/2026-07-01/1.jpg]]\n第3行：第三段\n\n\n这次的语音指令：\n把这张图重画成水彩");
   });
 });

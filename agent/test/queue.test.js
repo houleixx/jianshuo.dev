@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ArticleQueue, makeMemStore } from "../src/queue.js";
+import { ArticleQueue, makeMemStore, normalizeAnchor } from "../src/queue.js";
 
 // Build an ArticleQueue wired to in-memory store + spies. `runTurn` returns a
 // canned success unless overridden; it records every row it was asked to run.
@@ -25,6 +25,43 @@ describe("ArticleQueue.submit", () => {
     const again = await q.submit({ id: "a", text: "x" });
     expect(again.kind).toBe("replay");
     expect(store.list().length).toBe(1);
+  });
+
+  // ⑦ 锚点透传：instruct 消息带 anchor → row 存留 → runTurn(row) 收到（DO 层照抄
+  // article_index 的待遇）。normalizeAnchor 做 index.js 那步「非对象/type 非法 → null」
+  // 的校验（DO 本身没有单测基建，这里在能测的这一层锁住）。
+  it("anchor 随 submit 落到 row，runTurn 拿到的 row.anchor 就是这个字符串", async () => {
+    const { q, store, ran } = harness({
+      runTurn: async (row) => { ran.push(row); return { ok: true, reply: "好", article: {} }; },
+    });
+    const anchor = JSON.stringify({ type: "line", line: 1, text: "第一段" });
+    await q.submit({ id: "a", text: "x", anchor });
+    expect(store.get("a").anchor).toBe(anchor);
+    await q.drain();
+    expect(ran[0].anchor).toBe(anchor);
+  });
+
+  it("anchor 缺省 → row.anchor 为 null（老队列行同待遇，读取不炸）", async () => {
+    const { q, store } = harness();
+    await q.submit({ id: "a", text: "x" });
+    expect(store.get("a").anchor).toBeNull();
+  });
+});
+
+describe("normalizeAnchor — WS 消息里 anchor 的校验（非对象/type 非法 → null）", () => {
+  it("合法 image/line anchor → JSON 字符串", () => {
+    expect(normalizeAnchor({ type: "image", key: "photos/1.jpg" })).toBe(JSON.stringify({ type: "image", key: "photos/1.jpg" }));
+    expect(normalizeAnchor({ type: "line", line: 1, text: "甲" })).toBe(JSON.stringify({ type: "line", line: 1, text: "甲" }));
+  });
+  it("非对象 → null", () => {
+    expect(normalizeAnchor(null)).toBeNull();
+    expect(normalizeAnchor(undefined)).toBeNull();
+    expect(normalizeAnchor("bogus")).toBeNull();
+    expect(normalizeAnchor(42)).toBeNull();
+  });
+  it("type 非法 → null", () => {
+    expect(normalizeAnchor({ type: "bogus", key: "x" })).toBeNull();
+    expect(normalizeAnchor({})).toBeNull();
   });
 });
 

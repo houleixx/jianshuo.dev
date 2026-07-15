@@ -25,14 +25,24 @@ export const QUEUE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS queue (
   article_index INTEGER
 )`;
 
+// 锚点协议（spec §3/§4）：校验 client 传来的原始 anchor 对象，合法就序列化成 queue
+// 存的字符串，非法（非对象 / type 不是 image|line）一律 null —— best-effort，从不
+// 4xx。index.js 的 WS `instruct` 解析用它把 msg.anchor 落成 submit() 的 anchor 入参；
+// 单独导出是因为 DO 的 onMessage 没有单测基建，这个纯函数是唯一能锁住这条校验的地方。
+export function normalizeAnchor(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (raw.type !== "image" && raw.type !== "line") return null;
+  return JSON.stringify(raw);
+}
+
 // In-memory store — the reference implementation + the test backend.
 export function makeMemStore(now = () => Date.now()) {
   const rows = new Map(); // id -> row
   let maxSeq = 0;
   return {
-    insert({ id, text, images, article_index }) {
+    insert({ id, text, images, article_index, anchor }) {
       const t = now();
-      const row = { id, seq: ++maxSeq, text, images: images ?? null, status: "pending", reply: null, error: null, created_at: t, updated_at: t, article_index: article_index ?? null };
+      const row = { id, seq: ++maxSeq, text, images: images ?? null, status: "pending", reply: null, error: null, created_at: t, updated_at: t, article_index: article_index ?? null, anchor: anchor ?? null };
       rows.set(id, row);
       return { ...row };
     },
@@ -54,11 +64,11 @@ export function makeMemStore(now = () => Date.now()) {
 // makeMemStore. `sql` must be bound to the DO (e.g. this.sql.bind(this)).
 export function makeSqlStore(sql, now = () => Date.now()) {
   return {
-    insert({ id, text, images, article_index }) {
+    insert({ id, text, images, article_index, anchor }) {
       const seq = (sql`SELECT COALESCE(MAX(seq),0) AS m FROM queue`[0]?.m || 0) + 1;
       const t = now();
-      sql`INSERT INTO queue (id, seq, text, images, status, reply, error, created_at, updated_at, article_index)
-          VALUES (${id}, ${seq}, ${text}, ${images ?? null}, 'pending', NULL, NULL, ${t}, ${t}, ${article_index ?? null})`;
+      sql`INSERT INTO queue (id, seq, text, images, status, reply, error, created_at, updated_at, article_index, anchor)
+          VALUES (${id}, ${seq}, ${text}, ${images ?? null}, 'pending', NULL, NULL, ${t}, ${t}, ${article_index ?? null}, ${anchor ?? null})`;
       return this.get(id);
     },
     get(id) { return sql`SELECT * FROM queue WHERE id = ${id}`[0] || null; },
@@ -84,10 +94,13 @@ export class ArticleQueue {
 
   // Idempotent enqueue. New id → inserted (caller arms a drain). Known id →
   // 'replay' with the existing row (caller re-pushes its cached result).
-  async submit({ id, text, images, article_index }) {
+  // `anchor` is already a JSON string or null by the time it gets here (the
+  // caller runs it through normalizeAnchor() first, same treatment article_index
+  // gets) — this method just stores/threads it through, same as article_index.
+  async submit({ id, text, images, article_index, anchor }) {
     const existing = this.store.get(id);
     if (existing) return { kind: "replay", row: existing };
-    this.store.insert({ id, text, images: images ? JSON.stringify(images) : null, article_index });
+    this.store.insert({ id, text, images: images ? JSON.stringify(images) : null, article_index, anchor: anchor ?? null });
     return { kind: "enqueued" };
   }
 

@@ -257,6 +257,12 @@ describe("resolveSharedPromptBlock", () => {
     const block = await resolveSharedPromptBlock(e, "用4563566");
     expect(block).toContain("占位符");
   });
+  it("⑧ 注入块含「若上下文提供了用户长按的目标」补句 —— 与占位符注解无关，恒出现", async () => {
+    // 无占位符的分享文本也要有这句：分享码常在语音指令里搭配 anchor 一起出现。
+    expect(await resolveSharedPromptBlock(seeded(), "用4563566改这段")).toContain("若上下文提供了『用户长按的目标』，提示词里说的『这张图/这段』即指它");
+    const e = makeEnv({ "shares/4563566": sharedDoc({ instruction: "把第{{LINE}}行改好。" }) });
+    expect(await resolveSharedPromptBlock(e, "用4563566")).toContain("若上下文提供了『用户长按的目标』，提示词里说的『这张图/这段』即指它");
+  });
   it("normalizes ASR pauses: spaces / hyphens / 中文逗号 between digits", async () => {
     expect(await resolveSharedPromptBlock(seeded(), "用 456 3566 处理")).toContain("更毒舌");
     expect(await resolveSharedPromptBlock(seeded(), "用456-3566处理")).toContain("更毒舌");
