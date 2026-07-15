@@ -1,5 +1,8 @@
 // test/mint.test.js — 投币接口 + 铸币价格数学
-import { describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach } from "vitest";
+// 投喂到账推送只验证「调没调、带什么参数」，APNs 网络层归 push.js 自己管。
+vi.mock("../src/push.js", () => ({ sendPush: vi.fn(async () => true) }));
+import { sendPush } from "../src/push.js";
 import { fakeD1, usageSql, fakeEnv } from "./fakes.js";
 import { handleMintRoutes, feedQuote } from "../src/mint.js";
 import { hmacSign, b64url } from "../../functions/lib/auth.js";
@@ -46,6 +49,7 @@ beforeEach(() => {
   });
   env.USAGE = db;
   env.SESSION_SECRET = SECRET;
+  vi.mocked(sendPush).mockClear();
 });
 
 const post = (path, token, body) => handleMintRoutes(
@@ -139,6 +143,21 @@ describe("POST /agent/feed", () => {
     expect((await r2.json()).already).toBe(true);
     expect(db.prepare("SELECT COUNT(*) AS n FROM mint").bind().first().n).toBe(1);
     expect(await balanceUY(db, AUTHOR, Date.now())).toBe(bal);
+  });
+
+  it("投币成功 → 给作者发到账推送（谁投的+哪篇+算力数，点开进账单）；重复投不再推", async () => {
+    await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    expect(sendPush).toHaveBeenCalledTimes(1);
+    const [, scope, note] = vi.mocked(sendPush).mock.calls[0];
+    expect(scope).toBe(AUTHOR);
+    expect(note.link).toBe("voicedrop://usage");
+    expect(note.threadId).toBe("feed");
+    expect(note.body).toContain("t1");       // 哪篇
+    expect(note.body).toContain("FEEDER");   // 谁投的（显示名兜底 = ID 前 6 位大写）
+    expect(note.body).toMatch(/算力 \+\d/);  // 加了多少
+    // 幂等分支（already）不重复付款也不重复推
+    await post("/agent/feed", await makeToken(FEEDER), { share_id: SHARE1 });
+    expect(sendPush).toHaveBeenCalledTimes(1);
   });
 
   it("同对第二篇打七折，响应带 discount", async () => {

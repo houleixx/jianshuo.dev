@@ -20,6 +20,7 @@ import { isShareId, communityKey } from "../../functions/lib/community-store.js"
 import { readProfileName } from "../../functions/lib/style-store.js";
 import { grantBucket } from "./usage_store.js";
 import { publishMintRate } from "./referral.js";
+import { sendPush } from "./push.js";
 import {
   POOL_7D_UY, DAILY_POOL_UY, SEED_COINS_UC, FEED_AUTHOR_UC, FEED_FEEDER_UC,
   FEED_GRANT_EXPIRE_DAYS, FUSE_MULT, pairDiscount, ucToCoins, uyToSuanli,
@@ -123,6 +124,15 @@ export async function handleMintRoutes(url, request, env) {
       { feed_id: feedId, share_id: shareId, title, from: feederName });
     await grantBucket(env.USAGE, feeder, q.actorUY, "feed_curator", exp, now,
       { feed_id: feedId, share_id: shareId, title, author: authorName });
+
+    // 作者到账推送：谁投喂了哪篇、加了多少算力，点开落在算力账单页。
+    // sendPush 自带 try/catch + 缺 secret 静默 no-op，永不影响投币主流程。
+    await sendPush(env, post.owner, {
+      title: "文章被投喂了",
+      body: `${feederName} 投喂了《${title || "无题"}》，算力 +${r1(uyToSuanli(q.beneficiaryUY))}`,
+      threadId: "feed",
+      link: "voicedrop://usage",
+    });
 
     await publishMintRate(env, env.USAGE, now); // 落地页 CTA 实时价（尽力而为）
 
