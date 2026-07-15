@@ -13,7 +13,7 @@ import { checkArticlesShareable } from "../../functions/lib/moderation.js";
 import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList } from "./prompts.js";
 import { loadUserPrompts } from "./prompt-store.js";
-import { publishPromptPost, retractPromptPost } from "./prompt-community.js";
+import { publishPromptPost, retractPromptPost, promptShareId } from "./prompt-community.js";
 // author 显示名 —— SINGLE SOURCE OF TRUTH，见 style-store.js#readProfileName 上方
 // 注释："the share endpoint, miner, and mint all import this"。这里显式传
 // { fallback: "none" }：无名 → ""，而不是 miner/mint 默认走的 ID 前 6 位大写 —
@@ -73,8 +73,8 @@ async function loadIndex(env, scope) {
 /// 悬空 ref / 存储层垃圾节点静默丢弃，这里按扁平树宽走一遍（顶层 + 组内 children）
 /// 找 itemId 即可，不需要再自己防垃圾。
 async function effectiveLeaf(env, scope, itemId) {
-  const tpl = await loadPromptTemplate(env);
-  const doc = await loadUserPrompts(env, scope);
+  // 两个读互不依赖——串行曾是「开分享 10 秒」的帮凶之一（2026-07-16 真机）。
+  const [tpl, doc] = await Promise.all([loadPromptTemplate(env), loadUserPrompts(env, scope)]);
   const flat = [];
   for (const n of resolveList(tpl, doc)) {
     flat.push(n);
@@ -219,7 +219,7 @@ async function handlePromptShareGet(url, env) {
 
 // POST /agent/prompt-share {id} → 开分享（幂等同码）；
 // DELETE /agent/prompt-share/<itemId> → 关分享（删 shares/<码>，索引保留）。
-export async function handlePromptShareRoutes(url, request, env) {
+export async function handlePromptShareRoutes(url, request, env, ctx) {
   if (request.method === "GET") {
     const hit = await handlePromptShareGet(url, env);
     if (hit) return hit;
@@ -241,27 +241,33 @@ export async function handlePromptShareRoutes(url, request, env) {
     const { byItem } = await loadIndex(env, scope);
     const code = byItem[itemId]?.code;
     if (code) {
+      // 删 shares/<码> 必须同步（码失效立即生效）；撤帖 best-effort 挪后台，
+      // 失败由 get/reconcile 自愈兜底。
       await env.FILES.delete(`shares/${code}`);
-      await retractPromptPost(env, code);
+      const retract = retractPromptPost(env, code);
+      if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(retract); else await retract;
     }
     return J({ ok: true, code: code || null, sharing: false });
   }
-
-  const cfg = await loadPromptShareConfig(env);
-  if (!cfg.enabled) return J({ error: "disabled" }, 503);
 
   const body = await request.json().catch(() => null);
   const itemId = body && typeof body.id === "string" ? body.id : "";
   if (!itemId) return J({ error: "expected {id}" }, 400);
 
-  const leaf = await effectiveLeaf(env, scope, itemId);
+  // 三个读互不依赖，并行拉——这条链路曾经 15 个串行存储操作叠出「开分享 10 秒」
+  //（2026-07-16 真机）。检查顺序保持不变：enabled → unknown id → too long → 审核 → 日上限。
+  const [cfg, leaf, idx] = await Promise.all([
+    loadPromptShareConfig(env),
+    effectiveLeaf(env, scope, itemId),
+    loadIndex(env, scope),
+  ]);
+  if (!cfg.enabled) return J({ error: "disabled" }, 503);
   if (!leaf) return J({ error: "unknown id" }, 404);
   if (leaf.instruction.length > cfg.maxLength) return J({ error: "too long" }, 413);
   // 关键词审核（与文章分享同一把闸）：label+正文拼一篇"文章"扫一遍。
   const kw = await checkArticlesShareable([{ title: leaf.label, body: leaf.instruction }], env);
   if (kw.flagged) return J({ error: "content_flagged", term: kw.term }, 403);
 
-  const idx = await loadIndex(env, scope);
   const existing = idx.byItem[itemId];
 
   let code = existing?.code;
@@ -287,10 +293,14 @@ export async function handlePromptShareRoutes(url, request, env) {
     const prevDoc = await env.FILES.get(`shares/${code}`);
     if (prevDoc) importCount = JSON.parse(await prevDoc.text()).importCount || 0;
   } catch { /* 坏文档当没有，从 0 起 */ }
+  // shares/<码> 必须同步落盘（响应一到，码就得能兑换/能被落地页读到）；
+  // 发社区帖挪后台（本来就 best-effort，失败由 reconcile/get 自愈），
+  // communityShareId 从码确定性派生，不用等发帖落地。
   await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, existing?.createdAt, importCount));
-  const communityShareId = await publishPromptPost(env, scope, code, leaf);
-  return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true,
-             ...(communityShareId ? { communityShareId } : {}) });
+  const publish = publishPromptPost(env, scope, code, leaf);
+  if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(publish); else await publish;
+  const communityShareId = await promptShareId(code, env.SESSION_SECRET);
+  return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true, communityShareId });
 }
 
 /// itemId → { shareCode, sharing }。码在索引里就返回（再开同码），sharing 看
