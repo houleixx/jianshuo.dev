@@ -22,7 +22,10 @@
   ],
 
   "d1_databases": [
-    { "binding": "USAGE", "database_name": "voicedrop-usage", "database_id": "317b7cd5-e926-49f0-a6c9-497e4740aea8" }
+    { "binding": "USAGE", "database_name": "voicedrop-usage", "database_id": "317b7cd5-e926-49f0-a6c9-497e4740aea8" },
+    // 社区展示索引：与 voicedrop-reco worker / jianshuo.dev Pages 同一个 D1 库
+    // （community_posts 表）。prompt-community.js 写提示词帖的展示索引行。
+    { "binding": "RECO_DB", "database_name": "voicedrop-reco", "database_id": "feeee5df-0f48-43ca-8845-473d8b4809c3" }
   ],
 
   "durable_objects": {
