@@ -325,3 +325,52 @@ describe("runEditTurn — anchor 注入（varLines）", () => {
     expect(withNone).toContain("第1行：第一段\n第2行 = 图1：[[photo:photos/2026-07-01/1.jpg]]\n第3行：第三段\n\n\n这次的语音指令：\n把这张图重画成水彩");
   });
 });
+
+describe("runEditTurn — anchor 注入（legacy [[photo:N]] 数字标记归一）", () => {
+  // 老格式文章：正文标记是裸数字 token（1-based 指向 doc.photos），iOS 长按时
+  // 已把数字解析成完整相对 key 放进 anchor.key —— photoKeys 必须做两代格式归一，
+  // 否则老文章的 image anchor 会被「宁缺勿错」静默丢弃（多图老文章长按精确命中
+  // 是本项目的验收金标准）。
+  async function runLegacy({ body, photos, anchor }) {
+    const env = fakeEnv({
+      "users/u/articles/s.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "底稿", photos, articles: [{ title: "T", body }] }),
+    });
+    let seen;
+    const callClaude = async (req) => { seen = req; return { content: [{ type: "text", text: "改好了" }] }; };
+    await runEditTurn({
+      env, scope: "users/u/", articleKey: "users/u/articles/s.json",
+      token: "t", origin: "https://jianshuo.dev", editId: "e-legacy",
+      instruction: "把这张图重画成水彩", images: [], system: "SYS", history: [], callClaude,
+      anchor,
+    });
+    return seen.messages.find((m) => m.role === "user").content.map((b) => b.text || "").join("\n");
+  }
+
+  it("legacy 数字标记 + anchor.key=完整相对 key → 经 doc.photos 归一后注入成功", async () => {
+    const text = await runLegacy({
+      body: "第一段\n\n[[photo:1]]\n\n[[photo:2]]",
+      photos: ["photos/x/1-abc.jpg", "photos/x/2-def.jpg"],
+      anchor: { type: "image", key: "photos/x/2-def.jpg" },
+    });
+    expect(text).toContain("用户长按的图片：[[photo:photos/x/2-def.jpg]]");
+  });
+
+  it("越界数字标记（doc.photos 没有对应项）不炸，anchor 校验不过 → 不注入", async () => {
+    const text = await runLegacy({
+      body: "第一段\n\n[[photo:9]]",
+      photos: ["photos/x/1-abc.jpg"],
+      anchor: { type: "image", key: "photos/x/1-abc.jpg" },
+    });
+    // [[photo:9]] 越界被丢弃；photos/x/1-abc.jpg 没有被正文任何标记引用 → 不注入。
+    expect(text).not.toContain("用户长按");
+  });
+
+  it("doc.photos 缺失（新格式文章）时数字标记安全丢弃、相对 key 标记照常命中", async () => {
+    const text = await runLegacy({
+      body: "第一段\n\n[[photo:1]]\n\n[[photo:photos/y/3-ghi.jpg]]",
+      photos: undefined,
+      anchor: { type: "image", key: "photos/y/3-ghi.jpg" },
+    });
+    expect(text).toContain("用户长按的图片：[[photo:photos/y/3-ghi.jpg]]");
+  });
+});

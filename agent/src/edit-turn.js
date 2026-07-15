@@ -26,6 +26,9 @@ export function resolveAnchorLine(anchor, { rows, photoKeys }) {
     return `用户长按的图片：[[photo:${key}]]（指令里说的「这张图/这张照片」就是它）`;
   }
   if (anchor.type === "line") {
+    // anchor.text 防御性上限 2000 UTF-16 units（spec §3）；下面的行比对两侧都按
+    // 截断后前缀比——超过 2000 的段落理论上可能因前缀相同而误判「唯一匹配」，接受
+    // （真实正文段落远短于此，且误判上限也只是把 anchor 指到同前缀的另一行）。
     const text = String(anchor.text || "").slice(0, 2000);
     if (!text) return null;
     let n = Number.isInteger(anchor.line) ? anchor.line : -1;
@@ -143,8 +146,18 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   // 锚点（长按图片/文字菜单动作随手势带上的结构化定位）：校验 + 漂移自愈后，紧挨
   // 指令之前注入一条独立上下文行。rows 用 target（本次编辑这一篇）的 body 算，与
   // 上面 inlineNumberedBody 给模型看的号同一份 numberBodyRows 调用、同口径。
+  // photoKeys 做两代标记格式归一：老格式正文的标记是 [[photo:5]]（裸数字 token，
+  // 1-based 指向 doc.photos 数组），而 iOS 的 ArticleBody.resolvePhotoKey 在长按时
+  // 已把数字解析成完整相对 key 放进 anchor.key —— 不归一的话老文章上 includes()
+  // 恒 false，anchor 会被静默丢弃。数字 token → doc.photos[n-1]（与 iOS
+  // resolvePhotoKey / functions/voicedrop/[token].js 的 photoRefsInBodies 同口径，
+  // 越界丢弃）；非数字 token（新格式）本身就是相对 key，原样保留。
   const anchorRows = numberBodyRows(target?.body || "");
-  const photoKeys = anchorRows.filter((r) => r.kind === "photo").map((r) => r.token);
+  const legacyPhotos = Array.isArray(doc.photos) ? doc.photos : [];
+  const photoKeys = anchorRows
+    .filter((r) => r.kind === "photo")
+    .map((r) => (/^\d+$/.test(r.token) ? legacyPhotos[Number(r.token) - 1] : r.token))
+    .filter(Boolean);
   const anchorLine = resolveAnchorLine(anchor, { rows: anchorRows, photoKeys });
   if (anchorLine) varLines.push("", anchorLine);
   varLines.push("", "这次的语音指令：", instruction);
