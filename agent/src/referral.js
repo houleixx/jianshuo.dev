@@ -4,7 +4,7 @@
 // （referral_author / referral_new，90 天过期）；价格与投币同池同式——
 // sumCoins7d 全表无 kind 过滤 = 同一个分母，FUSE_MULT 同一条保险丝。
 // 设计 spec：voicedrop repo docs/superpowers/specs/2026-07-09-referral-rewards-design.md
-import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
+import { verifySession, anonScopeFromToken, bearerToken, sha256hex } from "../../functions/lib/auth.js";
 import { isShareId, communityKey } from "../../functions/lib/community-store.js";
 import { lookupRefhit } from "../../functions/lib/refhits.js";
 import { grantBucket, ensureAccount } from "./usage_store.js";
@@ -46,7 +46,8 @@ export async function publishMintRate(env, db, now) {
   } catch (e) { console.error("[referral] publishMintRate failed:", e && e.message); }
 }
 
-// token（分享短链 id）→ owner scope。shares/<id> 的值是 articleKey；社区 id 读指针。
+// token（分享短链 id 或邀请码）→ owner scope。shares/<id> 的值是 articleKey；
+// 社区 id 读指针；邀请码读 invites/<码>（大写归一，typed JSON {owner}）。
 async function ownerFromToken(env, token) {
   const id = String(token || "").trim();
   if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) return null;
@@ -57,11 +58,69 @@ async function ownerFromToken(env, token) {
     const cm = await env.FILES.get(communityKey(id));
     if (cm) { try { key = JSON.parse(await cm.text()).articleKey || null; } catch {} }
   }
+  if (!key && /^[A-Za-z0-9]{6,16}$/.test(id)) {
+    const inv = await env.FILES.get(`invites/${id.toUpperCase()}`);
+    if (inv) { try { const o = JSON.parse(await inv.text()).owner; if (/^users\/[^/]+\/$/.test(o)) return o; } catch {} }
+  }
   const m = key && key.match(/^(users\/[^/]+\/)/);
   return m ? m[1] : null;
 }
 
+// ── 邀请码（主动「邀请好友」入口）────────────────────────────────────────────
+// 码 = anon sub 的前 6 位 hex 大写（与 App 设置页显示的账户短码同源同值——一码两用）。
+// 撞码（不同 owner 已占）时退到 10 位、16 位。非 anon scope 走 HMAC 派生同样稳定。
+export async function inviteCodeForScope(env, scope, secret) {
+  const m = scope.match(/^users\/anon-([0-9a-f]+)\/$/);
+  const hex = m ? m[1] : await sha256hex(`invite:${scope}:${secret || ""}`);
+  for (const len of [6, 10, 16]) {
+    const code = hex.slice(0, len).toUpperCase();
+    if (code.length < len) break;                       // 源串不够长，用上一档
+    const cur = await env.FILES.get(`invites/${code}`);
+    if (!cur) return code;
+    try { if (JSON.parse(await cur.text()).owner === scope) return code; } catch { return code; }
+  }
+  return null;                                          // 三档全被别人占（实际不可能）
+}
+
+// GET /agent/referral/link — 铸/取自己的邀请链接。写穿 invites/<码>（owner+name，
+// name 每次刷新，落地页「X 邀请你」跟着改名走）；奖励数字按现价估算（与落地页同式）。
+async function handleInviteLink(request, env) {
+  const tok = bearerToken(request);
+  let scope = null;
+  if (env.SESSION_SECRET) { const s = await verifySession(tok, env.SESSION_SECRET); if (s) scope = s.scope; }
+  if (!scope) scope = await anonScopeFromToken(tok);
+  if (!scope) return J({ error: "unauthorized" }, 401);
+
+  const cfg = await loadReferralConfig(env);
+  const code = await inviteCodeForScope(env, scope, env.SESSION_SECRET);
+  if (!code) return J({ error: "invite-unavailable" }, 500);
+
+  let name = "";
+  try {
+    const o = await env.FILES.get(`${scope}CLAUDE.json`);
+    if (o) name = String(JSON.parse(await o.text())?.profile?.name || "").trim().slice(0, 20);
+  } catch {}
+  await env.FILES.put(`invites/${code}`, JSON.stringify({ owner: scope, name, ts: Date.now() }));
+
+  let rate = null;
+  try { const o = await env.FILES.get("config/mint-rate.json"); if (o) rate = JSON.parse(await o.text()); } catch {}
+  const per = rate && rate.suanliPerCoin > 0 ? rate.suanliPerCoin : 0;
+  return J({
+    code,
+    url: `https://voicedrop.cn/i/${code}`,
+    name,
+    enabled: cfg.enabled !== false,
+    // 邀请人/新朋友各自「约得」的算力现价（0 = 现价不可得，客户端隐藏数字）。
+    suanliInviter: per ? Math.round(cfg.authorCoins * per) : 0,
+    suanliFriend: per ? Math.round(cfg.newUserCoins * per) : 0,
+  });
+}
+
 export async function handleReferralRoutes(url, request, env, fetcher) {
+  if (url.pathname === "/agent/referral/link" && request.method === "GET") {
+    try { return await handleInviteLink(request, env); }
+    catch (e) { console.error("[referral] link failed:", e && e.message); return J({ error: "invite-failed" }, 500); }
+  }
   if (url.pathname !== "/agent/referral/claim" || request.method !== "POST") return null;
   if (!env.USAGE) return J({ error: "usage-unavailable" }, 503);
   try {
