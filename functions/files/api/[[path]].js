@@ -527,6 +527,27 @@ async function handleRequest(context) {
       });
     }
 
+    // 提示词分享码：shares/<码> 的值对提示词条目是 JSON（'{'开头），上面那段纯文本
+    // startsWith(scope) 匹配永远打不中，销号后这些码会永久公开孤立、无人能关。
+    // 读 owner 索引 users/<sub>/prompt-shares.json（形状 {byItem:{itemId:{code,...}}}）
+    // 逐个删 shares/<码>，同生同死。必须在整段 users/<sub>/ 前缀被清空前做——索引本身
+    // 也在那个前缀下。读不到/坏 JSON 静默跳过：销号主路径不能被它打断。
+    let promptCodes = 0;
+    {
+      try {
+        const obj = await env.FILES.get(`${scope}prompt-shares.json`);
+        if (obj) {
+          const idx = JSON.parse(await obj.text());
+          const byItem = idx && typeof idx.byItem === 'object' && idx.byItem ? idx.byItem : {};
+          await mapLimit(Object.values(byItem), 16, async (entry) => {
+            if (!entry || !entry.code) return;
+            await env.FILES.delete(`shares/${entry.code}`).catch(() => {});
+            promptCodes++;
+          });
+        }
+      } catch {}
+    }
+
     // The whole user prefix, re-listing until empty (R2 lists max 1000 per call).
     // MUST delete as an array — R2 bulk delete takes up to 1000 keys as ONE
     // operation. Per-key deletes blew the Pages Function subrequest budget on a
@@ -551,7 +572,7 @@ async function handleRequest(context) {
       await env.FILES.delete(`links/wechat-openid-${sanitizeSeg(wechatOpenid)}.json`).catch(() => {});
     }
 
-    return json({ ok: true, deleted: { objects, communityPosts, shareLinks } });
+    return json({ ok: true, deleted: { objects, communityPosts, shareLinks, promptCodes } });
   }
 
   // Mint a 24 h read-only articles link for the current user's scope.
@@ -903,13 +924,15 @@ async function handleRequest(context) {
   // 提示词帖（kind:"prompt"）：内容实时读 shares/<码> 写穿副本。副本没了 = 码已关
   // = 帖该死没死（agent 撤帖那步 best-effort 失败过）→ 自愈：清帖清索引，返回 null。
   async function livePromptLeaf(pointerKey, p) {
-    try {
-      const o = await env.FILES.get(`shares/${p.promptCode}`);
-      if (o) {
-        const doc = JSON.parse(await o.text());
-        if (doc && doc.type === "prompt" && typeof doc.instruction === "string") return doc;
-      }
-    } catch {}
+    // 对齐 liveDocForPointer 的纪律：get() 抛异常 = R2 瞬时读故障，不是「码已死」的
+    // 证据——上抛让外层路由自然 500，下次再试；只有明确读到 null（真 404）或副本
+    // JSON 损坏（写入方恒写合法 JSON，损坏=人工改坏）才自愈删帖。
+    const o = await env.FILES.get(`shares/${p.promptCode}`);
+    if (o) {
+      let doc = null;
+      try { doc = JSON.parse(await o.text()); } catch {}
+      if (doc && doc.type === "prompt" && typeof doc.instruction === "string") return doc;
+    }
     await env.FILES.delete(pointerKey);
     await indexDelete(p.shareId);
     return null;
@@ -1217,8 +1240,19 @@ async function handleRequest(context) {
       else try {
         const p = JSON.parse(await pObj.text());
         author = p.author || '';
-        const live = p.articleKey ? await env.FILES.get(p.articleKey) : null;
-        if (live) { const arts = resolveArticles(JSON.parse(await live.text())); title = arts[0]?.title || ''; body = (arts[0]?.body || '').slice(0, 600); }
+        if (p.kind === 'prompt' && p.promptCode) {
+          // 提示词帖没有 articleKey——内容真源是 shares/<码> 写穿副本。帖将死也无妨，
+          // 读不到就留空串（catch 兜底），不额外处理。
+          const leafObj = await env.FILES.get(`shares/${p.promptCode}`);
+          if (leafObj) {
+            const leaf = JSON.parse(await leafObj.text());
+            title = leaf?.label || '分享提示词';
+            body = (leaf?.instruction || '').slice(0, 600);
+          }
+        } else {
+          const live = p.articleKey ? await env.FILES.get(p.articleKey) : null;
+          if (live) { const arts = resolveArticles(JSON.parse(await live.text())); title = arts[0]?.title || ''; body = (arts[0]?.body || '').slice(0, 600); }
+        }
       } catch {}
       out.push({ shareId, author, title, body, gone, reports: rec.reporters?.length || 0, firstAt: rec.firstAt, reporters: rec.reporters || [] });
     }
@@ -1234,7 +1268,19 @@ async function handleRequest(context) {
     if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
     let act = 'restore'; try { const b = await request.clone().json(); act = (b && b.action) || 'restore'; } catch {}
     if (act === 'remove') {
-      await env.FILES.delete(communityKey(shareId)).catch(() => {});
+      const key = communityKey(shareId);
+      // 同生同死：帖是提示词帖就把 shares/<码> 也带走（对齐 unshare 的写法），
+      // 否则举报下架只杀帖不杀码，voicedrop.cn/<码> 继续公开可访问。
+      try {
+        const obj = await env.FILES.get(key);
+        if (obj) {
+          const parsed = JSON.parse(await obj.text());
+          if (parsed?.kind === 'prompt' && parsed.promptCode) {
+            await env.FILES.delete(`shares/${parsed.promptCode}`).catch(() => {});
+          }
+        }
+      } catch {}
+      await env.FILES.delete(key).catch(() => {});
       await env.FILES.delete(reportKey(shareId)).catch(() => {});
       await indexDelete(shareId);
       return json({ ok: true, removed: true });

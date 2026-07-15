@@ -138,6 +138,24 @@ describe("GET community/get/<id>", () => {
     expect(context.env.FILES._store.has("community/prm200000001.json")).toBe(false);
     expect(db._posts.has("prm200000001")).toBe(false);
   });
+
+  // F4：R2 瞬时读故障（get() 抛异常）不是「码已死」的证据，不能被 livePromptLeaf
+  // 当成 404 误删帖——只有明确读到 null 才是真的码已失效。异常应上抛（生产环境外
+  // 层路由自然 500，下次再试），帖必须原样留着。
+  it("community/get：livePromptLeaf 遇 R2 get 抛异常 → 异常上抛，帖不被误删（不是 404 自愈）", async () => {
+    const context = reqCtx("GET", ["community", "get", "prm600000001"]);
+    context.env.FILES._store.set("community/prm600000001.json", JSON.stringify({
+      schema: 2, shareId: "prm600000001", owner: "users/u/", kind: "prompt",
+      promptCode: "9998887", author: "王建硕", firstSharedAt: 1,
+    }));
+    const realGet = context.env.FILES.get.bind(context.env.FILES);
+    context.env.FILES.get = async (key) => {
+      if (key === "shares/9998887") throw new Error("R2 blip");
+      return realGet(key);
+    };
+    await expect(onRequest(context)).rejects.toThrow("R2 blip");
+    expect(context.env.FILES._store.has("community/prm600000001.json")).toBe(true);
+  });
 });
 
 // ── GET community/list — mixed schemas, ordering, self-heal ───────────────────
@@ -474,6 +492,46 @@ describe("community D1 index dual-write", () => {
     const ctxRemove = reqCtx("POST", ["community", "resolve", "rpt000000001"], { body: { action: "remove" }, env: { RECO_DB: db } });
     expect((await (await onRequest(ctxRemove)).json()).removed).toBe(true);
     expect(db._posts.has("rpt000000001")).toBe(false);
+  });
+
+  // F1：举报下架一条提示词帖时，杀帖必须连 shares/<码> 一起杀——同生同死，
+  // 否则 voicedrop.cn/<码> 继续公开可访问，管理员却以为已经下架。
+  it("举报一条提示词帖 → resolve remove 连 shares/<码> 一起删", async () => {
+    const db = fakeRecoD1();
+    db._posts.set("rpt300000001", { share_id: "rpt300000001", owner: "users/u/", hidden: 1, kind: "prompt" });
+    const ctx = reqCtx("POST", ["community", "resolve", "rpt300000001"], { body: { action: "remove" }, env: { RECO_DB: db } });
+    ctx.env.FILES._store.set("community/rpt300000001.json", JSON.stringify({
+      schema: 2, shareId: "rpt300000001", owner: "users/u/", kind: "prompt",
+      promptCode: "5556667", author: "王建硕", firstSharedAt: 1,
+    }));
+    ctx.env.FILES._store.set("shares/5556667", JSON.stringify({
+      type: "prompt", label: "口语化", instruction: "把这段改得更口语",
+    }));
+    const body = await (await onRequest(ctx)).json();
+    expect(body.removed).toBe(true);
+    expect(ctx.env.FILES._store.has("community/rpt300000001.json")).toBe(false);
+    expect(ctx.env.FILES._store.has("shares/5556667")).toBe(false);
+  });
+
+  // F3：管理员举报列表 GET community/reports 之前只走 p.articleKey 分支，提示词帖
+  // 没有 articleKey，永远显示空标题/空摘要——管理员看不出举报的是哪条提示词。
+  it("举报一条提示词帖后，GET community/reports 里该条 title=label、body=instruction", async () => {
+    const ctxReport = reqCtx("POST", ["community", "report", "rep400000001"], { token: await session("users/u2/") });
+    ctxReport.env.FILES._store.set("community/rep400000001.json", JSON.stringify({
+      schema: 2, shareId: "rep400000001", owner: "users/u/", kind: "prompt",
+      promptCode: "3213214", author: "王建硕", firstSharedAt: 1,
+    }));
+    ctxReport.env.FILES._store.set("shares/3213214", JSON.stringify({
+      type: "prompt", label: "更简洁", instruction: "把这段改得更简洁一些",
+    }));
+    expect((await (await onRequest(ctxReport)).json()).ok).toBe(true);
+
+    const ctxList = reqCtx("GET", ["community", "reports"], { env: { FILES: ctxReport.env.FILES } });   // same R2 store, fresh admin request
+    const body = await (await onRequest(ctxList)).json();
+    const entry = body.reports.find((r) => r.shareId === "rep400000001");
+    expect(entry).toBeTruthy();
+    expect(entry.title).toBe("更简洁");
+    expect(entry.body).toBe("把这段改得更简洁一些");
   });
 
   it("reindex rebuilds rows from R2 (hidden from report markers) and drops stale rows", async () => {

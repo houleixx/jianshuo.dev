@@ -62,6 +62,42 @@ describe("POST account/delete", () => {
     ]);
   });
 
+  // F2: 提示词分享码的 shares/<码> 值是 JSON（{type:"prompt",...}），不是纯文本
+  // articleKey，销号时 shareLinks 清理循环的 startsWith(scope) 匹配永远打不中——
+  // 销号后 voicedrop.cn/<码> 永久公开且无人能关。销号必须连 owner 索引
+  // users/<sub>/prompt-shares.json 里记的每个码一起杀。
+  it("wipes the user's prompt share codes (shares/<码> is JSON, not the plain-text articleKey shape)", async () => {
+    const scope = await anonScope();
+    const seed = {
+      [`${scope}ACCOUNT.json`]: JSON.stringify({}),
+      [`${scope}prompt-shares.json`]: JSON.stringify({
+        byItem: {
+          p_1: { code: "1112223", createdAt: "2026-07-01T00:00:00Z" },
+          sys_cartoon: { code: "4445556", createdAt: "2026-07-02T00:00:00Z" },
+        },
+        mintLog: [],
+      }),
+      "shares/1112223": JSON.stringify({ type: "prompt", sub: "x", label: "口语化", instruction: "把这段改得更口语" }),
+      "shares/4445556": JSON.stringify({ type: "prompt", sub: "x", label: "卡通化", instruction: "把这段改得更卡通" }),
+      // an article share link into the same scope must still be cleaned by the existing path
+      [`${scope}articles/a.json`]: "{}",
+      "shares/aaaa": `${scope}articles/a.json`,
+      // another user's prompt code must survive untouched
+      "users/other/prompt-shares.json": JSON.stringify({ byItem: { p_9: { code: "9998887", createdAt: "x" } }, mintLog: [] }),
+      "shares/9998887": JSON.stringify({ type: "prompt", sub: "other", label: "别人的", instruction: "别删我" }),
+    };
+    const context = ctx("POST", ["account", "delete"], { token: ANON, seed });
+    const resp = await onRequest(context);
+    const body = await resp.json();
+    expect(resp.status).toBe(200);
+    expect(body.deleted.promptCodes).toBe(2);
+    const left = [...context.env.FILES._store.keys()];
+    expect(left).not.toContain("shares/1112223");
+    expect(left).not.toContain("shares/4445556");
+    expect(left).toContain("shares/9998887");                    // other user's code survives
+    expect(left).toContain("users/other/prompt-shares.json");    // other user's index untouched
+  });
+
   it("works for a user with no Apple binding and no community activity", async () => {
     const scope = await anonScope();
     const seed = { [`${scope}VoiceDrop-b.m4a`]: "audio" };
