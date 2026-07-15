@@ -42,6 +42,7 @@ describe("工具表本身", () => {
     for (const n of [
       "list_articles", "read_article", "write_article",      // 文章
       "read_style", "extract_style",                          // 文风
+      "list_prompts", "share_prompt", "import_prompt",        // 提示词
       "trigger_mining", "restyle_article",                    // 挖矿
       "community_feed", "share_to_community", "feed_coin",    // 社区
       "credit_balance",                                       // 算力
@@ -127,6 +128,42 @@ describe("文风（新的 /style API，不再是 CLAUDE.md 文件）", () => {
   it("extract_style → POST agent style/extract（服务端蒸馏，不是本地手搓）", async () => {
     const { calls } = await run("extract_style", {});
     expect(calls[0]).toMatchObject({ source: "agent", method: "POST", path: "style/extract" });
+  });
+});
+
+describe("提示词分享", () => {
+  it("list_prompts → GET agent prompts（解析后的树，拿 id 用）", async () => {
+    const { calls } = await run("list_prompts", {});
+    expect(calls[0]).toMatchObject({ source: "agent", method: "GET", path: "prompts" });
+  });
+
+  it("share_prompt → POST agent prompt-share，body 带 {id}", async () => {
+    const { calls } = await run("share_prompt", { id: "sys_polish" });
+    expect(calls[0]).toMatchObject({ source: "agent", method: "POST", path: "prompt-share" });
+    expect(calls[0].body).toEqual({ id: "sys_polish" });
+  });
+
+  it("unshare_prompt → DELETE agent prompt-share/<id>，id 单独成段（好被 URL 编码）", async () => {
+    const { calls } = await run("unshare_prompt", { id: "p_ab12cd34" });
+    expect(calls[0]).toMatchObject({ source: "agent", method: "DELETE" });
+    expect(calls[0].path).toBe("prompt-share/p_ab12cd34");
+  });
+
+  it("prompt_share_status → GET agent prompt-shares", async () => {
+    const { calls } = await run("prompt_share_status", {});
+    expect(calls[0]).toMatchObject({ source: "agent", method: "GET", path: "prompt-shares" });
+  });
+
+  it("preview_prompt_share → GET agent prompt-share/<code>（公开预览）", async () => {
+    const { calls } = await run("preview_prompt_share", { code: "4563566" });
+    expect(calls[0]).toMatchObject({ source: "agent", method: "GET" });
+    expect(calls[0].path).toBe("prompt-share/4563566");
+  });
+
+  it("import_prompt → POST agent prompts/import，body 带 {code}", async () => {
+    const { calls } = await run("import_prompt", { code: "4563566" });
+    expect(calls[0]).toMatchObject({ source: "agent", method: "POST", path: "prompts/import" });
+    expect(calls[0].body).toEqual({ code: "4563566" });
   });
 });
 

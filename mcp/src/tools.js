@@ -184,6 +184,65 @@ export const TOOLS = [
       client.agent("POST", "style/extract", { body: { clearAfter: !!clearAfter } }),
   },
 
+  // ─────────────────────────── 提示词 ───────────────────────────
+  // 提示词 = 长按菜单里那些可自定义的 AI 指令（App 的 设置 → 提示词）。
+  // 分享机制是 7 位数字「魔法数字」：一条提示词一辈子一个码，码同时是短链
+  // voicedrop.cn/<码>；别人可以用码导入成自己的副本，也可以在语音指令里
+  // 直接念这个码一次性借用（不改自己的设置）。
+  {
+    name: "list_prompts",
+    description:
+      "列出我的全部提示词（长按菜单里的 AI 指令，含分组）。返回解析后的树：每项有 id、label、" +
+      "prompt 正文、appliesTo（text/image，即出现在长按文字还是长按图片菜单）。" +
+      "id 是提示词分享操作的入口——share_prompt / unshare_prompt 都要用它。" +
+      "id 形如 sys_*（系统默认项）或 p_*（自建/改过的项）。",
+    inputSchema: obj({}),
+    handler: (_a, { client }) => client.agent("GET", "prompts"),
+  },
+  {
+    name: "share_prompt",
+    description:
+      "把我的一条提示词分享出去：生成 7 位数字分享码（同时是 voicedrop.cn/<码> 短链）。" +
+      "一条提示词一辈子一个码——重复调用返回同一个码，关掉再开也是同码复活。" +
+      "别人拿到码后可以用 import_prompt 导入，或在语音指令里直接念码一次性借用。" +
+      "之后我改这条提示词，分享内容会自动跟着更新。id 用 list_prompts 拿。",
+    inputSchema: obj({ id: str("提示词的 id（sys_* 或 p_*），从 list_prompts 拿。") }, ["id"]),
+    handler: ({ id }, { client }) => client.agent("POST", "prompt-share", { body: { id } }),
+  },
+  {
+    name: "unshare_prompt",
+    description:
+      "停止分享一条提示词：分享码立即失效（别人再用码会被告知「分享已停止」）。" +
+      "码不会易主——之后再对同一条 share_prompt，还是原来那个码。",
+    inputSchema: obj({ id: str("提示词的 id（sys_* 或 p_*），从 list_prompts 拿。") }, ["id"]),
+    handler: ({ id }, { client }) => client.agent("DELETE", ["prompt-share", id]),
+  },
+  {
+    name: "prompt_share_status",
+    description:
+      "查我的提示词分享状态一览：哪些条目铸过码、码是多少、当前是否在分享中。" +
+      "返回 byItem：{<提示词id>: {code, sharing}}。没铸过码的条目不出现。",
+    inputSchema: obj({}),
+    handler: (_a, { client }) => client.agent("GET", "prompt-shares"),
+  },
+  {
+    name: "preview_prompt_share",
+    description:
+      "用 7 位分享码预览一条别人分享的提示词（公开接口，看内容不需要对方授权）。" +
+      "返回 label、prompt 正文、appliesTo、作者名 author（作者没设名字则为空）、被导入次数 importCount。" +
+      "只想看看是什么就用这个；确定要收下用 import_prompt。码无效或已停止分享会报 404。",
+    inputSchema: obj({ code: str("7 位数字分享码（首位非零），形如 4563566。") }, ["code"]),
+    handler: ({ code }, { client }) => client.agent("GET", ["prompt-share", code]),
+  },
+  {
+    name: "import_prompt",
+    description:
+      "用 7 位分享码把别人分享的提示词导入成我自己的独立副本（出现在我的长按菜单里，可改名改词可删）。" +
+      "是快照不是订阅：导入后原作者再改，不影响我这份。返回导入后的条目 item（含新 id）。",
+    inputSchema: obj({ code: str("7 位数字分享码（首位非零），形如 4563566。") }, ["code"]),
+    handler: ({ code }, { client }) => client.agent("POST", "prompts/import", { body: { code } }),
+  },
+
   // ─────────────────────────── 挖矿 ───────────────────────────
   {
     name: "trigger_mining",
