@@ -105,6 +105,21 @@ describe("reco worker", () => {
     expect(new Set(j.order)).toEqual(new Set(["a", "b"]));       // 推荐序覆盖全部可见帖
   });
 
+  it("feed 每帖带 kind：文章帖 article、提示词帖 prompt", async () => {
+    const env = { ...fakeD1([], [
+      { share_id: "aaaaaaaaaaaa", owner: "users/u1/", author: "甲", title: "文章帖",
+        first_shared_at: 1000, kind: "article", preview: null, cover_photo_key: null, has_photo: 0, article_count: 1, updated_at: 1000, reply_to: null, hidden: 0 },
+      { share_id: "bbbbbbbbbbbb", owner: "users/u2/", author: "乙", title: "改毒舌",
+        first_shared_at: 2000, kind: "prompt", preview: null, cover_photo_key: null, has_photo: 0, article_count: 1, updated_at: 2000, reply_to: null, hidden: 0 },
+    ]), SESSION_SECRET: SECRET };
+    const t = await token("users/u1/");
+    const resp = await worker.fetch(req("/reco/feed", { method: "GET", auth: t }), env);
+    const { posts } = await resp.json();
+    const byId = Object.fromEntries(posts.map(p => [p.shareId, p]));
+    expect(byId.aaaaaaaaaaaa.kind).toBe("article");
+    expect(byId.bbbbbbbbbbbb.kind).toBe("prompt");
+  });
+
   it("feed 无 D1 → 503（app 回退老的 list+rank 路径）", async () => {
     const t = await token("users/u1/");
     const r = await worker.fetch(req("/reco/feed", { method: "GET", auth: t }), { SESSION_SECRET: SECRET });

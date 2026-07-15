@@ -44,7 +44,7 @@ export async function countsFor(env, shareIds) {
 export async function feedRows(env) {
   const { results } = await env.DB.prepare(
     `SELECT share_id, owner, author, title, preview, cover_photo_key, has_photo,
-            article_count, first_shared_at, updated_at, reply_to
+            article_count, first_shared_at, updated_at, reply_to, kind
      FROM community_posts WHERE hidden=0
      ORDER BY first_shared_at DESC LIMIT 500`,
   ).all();

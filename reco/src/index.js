@@ -56,6 +56,7 @@ export default {
         likes: (engMap[r.share_id] || {}).like || 0,
         replies: replyCounts[r.share_id] || 0,
         liked: likedSet.has(r.share_id),
+        kind: r.kind || "article",
       }));
       const order = rankPosts(
         rows.map((r) => ({ shareId: r.share_id, firstSharedAt: r.first_shared_at,
