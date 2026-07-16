@@ -28,9 +28,13 @@ export async function onRequest(context) {
   const name = String(inv.name || "").trim();
 
   // 归因第 2 层：IP 指纹（与文章分享页同一套 refhits，R2 lifecycle 2 天）。
+  // ⚠️ 只在直连（jianshuo.dev）时于服务端写——voicedrop.cn 经腾讯云反代，这里的
+  // CF-Connecting-IP 是代理出口 IP，写了也是垃圾；反代流量由页面里的第一方
+  // beacon（浏览器直连 /agent/referral/hit）补真实 IP。
+  const fwdHost = request.headers?.get?.("x-forwarded-host");
   const ip = request.headers?.get?.("CF-Connecting-IP");
   const visitorId = ip && env.SESSION_SECRET ? await ipHash(ip, env.SESSION_SECRET) : `anon-${code}`;
-  if (ip && env.SESSION_SECRET && context.waitUntil) {
+  if (!fwdHost && ip && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(
       writeRefhit({ FILES: env.FILES }, ip, env.SESSION_SECRET, inv.owner, code, Date.now())
         .catch(() => {}));
@@ -55,13 +59,12 @@ export async function onRequest(context) {
   // 面额读不到退默认（与 agent 的 REFERRAL_DEFAULTS 同值；functions 不 import agent 代码）。
   if (!cfg) cfg = { enabled: true, authorCoins: 9, newUserCoins: 9 };
 
-  const fwdHost = request.headers?.get?.("x-forwarded-host");
   const origin = fwdHost ? `https://${fwdHost}` : new URL(request.url).origin;
   const pageUrl = fwdHost ? `${origin}/i/${code}` : request.url;
   const title = name ? `${name} 邀请你用 VoiceDrop` : "邀请你用 VoiceDrop";
   const og = { description: "动动嘴，就能写出好文章。说一段话，VoiceDrop 用你的语气整理成一篇能发的文章。", url: pageUrl, image: "" };
 
-  return new Response(invitePageHtml({ name, title, og, rate, cfg }), {
+  return new Response(invitePageHtml({ name, title, og, rate, cfg, code }), {
     status: 200,
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" },
   });
@@ -82,7 +85,7 @@ export function rewardCopy(name, rate, cfg) {
   return `用这个链接下载，你得 <b>${friend} 算力</b>${artNote}，${name || "对方"}得 <b>${inviter} 算力</b>`;
 }
 
-export function invitePageHtml({ name, title, og, rate, cfg }) {
+export function invitePageHtml({ name, title, og, rate, cfg, code = "" }) {
   const avatar = esc((name || "朋").slice(0, 1));
   const inviterHtml = name
     ? `<b>${esc(name)}</b> 邀请你一起用`
@@ -152,15 +155,33 @@ body{background:#211F1B;color:#fff;min-height:100dvh;display:flex;flex-direction
   </div>
   <div class="note">${note}</div>
 </div>
+<div id="wx-mask" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9;padding:26px 22px;text-align:right">
+  <svg width="44" height="60" viewBox="0 0 44 60" fill="none" stroke="#E2B871" stroke-width="3" stroke-linecap="round" style="margin-right:8px"><path d="M22 54V10M22 10l-12 13M22 10l12 13"/></svg>
+  <p style="font:600 19px/1.7 -apple-system,'PingFang SC';color:#fff;margin:14px 0 6px">微信里装不了 App</p>
+  <p style="font:15px/1.7 -apple-system,'PingFang SC';color:#C9BFAE;margin:0">点右上角「···」，选「在浏览器打开」<br>再点下载就行。邀请已经记住了。</p>
+</div>
 <script>
-// 归因第 3 层：下载点击（用户手势，微信内也允许）把本页 URL 写进剪贴板，
-// App 首启剪贴板兜底读它。顺手按 UA 弱化「不是你这台」的那个下载键。
+// 归因三件套（都不挡渲染）：
+// ① 第一方 beacon —— 浏览器直连 jianshuo.dev 报到（voicedrop.cn 反代会吃掉真实
+//    IP，服务端只在这条请求上写 IP 指纹，见 /agent/referral/hit）；
+// ② 下载点击写剪贴板（execCommand 先行——微信 webview 里 navigator.clipboard
+//    常年不可用；再叠 clipboard API 双保险）；
+// ③ 微信内点下载 → 不跳转，弹「去浏览器打开」蒙层（剪贴板照写）。
 (function(){
-  function keep(){try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}
-    try{fetch(location.pathname+"?c=1",{keepalive:true})}catch(e){}}
+  var HIT='https://jianshuo.dev/agent/referral/hit',CODE='${esc(code)}';
+  try{(navigator.sendBeacon&&navigator.sendBeacon(HIT,CODE))||fetch(HIT,{method:'POST',body:CODE,mode:'no-cors',keepalive:true})}catch(e){}
+  function keep(){
+    try{var t=document.createElement('textarea');t.value=location.href;t.style.cssText='position:fixed;opacity:0';
+      document.body.appendChild(t);t.select();t.setSelectionRange(0,99999);document.execCommand('copy');document.body.removeChild(t);}catch(e){}
+    try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}
+    try{fetch(location.pathname+"?c=1",{keepalive:true})}catch(e){}
+  }
+  var ua=navigator.userAgent||'',wx=/MicroMessenger/i.test(ua);
+  var mask=document.getElementById('wx-mask');
+  function tap(e){keep();if(wx){e.preventDefault();mask.style.display='block';}}
   var i=document.getElementById('dl-ios'),a=document.getElementById('dl-android');
-  i.addEventListener('click',keep);a.addEventListener('click',keep);
-  var ua=navigator.userAgent||'';
+  i.addEventListener('click',tap);a.addEventListener('click',tap);
+  mask.addEventListener('click',function(){mask.style.display='none';});
   if(/Android/i.test(ua))i.classList.add('dim');
   else if(/iPhone|iPad|iPod|Macintosh/i.test(ua))a.classList.add('dim');
 })();

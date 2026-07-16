@@ -1,7 +1,11 @@
 // test/invite-link.test.js — 邀请码：GET /agent/referral/link 铸码/写穿 + 落地页渲染 +
 // claim 用邀请码归因（ownerFromToken 的 invites/ 分支）。
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { fakeD1, usageSql, fakeEnv } from "./fakes.js";
+
+// 邀请人到账推送：mock 掉 APNs 通道，claim 成功用例断言调用参数。
+vi.mock("../src/push.js", () => ({ sendPush: vi.fn(async () => true) }));
+import { sendPush } from "../src/push.js";
 import { handleReferralRoutes, inviteCodeForScope } from "../src/referral.js";
 import { rewardCopy, invitePageHtml, onRequest as invitePage } from "../../functions/voicedrop/i/[code].js";
 
@@ -27,6 +31,7 @@ function linkReq(token) {
 }
 const URL_LINK = new URL("https://jianshuo.dev/agent/referral/link");
 const URL_CLAIM = new URL("https://jianshuo.dev/agent/referral/claim");
+const URL_HIT = new URL("https://jianshuo.dev/agent/referral/hit");
 
 let env;
 beforeEach(() => {
@@ -109,6 +114,11 @@ describe("claim with an invite code token", () => {
     expect(j.attributed).toBe(true);
     expect(j.suanli.you).toBeGreaterThan(0);
     expect(j.suanli.author).toBeGreaterThan(0);
+    // 邀请人侧到账推送（治「成功了也无感」）：发给 owner，点开直达算力账单。
+    const push = sendPush.mock.calls.find(([, scope]) => scope === OWNER);
+    expect(push).toBeTruthy();
+    expect(push[2].link).toBe("voicedrop://usage");
+    expect(push[2].body).toContain("算力 +");
   });
   it("lowercase clipboard code still resolves (uppercase normalization)", async () => {
     const db = fakeD1(usageSql());
@@ -199,7 +209,24 @@ describe("invite landing page", () => {
     expect(h).toContain("已自动记住舒博的邀请");
     // canonical 链接是干净的 voicedrop.cn/i/<码>（经反代时）
     expect(h).toContain(`https://voicedrop.cn/i/${OWNER_CODE}`);
-    // IP 指纹已排队写入
+    // 归因三件套都在页面里：第一方 beacon / execCommand 剪贴板兜底 / 微信引导蒙层
+    expect(h).toContain("/agent/referral/hit");
+    expect(h).toContain("execCommand");
+    expect(h).toContain("wx-mask");
+    // ⚠️ 反代访问（带 x-forwarded-host）：服务端不写 IP 指纹——CF-Connecting-IP
+    // 是代理出口 IP（垃圾），真实 IP 由页面 beacon 直连 /agent/referral/hit 补。
+    await Promise.all(c._tasks);
+    const hits = await c._env.FILES.list({ prefix: "refhits/" });
+    expect(hits.objects.length).toBe(0);
+  });
+  it("direct (un-proxied) visit still writes the server-side refhit", async () => {
+    const c = ctx(OWNER_CODE, {
+      [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),
+    });
+    c.request = new Request(`https://jianshuo.dev/voicedrop/i/${OWNER_CODE}`, {
+      headers: { "CF-Connecting-IP": "8.8.4.4" },   // 无 x-forwarded-host = 直连
+    });
+    await invitePage(c);
     await Promise.all(c._tasks);
     const hits = await c._env.FILES.list({ prefix: "refhits/" });
     expect(hits.objects.length).toBe(1);
@@ -237,5 +264,43 @@ describe("invite landing page", () => {
   it("escapes a hostile inviter name", () => {
     const h = invitePageHtml({ name: '<script>alert(1)</script>', title: "t", og: { url: "u" }, rate: null, cfg: { enabled: false } });
     expect(h).not.toContain("<script>alert");
+  });
+});
+
+// POST /agent/referral/hit — 落地页第一方 beacon（反代下唯一拿得到真实访客 IP 的路径）。
+describe("POST /agent/referral/hit", () => {
+  function hitReq(body, ip = "7.7.7.7") {
+    return new Request("https://jianshuo.dev/agent/referral/hit", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": ip },
+      body,
+    });
+  }
+  it("invite code → 204 and a refhit keyed to the REQUEST ip (not any proxy)", async () => {
+    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER }));
+    const r = await handleReferralRoutes(URL_HIT, hitReq(OWNER_CODE), env);
+    expect(r.status).toBe(204);
+    const hits = await env.FILES.list({ prefix: "refhits/" });
+    expect(hits.objects.length).toBe(1);
+    const rec = JSON.parse(await (await env.FILES.get(hits.objects[0].key)).text());
+    expect(rec.owner).toBe(OWNER);
+    expect(rec.token).toBe(OWNER_CODE);
+  });
+  it("article share id works too (both landing pages share the beacon)", async () => {
+    await env.FILES.put("shares/AbCdEf1234", `${OWNER}articles/a1.json`);
+    const r = await handleReferralRoutes(URL_HIT, hitReq("AbCdEf1234"), env);
+    expect(r.status).toBe(204);
+    expect((await env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(1);
+  });
+  it("unknown / garbage token → 204, nothing written (no probe signal)", async () => {
+    expect((await handleReferralRoutes(URL_HIT, hitReq("ZZZZZZ"), env)).status).toBe(204);
+    expect((await handleReferralRoutes(URL_HIT, hitReq("<xss>!!"), env)).status).toBe(204);
+    expect((await env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(0);
+  });
+  it("missing IP header → 204, nothing written", async () => {
+    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER }));
+    const req = new Request("https://jianshuo.dev/agent/referral/hit", { method: "POST", body: OWNER_CODE });
+    expect((await handleReferralRoutes(URL_HIT, req, env)).status).toBe(204);
+    expect((await env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(0);
   });
 });

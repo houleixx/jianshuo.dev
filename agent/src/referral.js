@@ -6,8 +6,9 @@
 // 设计 spec：voicedrop repo docs/superpowers/specs/2026-07-09-referral-rewards-design.md
 import { verifySession, anonScopeFromToken, bearerToken, sha256hex } from "../../functions/lib/auth.js";
 import { isShareId, communityKey } from "../../functions/lib/community-store.js";
-import { lookupRefhit, ipHash } from "../../functions/lib/refhits.js";
+import { lookupRefhit, writeRefhit, ipHash } from "../../functions/lib/refhits.js";
 import { phCapture } from "../../functions/lib/posthog.js";
+import { sendPush } from "./push.js";
 import { grantBucket, ensureAccount } from "./usage_store.js";
 import { deviceCheckGate, deviceCheckMark } from "./devicecheck.js";
 import {
@@ -118,6 +119,21 @@ async function handleInviteLink(request, env) {
 }
 
 export async function handleReferralRoutes(url, request, env, fetcher, ctx) {
+  // POST /agent/referral/hit — 落地页第一方 beacon（无鉴权，body = 邀请码/分享 id）。
+  // voicedrop.cn 落地页经腾讯云反代，Pages 侧 CF-Connecting-IP 恒等于代理出口 IP，
+  // IP 指纹层因此全废（2026-07-16 排查）；访客浏览器直连这里，才拿得到真实 IP。
+  // token 解析不出 owner 就静默丢弃——写不进垃圾，也不给探测者任何信号。
+  if (url.pathname === "/agent/referral/hit" && request.method === "POST") {
+    try {
+      const token = (await request.text()).trim().slice(0, 64);
+      const ip = request.headers.get("CF-Connecting-IP");
+      if (token && ip && env.SESSION_SECRET) {
+        const owner = await ownerFromToken(env, token);
+        if (owner) await writeRefhit(env, ip, env.SESSION_SECRET, owner, token.slice(0, 16), Date.now());
+      }
+    } catch (e) { console.error("[referral] hit failed:", e && e.message); }
+    return new Response(null, { status: 204 });
+  }
   if (url.pathname === "/agent/referral/link" && request.method === "GET") {
     try { return await handleInviteLink(request, env); }
     catch (e) { console.error("[referral] link failed:", e && e.message); return J({ error: "invite-failed" }, 500); }
@@ -219,6 +235,17 @@ export async function handleReferralRoutes(url, request, env, fetcher, ctx) {
     if (cfg.requireDeviceCheck) await deviceCheckMark(env, body.deviceCheckToken, fetcher);
     await publishMintRate(env, env.USAGE, now);
     track("归因成功", { 途径: via, ...(capped ? { 作者侧封顶: true } : {}) });
+
+    // 邀请人侧到账推送（与投喂同款通道）：没有这条，奖励静悄悄进桶，邀请人无感
+    // ——「朋友装了我啥都没看到」的一半原因。sendPush 自带兜底，绝不影响归因主流程。
+    if (q.beneficiaryUY > 0) {
+      await sendPush(env, owner, {
+        title: "邀请成功",
+        body: `你邀请的朋友装好了 VoiceDrop，算力 +${r1(uyToSuanli(q.beneficiaryUY))}`,
+        threadId: "referral",
+        link: "voicedrop://usage",
+      });
+    }
 
     return J({
       attributed: true,

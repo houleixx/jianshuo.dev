@@ -20,15 +20,23 @@ const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
 // R2 config/mint-rate.json）。rate/cfg 读不到或 enabled:false → 只补「。下载」不提奖励。
 // 「下载」点击顺手把本页 URL 写进剪贴板（用户手势，微信内也允许）——App 首启
 // 剪贴板兜底归因（第 3 层）靠它。返回值拼在 footer 文案之后。
-export function ctaHtml(rate, cfg) {
+export function ctaHtml(rate, cfg, id = '') {
   const on = cfg && cfg.enabled !== false && rate && rate.suanliPerCoin > 0;
   // 双边同额（当前 9:9）→「下载和作者各得 X 算力」；不同额时回退双数字句式。
   const equal = on && cfg.newUserCoins === cfg.authorCoins;
   const reward = !on ? ''
     : equal ? `和作者各得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力`
     : `，你约得 ${Math.round(cfg.newUserCoins * rate.suanliPerCoin)} 算力，作者约得 ${Math.round(cfg.authorCoins * rate.suanliPerCoin)} 算力`;
+  // ① 第一方 beacon：浏览器直连 jianshuo.dev 报到——voicedrop.cn 反代吃掉真实 IP，
+  //    IP 指纹只能靠这条（/agent/referral/hit）写。② 下载点击写剪贴板：execCommand
+  //    先行（微信 webview 里 navigator.clipboard 常年不可用），clipboard API 叠双保险。
+  const beacon = id ? `var H='https://jianshuo.dev/agent/referral/hit',C='${esc(id)}';
+try{(navigator.sendBeacon&&navigator.sendBeacon(H,C))||fetch(H,{method:'POST',body:C,mode:'no-cors',keepalive:true})}catch(e){}
+` : '';
   return `。<a id="vd-dl" href="${APP_STORE}">下载</a>${reward}
-<script>document.getElementById('vd-dl').addEventListener('click',function(){
+<script>${beacon}document.getElementById('vd-dl').addEventListener('click',function(){
+try{var t=document.createElement('textarea');t.value=location.href;t.style.cssText='position:fixed;opacity:0';
+document.body.appendChild(t);t.select();t.setSelectionRange(0,99999);document.execCommand('copy');document.body.removeChild(t);}catch(e){}
 try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}})</script>`;
 }
 
@@ -139,10 +147,11 @@ export async function onRequest(context) {
   };
 
   // 邀请归因：记录本次访问的 IP 指纹（归因第 2 层，refhits/，R2 lifecycle 2 天）。
-  // 不阻塞渲染；缺 SESSION_SECRET / IP 时静默跳过。
+  // 只在直连时服务端写——voicedrop.cn 反代下 CF-Connecting-IP 是代理出口 IP（垃圾），
+  // 反代流量由 ctaHtml 里的第一方 beacon 补真实 IP。缺 SESSION_SECRET / IP 时静默跳过。
   const shareOwner = (key.match(/^(users\/[^/]+\/)/) || [])[1];
   const visitorIP = context.request.headers?.get?.('CF-Connecting-IP');
-  if (shareOwner && visitorIP && env.SESSION_SECRET && context.waitUntil) {
+  if (!fwdHost && shareOwner && visitorIP && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(
       writeRefhit({ FILES: env.FILES }, visitorIP, env.SESSION_SECRET, shareOwner, id, Date.now())
         .catch(() => {}));
@@ -151,7 +160,7 @@ export async function onRequest(context) {
   let rate = null, refCfg = null;
   try { const o = await env.FILES.get('config/mint-rate.json'); if (o) rate = JSON.parse(await o.text()); } catch {}
   try { const o = await env.FILES.get('config/referral.json'); if (o) refCfg = JSON.parse(await o.text()); } catch {}
-  const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 });
+  const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 }, id);
 
   return html(page(title, bodyHtml, og, cta), 200, true);
 }
@@ -171,9 +180,10 @@ async function promptSharePage(context, env, id, ptr, code = id) {
   const og = { description: plainExcerpt(instruction, 120), url: fwdHost ? `${origin}/${id}` : request.url, image: '' };
 
   // 邀请归因 + 下载 CTA：与文章分享页同款（作者分享指令同样是引流）。
+  // 同款反代规则：只在直连时服务端写指纹，反代流量走 ctaHtml 的第一方 beacon。
   const shareOwner = ptr.sub ? `users/${ptr.sub}/` : null;
   const visitorIP = request.headers?.get?.('CF-Connecting-IP');
-  if (shareOwner && visitorIP && env.SESSION_SECRET && context.waitUntil) {
+  if (!fwdHost && shareOwner && visitorIP && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(
       writeRefhit({ FILES: env.FILES }, visitorIP, env.SESSION_SECRET, shareOwner, id, Date.now())
         .catch(() => {}));
@@ -181,7 +191,7 @@ async function promptSharePage(context, env, id, ptr, code = id) {
   let rate = null, refCfg = null;
   try { const o = await env.FILES.get('config/mint-rate.json'); if (o) rate = JSON.parse(await o.text()); } catch {}
   try { const o = await env.FILES.get('config/referral.json'); if (o) refCfg = JSON.parse(await o.text()); } catch {}
-  const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 });
+  const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 }, id);
 
   return html(page(label, promptShareHtml(label, code, instruction), og, cta), 200, true);
 }

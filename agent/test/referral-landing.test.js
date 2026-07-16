@@ -26,4 +26,13 @@ describe("ctaHtml", () => {
   it("clipboard write present in all states", () => {
     expect(ctaHtml(null, { enabled: false })).toContain("navigator.clipboard");
   });
+  it("execCommand 剪贴板兜底（微信 webview 里 navigator.clipboard 常不可用）", () => {
+    expect(ctaHtml(null, { enabled: false })).toContain("execCommand");
+  });
+  it("带 id 时内联第一方 beacon（反代下真实 IP 只能靠它）；不带 id 不内联", () => {
+    const withId = ctaHtml({ suanliPerCoin: 200 }, { authorCoins: 9, newUserCoins: 9, enabled: true }, "Ab3xK9_p2Q");
+    expect(withId).toContain("/agent/referral/hit");
+    expect(withId).toContain("Ab3xK9_p2Q");
+    expect(ctaHtml(null, { enabled: false })).not.toContain("/agent/referral/hit");
+  });
 });
