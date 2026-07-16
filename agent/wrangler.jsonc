@@ -21,6 +21,7 @@
     { "binding": "FILES", "bucket_name": "jianshuo-dev-files" }
   ],
 
+  "vars": { "POSTHOG_API_KEY": "phc_AVV3HDTbbLqKXzZeEWw6Y6WYAqiKTz9h6Hc6guqYVMPX" },
   "d1_databases": [
     { "binding": "USAGE", "database_name": "voicedrop-usage", "database_id": "317b7cd5-e926-49f0-a6c9-497e4740aea8" },
     // 社区展示索引：与 voicedrop-reco worker / jianshuo.dev Pages 同一个 D1 库
