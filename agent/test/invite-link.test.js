@@ -209,6 +209,9 @@ describe("invite landing page", () => {
     expect(h).toContain("已自动记住舒博的邀请");
     // canonical 链接是干净的 voicedrop.cn/i/<码>（经反代时）
     expect(h).toContain(`https://voicedrop.cn/i/${OWNER_CODE}`);
+    // 分享卡片有图：og:image / image_src 指向 logo（微信卡片不再是空图标）
+    expect(h).toContain('<meta property="og:image" content="https://voicedrop.cn/icon-512.png"/>');
+    expect(h).toContain('<link rel="image_src" href="https://voicedrop.cn/icon-512.png"/>');
     // 归因三件套都在页面里：第一方 beacon / execCommand 剪贴板兜底 / 微信引导蒙层
     expect(h).toContain("/agent/referral/hit");
     expect(h).toContain("execCommand");
@@ -226,7 +229,9 @@ describe("invite landing page", () => {
     c.request = new Request(`https://jianshuo.dev/voicedrop/i/${OWNER_CODE}`, {
       headers: { "CF-Connecting-IP": "8.8.4.4" },   // 无 x-forwarded-host = 直连
     });
-    await invitePage(c);
+    const r = await invitePage(c);
+    // 直连域的卡片图走 /voicedrop/ 前缀
+    expect(await r.text()).toContain('og:image" content="https://jianshuo.dev/voicedrop/icon-512.png"');
     await Promise.all(c._tasks);
     const hits = await c._env.FILES.list({ prefix: "refhits/" });
     expect(hits.objects.length).toBe(1);

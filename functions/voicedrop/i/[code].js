@@ -62,7 +62,10 @@ export async function onRequest(context) {
   const origin = fwdHost ? `https://${fwdHost}` : new URL(request.url).origin;
   const pageUrl = fwdHost ? `${origin}/i/${code}` : request.url;
   const title = name ? `${name} 邀请你用 VoiceDrop` : "邀请你用 VoiceDrop";
-  const og = { description: "动动嘴，就能写出好文章。说一段话，VoiceDrop 用你的语气整理成一篇能发的文章。", url: pageUrl, image: "" };
+  // 分享卡片图 = App logo（绝对 URL，微信爬虫认 og:image / image_src；反代域和
+  // 直连域路径不同：voicedrop.cn/* → pages /voicedrop/*）。
+  const logo = fwdHost ? `${origin}/icon-512.png` : `${origin}/voicedrop/icon-512.png`;
+  const og = { description: "动动嘴，就能写出好文章。说一段话，VoiceDrop 用你的语气整理成一篇能发的文章。", url: pageUrl, image: logo };
 
   return new Response(invitePageHtml({ name, title, og, rate, cfg, code }), {
     status: 200,
