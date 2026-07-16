@@ -69,7 +69,26 @@ export async function onRequest(context) {
       if (await env.FILES.head(reportKey(id))) {
         return html(page('已不可用', '<p class="muted">这篇分享已被移除。</p>'), 404);
       }
-      try { key = JSON.parse(await cm.text()).articleKey || null; } catch { /* fallthrough */ }
+      try {
+        const post = JSON.parse(await cm.text());
+        // 提示词帖（kind=prompt）没有 articleKey，内容在 shares/<promptCode> 写穿
+        // 副本里——在帖子 URL 上原地渲染指令页（URL 不变，微信爬虫抓 og 更稳）。
+        // 页面展示/口播的分享码用 7 位码；shares 副本已消失（同生同死被关）→
+        // 与纯数字码查无同款「分享已停止」。
+        if (post && post.kind === 'prompt' && post.promptCode) {
+          const m = await env.FILES.get(`shares/${post.promptCode}`);
+          if (m) {
+            try {
+              const ptr = JSON.parse(await m.text());
+              if (ptr && ptr.type === 'prompt' && typeof ptr.instruction === 'string') {
+                return promptSharePage(context, env, id, ptr, String(post.promptCode));
+              }
+            } catch { /* 副本损坏 → 按已停止处理 */ }
+          }
+          return html(page('分享已停止', '<p class="muted">这条分享已被作者停止，或者链接不存在。</p>'), 404);
+        }
+        key = post.articleKey || null;
+      } catch { /* fallthrough */ }
     }
   }
   if (!key || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) return context.next();
@@ -140,7 +159,9 @@ export async function onRequest(context) {
 // ── 指令分享落地页（魔法数字）────────────────────────────────────────────────
 // spec: voicedrop repo docs/superpowers/specs/2026-07-11-prompt-share-magic-number-design.md
 // 「怎么用 / 怎么收藏」是这里的渲染期模板，不入存储、不进语音兑换的注入文本。
-async function promptSharePage(context, env, id, ptr) {
+// `code` = 页面上展示/口播的 7 位分享码；社区帖入口传 promptCode（id 是 12 位帖
+// id，只做规范链接），7 位码直接访问时两者相同。
+async function promptSharePage(context, env, id, ptr, code = id) {
   const { request } = context;
   const label = String(ptr.label || '分享提示词');
   const instruction = String(ptr.instruction || '');
@@ -162,7 +183,7 @@ async function promptSharePage(context, env, id, ptr) {
   try { const o = await env.FILES.get('config/referral.json'); if (o) refCfg = JSON.parse(await o.text()); } catch {}
   const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 });
 
-  return html(page(label, promptShareHtml(label, id, instruction), og, cta), 200, true);
+  return html(page(label, promptShareHtml(label, code, instruction), og, cta), 200, true);
 }
 
 export function promptShareHtml(label, code, instruction) {

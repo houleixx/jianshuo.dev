@@ -52,6 +52,49 @@ describe("GET /voicedrop/<code> (prompt share)", () => {
     expect(res.status).toBe(404);
     expect(await res.text()).toContain("分享已停止");
   });
+  it("prompt 社区帖（kind=prompt, 有 promptCode 无 articleKey）原地渲染指令页", async () => {
+    const env = fakeEnv({
+      "community/6PSHBnpL8F3s.json": JSON.stringify({
+        schema: 2, shareId: "6PSHBnpL8F3s", owner: "users/anon-owner111/",
+        kind: "prompt", promptCode: "4563566", author: "作者甲", firstSharedAt: 1,
+      }),
+      "shares/4563566": PROMPT_DOC,
+    });
+    const res = await onRequest(ctx("6PSHBnpL8F3s", env));
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("更毒舌");
+    expect(body).toContain("把它改得更毒舌，观点不变。");
+    // 页面上展示/口播的分享码必须是 7 位码，不是 12 位社区帖 id
+    expect(body).toContain('class="vd-code"');
+    expect(body).toContain("4563566");
+    expect(body).not.toContain(">6PSHBnpL8F3s<");
+    expect(body).toContain("怎么用");
+  });
+  it("被举报下架的 prompt 社区帖 → 已不可用 404（Apple 1.2，不因 shares 副本仍在而漏出）", async () => {
+    const env = fakeEnv({
+      "community/6PSHBnpL8F3s.json": JSON.stringify({
+        schema: 2, shareId: "6PSHBnpL8F3s", owner: "users/anon-owner111/",
+        kind: "prompt", promptCode: "4563566",
+      }),
+      "community/reports/6PSHBnpL8F3s.json": JSON.stringify({ reported: true }),
+      "shares/4563566": PROMPT_DOC,
+    });
+    const res = await onRequest(ctx("6PSHBnpL8F3s", env));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain("已不可用");
+  });
+  it("prompt 社区帖的 shares 副本已消失（码被关闭）→ 分享已停止 404", async () => {
+    const env = fakeEnv({
+      "community/6PSHBnpL8F3s.json": JSON.stringify({
+        schema: 2, shareId: "6PSHBnpL8F3s", owner: "users/anon-owner111/",
+        kind: "prompt", promptCode: "4563566",
+      }),
+    });
+    const res = await onRequest(ctx("6PSHBnpL8F3s", env));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain("分享已停止");
+  });
   it("legacy article share entries still render as articles", async () => {
     const env = fakeEnv({
       "shares/Ab3xK9_p2Q": "users/u1/articles/x.json",
