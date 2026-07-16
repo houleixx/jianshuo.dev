@@ -193,10 +193,23 @@ async function promptSharePage(context, env, id, ptr, code = id) {
   try { const o = await env.FILES.get('config/referral.json'); if (o) refCfg = JSON.parse(await o.text()); } catch {}
   const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 }, id);
 
-  return html(page(label, promptShareHtml(label, code, instruction), og, cta), 200, true);
+  const host = fwdHost || new URL(request.url).hostname;
+  return html(page(label, promptShareHtml(label, code, instruction, host), og, cta), 200, true);
 }
 
-export function promptShareHtml(label, code, instruction) {
+// 「收进工具箱」按钮必须是 https universal link 才能拉起 App（voicedrop:// scheme 在
+// 微信 webview 里被整个吞掉，点了没反应）。但 universal link 在同域页内点击不触发
+// （Safari 规则，见 docs/superpowers/plans/2026-07-09-universal-links.md），所以指向
+// 「对面」的 applinks 域名：voicedrop.cn 页 → jianshuo.dev/voicedrop/<码>，其余 →
+// voicedrop.cn/<码>。装了 App 跨域点击直接进导入 sheet（AppRouter 两个域名的 7 位码
+// 都认）；没装则落到对面域名的同一张分享页，不死链。
+function importHref(code, host) {
+  return /(^|\.)voicedrop\.cn$/i.test(host)
+    ? `https://jianshuo.dev/voicedrop/${esc(code)}`
+    : `https://voicedrop.cn/${esc(code)}`;
+}
+
+export function promptShareHtml(label, code, instruction, host = '') {
   const note = instruction.includes('{{')
     ? '<p class="muted" style="font-size:.85rem">花括号（如 {{LINE}}、{{QUOTE}}）是占位符，代表你操作时选中的那一行或那张图，AI 会自动对上。</p>'
     : '';
@@ -206,8 +219,8 @@ export function promptShareHtml(label, code, instruction) {
 <div class="vd-code">${esc(code)}</div>
 <div class="vd-prompt">${mdToHtml(instruction)}</div>
 ${note}
-<a class="vd-import" href="voicedrop://prompt/${esc(code)}">一键收进我的工具箱</a>
-<p class="muted vd-import-note">装了 VoiceDrop 会直接打开导入页；还没装？<a href="${APP_STORE}">先下载</a>，回来再点一次。</p>
+<a class="vd-import" href="${importHref(code, host)}">一键收进我的工具箱</a>
+<p class="muted vd-import-note">装了 VoiceDrop 会直接打开导入页；还没装？<a href="${APP_STORE}">先下载</a>，回来再点一次。微信里点不动？点右上角 ⋯ 选「在 Safari 中打开」。</p>
 <h2>怎么用</h2>
 <ol>
 <li>打开 VoiceDrop，进入任意一篇文章，<strong>长按屏幕按住说话</strong>，说：「用 ${esc(code)} 改这段」——AI 会按上面这条提示词干活。只管这一次，不会改动你自己的任何设置。</li>

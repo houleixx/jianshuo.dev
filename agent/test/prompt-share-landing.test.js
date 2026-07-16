@@ -28,12 +28,18 @@ describe("promptShareHtml", () => {
     expect(h).toContain("设置 → 提示词");
     expect(h).not.toContain("占位符");
   });
-  it("一键收进工具箱按钮：voicedrop://prompt/<码> scheme 深链", () => {
-    const h = promptShareHtml("更毒舌", "4563566", "把它改得更毒舌。");
-    expect(h).toContain('class="vd-import"');
-    expect(h).toContain('href="voicedrop://prompt/4563566"');
-    expect(h).toContain("一键收进我的工具箱");
-    expect(h).toContain("先下载");   // 没装 App 的兜底引导
+  it("一键收进工具箱按钮：https universal link，指向对面 applinks 域名（同域点击不触发）", () => {
+    // voicedrop.cn 上的页 → 按钮指 jianshuo.dev/voicedrop/<码>
+    const onVd = promptShareHtml("更毒舌", "4563566", "把它改得更毒舌。", "voicedrop.cn");
+    expect(onVd).toContain('href="https://jianshuo.dev/voicedrop/4563566"');
+    // jianshuo.dev（或未知 host）上的页 → 按钮指 voicedrop.cn/<码>
+    const onJd = promptShareHtml("更毒舌", "4563566", "把它改得更毒舌。", "jianshuo.dev");
+    expect(onJd).toContain('href="https://voicedrop.cn/4563566"');
+    expect(onJd).toContain('class="vd-import"');
+    expect(onJd).toContain("一键收进我的工具箱");
+    expect(onJd).toContain("先下载");   // 没装 App 的兜底引导
+    expect(onJd).toContain("在 Safari 中打开");   // 微信内引导
+    expect(onJd).not.toContain("voicedrop://");   // scheme 深链已废弃（微信里点了没反应）
   });
   it("adds the placeholder note only when the instruction has {{…}}", () => {
     const h = promptShareHtml("更简洁", "4563566", "把第{{LINE}}行改简洁。");
