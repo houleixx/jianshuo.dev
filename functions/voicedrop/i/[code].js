@@ -32,7 +32,11 @@ export async function onRequest(context) {
   // CF-Connecting-IP 是代理出口 IP，写了也是垃圾；反代流量由页面里的第一方
   // beacon（浏览器直连 /agent/referral/hit）补真实 IP。
   const fwdHost = request.headers?.get?.("x-forwarded-host");
-  const ip = request.headers?.get?.("CF-Connecting-IP");
+  // 真实访客 IP：voicedrop.cn 反代下 CF-Connecting-IP 恒为腾讯云出口 IP（PostHog 里
+  // 「怎么都是同一个人」的根因），Caddy 一直把真实 IP 放在 X-Real-IP 转过来
+  // （infra/voicedrop-cn Caddyfile header_up）。只用于打点 distinct_id——refhits
+  // 归因照旧走浏览器直连 beacon：X-Real-IP 直打 pages.dev 可伪造，不进给钱的路径。
+  const ip = (fwdHost && request.headers?.get?.("X-Real-IP")) || request.headers?.get?.("CF-Connecting-IP");
   const visitorId = ip && env.SESSION_SECRET ? await ipHash(ip, env.SESSION_SECRET) : `anon-${code}`;
   if (!fwdHost && ip && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(
@@ -69,7 +73,9 @@ export async function onRequest(context) {
 
   return new Response(invitePageHtml({ name, title, og, rate, cfg, code }), {
     status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300" },
+    // x-vd-vid = 打点 distinct_id（不透明哈希）：curl -I 即可核对反代有没有把真实
+    // IP 带到（不同出口 IP 应得到不同值），排查「PostHog 里都是同一个人」用。
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=300", "x-vd-vid": visitorId },
   });
 }
 

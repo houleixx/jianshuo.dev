@@ -7,6 +7,7 @@ import { fakeD1, usageSql, fakeEnv } from "./fakes.js";
 vi.mock("../src/push.js", () => ({ sendPush: vi.fn(async () => true) }));
 import { sendPush } from "../src/push.js";
 import { handleReferralRoutes, inviteCodeForScope } from "../src/referral.js";
+import { ipHash } from "../../functions/lib/refhits.js";
 import { rewardCopy, invitePageHtml, onRequest as invitePage } from "../../functions/voicedrop/i/[code].js";
 
 const SECRET = "test-secret";
@@ -187,6 +188,31 @@ describe("invite landing page", () => {
     const ph = calls.find((x) => x.url.includes("posthog"));
     expect(ph.body.event).toBe("邀请下载点击");
     expect(ph.body.properties["平台"]).toBe("ios");
+    spy.mockRestore();
+  });
+
+  it("反代访问的打点 distinct_id 用 X-Real-IP（真实访客），不用代理出口 IP", async () => {
+    const calls = [];
+    const spy = (await import("vitest")).vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      calls.push({ url: String(url), body: init && init.body ? JSON.parse(init.body) : null });
+      return new Response("", { status: 200 });
+    });
+    const c = ctx(OWNER_CODE, {
+      [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),
+    });
+    c.env.POSTHOG_API_KEY = "phc_test";
+    // 反代形态：CF-Connecting-IP = 腾讯云出口（所有访客同值），真实 IP 在 X-Real-IP
+    c.request = new Request(`https://jianshuo.dev/voicedrop/i/${OWNER_CODE}`, {
+      headers: { "CF-Connecting-IP": "8.8.4.4", "x-forwarded-host": "voicedrop.cn", "X-Real-IP": "1.2.3.4" },
+    });
+    const r = await invitePage(c);
+    await Promise.all(c._tasks);
+    const ph = calls.find((x) => x.url.includes("posthog"));
+    expect(ph.body.distinct_id).toBe(await ipHash("1.2.3.4", SECRET));
+    // 响应头带同一不透明 id，线上 curl -I 可核对
+    expect(r.headers.get("x-vd-vid")).toBe(ph.body.distinct_id);
+    // 反代下服务端仍不写 refhits（X-Real-IP 可伪造，归因层只认 beacon）
+    expect((await c._env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(0);
     spy.mockRestore();
   });
 
