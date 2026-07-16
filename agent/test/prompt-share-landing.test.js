@@ -28,6 +28,13 @@ describe("promptShareHtml", () => {
     expect(h).toContain("设置 → 提示词");
     expect(h).not.toContain("占位符");
   });
+  it("一键收进工具箱按钮：voicedrop://prompt/<码> scheme 深链", () => {
+    const h = promptShareHtml("更毒舌", "4563566", "把它改得更毒舌。");
+    expect(h).toContain('class="vd-import"');
+    expect(h).toContain('href="voicedrop://prompt/4563566"');
+    expect(h).toContain("一键收进我的工具箱");
+    expect(h).toContain("先下载");   // 没装 App 的兜底引导
+  });
   it("adds the placeholder note only when the instruction has {{…}}", () => {
     const h = promptShareHtml("更简洁", "4563566", "把第{{LINE}}行改简洁。");
     expect(h).toContain("占位符");

@@ -196,6 +196,8 @@ export function promptShareHtml(label, code, instruction) {
 <div class="vd-code">${esc(code)}</div>
 <div class="vd-prompt">${mdToHtml(instruction)}</div>
 ${note}
+<a class="vd-import" href="voicedrop://prompt/${esc(code)}">一键收进我的工具箱</a>
+<p class="muted vd-import-note">装了 VoiceDrop 会直接打开导入页；还没装？<a href="${APP_STORE}">先下载</a>，回来再点一次。</p>
 <h2>怎么用</h2>
 <ol>
 <li>打开 VoiceDrop，进入任意一篇文章，<strong>长按屏幕按住说话</strong>，说：「用 ${esc(code)} 改这段」——AI 会按上面这条提示词干活。只管这一次，不会改动你自己的任何设置。</li>
@@ -376,6 +378,9 @@ hr{border:none;border-top:1px solid #e6e3dd;margin:2.4rem 0}
 .vd-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:2.4rem;font-weight:700;letter-spacing:.3em;text-align:center;margin:1.2rem 0 1.6rem;text-indent:.3em}
 .vd-prompt{background:#f1efe9;border-radius:12px;padding:14px 16px;margin:0 0 1.05rem}
 .vd-prompt p:last-child{margin-bottom:0}
+.vd-import{display:block;text-align:center;background:#1d1d1f;color:#faf9f7;text-decoration:none;
+  font-weight:650;border-radius:12px;padding:13px 16px;margin:0 0 .5rem}
+.vd-import-note{text-align:center;font-size:.85rem;margin-bottom:1.4rem}
 .muted{color:#86868b}
 footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid #ececec;
   color:#a1a1a6;font-size:.82rem}
