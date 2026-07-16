@@ -6,7 +6,8 @@
 // 设计 spec：voicedrop repo docs/superpowers/specs/2026-07-09-referral-rewards-design.md
 import { verifySession, anonScopeFromToken, bearerToken, sha256hex } from "../../functions/lib/auth.js";
 import { isShareId, communityKey } from "../../functions/lib/community-store.js";
-import { lookupRefhit } from "../../functions/lib/refhits.js";
+import { lookupRefhit, ipHash } from "../../functions/lib/refhits.js";
+import { phCapture } from "../../functions/lib/posthog.js";
 import { grantBucket, ensureAccount } from "./usage_store.js";
 import { deviceCheckGate, deviceCheckMark } from "./devicecheck.js";
 import {
@@ -116,7 +117,7 @@ async function handleInviteLink(request, env) {
   });
 }
 
-export async function handleReferralRoutes(url, request, env, fetcher) {
+export async function handleReferralRoutes(url, request, env, fetcher, ctx) {
   if (url.pathname === "/agent/referral/link" && request.method === "GET") {
     try { return await handleInviteLink(request, env); }
     catch (e) { console.error("[referral] link failed:", e && e.message); return J({ error: "invite-failed" }, 500); }
@@ -131,21 +132,35 @@ export async function handleReferralRoutes(url, request, env, fetcher) {
     if (!scope) scope = await anonScopeFromToken(tok);
     if (!scope) return J({ error: "unauthorized" }, 401);
 
-    const cfg = await loadReferralConfig(env);
-    if (!cfg.enabled) return no("disabled");
-
     const body = await request.json().catch(() => ({}));
     const now = Date.now();
+
+    // 漏斗打点（claim 到达 + 结果分布）：distinct_id = 新账号 sub；ip_hash 与
+    // 邀请落地页访问事件同一 HMAC 哈希，PostHog 里靠它把「访问→claim」串成漏斗。
+    // 只送元数据；best-effort，绝不打断归因主路径。
+    const iph = env.SESSION_SECRET ? await ipHash(request.headers.get("CF-Connecting-IP"), env.SESSION_SECRET) : null;
+    const track = (result, extra = {}) => {
+      const p = phCapture(env, "邀请claim", scope.slice("users/".length, -1), {
+        结果: result, 来源: String(body.source || "hello"),
+        ...(iph ? { ip_hash: iph } : {}), ...extra,
+      });
+      if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(p);
+      return p;
+    };
+    const deny = (reason) => { track(reason); return no(reason); };
+
+    const cfg = await loadReferralConfig(env);
+    if (!cfg.enabled) return deny("disabled");
 
     // 判新：account.created_at（服务端出生时间；首次 claim 即出生，不信客户端）。
     await ensureAccount(env.USAGE, scope, now);
     const acct = await env.USAGE.prepare("SELECT created_at FROM account WHERE user_sub=?").bind(scope).first();
-    if (!acct || now - acct.created_at > DAY_MS) return no("not-new");
+    if (!acct || now - acct.created_at > DAY_MS) return deny("not-new");
 
     // 已归因过 → 幂等返回（不看 source，first-touch 终身封笔）。
     const prior = await env.USAGE.prepare(
       "SELECT id FROM mint WHERE kind='referral' AND subject_key=?").bind(scope).first();
-    if (prior) return J({ attributed: true, already: true });
+    if (prior) { track("already"); return J({ attributed: true, already: true }); }
 
     // 归因：token（link/clipboard）优先，否则 hello 走 IP 指纹（唯一 owner 才算）。
     let owner = null, via = String(body.source || "hello");
@@ -155,21 +170,21 @@ export async function handleReferralRoutes(url, request, env, fetcher) {
       const hit = env.SESSION_SECRET ? await lookupRefhit(env, ip, env.SESSION_SECRET, now) : null;
       if (hit) { owner = hit.owner; via = "hello"; }
     }
-    if (!owner) return no("no-match");
-    if (owner === scope) return no("self");
+    if (!owner) return deny("no-match");
+    if (owner === scope) return deny("self");
 
     // DeviceCheck（防删除重装刷币）。require 时拿不到明确「未用过」一律拒。
     if (cfg.requireDeviceCheck) {
       const dc = await deviceCheckGate(env, body.deviceCheckToken, fetcher);
-      if (dc === "used") return no("device-used");
-      if (dc === "unavailable") return no("device-unavailable");
+      if (dc === "used") return deny("device-used");
+      if (dc === "unavailable") return deny("device-unavailable");
     }
 
     // 当日保险丝（与投币同一条线，对抗性超发止损）。
     const day0 = now - (now % DAY_MS);
     const paidToday = (await env.USAGE.prepare(
       "SELECT COALESCE(SUM(actor_uy+beneficiary_uy),0) AS s FROM mint WHERE ts>=?").bind(day0).first()).s;
-    if (paidToday > FUSE_MULT * DAILY_POOL_UY) return no("pool_exhausted");
+    if (paidToday > FUSE_MULT * DAILY_POOL_UY) return deny("pool_exhausted");
 
     // owner 日封顶：超出只发新人侧（对新人公平，作者侧归零防批量刷）。
     const ownerToday = (await env.USAGE.prepare(
@@ -192,7 +207,7 @@ export async function handleReferralRoutes(url, request, env, fetcher) {
       authorUC + newUC, q.priceUY, q.actorUY, q.beneficiaryUY,
       JSON.stringify({ via, ...(capped ? { capped: true } : {}) }), now,
     ).run();
-    if (!ins.meta || ins.meta.changes !== 1) return J({ attributed: true, already: true });
+    if (!ins.meta || ins.meta.changes !== 1) { track("already"); return J({ attributed: true, already: true }); }
     const refId = ins.meta.last_row_id;
 
     const exp = expiryAfterDays(now, CAMPAIGN_EXPIRE_DAYS);
@@ -203,6 +218,7 @@ export async function handleReferralRoutes(url, request, env, fetcher) {
 
     if (cfg.requireDeviceCheck) await deviceCheckMark(env, body.deviceCheckToken, fetcher);
     await publishMintRate(env, env.USAGE, now);
+    track("归因成功", { 途径: via, ...(capped ? { 作者侧封顶: true } : {}) });
 
     return J({
       attributed: true,

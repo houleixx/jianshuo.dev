@@ -158,6 +158,28 @@ describe("invite landing page", () => {
     };
   }
 
+  it("?c=1 下载点击 beacon → 204 + PostHog 打点（有 key 时）；页面含 beacon 钩子", async () => {
+    const calls = [];
+    const spy = (await import("vitest")).vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      calls.push({ url: String(url), body: init && init.body ? JSON.parse(init.body) : null });
+      return new Response("", { status: 200 });
+    });
+    const c = ctx(OWNER_CODE, {
+      [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),
+    });
+    c.env.POSTHOG_API_KEY = "phc_test";
+    c.request = new Request(`https://jianshuo.dev/voicedrop/i/${OWNER_CODE}?c=1`, {
+      headers: { "CF-Connecting-IP": "8.8.4.4", "user-agent": "iPhone" },
+    });
+    const r = await invitePage(c);
+    expect(r.status).toBe(204);
+    await Promise.all(c._tasks);
+    const ph = calls.find((x) => x.url.includes("posthog"));
+    expect(ph.body.event).toBe("邀请下载点击");
+    expect(ph.body.properties["平台"]).toBe("ios");
+    spy.mockRestore();
+  });
+
   it("renders the inviter name, hero, download buttons and clipboard hook", async () => {
     const c = ctx(OWNER_CODE, {
       [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),

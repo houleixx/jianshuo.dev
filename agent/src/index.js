@@ -1436,7 +1436,7 @@ export default {
     { const r = await handleMintRoutes(url, request, env); if (r) return r; }
 
     // 邀请奖励（新装归因 + 双边铸币入账）—— src/referral.js
-    { const r = await handleReferralRoutes(url, request, env); if (r) return r; }
+    { const r = await handleReferralRoutes(url, request, env, undefined, ctx); if (r) return r; }
 
     // 指令分享码（魔法数字：POST 开分享 / DELETE 关分享）—— src/prompt-share.js
     { const r = await handlePromptShareRoutes(url, request, env, ctx); if (r) return r; }

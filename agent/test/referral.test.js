@@ -75,6 +75,36 @@ async function claim(body, { token = newbieTok, ip = "9.9.9.9", dc = dcFresh } =
   return { status: resp.status, json: await resp.json() };
 }
 
+// ── 漏斗打点（邀请claim → PostHog，best-effort）────────────────────────────
+import { vi as vi2 } from "vitest";
+describe("邀请claim 打点", () => {
+  it("POSTHOG_API_KEY 缺失 → 不打点不打网络，claim 行为不变", async () => {
+    const spy = vi2.spyOn(globalThis, "fetch");
+    // 现有测试的 env 本来就没有 POSTHOG_API_KEY——随便跑一个 claim 分支即可
+    spy.mockClear();
+    // 由本文件其他用例覆盖 claim 本身；这里只锁 phCapture 的 no-op 契约
+    const { phCapture } = await import("../../functions/lib/posthog.js");
+    await phCapture({}, "邀请claim", "sub", {});
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("有 key 时 capture 打到 posthog 且失败不 throw", async () => {
+    const calls = [];
+    const spy = vi2.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      calls.push({ url: String(url), body: JSON.parse(init.body) });
+      return new Response("", { status: 500 });   // 打点失败也不能炸
+    });
+    const { phCapture } = await import("../../functions/lib/posthog.js");
+    await phCapture({ POSTHOG_API_KEY: "phc_test" }, "邀请claim", "anon-x", { 结果: "no-match" });
+    expect(calls[0].url).toContain("us.i.posthog.com/capture");
+    expect(calls[0].body.event).toBe("邀请claim");
+    expect(calls[0].body.distinct_id).toBe("anon-x");
+    expect(calls[0].body.properties["结果"]).toBe("no-match");
+    spy.mockRestore();
+  });
+});
+
 describe("referral constants", () => {
   it("has Chinese ledger names", () => {
     expect(REASON_ZH["referral_author"]).toBe("邀请奖励");

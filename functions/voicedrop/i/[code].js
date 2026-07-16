@@ -7,7 +7,8 @@
 // 下载点击把本页 URL 写进剪贴板（归因第 3 层）。已装用户在 Safari 点链接根本
 // 到不了这里——universal link 直接拉起 App（归因第 1 层）。
 import { metaTags } from "../[token].js";
-import { writeRefhit } from "../../lib/refhits.js";
+import { writeRefhit, ipHash } from "../../lib/refhits.js";
+import { phCapture } from "../../lib/posthog.js";
 
 const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
 const ANDROID_DL = "https://jianshuo.dev/voicedrop/apk/";
@@ -28,11 +29,24 @@ export async function onRequest(context) {
 
   // 归因第 2 层：IP 指纹（与文章分享页同一套 refhits，R2 lifecycle 2 天）。
   const ip = request.headers?.get?.("CF-Connecting-IP");
+  const visitorId = ip && env.SESSION_SECRET ? await ipHash(ip, env.SESSION_SECRET) : `anon-${code}`;
   if (ip && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(
       writeRefhit({ FILES: env.FILES }, ip, env.SESSION_SECRET, inv.owner, code, Date.now())
         .catch(() => {}));
   }
+
+  // 漏斗打点（元数据 only；distinct_id = ipHash，claim 侧带同一 hash 可在 PostHog 里串起漏斗）。
+  const ua = String(request.headers?.get?.("user-agent") || "");
+  const platform = /iPhone|iPad|iPod/i.test(ua) ? "ios" : /Android/i.test(ua) ? "android" : "other";
+  const inWeChat = /MicroMessenger/i.test(ua);
+  const url0 = new URL(request.url);
+  if (url0.searchParams.get("c") === "1") {
+    // 下载点击 beacon（页面 keep() 发的，见 invitePageHtml）：打点后 204，不再渲染整页。
+    if (context.waitUntil) context.waitUntil(phCapture(env, "邀请下载点击", visitorId, { 码: code, 平台: platform, 微信内: inWeChat }));
+    return new Response(null, { status: 204 });
+  }
+  if (context.waitUntil) context.waitUntil(phCapture(env, "邀请落地页访问", visitorId, { 码: code, 平台: platform, 微信内: inWeChat, 邀请人有名: !!name }));
 
   // 奖励数字按访问时刻现价（与文章分享页 CTA 同源）：读不到 → 通用文案。
   let rate = null, cfg = null;
@@ -142,7 +156,8 @@ body{background:#211F1B;color:#fff;min-height:100dvh;display:flex;flex-direction
 // 归因第 3 层：下载点击（用户手势，微信内也允许）把本页 URL 写进剪贴板，
 // App 首启剪贴板兜底读它。顺手按 UA 弱化「不是你这台」的那个下载键。
 (function(){
-  function keep(){try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}}
+  function keep(){try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}
+    try{fetch(location.pathname+"?c=1",{keepalive:true})}catch(e){}}
   var i=document.getElementById('dl-ios'),a=document.getElementById('dl-android');
   i.addEventListener('click',keep);a.addEventListener('click',keep);
   var ua=navigator.userAgent||'';
