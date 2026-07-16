@@ -7,7 +7,7 @@ import { vi, describe, it, expect } from "vitest";
 // Same pattern as paint-callback-route.test.js / mine-sharding.test.js.
 vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
 import { fakeEnv } from "./fakes.js";
-import { hmacSign, b64url } from "../../functions/lib/auth.js";
+import { hmacSign, b64url, anonScopeFromToken } from "../../functions/lib/auth.js";
 import {
   PROMPT_SHARE_DEFAULTS, loadPromptShareConfig, mintCode,
   handlePromptShareRoutes, resolvePromptShare, resolveSharedPromptBlock, refreshPromptShare, shareStates,
@@ -608,6 +608,41 @@ describe("分享即发帖（2026-07-15 提示词社区帖）", () => {
     const r = await handlePromptShareRoutes(new URL(req.url), req, e);
     expect(r.status).toBe(403);
     expect((await r.json()).error).toBe("needs_apple_signin");
+  });
+
+  it("绑过实名的匿名 token（ACCOUNT.json 有 appleSub）→ 铸码/关分享都放行", async () => {
+    const anonTok = "anon_bound_1234567890abcdef";
+    const scope = await anonScopeFromToken(anonTok);
+    const e = makeEnv({ [`${scope}ACCOUNT.json`]: JSON.stringify({ appleSub: "apple-sub-1" }) });
+    const mint = new Request("https://jianshuo.dev/agent/prompt-share", {
+      method: "POST", headers: { Authorization: `Bearer ${anonTok}` },
+      body: JSON.stringify({ id: SYS_ITEM }),
+    });
+    const r1 = await handlePromptShareRoutes(new URL(mint.url), mint, e);
+    expect(r1.status).toBe(200);
+    const j1 = await r1.json();
+    expect(j1.code).toMatch(/^[1-9]\d{6}$/);
+    expect(j1.sharing).toBe(true);
+
+    const off = new Request(`https://jianshuo.dev/agent/prompt-share/${encodeURIComponent(SYS_ITEM)}`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${anonTok}` },
+    });
+    const r2 = await handlePromptShareRoutes(new URL(off.url), off, e);
+    expect(r2.status).toBe(200);
+    expect((await r2.json()).sharing).toBe(false);
+    expect(await e.FILES.get(`shares/${j1.code}`)).toBeNull();
+  });
+
+  it("绑过微信的匿名 token（wechatOpenid）同样放行铸码", async () => {
+    const anonTok = "anon_wxbound_1234567890abcd";
+    const scope = await anonScopeFromToken(anonTok);
+    const e = makeEnv({ [`${scope}ACCOUNT.json`]: JSON.stringify({ wechatOpenid: "wx-openid-1" }) });
+    const req = new Request("https://jianshuo.dev/agent/prompt-share", {
+      method: "POST", headers: { Authorization: `Bearer ${anonTok}` },
+      body: JSON.stringify({ id: SYS_ITEM }),
+    });
+    const r = await handlePromptShareRoutes(new URL(req.url), req, e);
+    expect(r.status).toBe(200);
   });
 
   it("审核拦截：label/正文命中屏蔽词 → 403 content_flagged，不铸码", async () => {

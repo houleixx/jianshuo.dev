@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { onRequest } from "../../functions/files/api/[[path]].js";
 import { fakeEnv, fakeRecoD1 } from "./fakes.js";
-import { b64url, b64urlToString, hmacSign } from "../../functions/lib/auth.js";
+import { b64url, b64urlToString, hmacSign, anonScopeFromToken } from "../../functions/lib/auth.js";
 
 // The VD社区 (community) surface had NO test coverage, yet it carries the most
 // legacy branches in the whole Files API: schema-1 inline posts written by old
@@ -283,6 +283,40 @@ describe("POST community/share — write gate", () => {
     const resp = await onRequest(context);
     expect(resp.status).toBe(403);
     expect((await resp.json()).error).toBe("admin cannot share");
+  });
+
+  it("绑过实名的匿名 token（ACCOUNT.json 有 appleSub）→ 分享放行；unshare 同样", async () => {
+    const token = "anon_" + "b".repeat(28);
+    const scope = await anonScopeFromToken(token);
+    const context = reqCtx("POST", ["community", "share", "articles", "s1.json"], { token });
+    context.env.FILES._store.set(`${scope}ACCOUNT.json`, JSON.stringify({ appleSub: "apple-sub-7" }));
+    context.env.FILES._store.set(`${scope}articles/s1.json`, schema3("匿名但可追责"));
+
+    const expectedId = await shareIdFor(`${scope}articles/s1.json`);
+    const body = await (await onRequest(context)).json();
+    expect(body.ok).toBe(true);
+    expect(body.shareId).toBe(expectedId);
+    const stored = JSON.parse(context.env.FILES._store.get(`community/${expectedId}.json`));
+    expect(stored.owner).toBe(scope);
+
+    const ctx2 = reqCtx("POST", ["community", "unshare", expectedId], { token });
+    ctx2.env.FILES._store.set(`${scope}ACCOUNT.json`, JSON.stringify({ appleSub: "apple-sub-7" }));
+    ctx2.env.FILES._store.set(`community/${expectedId}.json`, JSON.stringify({
+      schema: 2, shareId: expectedId, owner: scope, articleKey: `${scope}articles/s1.json`,
+    }));
+    const resp2 = await onRequest(ctx2);
+    expect(resp2.status).toBe(200);
+    expect(ctx2.env.FILES._store.has(`community/${expectedId}.json`)).toBe(false);
+  });
+
+  it("从未绑定的匿名 token 分享仍 403（门槛只对可追责者开）", async () => {
+    const token = "anon_" + "c".repeat(28);
+    const scope = await anonScopeFromToken(token);
+    const context = reqCtx("POST", ["community", "share", "articles", "s1.json"], { token });
+    context.env.FILES._store.set(`${scope}articles/s1.json`, schema3("裸匿名"));
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(403);
+    expect((await resp.json()).error).toBe("needs_apple_signin");
   });
 
   it("Apple session writes a schema-2 POINTER (no content copy) and returns shareId", async () => {

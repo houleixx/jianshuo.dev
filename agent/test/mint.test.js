@@ -5,7 +5,7 @@ vi.mock("../src/push.js", () => ({ sendPush: vi.fn(async () => true) }));
 import { sendPush } from "../src/push.js";
 import { fakeD1, usageSql, fakeEnv } from "./fakes.js";
 import { handleMintRoutes, feedQuote } from "../src/mint.js";
-import { hmacSign, b64url } from "../../functions/lib/auth.js";
+import { hmacSign, b64url, anonScopeFromToken } from "../../functions/lib/auth.js";
 import { balanceUY, getLedger } from "../src/usage_store.js";
 import {
   SIGNUP_GRANT_UY, DAILY_POOL_UY, FUSE_MULT, POOL_7D_UY, SEED_COINS_UC,
@@ -212,6 +212,17 @@ describe("POST /agent/feed", () => {
     expect((await r1.json()).error).toBe("needs_apple_signin");
     const r2 = await post("/agent/feed", await makeToken(FEEDER, false), { share_id: SHARE1 });
     expect(r2.status).toBe(403);
+  });
+
+  it("绑过实名的匿名 token（ACCOUNT.json 有 appleSub）→ 投币放行，feeder 记匿名 scope", async () => {
+    const anonTok = "anon_feedbound_0123456789ab";
+    const scope = await anonScopeFromToken(anonTok);
+    await env.FILES.put(`${scope}ACCOUNT.json`, JSON.stringify({ appleSub: "apple-sub-9" }));
+    const r = await post("/agent/feed", anonTok, { share_id: SHARE1 });
+    const j = await r.json();
+    expect(j.ok).toBe(true);
+    const row = db.prepare("SELECT * FROM mint").bind().first();
+    expect(row.actor_sub).toBe(scope);
   });
 
   it("share 不存在 → 404；文章已删 → 404", async () => {

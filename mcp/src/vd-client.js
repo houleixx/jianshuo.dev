@@ -63,10 +63,11 @@ export function createClient({ token, fetch: fetchImpl = globalThis.fetch }) {
 // 「发生了什么」和「怎么办」，否则它只会把机器码原样念给用户听。
 const BY_CODE = {
   needs_apple_signin:
-    "这个操作需要 Apple 登录后的身份。匿名 token 不能写社区、不能投币——" +
-    "请在 VoiceDrop App 里用 Apple 登录，然后重新复制 token。",
+    "这个操作需要可追责身份：这个账号还没绑定过 Apple 登录。" +
+    "请在 VoiceDrop App 里用 Apple 登录一次（绑定后同一个 token 直接重试即可，不用换）。",
   needs_wechat_signin:
-    "这个操作需要微信登录后的身份。请在 VoiceDrop App 里用微信登录，然后重新复制 token。",
+    "这个操作需要可追责身份：这个账号还没绑定过微信登录。" +
+    "请在 VoiceDrop App 里用微信登录一次（绑定后同一个 token 直接重试即可，不用换）。",
   content_flagged: "内容被审核规则拦下了，没有发布到社区。",
   wechat_not_configured:
     "这个账号还没配公众号。请在 VoiceDrop App 的设置里填上公众号的 appid 和 secret。",

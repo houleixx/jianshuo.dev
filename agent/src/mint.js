@@ -8,13 +8,14 @@
 //     ledger.detail 带 feed_id 与 mint 行互相对账。
 //   • 价格滞后于总量、支付即时发生：POOL_7D ÷ (70 币永久底座 + 近7天铸币 + 本次)。
 //     底座不滑窗 → 价格永远 ≤ 200 算力/币，冷启动不发散，无需任何结算定时任务。
-//   • 投币需实名 session（Apple 或 WeChat）；匿名 token 返回登录引导
-//     （与社区分享 write gate 同一约定，App 已会弹 Apple 登录再重试）。
+//   • 投币需可追责身份：实名 session（Apple 或 WeChat），或绑过实名的匿名
+//     scope（hasVerifiedBinding，MCP 配对 token 由此放行）；从未绑定的匿名
+//     token 返回登录引导（与社区分享 write gate 同一约定，App 会弹登录再重试）。
 //   • 写入顺序定死：先 INSERT OR IGNORE 抢唯一键，成功才付钱 → 连点/重试/并发
 //     绝无重复付款。极小概率「事件已记、grant 前崩」= 少付一笔，可由
 //     ledger.detail.feed_id 对账补发（与 grantBucket 既有 known-limitation 同级）。
 
-import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
+import { verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../functions/lib/auth.js";
 import { resolveArticles } from "../../functions/lib/article-store.js";
 import { isShareId, communityKey } from "../../functions/lib/community-store.js";
 import { readProfileName } from "../../functions/lib/style-store.js";
@@ -63,13 +64,18 @@ export async function handleMintRoutes(url, request, env) {
   // ── POST /agent/feed {share_id} ── 投币：铸币 + 双边即时到账 ─────────────
   if (url.pathname === "/agent/feed" && request.method === "POST") {
     const sess = env.SESSION_SECRET ? await verifySession(tok, env.SESSION_SECRET) : null;
-    if (!sess || !sess.scope) {
-      // 匿名 token 是有效身份但投币要实名 → 按平台返回登录引导而不是笼统 401
-      if (await anonScopeFromToken(tok)) return J({ error: signinRequiredError(request) }, 403);
-      return J({ error: "unauthorized" }, 401);
+    let feeder;
+    if (sess && sess.scope) {
+      if (!sess.apple && !sess.wechat) return J({ error: signinRequiredError(request) }, 403);
+      feeder = sess.scope;
+    } else {
+      // 匿名 token：绑过实名的 scope（ACCOUNT.json 有 appleSub/wechatOpenid）
+      // 已可追责，放行（MCP 配对 token 走这里）；从未绑定的返回登录引导。
+      const anon = await anonScopeFromToken(tok);
+      if (!anon) return J({ error: "unauthorized" }, 401);
+      if (!(await hasVerifiedBinding(env, anon))) return J({ error: signinRequiredError(request) }, 403);
+      feeder = anon;
     }
-    if (!sess.apple && !sess.wechat) return J({ error: signinRequiredError(request) }, 403);
-    const feeder = sess.scope;
 
     const body = await request.json().catch(() => ({}));
     const shareId = String(body.share_id || "");

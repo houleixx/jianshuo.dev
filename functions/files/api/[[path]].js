@@ -26,7 +26,7 @@ import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionSt
 import { silentM4aBytes } from "../../lib/silent-m4a.js";
 import { shareIdFor, communityKey, reportKey, isShareId } from "../../lib/community-store.js";
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
-import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken } from "../../lib/auth.js";
+import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
 
 // Miner sidecars that live under articles/ and end in .json but are NOT article
@@ -944,10 +944,14 @@ async function handleRequest(context) {
   if (request.method === 'POST' && action === 'community' && sub2 === 'share') {
     if (!scope) return json({ error: 'admin cannot share' }, 403);
     if (!env.SESSION_SECRET) return json({ error: 'server misconfigured' }, 500);
-    // Community write gate: posting to the shared space requires an Apple-verified
-    // identity (accountability). A bare anon/temp token gets 403 needs_apple_signin,
-    // which the app catches -> presents the Apple sheet -> binds -> retries the share.
-    if (!apple && !wechat) return json({ error: signinRequiredError(request) }, 403);
+    // Community write gate: posting to the shared space requires accountability —
+    // a verified session, OR an anon token whose scope has ever bound Apple/WeChat
+    // (ACCOUNT.json, see hasVerifiedBinding; this admits MCP-paired tokens). A
+    // never-bound anon token gets 403 needs_apple_signin, which the app catches
+    // -> presents the sign-in sheet -> binds -> retries the share.
+    if (!apple && !wechat && !(await hasVerifiedBinding(env, scope))) {
+      return json({ error: signinRequiredError(request) }, 403);
+    }
     const articleKey = keyFor(decodeURIComponent(segments.slice(2).join('/')));
     if (!articleKey || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(articleKey)) {
       return json({ error: 'not shareable' }, 400);
@@ -1189,8 +1193,10 @@ async function handleRequest(context) {
   // Un-share (delete) a community post — owner only.
   if (request.method === 'POST' && action === 'community' && sub2 === 'unshare') {
     if (!scope) return json({ error: 'unauthorized' }, 403);
-    // Same Apple-verified gate as share: editing the shared space needs accountability.
-    if (!apple && !wechat) return json({ error: signinRequiredError(request) }, 403);
+    // Same accountability gate as share (verified session or ever-bound anon scope).
+    if (!apple && !wechat && !(await hasVerifiedBinding(env, scope))) {
+      return json({ error: signinRequiredError(request) }, 403);
+    }
     const shareId = segments[2] || '';
     if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
     const key = communityKey(shareId);

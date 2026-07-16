@@ -83,3 +83,21 @@ export async function anonScopeFromToken(token) {
   const id = (await sha256hex(token)).slice(0, 32);
   return `users/anon-${id}/`;
 }
+
+// 「这个 scope 绑过实名身份吗？」——Apple/微信登录会把 appleSub / wechatOpenid /
+// wechatUnionid 写进 ${scope}ACCOUNT.json（files API 的 auth 分支）。社区写门槛
+// （分享/发帖/投币）的目的只是可追责：匿名设备 token 落在一个绑过实名的 scope 上
+// 时，匿名 scope → ACCOUNT.json → Apple/微信 的追责链已经成立，所以放行——
+// 「实名 session」或「绑过实名的匿名 scope」二者取其一（设计定稿 2026-07-16）。
+// 从未绑定过的裸匿名 token 仍然 403，引导登录。
+export async function hasVerifiedBinding(env, scope) {
+  if (!scope || !scope.startsWith("users/") || !env.FILES) return false;
+  try {
+    const obj = await env.FILES.get(`${scope}ACCOUNT.json`);
+    if (!obj) return false;
+    const acct = JSON.parse(await obj.text());
+    return !!(acct.appleSub || acct.wechatOpenid || acct.wechatUnionid);
+  } catch {
+    return false;
+  }
+}
