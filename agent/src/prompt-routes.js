@@ -7,7 +7,7 @@
 // 写操作只有【整树 PUT】：新建/删除/改名/改词/排序/分组/fork 全走它。客户端本来就
 // 整棵树拿在手里，所以不存在局部更新竞态。
 import { loadPromptTemplate } from "./prompt-template.js";
-import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, MAX_LABEL, MAX_PROMPT } from "./prompts.js";
+import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, preserveImportMarkers, MAX_LABEL, MAX_PROMPT } from "./prompts.js";
 import { loadUserPrompts, saveUserPrompts } from "./prompt-store.js";
 import { resolvePromptShare, refreshPromptShare, shareStates, rekeyForkedShares } from "./prompt-share.js";
 
@@ -91,6 +91,11 @@ export async function handlePromptsRoute(request, env, scope, url) {
     if (!body || typeof body !== "object" || Array.isArray(body) || !Array.isArray(body.items)) {
       return J({ error: "expected {items: [...]}" }, 400);
     }
+    // 老客户端没建模 importedFrom，会在整树 PUT 里把导入标记剥掉——按 id 从旧文档
+    // 补回（见 prompts.js#preserveImportMarkers）。补回值出自 IMPORT_CODE_RE 白名单，
+    // 不可能把一份本来合法的 PUT 变成 400，所以放在 validateList 之前是安全的。
+    const prev = await loadUserPrompts(env, scope);
+    if (prev && Array.isArray(prev.items)) preserveImportMarkers(prev.items, body.items);
     const err = validateList(tpl, body.items);
     if (err) return J({ error: err }, 400);
     await saveUserPrompts(env, scope, body.items);
@@ -122,6 +127,21 @@ function newUserId() {
 /// 撞车让路——理论上 2×32 位随机源撞车概率极低，但"理论上极低"不等于"不用处理"：
 /// 撞了就该悄悄重摇一个新 id，而不是让 validateList 的 duplicate id 检查把整次
 /// 导入判成 400（那样用户会遇到一个自己完全没法理解、也无法自己修复的错误）。
+/// 树宽收集全部 action 实体节点（顶层 + group children；ref 不算——它们身上
+/// 不可能有 importedFrom）。返回的是 items 里的原对象引用，调用方可原地打标记。
+function collectEntityActions(items) {
+  const out = [];
+  const visit = (list) => {
+    for (const n of list || []) {
+      if (!n || typeof n !== "object" || Array.isArray(n)) continue;
+      if (Array.isArray(n.children)) visit(n.children);
+      if (!n.ref && n.type === "action") out.push(n);
+    }
+  };
+  visit(items);
+  return out;
+}
+
 function collectEntityIds(items) {
   const ids = new Set();
   const visit = (list) => {
@@ -211,11 +231,38 @@ export async function handlePromptImport(request, env, scope) {
   const label = truncateUtf16(rawLabel.trim() ? rawLabel : "导入的提示词", MAX_LABEL);
   const prompt = truncateUtf16(String(hit.instruction || ""), MAX_PROMPT);
 
+  // ── 幂等：反复收下同一个码，不重复添加（2026-07-16 用户拍板）───────────────
+  // 识别键 = 实体上的 importedFrom（本端点落盘时打上）。存量老副本没有这个标记，
+  // 退一步按内容认领（label+prompt 与本次导入的计算结果完全一致、且自己没有别的
+  // importedFrom）——认领时顺手补上标记，下次直接按码命中。用户删掉那条 = id 从树里
+  // 消失，再导入照常追加（这正是「删了还能再收」的语义）。
+  const entities = collectEntityActions(items);
+  let existing = entities.find((n) => n.importedFrom === code);
+  if (!existing) {
+    const legacy = entities.find((n) => n.importedFrom === undefined && n.label === label && n.prompt === prompt);
+    if (legacy) {
+      legacy.importedFrom = code;
+      // 补标记是锦上添花：清洗过的树 + 白名单格式的码，validateList 理应通过；
+      // 万一不过（存量脏数据的极端形状），放弃落盘也不影响本次「已收下」的判定。
+      if (!validateList(tpl, items)) await saveUserPrompts(env, scope, items);
+      existing = legacy;
+    }
+  }
+  if (existing) {
+    const flat = [];
+    for (const it of resolveList(tpl, { schema: 1, items })) {
+      flat.push(it);
+      if (Array.isArray(it.children)) flat.push(...it.children);
+    }
+    return J({ item: flat.find((i) => i.id === existing.id), already: true });
+  }
+
   const item = {
     id: freshUserId(collectEntityIds(items)), type: "action",
     label, prompt,
     appliesTo: hit.appliesTo,
     ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
+    importedFrom: code,
   };
   items.push(item);
 

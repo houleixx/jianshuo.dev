@@ -22,6 +22,7 @@ function fromEntity(node) {
     out.appliesTo = Array.isArray(node.appliesTo) ? [...node.appliesTo] : node.appliesTo;
     if (node.kind !== undefined) out.kind = node.kind;
     if (node.imageParams !== undefined) out.imageParams = deepCloneParams(node.imageParams);
+    if (node.importedFrom !== undefined) out.importedFrom = node.importedFrom;
   }
   return out;
 }
@@ -111,7 +112,10 @@ const APPLIES = new Set(["text", "image"]);
 // 白名单外的字段一律拒绝——否则任意大小的载荷能从任何一个陌生键名混进存储。
 const REF_ACTION_KEYS = new Set(["ref"]);
 const REF_GROUP_KEYS = new Set(["ref", "children"]);
-const ENTITY_ACTION_KEYS = new Set(["id", "type", "label", "prompt", "appliesTo", "kind", "imageParams", "forkedFrom"]);
+const ENTITY_ACTION_KEYS = new Set(["id", "type", "label", "prompt", "appliesTo", "kind", "imageParams", "forkedFrom", "importedFrom"]);
+// importedFrom = 这条实体当初是从哪个 7 位分享码导入的（导入幂等的识别键：
+// 「收下这条提示词」反复点，同码只落一条）。只在 action 实体上合法。
+export const IMPORT_CODE_RE = /^[1-9][0-9]{6}$/;
 const ENTITY_GROUP_KEYS = new Set(["id", "type", "label", "children", "forkedFrom"]);
 
 /// kind/imageParams 只在字段白名单里对 action 放行——但白名单只挡键名，不挡值，
@@ -234,6 +238,11 @@ function validateListUnsafe(template, items) {
     if (node.kind !== undefined) {
       if (typeof node.kind !== "string" || node.kind.length > MAX_KIND) return `bad kind (want string, max ${MAX_KIND})`;
     }
+    if (node.importedFrom !== undefined) {
+      if (typeof node.importedFrom !== "string" || !IMPORT_CODE_RE.test(node.importedFrom)) {
+        return "bad importedFrom (want 7-digit share code)";
+      }
+    }
     if (node.imageParams !== undefined) {
       const err = validateImageParams(node.imageParams);
       if (err) return err;
@@ -353,6 +362,34 @@ export function sanitizeStoredItems(items, template) {
     out.push(cloned);
   }
   return out;
+}
+
+/// 整树 PUT 的 importedFrom 保全：老客户端（PromptNode 没建模这个字段）整树 PUT
+/// 会把导入标记静默剥掉，导入幂等就此失效——所以 PUT 落盘前按实体 id 从旧文档
+/// 把标记补回来。只补「旧文档有、新文档没带」的（客户端显式删除条目 = id 消失，
+/// 自然不补；将来若有客户端想主动清除标记，得先在这里开口子）。原地修改 newItems。
+export function preserveImportMarkers(oldItems, newItems) {
+  const marks = new Map();
+  const collect = (list) => {
+    for (const n of list || []) {
+      if (isJunkNode(n)) continue;
+      if (!n.ref && typeof n.id === "string" && typeof n.importedFrom === "string"
+          && IMPORT_CODE_RE.test(n.importedFrom)) marks.set(n.id, n.importedFrom);
+      if (Array.isArray(n.children)) collect(n.children);
+    }
+  };
+  collect(oldItems);
+  if (!marks.size) return;
+  const apply = (list) => {
+    for (const n of list || []) {
+      if (isJunkNode(n)) continue;
+      if (!n.ref && n.type === "action" && n.importedFrom === undefined && marks.has(n.id)) {
+        n.importedFrom = marks.get(n.id);
+      }
+      if (Array.isArray(n.children)) apply(n.children);
+    }
+  };
+  apply(newItems);
 }
 
 export function restoreDefaults(template, items) {

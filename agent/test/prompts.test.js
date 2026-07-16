@@ -1392,12 +1392,104 @@ describe("POST /agent/prompts/import — 魔法数字导入（4b）", () => {
     expect((await worker.fetch(new Request("https://jianshuo.dev/agent/prompts/import", { headers: { Authorization: TOKEN } }), env)).status).toBe(405);
   });
 
-  it("导入两次 → 两条独立副本（各自 id 不同）", async () => {
+  // ── 幂等：反复收下不重复添加（2026-07-16 用户拍板，替换掉原「两条独立副本」语义）──
+  it("★ 导入两次同一个码 → 第二次返回同一条（already:true），列表只有一条副本", async () => {
     const env = fakeEnv(seedShare());
-    const a = (await (await IMPORT(env, "4820135")).json()).item;
-    const b = (await (await IMPORT(env, "4820135")).json()).item;
-    expect(a.id).not.toBe(b.id);
-    expect((await (await GET(env)).json()).items.filter((i) => i.origin === "user")).toHaveLength(2);
+    const first = await (await IMPORT(env, "4820135")).json();
+    expect(first.already).toBeUndefined();
+    const second = await (await IMPORT(env, "4820135")).json();
+    expect(second.already).toBe(true);
+    expect(second.item.id).toBe(first.item.id);
+    expect((await (await GET(env)).json()).items.filter((i) => i.origin === "user")).toHaveLength(1);
+  });
+
+  it("重复导入不重复 +importCount", async () => {
+    const env = fakeEnv(seedShare());
+    await IMPORT(env, "4820135");
+    await IMPORT(env, "4820135");
+    expect(JSON.parse(env.FILES._store.get("shares/4820135")).importCount).toBe(129);
+  });
+
+  it("导入的条目落盘带 importedFrom=码，GET 解析结果也透传", async () => {
+    const env = fakeEnv(seedShare());
+    const { item } = await (await IMPORT(env, "4820135")).json();
+    expect(item.importedFrom).toBe("4820135");
+    const stored = JSON.parse(env.FILES._store.get(SCOPE_KEY(env)));
+    const entity = stored.items.find((n) => n.id === item.id);
+    expect(entity.importedFrom).toBe("4820135");
+    const got = await (await GET(env)).json();
+    expect(got.items.find((i) => i.id === item.id).importedFrom).toBe("4820135");
+  });
+
+  it("收下的条目被拖进分组后，再导入同码仍认得（already:true，不追加）", async () => {
+    const env = fakeEnv(seedShare());
+    await PUT(env, [
+      { id: "p_group001", type: "group", label: "我的组", children: [
+        { id: "p_import01", type: "action", label: "改写成播客口播稿",
+          prompt: "把文章改写成口播稿…", appliesTo: ["text"], importedFrom: "4820135" },
+      ] },
+    ]);
+    const res = await (await IMPORT(env, "4820135")).json();
+    expect(res.already).toBe(true);
+    expect(res.item.id).toBe("p_import01");
+    const got = await (await GET(env)).json();
+    expect(got.items).toHaveLength(1);
+  });
+
+  it("用户删掉那条 → 再导入 = 重新追加（不算 already）", async () => {
+    const env = fakeEnv(seedShare());
+    const { item } = await (await IMPORT(env, "4820135")).json();
+    const stored = JSON.parse(env.FILES._store.get(SCOPE_KEY(env)));
+    await PUT(env, stored.items.filter((n) => n.id !== item.id));
+    const second = await (await IMPORT(env, "4820135")).json();
+    expect(second.already).toBeUndefined();
+    expect(second.item.id).not.toBe(item.id);
+  });
+
+  it("存量老副本（无 importedFrom 但 label+prompt 一致）→ 认领为 already 并补上标记，不追加", async () => {
+    const env = fakeEnv(seedShare());
+    await PUT(env, [
+      { id: "p_legacy01", type: "action", label: "改写成播客口播稿",
+        prompt: "把文章改写成口播稿…", appliesTo: ["text"] },
+    ]);
+    const res = await (await IMPORT(env, "4820135")).json();
+    expect(res.already).toBe(true);
+    expect(res.item.id).toBe("p_legacy01");
+    const stored = JSON.parse(env.FILES._store.get(SCOPE_KEY(env)));
+    expect(stored.items.find((n) => n.id === "p_legacy01").importedFrom).toBe("4820135");
+    expect(stored.items).toHaveLength(1);
+  });
+
+  it("PUT 整树带 importedFrom 通过校验；非法格式（非 7 位码）400", async () => {
+    const env = fakeEnv();
+    const ok = await PUT(env, [
+      { id: "p_import01", type: "action", label: "x", prompt: "y",
+        appliesTo: ["text"], importedFrom: "4820135" },
+    ]);
+    expect(ok.status).toBe(200);
+    const bad = await PUT(env, [
+      { id: "p_import02", type: "action", label: "x", prompt: "y",
+        appliesTo: ["text"], importedFrom: "not-a-code" },
+    ]);
+    expect(bad.status).toBe(400);
+  });
+
+  it("老客户端整树 PUT 剥掉 importedFrom → 服务端按 id 从旧文档补回（防标记被冲掉）", async () => {
+    const env = fakeEnv(seedShare());
+    const { item } = await (await IMPORT(env, "4820135")).json();
+    // 模拟老 iOS：同一条实体原样 PUT 回来但没带 importedFrom
+    const stored = JSON.parse(env.FILES._store.get(SCOPE_KEY(env)));
+    const stripped = stored.items.map((n) => {
+      if (n.id !== item.id) return n;
+      const { importedFrom, ...rest } = n;
+      return rest;
+    });
+    await PUT(env, stripped);
+    const after = JSON.parse(env.FILES._store.get(SCOPE_KEY(env)));
+    expect(after.items.find((n) => n.id === item.id).importedFrom).toBe("4820135");
+    // 补回后幂等仍成立
+    const res = await (await IMPORT(env, "4820135")).json();
+    expect(res.already).toBe(true);
   });
 
   // ── 对抗性探测 ───────────────────────────────────────────────────────────
