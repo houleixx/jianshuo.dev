@@ -33,10 +33,12 @@ export async function onRequest(context) {
   // beacon（浏览器直连 /agent/referral/hit）补真实 IP。
   const fwdHost = request.headers?.get?.("x-forwarded-host");
   // 真实访客 IP：voicedrop.cn 反代下 CF-Connecting-IP 恒为腾讯云出口 IP（PostHog 里
-  // 「怎么都是同一个人」的根因），Caddy 一直把真实 IP 放在 X-Real-IP 转过来
-  // （infra/voicedrop-cn Caddyfile header_up）。只用于打点 distinct_id——refhits
-  // 归因照旧走浏览器直连 beacon：X-Real-IP 直打 pages.dev 可伪造，不进给钱的路径。
-  const ip = (fwdHost && request.headers?.get?.("X-Real-IP")) || request.headers?.get?.("CF-Connecting-IP");
+  // 「怎么都是同一个人」的根因）。Caddy 把访客 IP 放进 X-Forwarded-For 第一段转来；
+  // 注意 X-Real-IP 不能用——Cloudflare 边缘会用连接方 IP 覆写它（2026-07-16 实测），
+  // XFF 则是追加不覆写。只用于打点 distinct_id——refhits 归因照旧走浏览器直连
+  // beacon：XFF 直打 pages.dev 可伪造，不进给钱的路径。
+  const xff = (request.headers?.get?.("X-Forwarded-For") || "").split(",")[0].trim();
+  const ip = (fwdHost && xff) || request.headers?.get?.("CF-Connecting-IP");
   const visitorId = ip && env.SESSION_SECRET ? await ipHash(ip, env.SESSION_SECRET) : `anon-${code}`;
   if (!fwdHost && ip && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(

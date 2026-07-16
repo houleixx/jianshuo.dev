@@ -191,7 +191,7 @@ describe("invite landing page", () => {
     spy.mockRestore();
   });
 
-  it("反代访问的打点 distinct_id 用 X-Real-IP（真实访客），不用代理出口 IP", async () => {
+  it("反代访问的打点 distinct_id 用 X-Forwarded-For 首段（真实访客），不用代理出口 IP", async () => {
     const calls = [];
     const spy = (await import("vitest")).vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
       calls.push({ url: String(url), body: init && init.body ? JSON.parse(init.body) : null });
@@ -201,9 +201,10 @@ describe("invite landing page", () => {
       [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),
     });
     c.env.POSTHOG_API_KEY = "phc_test";
-    // 反代形态：CF-Connecting-IP = 腾讯云出口（所有访客同值），真实 IP 在 X-Real-IP
+    // 反代形态：CF-Connecting-IP = 腾讯云出口（所有访客同值）。真实 IP 在 XFF 首段
+    // （Caddy 追加访客 IP，CF 再追加 CVM IP；X-Real-IP 会被 CF 覆写，不可用）。
     c.request = new Request(`https://jianshuo.dev/voicedrop/i/${OWNER_CODE}`, {
-      headers: { "CF-Connecting-IP": "8.8.4.4", "x-forwarded-host": "voicedrop.cn", "X-Real-IP": "1.2.3.4" },
+      headers: { "CF-Connecting-IP": "8.8.4.4", "x-forwarded-host": "voicedrop.cn", "X-Forwarded-For": "1.2.3.4, 8.8.4.4" },
     });
     const r = await invitePage(c);
     await Promise.all(c._tasks);
