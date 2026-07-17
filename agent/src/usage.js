@@ -77,9 +77,13 @@ export function editGate(balanceUY, editsSoFar) {
 export const DAY_MS = 86400000;
 export const SIGNUP_EXPIRE_DAYS  = 365;   // 注册赠送 1 年
 export const CAMPAIGN_EXPIRE_DAYS = 90;   // 活动赠送默认 3 个月
-export const SUB_GRANT_SUANLI = 200;      // 包月发放
-export const SUB_PRICE_RMB    = 19.9;     // 包月价（App Store Connect 里配，这里只作展示/对账）
-export const SUB_PRODUCT_MONTHLY = "com.wangjianshuo.VoiceDrop.sub.monthly"; // 苹果产品 ID
+// 订阅档位：产品 ID → 每月发放算力。ID 里写死价格（monthly_19_9 = ¥19.9/月），
+// 以后加档（如 ¥49.9）只在这里加一行 + ASC 建同名产品，服务端零改动。
+export const SUB_PRODUCTS = {
+  "com.wangjianshuo.VoiceDrop.sub.monthly_19_9": 200,   // ¥19.9/月 → 200 算力
+};
+export const SUB_GRANT_SUANLI = 200;      // 当前主档发放量（展示兜底用，发放以 SUB_PRODUCTS 为准）
+export const SUB_PRODUCT_MONTHLY = "com.wangjianshuo.VoiceDrop.sub.monthly_19_9"; // 当前主档（iOS 请求的 ID）
 export const SUB_BUCKET_GRACE_MS = 6 * 3600 * 1000;  // 订阅桶过期宽限（续费空窗，spec §12.2）
 export const expiryAfterDays = (now, days) => now + days * DAY_MS;
 

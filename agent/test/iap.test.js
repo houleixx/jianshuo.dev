@@ -232,6 +232,18 @@ describe("GET /agent/iap/status", () => {
   });
 });
 
+describe("档位表（SUB_PRODUCTS）", () => {
+  it("产品 ID 带价格且在档位表里；发放量以表为准（以后加档只加一行）", async () => {
+    const { SUB_PRODUCTS } = await import("../src/usage.js");
+    expect(SUB_PRODUCT_MONTHLY).toMatch(/_19_9$/);            // ID 里写死价格
+    expect(SUB_PRODUCTS[SUB_PRODUCT_MONTHLY]).toBe(SUB_GRANT_SUANLI);
+    const db = fakeD1(SQL);
+    const env = mkEnv(db, appleRoute(txnPayload()));
+    const r = await call(env, "/agent/iap/claim", { method: "POST", token: TOK, body: { transaction_id: "1000000001" } });
+    expect((await r.json()).suanli).toBe(SUB_PRODUCTS[SUB_PRODUCT_MONTHLY]);
+  });
+});
+
 describe("processTransaction / revokeTransaction 直接单元", () => {
   it("bundleId 不对 → wrong-bundle", async () => {
     const db = fakeD1(SQL);

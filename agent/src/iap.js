@@ -5,7 +5,7 @@
 // 信任模型：客户端/苹果通知送来的都只当「线索」（transaction_id），入账前一律拿
 // App Store Server API 回查权威交易信息——伪造的 id 在回查这步 404 死掉，
 // 因此这里不做 JWS x509 链验签。
-import { SUB_GRANT_SUANLI, SUB_PRODUCT_MONTHLY, SUB_BUCKET_GRACE_MS, suanliToUY, uyToSuanli } from "./usage.js";
+import { SUB_PRODUCTS, SUB_GRANT_SUANLI, SUB_BUCKET_GRACE_MS, suanliToUY, uyToSuanli } from "./usage.js";
 import { grantBucket } from "./usage_store.js";
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
 
@@ -83,7 +83,8 @@ export async function fetchAppleTransaction(env, transactionId, fetcher = fetch)
 // scope 为 null 时（通知侧无用户上下文）只认已有绑定，没绑定就跳过等客户端 claim。
 export async function processTransaction(db, txn, environment, scope, now) {
   if (txn.bundleId && txn.bundleId !== IAP_BUNDLE_ID) return { ok: false, error: "wrong-bundle" };
-  if (txn.productId !== SUB_PRODUCT_MONTHLY) return { ok: false, error: "unknown-product" };
+  const grantSuanli = SUB_PRODUCTS[txn.productId];        // 档位表定发放量
+  if (!grantSuanli) return { ok: false, error: "unknown-product" };
   const txnId = String(txn.transactionId);
   const origId = String(txn.originalTransactionId || txnId);
   const expiresDate = Number(txn.expiresDate) || 0;
@@ -108,7 +109,7 @@ export async function processTransaction(db, txn, environment, scope, now) {
   let granted = false;
   if (isNew && expiresDate > now && !txn.revocationDate) {
     // 桶到期 = 苹果周期末 + 宽限（续费空窗，spec §12.2）→ 月清零天然成立。
-    await grantBucket(db, owner, suanliToUY(SUB_GRANT_SUANLI), "subscription", expiresDate + SUB_BUCKET_GRACE_MS, now,
+    await grantBucket(db, owner, suanliToUY(grantSuanli), "subscription", expiresDate + SUB_BUCKET_GRACE_MS, now,
       { txn_id: txnId, env: environment });
     const b = await db.prepare(
       "SELECT id FROM bucket WHERE user_sub=? AND source='subscription' ORDER BY id DESC LIMIT 1"
@@ -118,7 +119,7 @@ export async function processTransaction(db, txn, environment, scope, now) {
   }
   await db.prepare("UPDATE iap_sub SET product_id=?, expires_date=?, status=?, updated_at=? WHERE original_txn_id=?")
     .bind(txn.productId, expiresDate, txn.revocationDate ? "revoked" : "active", now, origId).run();
-  return { ok: true, owner, granted, already: !isNew, expires_date: expiresDate };
+  return { ok: true, owner, granted, already: !isNew, expires_date: expiresDate, suanli: granted ? grantSuanli : 0 };
 }
 
 // 退款/撤销：该交易发的桶余量清零（已花掉的部分不追）。幂等（清零再清零无副作用）。
@@ -148,7 +149,7 @@ export async function handleIapRoute(url, request, env, fetcher = fetch) {
       const res = await processTransaction(env.USAGE, found.txn, found.environment, scope, now);
       if (!res.ok) return J({ error: res.error }, res.error === "bound-elsewhere" ? 409 : 400);
       return J({ ok: true, granted: res.granted, already: res.already,
-        suanli: res.granted ? SUB_GRANT_SUANLI : 0, expires_date: res.expires_date });
+        suanli: res.suanli, expires_date: res.expires_date });
     }
 
     // App Store Server Notifications V2。signedPayload 只 decode 取 transactionId，
@@ -192,7 +193,7 @@ export async function handleIapRoute(url, request, env, fetcher = fetch) {
       return J({ active, product_id: row ? row.product_id : null,
         expires_date: row ? row.expires_date : null,
         sub_suanli: Math.round(uyToSuanli(subRemainUY) * 10) / 10,
-        monthly_suanli: SUB_GRANT_SUANLI });
+        monthly_suanli: (row && SUB_PRODUCTS[row.product_id]) || SUB_GRANT_SUANLI });
     }
 
     return J({ error: "not-found" }, 404);
