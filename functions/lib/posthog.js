@@ -3,7 +3,8 @@
 // - key = iOS 同一 project 的 phc_ 客户端写入 key（可公开设计），env.POSTHOG_API_KEY
 //   缺失 = 整体不打点（与 iOS Analytics 同纪律：不配置不启用，主路径零影响）。
 // - 隐私红线（与 iOS 埋点同一条）：只送元数据，绝不送用户内容；IP 只以
-//   refhits 同款 HMAC 截断哈希（ipHash）出现，不存明文。
+//   refhits 同款 ipHash 出现——注意 refhits.js 的 DEBUG_PLAINTEXT_IP 调试开关
+//   打开时 ipHash 就是明文 IP（2026-07-17 归因排查，确认后翻回哈希）。
 // - best-effort：失败只 console，绝不 throw。调用方自己决定 waitUntil 还是 await。
 export function phCapture(env, event, distinctId, properties = {}) {
   const key = env && env.POSTHOG_API_KEY;

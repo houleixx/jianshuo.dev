@@ -7,12 +7,22 @@ import { hmacSign } from "./auth.js";
 
 const DAY_MS = 86400000;
 
+// ⚠️ 调试开关（2026-07-17 建硕拍板）：归因排查期间指纹直接用明文 IP，方便在
+// R2 / PostHog 里肉眼对账「访问 IP vs claim IP」。确认 IP 层归因没问题后翻回
+// false 恢复 HMAC 截断哈希（隐私红线）。翻回时明文旧记录靠 R2 2 天过期自清；
+// 切换瞬间新旧 key 不互认，最多 24h 内的既有访问会归因不上，可接受。
+export const DEBUG_PLAINTEXT_IP = true;
+
 export async function ipHash(ip, secret) {
+  if (DEBUG_PLAINTEXT_IP) return String(ip || "");
   return (await hmacSign(String(ip || ""), secret)).slice(0, 16);
 }
 
 export async function writeRefhit(env, ip, secret, owner, token, ts) {
   if (!ip || !secret || !owner) return;
+  // 测试 owner 不写指纹——TESTOG 这类测试页会把真实访客的 IP 变成「多 owner」，
+  // 反而屏蔽他们的 hello 归因（2026-07-17 实锤：自测手机因此被拦，靠剪贴板兜底）。
+  if (String(owner).startsWith("users/test-")) return;
   const h = await ipHash(ip, secret);
   await env.FILES.put(`refhits/${h}/${ts}`, JSON.stringify({ owner, token, ts }));
 }

@@ -1,7 +1,7 @@
 // test/refhits.test.js — IP 指纹归因：写入 + 唯一匹配查询
 import { describe, it, expect, beforeEach } from "vitest";
 import { fakeEnv } from "./fakes.js";
-import { ipHash, writeRefhit, lookupRefhit } from "../../functions/lib/refhits.js";
+import { ipHash, writeRefhit, lookupRefhit, DEBUG_PLAINTEXT_IP } from "../../functions/lib/refhits.js";
 
 const SECRET = "test-secret";
 const NOW = 1800000000000;
@@ -9,10 +9,22 @@ let env;
 beforeEach(() => { env = fakeEnv(); });
 
 describe("refhits", () => {
-  it("hashes ip, no plaintext", async () => {
+  // 断言跟着 DEBUG_PLAINTEXT_IP 开关走：调试期明文 IP，翻回后 16 位哈希——
+  // 两种状态下这条测试都成立，切换开关不需要改测试。
+  it("debug 开关开=明文 IP；关=16 位哈希无明文", async () => {
     const h = await ipHash("1.2.3.4", SECRET);
-    expect(h).toHaveLength(16);
-    expect(h).not.toContain(".");
+    if (DEBUG_PLAINTEXT_IP) {
+      expect(h).toBe("1.2.3.4");
+    } else {
+      expect(h).toHaveLength(16);
+      expect(h).not.toContain(".");
+    }
+  });
+  it("test owner 不写指纹（测试页不得污染真实访客的归因）", async () => {
+    await writeRefhit(env, "1.2.3.4", SECRET, "users/test-og-check/", "TESTOG", NOW - 7200_000);
+    await writeRefhit(env, "1.2.3.4", SECRET, "users/anon-a/", "tokA", NOW - 3600_000);
+    const hit = await lookupRefhit(env, "1.2.3.4", SECRET, NOW);
+    expect(hit && hit.owner).toBe("users/anon-a/");   // TESTOG 不落盘，不构成多 owner
   });
   it("lookup finds unique owner within 24h", async () => {
     await writeRefhit(env, "1.2.3.4", SECRET, "users/anon-a/", "tokA", NOW - 3600_000);
