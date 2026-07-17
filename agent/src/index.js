@@ -30,6 +30,7 @@ import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
 import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
 import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, referralLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
+import { handleIapRoute } from "./iap.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { handlePromptShareRoutes, shareStates } from "./prompt-share.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
@@ -1442,6 +1443,9 @@ export default {
     { const r = await handlePromptShareRoutes(url, request, env, ctx); if (r) return r; }
 
     { const r = await handleUsageRoute(url, request, env); if (r) return r; }
+
+    // 苹果订阅（claim / App Store 服务器通知 / 状态）—— src/iap.js
+    { const r = await handleIapRoute(url, request, env); if (r) return r; }
 
     return new Response("not found", { status: 404 });
   },
