@@ -48,6 +48,59 @@ export async function publishMintRate(env, db, now) {
   } catch (e) { console.error("[referral] publishMintRate failed:", e && e.message); }
 }
 
+// 访客指纹一览页。指纹按「最近一次访问」倒序，每个指纹取最新一条记录的
+// owner/token 标注来源页；值读取封顶 80 个指纹（worker 子请求预算），超出的
+// 只列指纹不标来源。北京时间展示（访客几乎全在国内）。
+async function refhitsViewPage(env) {
+  const listed = await env.FILES.list({ prefix: "refhits/", limit: 1000 });
+  const byFp = new Map(); // fp → {tss:[], latestKey}
+  for (const o of listed.objects || []) {
+    const parts = o.key.split("/");
+    if (parts.length !== 3) continue;
+    const ts = parseInt(parts[2], 10);
+    if (!Number.isFinite(ts)) continue;
+    const rec = byFp.get(parts[1]) || { tss: [], latestKey: null, latestTs: 0 };
+    rec.tss.push(ts);
+    if (ts > rec.latestTs) { rec.latestTs = ts; rec.latestKey = o.key; }
+    byFp.set(parts[1], rec);
+  }
+  const rows = [...byFp.entries()].sort((a, b) => b[1].latestTs - a[1].latestTs);
+  const values = new Map();
+  for (const [fp, rec] of rows.slice(0, 80)) {
+    try {
+      const obj = await env.FILES.get(rec.latestKey);
+      if (obj) values.set(fp, JSON.parse(await obj.text()));
+    } catch {}
+  }
+  const cn = (ts) => new Date(ts + 8 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
+  const escH = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fam = (fp) => fp.includes(":") ? "v6" : fp.includes(".") ? "v4" : "哈希";
+  const tr = rows.map(([fp, rec]) => {
+    const v = values.get(fp);
+    const src = v ? `${escH(v.token || "?")} <span class="muted">${escH(String(v.owner || "").replace("users/", "").replace("anon-", "").slice(0, 8))}…</span>` : "";
+    return `<tr><td class="ip">${escH(fp)}</td><td>${fam(fp)}</td><td class="num">${rec.tss.length}</td><td>${cn(rec.latestTs)}</td><td>${src}</td></tr>`;
+  }).join("\n");
+  const plain = rows.filter(([fp]) => fam(fp) !== "哈希").length;
+  const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<meta http-equiv="refresh" content="60"><title>分享页访客 IP</title><style>
+body{font-family:-apple-system,"PingFang SC",sans-serif;background:#fafaf7;color:#333;margin:24px auto;max-width:860px;padding:0 16px}
+h1{font-size:1.2rem;font-weight:600}
+.sub{color:#888;font-size:.85rem;margin-bottom:16px}
+table{border-collapse:collapse;width:100%;font-size:.85rem;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+th{background:#f0efe9;text-align:left;padding:8px 10px;font-weight:600}
+td{padding:7px 10px;border-top:1px solid #f0efe9}
+.ip{font-family:ui-monospace,Menlo,monospace;font-size:.8rem;word-break:break-all}
+.num{text-align:right}.muted{color:#aaa}
+</style></head><body>
+<h1>分享页访客 IP</h1>
+<div class="sub">指纹 ${rows.length} 个（明文 ${plain} 个）· 记录保留 2 天 · 北京时间 · 60 秒自动刷新 · ${cn(Date.now())}</div>
+<table><thead><tr><th>IP / 指纹</th><th>类型</th><th>次数</th><th>最近访问</th><th>来源页（码 · owner）</th></tr></thead>
+<tbody>${tr}</tbody></table>
+</body></html>`;
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
 // token（分享短链 id 或邀请码）→ owner scope。shares/<id> 的值是 articleKey；
 // 社区 id 读指针；邀请码读 invites/<码>（大写归一，typed JSON {owner}）。
 async function ownerFromToken(env, token) {
@@ -137,6 +190,17 @@ export async function handleReferralRoutes(url, request, env, fetcher, ctx) {
   if (url.pathname === "/agent/referral/link" && request.method === "GET") {
     try { return await handleInviteLink(request, env); }
     catch (e) { console.error("[referral] link failed:", e && e.message); return J({ error: "invite-failed" }, 500); }
+  }
+  // GET /agent/referral/refhits?key=<REFHITS_VIEW_KEY> — 调试小工具：分享页访客
+  // IP 指纹一览（明文 IP 模式下就是 IP 列表）。key 走 worker secret，仓库公开
+  // 所以绝不硬编码；未配 secret 视为功能关闭。DEBUG_PLAINTEXT_IP 排查期的配套，
+  // 指纹翻回哈希后页面照常工作（只是列的又是哈希）。
+  if (url.pathname === "/agent/referral/refhits" && request.method === "GET") {
+    try {
+      const key = url.searchParams.get("key") || "";
+      if (!env.REFHITS_VIEW_KEY || key !== env.REFHITS_VIEW_KEY) return new Response("unauthorized", { status: 401 });
+      return await refhitsViewPage(env);
+    } catch (e) { console.error("[referral] refhits view failed:", e && e.message); return new Response("error", { status: 500 }); }
   }
   if (url.pathname !== "/agent/referral/claim" || request.method !== "POST") return null;
   if (!env.USAGE) return J({ error: "usage-unavailable" }, 503);
