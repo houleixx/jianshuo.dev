@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VoiceDrop 周报 · 2026-07-14 ~ 07-18</title>
+<meta name="robots" content="noindex">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#fbf3e9;--card:#fffdf9;--ink:#3d3428;--soft:#82735f;--muted:#9b8b78;
+  --s1:#2a78d6;--s2:#008300;--s3:#e87ba4;--s4:#eda100;--s5:#1baf7a;--s6:#eb6834;
+  --warn-bg:#fdf0d2;--warn-ink:#8a5a06;
+  --grid:#ece1d2;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Noto Sans SC",sans-serif;line-height:1.65;padding:36px 18px 80px}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:1.7rem;letter-spacing:-.01em}
+.sub{color:var(--soft);font-weight:600;font-size:.92rem;margin-top:6px}
+h2{font-size:1.15rem;margin:0 0 4px}
+.note{font-size:.82rem;color:var(--muted);margin-top:4px}
+section{background:var(--card);border-radius:22px;padding:26px 26px 24px;margin-top:22px;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8)}
+/* hero tiles */
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:22px}
+@media(max-width:720px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--card);border-radius:18px;padding:18px 18px 15px;box-shadow:0 8px 22px rgba(74,63,53,.06)}
+.tile .n{font-size:2rem;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.tile .l{font-size:.82rem;color:var(--soft);font-weight:600;margin-top:2px}
+.tile .d{font-size:.75rem;color:var(--muted);margin-top:4px}
+/* charts */
+svg text{font-family:inherit}
+.legend{display:flex;gap:18px;font-size:.8rem;color:var(--soft);font-weight:600;margin:10px 0 2px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+/* h-bars */
+.hbars{margin-top:14px}
+.hb{display:grid;grid-template-columns:110px 1fr 84px;align-items:center;gap:10px;padding:4px 0;font-size:.86rem}
+.hb .bar{height:16px;border-radius:4px;background:var(--s1);min-width:2px}
+.hb .val{color:var(--soft);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hb:hover .bar{filter:brightness(1.1)}
+/* tables */
+table{border-collapse:collapse;width:100%;font-size:.86rem;margin-top:12px;font-variant-numeric:tabular-nums}
+th{text-align:left;color:var(--soft);font-weight:700;padding:6px 10px;border-bottom:2px solid var(--grid);white-space:nowrap}
+td{padding:6px 10px;border-bottom:1px solid var(--grid)}
+td.num,th.num{text-align:right}
+.cell{display:inline-block;min-width:52px;text-align:center;border-radius:6px;padding:1px 6px}
+.dim{color:var(--muted)}
+/* funnel */
+.funnel .hb{grid-template-columns:150px 1fr 150px}
+/* callouts */
+.ok{color:var(--s2);font-weight:700}
+.bad{color:#c2402a;font-weight:700}
+.pill{display:inline-block;background:var(--warn-bg);color:var(--warn-ink);border-radius:99px;font-size:.75rem;font-weight:700;padding:2px 10px;vertical-align:2px;margin-left:6px}
+ul.insights{margin:10px 0 0 1.2em}
+ul.insights li{margin-top:8px}
+footer{color:var(--muted);font-size:.78rem;margin-top:30px;text-align:center}
+a{color:var(--s1)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>VoiceDrop 访客周报</h1>
+<p class="sub">2026-07-14 ~ 07-18（东京时间） · 数据源：PostHog · 埋点 07-14 上线，本报告即全量历史 · 07-18 仅含 0:00-0:20 的数据，按不完整处理</p>
+
+<div class="tiles">
+  <div class="tile"><div class="n">65</div><div class="l">App 用户（累计）</div><div class="d">9 个国家/地区 · TestFlight 28 人</div></div>
+  <div class="tile"><div class="n">37%</div><div class="l">激活率（完成首次录音）</div><div class="d">24/65 开始录音 → 23 人上传成功</div></div>
+  <div class="tile"><div class="n">50</div><div class="l">录音上传（条）</div><div class="d">23 人上传 · 失败仅 4 次</div></div>
+  <div class="tile"><div class="n">16%</div><div class="l">爆发日新用户次日留存</div><div class="d">对比种子用户 D1 50~57%</div></div>
+</div>
+
+<section>
+<h2>每日活跃 & 新增</h2>
+<p class="note">07-16 是爆发日：33 人新装、46 日活；07-17 回落到 28。单位相同（人），同一坐标轴。</p>
+<div class="legend"><span><i style="background:var(--s1)"></i>日活 DAU</span><span><i style="background:var(--s4)"></i>新装 Installs</span></div>
+<svg viewBox="0 0 720 240" width="100%" role="img" aria-label="每日 DAU 与新增安装柱状图">
+  <!-- grid -->
+  <g stroke="#ece1d2" stroke-width="1">
+    <line x1="50" y1="200" x2="700" y2="200"/><line x1="50" y1="130" x2="700" y2="130"/><line x1="50" y1="60" x2="700" y2="60"/>
+  </g>
+  <g font-size="11" fill="#9b8b78">
+    <text x="44" y="204" text-anchor="end">0</text><text x="44" y="134" text-anchor="end">25</text><text x="44" y="64" text-anchor="end">50</text>
+  </g>
+  <!-- bars: scale 50 users = 140px => 2.8px/user; baseline y=200 -->
+  <!-- 07-14 dau8 inst8 -->
+  <g><rect x="80"  y="177.6" width="26" height="22.4" rx="4" fill="var(--s1)"/><rect x="110" y="177.6" width="26" height="22.4" rx="4" fill="var(--s4)"/><text x="93"  y="171" text-anchor="middle" font-size="11" fill="#52514e">8</text><text x="123" y="171" text-anchor="middle" font-size="11" fill="#52514e">8</text></g>
+  <!-- 07-15 dau18 inst14 -->
+  <g><rect x="212" y="149.6" width="26" height="50.4" rx="4" fill="var(--s1)"/><rect x="242" y="160.8" width="26" height="39.2" rx="4" fill="var(--s4)"/><text x="225" y="143" text-anchor="middle" font-size="11" fill="#52514e">18</text><text x="255" y="154" text-anchor="middle" font-size="11" fill="#52514e">14</text></g>
+  <!-- 07-16 dau46 inst33 -->
+  <g><rect x="344" y="71.2"  width="26" height="128.8" rx="4" fill="var(--s1)"/><rect x="374" y="107.6" width="26" height="92.4" rx="4" fill="var(--s4)"/><text x="357" y="65" text-anchor="middle" font-size="11" font-weight="700" fill="#0b0b0b">46</text><text x="387" y="101" text-anchor="middle" font-size="11" font-weight="700" fill="#0b0b0b">33</text></g>
+  <!-- 07-17 dau28 inst11 -->
+  <g><rect x="476" y="121.6" width="26" height="78.4" rx="4" fill="var(--s1)"/><rect x="506" y="169.2" width="26" height="30.8" rx="4" fill="var(--s4)"/><text x="489" y="115" text-anchor="middle" font-size="11" fill="#52514e">28</text><text x="519" y="163" text-anchor="middle" font-size="11" fill="#52514e">11</text></g>
+  <!-- 07-18 dau2 inst1 (incomplete) -->
+  <g opacity=".45"><rect x="608" y="194.4" width="26" height="5.6" rx="3" fill="var(--s1)"/><rect x="638" y="197.2" width="26" height="2.8" rx="3" fill="var(--s4)"/><text x="623" y="188" text-anchor="middle" font-size="11" fill="#52514e">2</text><text x="653" y="191" text-anchor="middle" font-size="11" fill="#52514e">1</text></g>
+  <g font-size="12" fill="#52514e" font-weight="600">
+    <text x="108" y="222" text-anchor="middle">07-14</text>
+    <text x="240" y="222" text-anchor="middle">07-15</text>
+    <text x="372" y="222" text-anchor="middle">07-16</text>
+    <text x="504" y="222" text-anchor="middle">07-17</text>
+    <text x="636" y="222" text-anchor="middle">07-18*</text>
+  </g>
+</svg>
+<p class="note">* 07-18 仅统计到凌晨 0:20。</p>
+</section>
+
+<section>
+<h2>留存：种子用户很黏，爆发日流量很飘</h2>
+<p class="note">按首次活跃日分组（cohort），Dn = 第 n 天后回访比例。右下空白 = 日期未到；今日（07-18）不完整、灰显。</p>
+<table>
+  <thead><tr><th>首活日</th><th class="num">人数</th><th class="num">D1</th><th class="num">D2</th><th class="num">D3</th><th class="num">D4</th></tr></thead>
+  <tbody>
+    <tr><td>07-14</td><td class="num">8</td>
+      <td class="num"><span class="cell" style="background:#c5dcf5">50%</span></td>
+      <td class="num"><span class="cell" style="background:#9cc2ec">75%</span></td>
+      <td class="num"><span class="cell" style="background:#aecdf0">63%</span></td>
+      <td class="num dim"><span class="cell">13%*</span></td></tr>
+    <tr><td>07-15</td><td class="num">14</td>
+      <td class="num"><span class="cell" style="background:#bdd7f3">57%</span></td>
+      <td class="num"><span class="cell" style="background:#c5dcf5">50%</span></td>
+      <td class="num dim"><span class="cell">—*</span></td><td class="num dim"></td></tr>
+    <tr><td>07-16</td><td class="num">32</td>
+      <td class="num"><span class="cell" style="background:#eaf2fb">16%</span></td>
+      <td class="num dim"><span class="cell">—*</span></td><td class="num dim"></td><td class="num dim"></td></tr>
+    <tr><td>07-17</td><td class="num">11</td>
+      <td class="num dim"><span class="cell">—*</span></td><td class="num dim"></td><td class="num dim"></td><td class="num dim"></td></tr>
+  </tbody>
+</table>
+<p class="note">* 落在 07-18，当天刚开始，数字必然偏低，不作数。</p>
+<p style="margin-top:12px;font-size:.9rem">一周内活跃天数分布：1 天 <b>43 人</b> · 2 天 <b>12</b> · 3 天 <b>6</b> · 4 天 <b>3</b> · 5 天全勤 <b>1</b>。</p>
+</section>
+
+<section>
+<h2>激活漏斗：进了录音门的人几乎不流失</h2>
+<div class="hbars funnel">
+  <div class="hb"><span>App 用户</span><div class="bar" style="width:100%"></div><span class="val">65 人</span></div>
+  <div class="hb"><span>开始录音</span><div class="bar" style="width:37%"></div><span class="val">24 人（37%）</span></div>
+  <div class="hb"><span>完成录音</span><div class="bar" style="width:35.4%"></div><span class="val">23 人（96%）</span></div>
+  <div class="hb"><span>上传成功</span><div class="bar" style="width:35.4%"></div><span class="val">23 人（100%）</span></div>
+</div>
+<p class="note" style="margin-top:10px">上传失败全周仅 4 次（2 人），管线很稳。瓶颈明确在第一步：63% 的安装用户从未按下录音键。</p>
+<p style="margin-top:10px;font-size:.9rem">上传深度（23 个上传者、共 50 条）：1 条 ×10 人 · 2 条 ×6 · 3 条 ×5 · 4 条 ×1 · <b>9 条 ×1</b>（最重度用户）。</p>
+</section>
+
+<section>
+<h2>用户都在干什么：社区成了第二引擎</h2>
+<div class="hbars">
+  <div class="hb"><span>录音列表</span><div class="bar" style="width:100%"></div><span class="val">684 次 · 48 人</span></div>
+  <div class="hb"><span>社区</span><div class="bar" style="width:68%"></div><span class="val">468 次 · 27 人</span></div>
+  <div class="hb"><span>提示词管理</span><div class="bar" style="width:25%"></div><span class="val">171 次 · 17 人</span></div>
+  <div class="hb"><span>录音详情</span><div class="bar" style="width:23%"></div><span class="val">160 次 · 21 人</span></div>
+  <div class="hb"><span>账户</span><div class="bar" style="width:6.3%"></div><span class="val">43 次 · 17 人</span></div>
+</div>
+<table>
+  <thead><tr><th>行为</th><th class="num">次数</th><th class="num">人数</th><th>行为</th><th class="num">次数</th><th class="num">人数</th></tr></thead>
+  <tbody>
+    <tr><td>社区互动</td><td class="num">854</td><td class="num">27</td><td>投币</td><td class="num">37</td><td class="num">9</td></tr>
+    <tr><td>文章打开</td><td class="num">369</td><td class="num">20</td><td>创建分享链接</td><td class="num">38</td><td class="num">8</td></tr>
+    <tr><td>语音编辑发起</td><td class="num">274</td><td class="num">18</td><td>提示词保存</td><td class="num">38</td><td class="num">7</td></tr>
+    <tr><td>语音编辑落地</td><td class="num">241</td><td class="num">13</td><td>导入码兑换</td><td class="num">28</td><td class="num">5</td></tr>
+    <tr><td>采访开启/结束</td><td class="num">13/13</td><td class="num">9</td><td>邀请好友分享</td><td class="num">24</td><td class="num">6</td></tr>
+    <tr><td>追问回答 / 跳过</td><td class="num">20 / 13</td><td class="num">3 / 4</td><td>发到社区</td><td class="num">13</td><td class="num">4</td></tr>
+    <tr><td>发公众号</td><td class="num">8</td><td class="num">4</td><td>小红书导出</td><td class="num">2</td><td class="num">2</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>邀请增长漏斗（网页端）<span class="pill">IP 归因 07-18 0:07 起才修好</span></h2>
+<div class="hbars funnel">
+  <div class="hb"><span>分享页访问</span><div class="bar" style="width:100%;background:var(--s5)"></div><span class="val">40 PV · 34 IP</span></div>
+  <div class="hb"><span>邀请落地页访问</span><div class="bar" style="width:91%;background:var(--s5)"></div><span class="val">103 PV · 31 IP</span></div>
+  <div class="hb"><span>点「下载」</span><div class="bar" style="width:24%;background:var(--s5)"></div><span class="val">47 次 · 8 IP</span></div>
+  <div class="hb"><span>归因成功</span><div class="bar" style="width:6%;background:var(--s5)"></div><span class="val">2 人</span></div>
+</div>
+<p class="note" style="margin-top:10px">「邀请claim」事件 229 次 / 70 台设备是每次 App 启动的<b>尝试</b>数，不是成功数。本周大部分时间 IP 归因被 v4/v6 地址族错位吃掉（网页记 IPv6、服务端记 IPv4 对不上），07-18 凌晨关闭 jianshuo.dev 的 IPv6 后已修复——下周归因成功数是检验修复效果的关键指标。</p>
+</section>
+
+<section>
+<h2>用户从哪来</h2>
+<table>
+  <thead><tr><th>国家/地区</th><th class="num">用户</th><th class="num">其中 TestFlight</th></tr></thead>
+  <tbody>
+    <tr><td>中国</td><td class="num">35</td><td class="num">17</td></tr>
+    <tr><td>美国</td><td class="num">13</td><td class="num">4</td></tr>
+    <tr><td>日本</td><td class="num">11</td><td class="num">2</td></tr>
+    <tr><td>香港</td><td class="num">4</td><td class="num">3</td></tr>
+    <tr><td>新加坡</td><td class="num">3</td><td class="num">1</td></tr>
+    <tr><td>加拿大 / 台湾 / 韩国 / 澳大利亚</td><td class="num">2/1/1/1</td><td class="num">1/0/0/0</td></tr>
+  </tbody>
+</table>
+<p class="note">TestFlight 合计 28 人（43%），正式渠道已过半。网页端另有 134 个独立访客 IP。</p>
+</section>
+
+<section>
+<h2>结论与下周动作</h2>
+<ul class="insights">
+  <li><b>冷启动周成绩单不差</b>：5 天 65 个 App 用户、9 个地区，录音-上传管线成功率 <span class="ok">96%+</span>，基础设施稳。</li>
+  <li><b>最大漏点是激活第一步</b>：63% 的人装了 App 却没按过录音键。建议首启就把人带进录音（首启引导直接开一段 30 秒采访式录音），别停在录音列表空页。</li>
+  <li><b>爆发日流量质量低</b>：07-16 的 32 人 D1 仅 16%，而种子用户 D1 50~57%。渠道拉新（何处引流待查 UTM）带来的是「看客」；社区互动（854 次/27 人）才是留存黏合剂，尽快把新用户第一次会话导向社区内容。</li>
+  <li><b class="bad">UX 卡点警报</b>：$rageclick 狂点 101 次、覆盖 16 人（1/4 用户！），但 SwiftUI 埋点的 screen 名全是泛型容器（NavigationStackHostingController），定位不到具体页面。建议：① 给 PostHog iOS SDK 配 screen 手动命名；② 抽查这 16 人的 session replay。</li>
+  <li><b>追问功能参与度低</b>：仅 3 人回答过（20 次），4 人跳过。样本太小先不动，下周再看。</li>
+  <li><b>邀请闭环刚打通</b>：落地页→下载点击转化 26%（8/31 IP）不算差，但归因成功只有 2。IPv6 错位已修，下周盯「邀请归因成功」是否跟上下载量。</li>
+</ul>
+</section>
+
+<footer>数据：PostHog（project 511447）· 生成于 2026-07-18 · 查询窗口 2026-07-14 00:00 ~ 07-18 00:20 JST</footer>
+</div>
+</body>
+</html>
