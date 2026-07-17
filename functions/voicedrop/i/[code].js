@@ -73,7 +73,7 @@ export async function onRequest(context) {
   const logo = fwdHost ? `${origin}/icon-512.png` : `${origin}/voicedrop/icon-512.png`;
   const og = { description: "动动嘴，就能写出好文章。说一段话，VoiceDrop 用你的语气整理成一篇能发的文章。", url: pageUrl, image: logo };
 
-  return new Response(invitePageHtml({ name, title, og, rate, cfg, code }), {
+  return new Response(invitePageHtml({ name, title, og, rate, cfg, code, proxied: !!fwdHost }), {
     status: 200,
     // x-vd-vid = 打点 distinct_id（不透明哈希）：curl -I 即可核对反代有没有把真实
     // IP 带到（不同出口 IP 应得到不同值），排查「PostHog 里都是同一个人」用。
@@ -96,7 +96,7 @@ export function rewardCopy(name, rate, cfg) {
   return `用这个链接下载，你得 <b>${friend} 算力</b>${artNote}，${name || "对方"}得 <b>${inviter} 算力</b>`;
 }
 
-export function invitePageHtml({ name, title, og, rate, cfg, code = "" }) {
+export function invitePageHtml({ name, title, og, rate, cfg, code = "", proxied = false }) {
   const avatar = esc((name || "朋").slice(0, 1));
   const inviterHtml = name
     ? `<b>${esc(name)}</b> 邀请你一起用`
@@ -174,13 +174,14 @@ body{background:#211F1B;color:#fff;min-height:100dvh;display:flex;flex-direction
 <script>
 // 归因三件套（都不挡渲染）：
 // ① 第一方 beacon —— 浏览器直连 jianshuo.dev 报到（voicedrop.cn 反代会吃掉真实
-//    IP，服务端只在这条请求上写 IP 指纹，见 /agent/referral/hit）；
+//    IP，服务端只在这条请求上写 IP 指纹，见 /agent/referral/hit）。只在反代页注入：
+//    直连页服务端已写过指纹，再发 beacon 同一次访问记两条（2026-07-17 用户发现）；
 // ② 下载点击写剪贴板（execCommand 先行——微信 webview 里 navigator.clipboard
 //    常年不可用；再叠 clipboard API 双保险）；
 // ③ 微信内点下载 → 不跳转，弹「去浏览器打开」蒙层（剪贴板照写）。
 (function(){
-  var HIT='https://jianshuo.dev/agent/referral/hit',CODE='${esc(code)}';
-  try{(navigator.sendBeacon&&navigator.sendBeacon(HIT,CODE))||fetch(HIT,{method:'POST',body:CODE,mode:'no-cors',keepalive:true})}catch(e){}
+  ${proxied ? `var HIT='https://jianshuo.dev/agent/referral/hit',CODE='${esc(code)}';
+  try{(navigator.sendBeacon&&navigator.sendBeacon(HIT,CODE))||fetch(HIT,{method:'POST',body:CODE,mode:'no-cors',keepalive:true})}catch(e){}` : ''}
   function keep(){
     try{var t=document.createElement('textarea');t.value=location.href;t.style.cssText='position:fixed;opacity:0';
       document.body.appendChild(t);t.select();t.setSelectionRange(0,99999);document.execCommand('copy');document.body.removeChild(t);}catch(e){}

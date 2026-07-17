@@ -29,10 +29,14 @@ describe("ctaHtml", () => {
   it("execCommand 剪贴板兜底（微信 webview 里 navigator.clipboard 常不可用）", () => {
     expect(ctaHtml(null, { enabled: false })).toContain("execCommand");
   });
-  it("带 id 时内联第一方 beacon（反代下真实 IP 只能靠它）；不带 id 不内联", () => {
-    const withId = ctaHtml({ suanliPerCoin: 200 }, { authorCoins: 9, newUserCoins: 9, enabled: true }, "Ab3xK9_p2Q");
-    expect(withId).toContain("/agent/referral/hit");
-    expect(withId).toContain("Ab3xK9_p2Q");
+  it("beacon 只在反代页内联（直连页服务端已写指纹，再发 beacon 一次访问记两条）", () => {
+    const proxied = ctaHtml({ suanliPerCoin: 200 }, { authorCoins: 9, newUserCoins: 9, enabled: true }, "Ab3xK9_p2Q", true);
+    expect(proxied).toContain("/agent/referral/hit");
+    expect(proxied).toContain("Ab3xK9_p2Q");
+    // 直连（proxied 缺省 false）：不内联 beacon，剪贴板兜底照旧
+    const direct = ctaHtml({ suanliPerCoin: 200 }, { authorCoins: 9, newUserCoins: 9, enabled: true }, "Ab3xK9_p2Q");
+    expect(direct).not.toContain("/agent/referral/hit");
+    expect(direct).toContain("navigator.clipboard");
     expect(ctaHtml(null, { enabled: false })).not.toContain("/agent/referral/hit");
   });
 });
