@@ -61,6 +61,16 @@ export async function appleJWT(env, now = Date.now()) {
 
 const iapReady = (env) => !!(env.ASC_API_KEY_ID && env.ASC_API_ISSUER_ID && env.ASC_API_KEY_CONTENT && env.USAGE);
 
+// 售卖开关（零部署）：R2 config/iap.json 写 {"enabled":true} 即开闸；文件不存在/坏 = 关。
+// 只控制客户端「要不要显示订阅入口」；claim/通知照常工作（已订户续费不受开关影响）。
+export async function iapEnabled(env) {
+  try {
+    const obj = env.FILES && await env.FILES.get("config/iap.json");
+    if (obj) return JSON.parse(await obj.text()).enabled === true;
+  } catch (e) { console.error("[iap] bad config/iap.json:", e && e.message); }
+  return false;
+}
+
 // 回查苹果权威交易信息：先生产、404 再 sandbox（TestFlight/沙盒交易生产端点查不到）。
 // 命中 → { txn, environment }；查无 → null；苹果侧其他错误 → throw（让调用方 5xx/重试）。
 export async function fetchAppleTransaction(env, transactionId, fetcher = fetch) {
@@ -190,7 +200,8 @@ export async function handleIapRoute(url, request, env, fetcher = fetch) {
         ).bind(scope, now).first();
         subRemainUY = s ? s.s : 0;
       }
-      return J({ active, product_id: row ? row.product_id : null,
+      return J({ active, enabled: await iapEnabled(env),
+        product_id: row ? row.product_id : null,
         expires_date: row ? row.expires_date : null,
         sub_suanli: Math.round(uyToSuanli(subRemainUY) * 10) / 10,
         monthly_suanli: (row && SUB_PRODUCTS[row.product_id]) || SUB_GRANT_SUANLI });

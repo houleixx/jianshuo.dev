@@ -225,6 +225,19 @@ describe("GET /agent/iap/status", () => {
     expect(body.sub_suanli).toBe(SUB_GRANT_SUANLI);
   });
 
+  it("售卖开关：默认 enabled:false；R2 config/iap.json {\"enabled\":true} 即开（零部署）", async () => {
+    const db = fakeD1(SQL);
+    const env = mkEnv(db, {});
+    let body = await (await call(env, "/agent/iap/status", { token: TOK })).json();
+    expect(body.enabled).toBe(false);
+    env.FILES = { get: async (k) => k === "config/iap.json" ? { text: async () => '{"enabled":true}' } : null };
+    body = await (await call(env, "/agent/iap/status", { token: TOK })).json();
+    expect(body.enabled).toBe(true);
+    env.FILES = { get: async () => ({ text: async () => "not json" }) };  // 坏配置 = 关
+    body = await (await call(env, "/agent/iap/status", { token: TOK })).json();
+    expect(body.enabled).toBe(false);
+  });
+
   it("无 token → 401；非 iap 路径 → null 交回主分发", async () => {
     const env = mkEnv(fakeD1(SQL), {});
     expect((await call(env, "/agent/iap/status", {})).status).toBe(401);
