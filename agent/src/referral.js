@@ -48,10 +48,10 @@ export async function publishMintRate(env, db, now) {
   } catch (e) { console.error("[referral] publishMintRate failed:", e && e.message); }
 }
 
-// 访客指纹一览页。指纹按「最近一次访问」倒序，每个指纹取最新一条记录的
-// owner/token 标注来源页；值读取封顶 80 个指纹（worker 子请求预算），超出的
-// 只列指纹不标来源。北京时间展示（访客几乎全在国内）。
-async function refhitsViewPage(env) {
+// 访客指纹数据：按「最近一次访问」倒序，每个指纹取最新一条记录的 owner/token
+// 标注来源页；值读取封顶 80 个指纹（worker 子请求预算），超出的只列指纹不标来源。
+// HTML 页与后台 JSON（?format=json）共用这一份。
+async function refhitsRows(env) {
   const listed = await env.FILES.list({ prefix: "refhits/", limit: 1000 });
   const byFp = new Map(); // fp → {tss:[], latestKey}
   for (const o of listed.objects || []) {
@@ -59,28 +59,42 @@ async function refhitsViewPage(env) {
     if (parts.length !== 3) continue;
     const ts = parseInt(parts[2], 10);
     if (!Number.isFinite(ts)) continue;
-    const rec = byFp.get(parts[1]) || { tss: [], latestKey: null, latestTs: 0 };
+    const rec = byFp.get(parts[1]) || { tss: [], latestKey: null, latestTs: 0, firstTs: Infinity };
     rec.tss.push(ts);
     if (ts > rec.latestTs) { rec.latestTs = ts; rec.latestKey = o.key; }
+    if (ts < rec.firstTs) rec.firstTs = ts;
     byFp.set(parts[1], rec);
   }
-  const rows = [...byFp.entries()].sort((a, b) => b[1].latestTs - a[1].latestTs);
-  const values = new Map();
-  for (const [fp, rec] of rows.slice(0, 80)) {
-    try {
-      const obj = await env.FILES.get(rec.latestKey);
-      if (obj) values.set(fp, JSON.parse(await obj.text()));
-    } catch {}
+  const sorted = [...byFp.entries()].sort((a, b) => b[1].latestTs - a[1].latestTs);
+  const fam = (fp) => fp.includes(":") ? "v6" : fp.includes(".") ? "v4" : "hash";
+  const rows = [];
+  for (const [i, [fp, rec]] of sorted.entries()) {
+    let v = null;
+    if (i < 80) {
+      try {
+        const obj = await env.FILES.get(rec.latestKey);
+        if (obj) v = JSON.parse(await obj.text());
+      } catch {}
+    }
+    rows.push({
+      fp, family: fam(fp), hits: rec.tss.length, firstTs: rec.firstTs, lastTs: rec.latestTs,
+      token: v ? String(v.token || "") : null,
+      owner: v ? String(v.owner || "").replace("users/", "").replace("anon-", "").replace(/\/$/, "").slice(0, 8) : null,
+    });
   }
+  return { rows, plain: rows.filter((r) => r.family !== "hash").length, generatedAt: Date.now() };
+}
+
+// 独立 HTML 版（?key= 书签入口）。北京时间展示（访客几乎全在国内）。
+async function refhitsViewPage(env) {
+  const { rows: data, plain } = await refhitsRows(env);
   const cn = (ts) => new Date(ts + 8 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
   const escH = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const fam = (fp) => fp.includes(":") ? "v6" : fp.includes(".") ? "v4" : "哈希";
-  const tr = rows.map(([fp, rec]) => {
-    const v = values.get(fp);
-    const src = v ? `${escH(v.token || "?")} <span class="muted">${escH(String(v.owner || "").replace("users/", "").replace("anon-", "").slice(0, 8))}…</span>` : "";
-    return `<tr><td class="ip">${escH(fp)}</td><td>${fam(fp)}</td><td class="num">${rec.tss.length}</td><td>${cn(rec.latestTs)}</td><td>${src}</td></tr>`;
+  const tr = data.map((r) => {
+    const src = r.token ? `${escH(r.token)} <span class="muted">${escH(r.owner || "")}…</span>` : "";
+    return `<tr><td class="ip">${escH(r.fp)}</td><td>${r.family === "hash" ? "哈希" : r.family}</td><td class="num">${r.hits}</td><td>${cn(r.lastTs)}</td><td>${src}</td></tr>`;
   }).join("\n");
-  const plain = rows.filter(([fp]) => fam(fp) !== "哈希").length;
+  const rows = data;
   const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <meta http-equiv="refresh" content="60"><title>分享页访客 IP</title><style>
@@ -191,14 +205,20 @@ export async function handleReferralRoutes(url, request, env, fetcher, ctx) {
     try { return await handleInviteLink(request, env); }
     catch (e) { console.error("[referral] link failed:", e && e.message); return J({ error: "invite-failed" }, 500); }
   }
-  // GET /agent/referral/refhits?key=<REFHITS_VIEW_KEY> — 调试小工具：分享页访客
-  // IP 指纹一览（明文 IP 模式下就是 IP 列表）。key 走 worker secret，仓库公开
-  // 所以绝不硬编码；未配 secret 视为功能关闭。DEBUG_PLAINTEXT_IP 排查期的配套，
-  // 指纹翻回哈希后页面照常工作（只是列的又是哈希）。
+  // GET /agent/referral/refhits — 分享页访客 IP 指纹一览（明文 IP 模式下就是
+  // IP 列表）。两种钥匙开同一扇门：?key=<REFHITS_VIEW_KEY>（独立书签）或
+  // Authorization: Bearer <FILES_TOKEN>（/voicedrop/admin 后台，与其他 admin API
+  // 同一把 master token）。?format=json 给后台页出数据，默认出独立 HTML。
+  // key 走 worker secret，仓库公开所以绝不硬编码；两把钥匙都没配 = 功能关闭。
+  // DEBUG_PLAINTEXT_IP 排查期的配套，指纹翻回哈希后照常工作（只是列的又是哈希）。
   if (url.pathname === "/agent/referral/refhits" && request.method === "GET") {
     try {
       const key = url.searchParams.get("key") || "";
-      if (!env.REFHITS_VIEW_KEY || key !== env.REFHITS_VIEW_KEY) return new Response("unauthorized", { status: 401 });
+      const tok = bearerToken(request);
+      const okKey = env.REFHITS_VIEW_KEY && key === env.REFHITS_VIEW_KEY;
+      const okAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
+      if (!okKey && !okAdmin) return new Response("unauthorized", { status: 401 });
+      if (url.searchParams.get("format") === "json") return J(await refhitsRows(env));
       return await refhitsViewPage(env);
     } catch (e) { console.error("[referral] refhits view failed:", e && e.message); return new Response("error", { status: 500 }); }
   }

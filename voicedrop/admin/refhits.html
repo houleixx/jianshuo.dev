@@ -4,38 +4,41 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta name="robots" content="noindex,nofollow"/>
-<title>VoiceDrop · 算力账本</title>
+<title>VoiceDrop · 访客 IP</title>
 <link rel="stylesheet" href="./theme.css"/>
 <script>
-/* Standalone/preview fallback for the three helpers the pages use. The production
+/* Standalone/preview fallback for the helpers the pages use. The production
    server's /voicedrop/shared.js loads later and overrides these — safe either way. */
 window.$=window.$||function(s,r){return (r||document).querySelector(s);};
 window.esc=window.esc||function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');};
-window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];var a=doc.articles||(doc.result&&doc.result.articles)||(doc.output&&doc.output.articles)||doc.results||[];if(!Array.isArray(a))return[];return a.map(function(x){return typeof x==='string'?{title:'',body:x}:{title:x.title||x.heading||'',body:x.body||x.content||x.text||''};});};
 </script>
 <style>
-.wrap{max-width:880px;margin:0 auto;padding:26px 22px 90px}
+.wrap{max-width:920px;margin:0 auto;padding:26px 22px 90px}
 .sumline{color:var(--muted);font-size:.9rem;margin:0 0 18px}
 .tablecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);
   overflow:hidden;box-shadow:var(--shadow)}
 table{width:100%;border-collapse:collapse}
-thead th{font-size:.74rem;color:var(--muted);font-weight:700;text-align:right;padding:12px 18px;
+thead th{font-size:.74rem;color:var(--muted);font-weight:700;text-align:left;padding:12px 14px;
   background:var(--bg-soft);border-bottom:1px solid var(--line);letter-spacing:.02em}
-thead th:first-child{text-align:left}
-tbody td{padding:13px 18px;text-align:right;border-bottom:1px solid var(--line2);font-variant-numeric:tabular-nums}
-tbody td:first-child{text-align:left;font-family:var(--fm);color:var(--ink);font-weight:600}
+tbody td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line2);font-variant-numeric:tabular-nums;font-size:.86rem}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--bg-sunk)}
-.spent{color:var(--accent);font-weight:700}
-.bal{color:var(--ok);font-weight:700}
+td.ip{font-family:var(--fm);font-size:.78rem;word-break:break-all;max-width:340px}
+td.num{text-align:right}
+th.num{text-align:right}
+.famtag{display:inline-block;font-size:.7rem;font-weight:700;border-radius:5px;padding:1px 7px}
+.fam-v4{background:#e8f1e4;color:#3d7a2f}
+.fam-v6{background:#e4ecf6;color:#2f5d9e}
+.fam-hash{background:var(--bg-sunk);color:var(--muted)}
+.src .own{color:var(--muted);font-size:.76rem}
 </style>
 </head>
 <body>
 
 <div id="gate" hidden style="max-width:430px">
   <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
-  <h1>算力账本</h1>
-  <p>输入 master token 查看全量账户的算力消费。token 只存在本机浏览器，不上传。</p>
+  <h1>访客 IP</h1>
+  <p>输入 master token 查看分享页访客的 IP 指纹。token 只存在本机浏览器，不上传。</p>
   <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
   <div class="err" id="gateErr"></div>
   <button class="btn primary block" id="enter">进入</button>
@@ -51,11 +54,11 @@ tbody tr:hover{background:var(--bg-sunk)}
       <div class="nav-tabs">
         <a class="nav-tab" href="./">概览</a>
         <a class="nav-tab" href="./reports.html">举报审核</a>
-        <a class="nav-tab active" href="./usage.html">算力账本</a>
+        <a class="nav-tab" href="./usage.html">算力账本</a>
         <a class="nav-tab" href="./feed.html">投喂账本</a>
         <a class="nav-tab" href="./mine.html">挖文日志</a>
         <a class="nav-tab" href="./llm.html">LLM 日志</a>
-        <a class="nav-tab" href="./refhits.html">访客 IP</a>
+        <a class="nav-tab active" href="./refhits.html">访客 IP</a>
       </div>
       <div class="nav-actions">
         <button class="btn ghost" id="refresh">刷新</button>
@@ -66,11 +69,11 @@ tbody tr:hover{background:var(--bg-sunk)}
 
   <div class="wrap">
     <div class="pagehead">
-      <h1>算力账本</h1>
+      <h1>分享页访客 IP</h1>
       <span class="tag" id="updated"></span>
     </div>
     <div class="cards" id="cards"></div>
-    <p class="sumline" id="sum"></p>
+    <p class="sumline">打开分享页即记录（不需点下载）· 记录保留 2 天 · 北京时间 · 明文 IP 是归因排查的临时调试态，确认后会翻回哈希</p>
     <div id="tableWrap"></div>
   </div>
 </div>
@@ -79,54 +82,49 @@ tbody tr:hover{background:var(--bg-sunk)}
 <script>
 const TKEY = 'vd_admin_token';            // shared with the rest of /admin — token carries over
 let TOKEN = localStorage.getItem(TKEY) || '';
-// $ / esc come from /voicedrop/shared.js
 const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
+
+const cn = ts => new Date(ts + 8*3600e3).toISOString().slice(5,16).replace('T',' ');
+const FAM = { v4:'v4', v6:'v6', hash:'哈希' };
 
 async function load(){
   $('#tableWrap').innerHTML = '<div class="empty-state"><span class="spin"></span> 读取中…</div>';
-  $('#cards').innerHTML=''; $('#sum').textContent='';
-  let accounts;
+  $('#cards').innerHTML='';
+  let data;
   try {
-    const r = await fetch('https://jianshuo.dev/agent/usage/admin/accounts', { headers:{ Authorization:`Bearer ${TOKEN}` }});
+    const r = await fetch('https://jianshuo.dev/agent/referral/refhits?format=json', { headers:{ Authorization:`Bearer ${TOKEN}` }});
     if(r.status===401 || r.status===403){ logout('token 无效'); return; }
     if(!r.ok) throw new Error('加载失败 '+r.status);
-    accounts = (await r.json()).accounts || [];
+    data = await r.json();
   } catch(e){
     $('#tableWrap').innerHTML = `<div class="empty-state">${esc(e.message)}</div>`; return;
   }
-
-  // biggest spenders first
-  accounts.sort((a,b)=> (b.spent_suanli||0) - (a.spent_suanli||0));
-  const totSpentY = accounts.reduce((s,a)=> s + (a.spent_yuan||0), 0);
-  const totBal    = accounts.reduce((s,a)=> s + (a.balance_suanli||0), 0);
+  const rows = data.rows || [];
+  const hourAgo = Date.now() - 3600e3;
+  const recent = rows.filter(x => x.lastTs > hourAgo).length;
 
   $('#updated').textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN');
   const cards = [
-    ['', accounts.length, '账户'],
-    ['spent', '¥'+totSpentY.toFixed(2), '总消费'],
-    ['bal', Math.round(totBal).toLocaleString(), '总余额(算力)'],
+    ['', rows.length, '指纹总数'],
+    ['bal', data.plain, '明文 IP'],
+    ['spent', recent, '最近 1 小时活跃'],
   ];
   for(const [c,n,l] of cards)
     $('#cards').append(el('div','card '+c, `<div class="n">${n}</div><div class="l">${l}</div>`));
 
-  if(!accounts.length){ $('#tableWrap').innerHTML='<div class="empty-state">还没有账户。</div>'; return; }
+  if(!rows.length){ $('#tableWrap').innerHTML='<div class="empty-state">还没有访客记录。</div>'; return; }
 
-  const rows = accounts.map(a=>{
-    const who = a.user_sub.replace('users/anon-','').replace(/\/$/,'').slice(0,8).toUpperCase();
-    return `<tr>
-      <td>${esc(who)}</td>
-      <td class="bal">${fmt(a.balance_suanli)}</td>
-      <td>${fmt(a.granted_suanli)}</td>
-      <td class="spent">${fmt(a.spent_suanli)}</td>
-      <td>¥${(a.spent_yuan||0).toFixed(2)}</td>
-    </tr>`;
-  }).join('');
+  const trs = rows.map(r => `<tr>
+    <td class="ip">${esc(r.fp)}</td>
+    <td><span class="famtag fam-${esc(r.family)}">${FAM[r.family]||esc(r.family)}</span></td>
+    <td class="num">${r.hits}</td>
+    <td>${cn(r.lastTs)}</td>
+    <td class="src">${r.token ? `${esc(r.token)} <span class="own">${esc(r.owner||'')}…</span>` : ''}</td>
+  </tr>`).join('');
   $('#tableWrap').innerHTML = `<div class="tablecard"><table>
-    <thead><tr><th>账户</th><th>余额(算力)</th><th>累计获得</th><th>累计消费</th><th>消费(¥)</th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
-  $('#sum').textContent = `共 ${accounts.length} 账户 · 累计消费 ¥${totSpentY.toFixed(2)}`;
+    <thead><tr><th>IP / 指纹</th><th>类型</th><th class="num">次数</th><th>最近访问</th><th>来源页（码 · owner）</th></tr></thead>
+    <tbody>${trs}</tbody></table></div>`;
 }
-function fmt(n){ return (n==null?0:n).toLocaleString(undefined,{maximumFractionDigits:1}); }
 
 // ---- gate / boot (mirrors index/llm/mine) ----
 function showGate(msg){ $('#app').hidden=true; $('#gate').hidden=false; $('#gateErr').textContent=msg||''; $('#tok').focus(); }
@@ -140,8 +138,7 @@ $('#enter').onclick=enter;
 $('#tok').addEventListener('keydown',e=>{ if(e.key==='Enter')enter(); });
 $('#refresh').onclick=load;
 $('#logout').onclick=()=>logout();
-
-if(TOKEN){ $('#app').hidden=false; load(); } else { showGate(); }
+if(TOKEN){ $('#app').hidden=false; load(); } else showGate();
 </script>
 </body>
 </html>
