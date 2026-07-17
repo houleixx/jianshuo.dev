@@ -10,7 +10,32 @@
 
 import { TITLE_FALLBACK, resolveArticles } from "../lib/article-store.js";
 import { communityKey, reportKey } from "../lib/community-store.js";
-import { writeRefhit } from "../lib/refhits.js";
+import { writeRefhit, ipHash } from "../lib/refhits.js";
+import { phCapture } from "../lib/posthog.js";
+
+// 分享页访问打点（2026-07-17 用户要求：看每张分享页的访问量）。元数据 only；
+// distinct_id = ipHash（DEBUG_PLAINTEXT_IP 调试期即明文 IP），真实 IP 提取与
+// i/[code].js 同款（反代下取 XFF 首段）。爬虫不过滤只打标——微信/QQ 抓卡片、
+// 搜索蜘蛛都会来，PostHog 里按「疑似爬虫 = false」看真人量。best-effort 永不 throw。
+async function trackShareView(context, env, id, kind, owner, extra = {}) {
+  try {
+    const { request } = context;
+    const fwdHost = request.headers?.get?.("x-forwarded-host");
+    const xff = (request.headers?.get?.("X-Forwarded-For") || "").split(",")[0].trim();
+    const ip = (fwdHost && xff) || request.headers?.get?.("CF-Connecting-IP");
+    const vid = ip && env.SESSION_SECRET ? await ipHash(ip, env.SESSION_SECRET) : `anon-${id}`;
+    const ua = String(request.headers?.get?.("user-agent") || "");
+    const p = phCapture(env, "分享页访问", vid, {
+      码: id, 类型: kind,
+      平台: /iPhone|iPad|iPod/i.test(ua) ? "ios" : /Android/i.test(ua) ? "android" : "other",
+      微信内: /MicroMessenger/i.test(ua),
+      疑似爬虫: /bot|spider|crawler|curl|wget|python|httpclient|okhttp|headless/i.test(ua),
+      ...(owner ? { 作者: String(owner).replace("users/", "").replace("anon-", "").slice(0, 8) } : {}),
+      ...extra,
+    });
+    if (context.waitUntil) context.waitUntil(p);
+  } catch { /* 打点绝不影响页面 */ }
+}
 
 const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
 
@@ -53,6 +78,7 @@ export async function onRequest(context) {
   //   2. community/<id>.json    — a VD社区 post (schema-2 live pointer {…,articleKey})
   // So a 社区 post shares to WeChat exactly like an article — no separate page/crawler path.
   let key = null;
+  let viaCommunity = false;   // 打点用：article（shares/ 直分享）还是 community（社区帖）
   const map = await env.FILES.get(`shares/${id}`);
   if (map) {
     key = await map.text();
@@ -96,6 +122,7 @@ export async function onRequest(context) {
           return html(page('分享已停止', '<p class="muted">这条分享已被作者停止，或者链接不存在。</p>'), 404);
         }
         key = post.articleKey || null;
+        viaCommunity = true;
       } catch { /* fallthrough */ }
     }
   }
@@ -162,6 +189,7 @@ export async function onRequest(context) {
   try { const o = await env.FILES.get('config/referral.json'); if (o) refCfg = JSON.parse(await o.text()); } catch {}
   const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 }, id);
 
+  await trackShareView(context, env, id, viaCommunity ? "community" : "article", shareOwner);
   return html(page(title, bodyHtml, og, cta), 200, true);
 }
 
@@ -194,6 +222,7 @@ async function promptSharePage(context, env, id, ptr, code = id) {
   const cta = ctaHtml(rate, refCfg || { enabled: true, authorCoins: 12, newUserCoins: 6 }, id);
 
   const host = fwdHost || new URL(request.url).hostname;
+  await trackShareView(context, env, id, "prompt", shareOwner, { 提示词码: code });
   return html(page(label, promptShareHtml(label, code, instruction, host), og, cta), 200, true);
 }
 
