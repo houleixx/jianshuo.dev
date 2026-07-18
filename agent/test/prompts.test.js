@@ -1635,4 +1635,70 @@ describe("POST /agent/prompts/import — 魔法数字导入（4b）", () => {
     const { item } = await res.json();
     expect(item.origin).toBe("user");
   });
+
+  // ── 分组随身（2026-07-19）：分享副本带 groupPath → 收下时落进同名分组────────────
+  // groupPath 是数组（树两级封顶所以至多一段，数组是给未来多层留的格式），今天只消费第一段。
+  it("★ groupPath 命中系统组（改写这段）→ 落进该组，不堆顶层；组仍是 ref 不被冻结", async () => {
+    const env = fakeEnv(seedShare({ groupPath: ["改写这段"] }));
+    const { item } = await (await IMPORT(env, "4820135")).json();
+    expect(item.id).toMatch(/^p_/);
+    const got = await (await GET(env)).json();
+    expect(got.items.map((i) => i.id)).not.toContain(item.id);      // 顶层没有它
+    const grp = got.items.find((i) => i.type === "group" && i.label === "改写这段");
+    expect(grp.children.map((c) => c.id)).toContain(item.id);
+    expect(grp.origin).toBe("system");                              // 组本身没被物化成实体
+  });
+
+  it("groupPath 命中同名自建组 → 合并进去，不新建重名组", async () => {
+    const env = fakeEnv(seedShare({ groupPath: ["小红书"] }));
+    await PUT(env, [{ id: "p_mygrp001", type: "group", label: "小红书", children: [] }]);
+    const { item } = await (await IMPORT(env, "4820135")).json();
+    const got = await (await GET(env)).json();
+    const groups = got.items.filter((i) => i.type === "group" && i.label === "小红书");
+    expect(groups).toHaveLength(1);
+    expect(groups[0].children.map((c) => c.id)).toContain(item.id);
+  });
+
+  it("没有同名组 → 新建一个自建组装着", async () => {
+    const env = fakeEnv(seedShare({ groupPath: ["神秘工具箱"] }));
+    await PUT(env, []);
+    const { item } = await (await IMPORT(env, "4820135")).json();
+    const got = await (await GET(env)).json();
+    expect(got.items).toHaveLength(1);
+    const grp = got.items[0];
+    expect(grp.type).toBe("group");
+    expect(grp.label).toBe("神秘工具箱");
+    expect(grp.origin).toBe("user");
+    expect(grp.children.map((c) => c.id)).toEqual([item.id]);
+  });
+
+  it("groupPath 形状非法（字符串而非数组）→ 落顶层，不炸", async () => {
+    const env = fakeEnv(seedShare({ groupPath: "改写这段" }));
+    await PUT(env, []);
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const { item } = await res.json();
+    const got = await (await GET(env)).json();
+    expect(got.items.map((i) => i.id)).toContain(item.id);
+  });
+
+  it("组名超 40 字 → 截断后建组（不因 validateList 拒收而 400）", async () => {
+    const env = fakeEnv(seedShare({ groupPath: ["组".repeat(45)] }));
+    await PUT(env, []);
+    const res = await IMPORT(env, "4820135");
+    expect(res.status).toBe(200);
+    const got = await (await GET(env)).json();
+    expect(got.items[0].label).toBe("组".repeat(40));
+  });
+
+  it("分组内导入的幂等：再收一次 → already:true，组里只有一条", async () => {
+    const env = fakeEnv(seedShare({ groupPath: ["改写这段"] }));
+    const first = await (await IMPORT(env, "4820135")).json();
+    const second = await (await IMPORT(env, "4820135")).json();
+    expect(second.already).toBe(true);
+    expect(second.item.id).toBe(first.item.id);
+    const got = await (await GET(env)).json();
+    const grp = got.items.find((i) => i.type === "group" && i.label === "改写这段");
+    expect(grp.children.filter((c) => c.importedFrom === "4820135")).toHaveLength(1);
+  });
 });

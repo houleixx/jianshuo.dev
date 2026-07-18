@@ -9,7 +9,7 @@
 // shadows /voicedrop/ or /voicedrop/privacy/.
 
 import { TITLE_FALLBACK, resolveArticles } from "../lib/article-store.js";
-import { communityKey, reportKey } from "../lib/community-store.js";
+import { communityKey, reportKey, promptPostTitle } from "../lib/community-store.js";
 import { writeRefhit, ipHash } from "../lib/refhits.js";
 import { phCapture } from "../lib/posthog.js";
 
@@ -202,7 +202,7 @@ export async function onRequest(context) {
 // id，只做规范链接），7 位码直接访问时两者相同。
 async function promptSharePage(context, env, id, ptr, code = id) {
   const { request } = context;
-  const label = String(ptr.label || '分享提示词');
+  const label = String(promptPostTitle(ptr) || '分享提示词');
   const instruction = String(ptr.instruction || '');
 
   const fwdHost = request.headers?.get?.('x-forwarded-host');

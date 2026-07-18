@@ -6,7 +6,7 @@
 //
 // 写操作只有【整树 PUT】：新建/删除/改名/改词/排序/分组/fork 全走它。客户端本来就
 // 整棵树拿在手里，所以不存在局部更新竞态。
-import { loadPromptTemplate } from "./prompt-template.js";
+import { loadPromptTemplate, templateIndex } from "./prompt-template.js";
 import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, preserveImportMarkers, MAX_LABEL, MAX_PROMPT } from "./prompts.js";
 import { loadUserPrompts, saveUserPrompts } from "./prompt-store.js";
 import { resolvePromptShare, refreshPromptShare, shareStates, rekeyForkedShares } from "./prompt-share.js";
@@ -180,6 +180,23 @@ function truncateUtf16(s, max) {
   return (last >= 0xD800 && last <= 0xDBFF) ? cut.slice(0, -1) : cut;
 }
 
+/// 顶层同名分组查找（导入落位用）：ref 组按模板解析出的 label 比、实体组按自己的
+/// label 比，都 trim 后精确匹配。只认顶层（两级封顶，组进不了组）、只认 group——
+/// 同名的顶层 action 不算命中。返回 items 里的原对象引用，调用方原地往 children 塞。
+function findTopGroup(tpl, items, label) {
+  const idx = templateIndex(tpl);
+  for (const n of items) {
+    if (!n || typeof n !== "object" || Array.isArray(n)) continue;
+    if (n.ref) {
+      const t = idx.get(n.ref);
+      if (t && t.type === "group" && String(t.label || "").trim() === label) return n;
+    } else if (n.type === "group" && String(n.label || "").trim() === label) {
+      return n;
+    }
+  }
+  return null;
+}
+
 /// 把「当前生效的列表」物化成一份【用户列表】（存储原始形状：ref / 实体，不是解析结果）。
 /// 用户还没有 prompts.json 时，他的生效列表 = 模板全量 → 物化成全 ref——这样模板项
 /// 仍然跟随最新，只是现在显式列在他的文件里了。【关键陷阱】：物化出的 group ref
@@ -257,14 +274,33 @@ export async function handlePromptImport(request, env, scope) {
     return J({ item: flat.find((i) => i.id === existing.id), already: true });
   }
 
+  const usedIds = collectEntityIds(items);
   const item = {
-    id: freshUserId(collectEntityIds(items)), type: "action",
+    id: freshUserId(usedIds), type: "action",
     label, prompt,
     appliesTo: hit.appliesTo,
     ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
     importedFrom: code,
   };
-  items.push(item);
+  usedIds.add(item.id);
+
+  // 分组随身：分享副本带 groupPath（原作者放它的分组路径）→ 收下时落进同名顶层分组
+  // （系统组/自建组都算，合并进去），没有同名组就新建一个自建组装着；没带 groupPath
+  // （老码/本来就在顶层）→ 落顶层，与旧行为一致。树两级封顶，今天只消费路径第一段
+  // （resolvePromptShare 已清洗）；未来放宽层数时这里改成按路径逐层下钻/建组。
+  // 组名与 label 同一套截断策略（外部既成事实，截断不拒绝）。
+  const groupLabel = hit.groupPath?.length ? truncateUtf16(hit.groupPath[0], MAX_LABEL) : "";
+  if (groupLabel) {
+    const target = findTopGroup(tpl, items, groupLabel);
+    if (target) {
+      if (!Array.isArray(target.children)) target.children = [];
+      target.children.push(item);
+    } else {
+      items.push({ id: freshUserId(usedIds), type: "group", label: groupLabel, children: [item] });
+    }
+  } else {
+    items.push(item);
+  }
 
   const err = validateList(tpl, items);
   if (err) return J({ error: err }, 400);
@@ -281,6 +317,11 @@ export async function handlePromptImport(request, env, scope) {
     }
   } catch (e) { console.error("[prompts] importCount bump failed:", e && e.message); }
 
-  const resolvedItems = resolveList(tpl, { schema: 1, items });
-  return J({ item: resolvedItems[resolvedItems.length - 1] });
+  // 新条目可能落在分组里，不能再取「最后一个顶层项」——按 id 扁平找（与 already 分支同款）。
+  const flat = [];
+  for (const it of resolveList(tpl, { schema: 1, items })) {
+    flat.push(it);
+    if (Array.isArray(it.children)) flat.push(...it.children);
+  }
+  return J({ item: flat.find((i) => i.id === item.id) });
 }

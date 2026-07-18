@@ -18,3 +18,14 @@ export async function shareIdFor(articleKey, secret) {
 
 export const communityKey = (shareId) => `community/${shareId}.json`;
 export const reportKey = (shareId) => `community/reports/${shareId}.json`;
+
+// 提示词分享的展示标题（单一真源）：副本带 groupPath（原作者的分组路径，今天树两级
+// 封顶所以至多一段，格式上留给未来多层）→「分组｜名字」；没带 = 名字本身。
+// 消费方：D1 索引 title、community/get 合成、落地页 <h1>、分享前的关键词审核。
+export function promptPostTitle(leaf) {
+  const label = (leaf && typeof leaf.label === "string" ? leaf.label : "").trim();
+  const path = Array.isArray(leaf?.groupPath)
+    ? leaf.groupPath.filter((g) => typeof g === "string" && g.trim()).map((g) => g.trim())
+    : [];
+  return [...path, label].filter(Boolean).join("｜");
+}

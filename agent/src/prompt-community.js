@@ -5,7 +5,7 @@
 // shares/<码>（写穿副本，作者保存时 refreshPromptShare 已同步）。shareId 从【码】
 // HMAC 派生（不从 itemId）：码一辈子不变（含 fork re-key），同码同帖复活、fork 后
 // 帖不断，全部自动成立，索引里不用存任何新绑定。
-import { shareIdFor, communityKey } from "../../functions/lib/community-store.js";
+import { shareIdFor, communityKey, promptPostTitle } from "../../functions/lib/community-store.js";
 import { readProfileName } from "../../functions/lib/style-store.js";
 
 export const promptShareId = (code, secret) => shareIdFor(`promptshare:${code}`, secret);
@@ -51,8 +51,8 @@ export async function retractPromptPost(env, code) {
   } catch (e) { console.error("[prompt-community] retract failed:", e && e.message); }
 }
 
-// D1 展示索引行（与 Pages indexUpsert 的 prompt 语义一致：title=label、
-// preview=正文前60字、无图）。写失败吞掉。
+// D1 展示索引行（与 Pages indexUpsert 的 prompt 语义一致：title=promptPostTitle
+// 组合的「分组｜名字」、preview=正文前60字、无图）。写失败吞掉。
 async function indexUpsertPrompt(env, post, leaf) {
   if (!env.RECO_DB) return;
   try {
@@ -64,7 +64,7 @@ async function indexUpsertPrompt(env, post, leaf) {
          owner=excluded.owner, author=excluded.author, title=excluded.title,
          preview=excluded.preview, updated_at=excluded.updated_at, hidden=excluded.hidden,
          kind=excluded.kind`,
-    ).bind(post.shareId, post.owner, null, post.author || "", leaf.label || "",
+    ).bind(post.shareId, post.owner, null, post.author || "", promptPostTitle(leaf) || "",
            previewOf(leaf.instruction) || null, null, 0, 1,
            post.firstSharedAt, Date.now(), null, 0, "prompt").run();
   } catch (e) { console.log("[prompt-community] index upsert failed", String(e?.message || e)); }

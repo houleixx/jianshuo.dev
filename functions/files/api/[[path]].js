@@ -24,7 +24,7 @@
 
 import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst, indexEntryFor, removeIndexEntry, setIndexFlag } from "../../lib/article-store.js";
 import { silentM4aBytes } from "../../lib/silent-m4a.js";
-import { shareIdFor, communityKey, reportKey, isShareId } from "../../lib/community-store.js";
+import { shareIdFor, communityKey, reportKey, isShareId, promptPostTitle } from "../../lib/community-store.js";
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
@@ -1112,7 +1112,7 @@ async function handleRequest(context) {
           let leaf = null;
           try { const d = o2 && JSON.parse(await o2.text()); if (d?.type === 'prompt') leaf = d; } catch {}
           if (!leaf) { await env.FILES.delete(o.key); await indexDelete(p.shareId); return; }
-          await indexUpsert(p, [{ title: leaf.label || '', body: leaf.instruction }], undefined,
+          await indexUpsert(p, [{ title: promptPostTitle(leaf) || '', body: leaf.instruction }], undefined,
                             { hidden: hidden.has(p.shareId), kind: 'prompt' });
           seen.add(p.shareId); indexed++;
           return;
@@ -1337,7 +1337,7 @@ async function handleRequest(context) {
     if (p.kind === 'prompt') {
       const leaf = await livePromptLeaf(communityKey(shareId), p);
       if (!leaf) return json({ error: 'not found' }, 404);
-      const articles = [{ title: leaf.label || '分享提示词', body: leaf.instruction }];
+      const articles = [{ title: promptPostTitle(leaf) || '分享提示词', body: leaf.instruction }];
       const heal = indexUpsert(p, articles, undefined, { kind: 'prompt' });
       if (waitUntil) waitUntil(heal); else await heal;
       return json({ shareId: p.shareId, author: p.author, title: articles[0].title,

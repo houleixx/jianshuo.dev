@@ -2,7 +2,8 @@
 // spec：voicedrop repo docs/superpowers/specs/2026-07-11-prompt-share-magic-number-design.md
 //
 // 与文章分享共用 shares/ 命名空间：文章条目值是纯文本 articleKey，指令条目值是
-// JSON {type:"prompt", sub, itemId, label, instruction, createdAt, updatedAt} ——
+// JSON {type:"prompt", sub, itemId, label, instruction, groupPath?, createdAt, updatedAt} ——
+// groupPath = 作者树里的分组路径（数组；树两级封顶所以至多一段，数组是给未来多层留格式）——
 // 当前生效文本的**写穿副本**（铸码时写入，作者保存指令时由 prompt-routes.js 的
 // syncActiveShares 经 refreshPromptShare 同步），落地页与兑换都只读这一个对象，
 // 不再现算合并。
@@ -14,6 +15,7 @@ import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList } from "./prompts.js";
 import { loadUserPrompts } from "./prompt-store.js";
 import { publishPromptPost, retractPromptPost, promptShareId } from "./prompt-community.js";
+import { promptPostTitle } from "../../functions/lib/community-store.js";
 // author 显示名 —— SINGLE SOURCE OF TRUTH，见 style-store.js#readProfileName 上方
 // 注释："the share endpoint, miner, and mint all import this"。这里显式传
 // { fallback: "none" }：无名 → ""，而不是 miner/mint 默认走的 ID 前 6 位大写 —
@@ -77,15 +79,21 @@ async function effectiveLeaf(env, scope, itemId) {
   const [tpl, doc] = await Promise.all([loadPromptTemplate(env), loadUserPrompts(env, scope)]);
   const flat = [];
   for (const n of resolveList(tpl, doc)) {
-    flat.push(n);
-    for (const c of n.children || []) flat.push(c);
+    flat.push({ node: n });
+    // 记下父分组路径——分享副本带上它，收下的人才能落进同名分组（而不是全堆顶层）。
+    // 树今天两级封顶，路径至多一段；存数组是给未来放宽层数留的格式余地。
+    for (const c of n.children || []) {
+      flat.push({ node: c, groupPath: n.type === "group" && typeof n.label === "string" && n.label.trim() ? [n.label] : [] });
+    }
   }
-  const hit = flat.find((n) => n.id === itemId);
+  const entry = flat.find((e) => e.node.id === itemId);
+  const hit = entry?.node;
   if (!hit || hit.type !== "action") return null;
   return {
     label: hit.label, instruction: hit.prompt,
     appliesTo: hit.appliesTo,
     ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
+    ...(entry.groupPath?.length ? { groupPath: entry.groupPath } : {}),
   };
 }
 
@@ -98,6 +106,7 @@ function sharedDocFor(scope, itemId, leaf, createdAt, importCount = 0) {
     type: "prompt", sub: scope.slice("users/".length, -1), itemId,
     label: leaf.label, instruction: leaf.instruction,
     appliesTo: leaf.appliesTo, ...(leaf.kind !== undefined ? { kind: leaf.kind } : {}),
+    ...(Array.isArray(leaf.groupPath) && leaf.groupPath.length ? { groupPath: leaf.groupPath } : {}),
     importCount,
     createdAt: createdAt || now, updatedAt: now,
   }, null, 2);
@@ -139,6 +148,14 @@ function sanitizeAppliesTo(raw) {
   return filtered.length ? filtered : ["text", "image"];
 }
 
+/// groupPath 清洗：与 appliesTo 同一原则——外部既成事实文档里的非法元素【丢弃】而不是
+/// 拒绝整条。只留非空字符串段并 trim；段数封顶 4（树两级封顶下正常至多 1 段，超出的
+/// 只可能来自手改/未来数据，导入侧今天也只消费第一段）。
+function sanitizeGroupPath(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((g) => typeof g === "string" && g.trim()).map((g) => g.trim()).slice(0, 4);
+}
+
 /// 兑换/落地读的解析：shares/<code> 是 JSON 且 type=prompt 才算（老式文章条目值
 /// 是纯 key 字符串，JSON.parse 失败自然跳过）。
 export async function resolvePromptShare(env, code) {
@@ -147,12 +164,15 @@ export async function resolvePromptShare(env, code) {
     if (!o) return null;
     const doc = JSON.parse(await o.text());
     if (!doc || doc.type !== "prompt" || typeof doc.instruction !== "string") return null;
+    const groupPath = sanitizeGroupPath(doc.groupPath);
     return {
       code, sub: doc.sub, itemId: doc.itemId,
       label: doc.label || "分享指令", instruction: doc.instruction,
       // 老副本（本次重构之前铸的码）没有 appliesTo → 回退「都行」；元素非法也一样。
       appliesTo: sanitizeAppliesTo(doc.appliesTo),
       ...(doc.kind !== undefined ? { kind: doc.kind } : {}),
+      // 老副本没有 groupPath → 字段缺失，导入照旧落顶层。
+      ...(groupPath.length ? { groupPath } : {}),
       importCount: doc.importCount || 0,
     };
   } catch { return null; }
@@ -221,6 +241,7 @@ async function handlePromptShareGet(url, env) {
   return J({
     label: hit.label, prompt: hit.instruction, appliesTo: hit.appliesTo,
     ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
+    ...(hit.groupPath ? { groupPath: hit.groupPath } : {}),
     author, importCount: hit.importCount,
   });
 }
@@ -274,8 +295,9 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   if (!cfg.enabled) return J({ error: "disabled" }, 503);
   if (!leaf) return J({ error: "unknown id" }, 404);
   if (leaf.instruction.length > cfg.maxLength) return J({ error: "too long" }, 413);
-  // 关键词审核（与文章分享同一把闸）：label+正文拼一篇"文章"扫一遍。表已预取，纯本地扫。
-  const kw = await checkArticlesShareable([{ title: leaf.label, body: leaf.instruction }], null, blocklist);
+  // 关键词审核（与文章分享同一把闸）：标题+正文拼一篇"文章"扫一遍。表已预取，纯本地扫。
+  // 标题用「分组｜名字」组合口径（promptPostTitle）——分组名如今也公开展示，必须一并过审。
+  const kw = await checkArticlesShareable([{ title: promptPostTitle(leaf), body: leaf.instruction }], null, blocklist);
   if (kw.flagged) return J({ error: "content_flagged", term: kw.term }, 403);
 
   const existing = idx.byItem[itemId];
