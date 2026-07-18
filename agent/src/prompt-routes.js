@@ -46,13 +46,13 @@ async function syncActiveShares(env, scope, items) {
     const activeIds = Object.entries(states).filter(([, s]) => s.sharing).map(([id]) => id);
     if (!activeIds.length) return;
     const saved = collectSavedIds(items);
-    for (const id of activeIds) {
-      if (saved.has(id)) await refreshPromptShare(env, scope, id);
-    }
+    // 各条互不依赖，并发刷（原来是 for-await 串行——分享多的用户一次保存要几十次串行
+    // R2 往返，是"保存慢"的大头）。这一步现在整个在后台跑，见 PUT 分支的 waitUntil。
+    await Promise.all(activeIds.filter((id) => saved.has(id)).map((id) => refreshPromptShare(env, scope, id)));
   } catch (e) { console.error("[prompts] syncActiveShares failed:", e && e.message); }
 }
 
-export async function handlePromptsRoute(request, env, scope, url) {
+export async function handlePromptsRoute(request, env, scope, url, ctx) {
   const tpl = await loadPromptTemplate(env);
 
   // POST /agent/prompts/restore-defaults —— 补回模板里缺的（后悔药 + 拿新 prompt）
@@ -99,12 +99,20 @@ export async function handlePromptsRoute(request, env, scope, url) {
     const err = validateList(tpl, body.items);
     if (err) return J({ error: err }, 400);
     await saveUserPrompts(env, scope, body.items);
+    // 落盘成功即可返回——响应体 resolved(tpl, body.items) 只用手上的 body，不读 R2，
+    // 不依赖下面这两步。rekey + 分享副本同步都是 best-effort（各自 try/catch），挪到
+    // 后台跑，保存不再等它们那几十次 R2 往返（分享多的用户曾因此卡两三秒）。
     // re-key 必须先于活同步：fork 一个正在分享的系统项后，索引键要从旧 id（sys_*）
     // 挪到新的实体 id，紧接着的 syncActiveShares 才能认出这个实体正处于分享中，
     // 把 fork 后的新内容刷进 shares/<码>——否则分享码会永远冻结在 fork 前的旧内容。
-    // 也是 best-effort（函数内部已经 try/catch），见 prompt-share.js#rekeyForkedShares。
-    await rekeyForkedShares(env, scope, body.items);
-    await syncActiveShares(env, scope, body.items);   // best-effort, 见上方注释
+    // 有 ctx.waitUntil（线上）就后台跑；没有（单测直接 worker.fetch(req, env) 不传 ctx）
+    // 就 await 内联，保持测试对"保存后副本已刷新/码已 rekey"的同步断言（与
+    // prompt-share.js#openPromptShare 发帖同款 waitUntil-or-await）。
+    const post = (async () => {
+      await rekeyForkedShares(env, scope, body.items);
+      await syncActiveShares(env, scope, body.items);
+    })();
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(post); else await post;
     return resolved(tpl, body.items);
   }
 

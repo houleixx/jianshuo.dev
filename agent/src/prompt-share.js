@@ -347,10 +347,13 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
 export async function shareStates(env, scope) {
   const { byItem } = await loadIndex(env, scope);
   const out = {};
-  for (const [itemId, entry] of Object.entries(byItem)) {
-    if (!entry?.code || !CODE_RE.test(entry.code)) continue;
+  // 逐条 head 并发（原来 for-await 串行——分享 N 条就 N 次串行 R2 往返；这个函数在
+  // syncActiveShares 和 iOS 分享卡 GET /agent/prompt-shares 两条热路径上都被调）。
+  // 各条写 out 的不同 key，无竞态。
+  await Promise.all(Object.entries(byItem).map(async ([itemId, entry]) => {
+    if (!entry?.code || !CODE_RE.test(entry.code)) return;
     out[itemId] = { shareCode: entry.code, sharing: !!(await env.FILES.head(`shares/${entry.code}`)) };
-  }
+  }));
   return out;
 }
 

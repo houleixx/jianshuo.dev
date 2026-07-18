@@ -1070,7 +1070,7 @@ export default {
       const scope = await resolveScope(bearerToken(request), env);
       if (!scope) return J({ error: "unauthorized" }, 401);
       if (url.pathname === "/agent/prompts/import") return handlePromptImport(request, env, scope);
-      return handlePromptsRoute(request, env, scope, url);
+      return handlePromptsRoute(request, env, scope, url, ctx);
     }
 
     // ── /agent/prompt-shares ── 只读：当前用户全部分享状态一览（iOS 分享卡，5c）。
