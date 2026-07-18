@@ -11,6 +11,7 @@ import { hmacSign, b64url, anonScopeFromToken } from "../../functions/lib/auth.j
 import {
   PROMPT_SHARE_DEFAULTS, loadPromptShareConfig, mintCode,
   handlePromptShareRoutes, resolvePromptShare, resolveSharedPromptBlock, refreshPromptShare, shareStates,
+  findOwnShareMagic,
 } from "../src/prompt-share.js";
 import worker from "../src/index.js";
 
@@ -289,6 +290,40 @@ describe("resolveSharedPromptBlock", () => {
     expect(magic).toBe(null);
     const silent = makeEnv({ "config/prompt-share.json": JSON.stringify({ notFoundNote: false }) });
     expect(await resolveSharedPromptBlock(silent, "用9999999改")).toBe(null);
+  });
+});
+
+describe("findOwnShareMagic（长按菜单：指令文本反查自己的活跃分享码）", () => {
+  const OWN_SCOPE = "users/me/";
+  const seeded = (extra = {}) => makeEnv({
+    [`${OWN_SCOPE}prompt-shares.json`]: JSON.stringify({ byItem: { it1: { code: "7766443" }, it2: { code: "5550001" } }, mintLog: [] }),
+    "shares/7766443": sharedDoc({ label: "波普漫画风插图", instruction: "将图片改编为波普漫画风插画海报。保留人物原本的五官。" }),
+    // it2 的码没有 shares/ 条目 = 开关已关，不应命中
+    ...extra,
+  });
+
+  it("指令文本包含分享原文（客户端加了锚点前后缀、空白差异）→ 命中该码", async () => {
+    const magic = await findOwnShareMagic(seeded(), OWN_SCOPE,
+      "对第3行的图执行：将图片改编为 波普漫画风插画海报。\n保留人物原本的五官。");
+    expect(magic).toBe("7766443");
+  });
+  it("开关已关（索引在、shares/ 条目没了）→ null", async () => {
+    const e = makeEnv({
+      [`${OWN_SCOPE}prompt-shares.json`]: JSON.stringify({ byItem: { it2: { code: "5550001" } }, mintLog: [] }),
+    });
+    expect(await findOwnShareMagic(e, OWN_SCOPE, "随便什么指令")).toBe(null);
+  });
+  it("文本对不上 / 空文本 / 无索引 → null", async () => {
+    expect(await findOwnShareMagic(seeded(), OWN_SCOPE, "把标题改短一点")).toBe(null);
+    expect(await findOwnShareMagic(seeded(), OWN_SCOPE, "")).toBe(null);
+    expect(await findOwnShareMagic(makeEnv(), OWN_SCOPE, "将图片改编为波普漫画风插画海报。")).toBe(null);
+  });
+  it("多条命中取分享原文最长的一条（更具体者胜）", async () => {
+    const e = seeded({
+      [`${OWN_SCOPE}prompt-shares.json`]: JSON.stringify({ byItem: { it1: { code: "7766443" }, it3: { code: "9990001" } }, mintLog: [] }),
+      "shares/9990001": sharedDoc({ instruction: "将图片改编为" }),
+    });
+    expect(await findOwnShareMagic(e, OWN_SCOPE, "将图片改编为波普漫画风插画海报。保留人物原本的五官。")).toBe("7766443");
   });
 });
 

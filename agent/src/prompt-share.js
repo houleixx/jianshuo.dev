@@ -178,6 +178,32 @@ export async function resolvePromptShare(env, code) {
   } catch { return null; }
 }
 
+/// 文本反查自己的活跃分享码（长按菜单场景）：客户端调预设指令只发文本不带 itemId，
+/// 出图侧拿本轮指令文本对比自己每条活跃分享副本的原文——两边去掉全部空白后做包含
+/// 匹配，命中多条取原文最长者（更具体者胜）。只在真要出图时才调用（次数少），
+/// R2 读次数 = 活跃分享数；任何异常回 null，绝不打断出图。
+const squashWs = (s) => String(s || "").replace(/\s+/g, "");
+export async function findOwnShareMagic(env, scope, text) {
+  try {
+    const hay = squashWs(text);
+    if (!hay) return null;
+    const { byItem } = await loadIndex(env, scope);
+    let best = null, bestLen = 0;
+    for (const entry of Object.values(byItem).slice(0, 50)) {
+      const code = entry?.code;
+      if (!code) continue;
+      const o = await env.FILES.get(`shares/${code}`);
+      if (!o) continue; // 开关已关，码失效
+      let doc; try { doc = JSON.parse(await o.text()); } catch { continue; }
+      if (!doc || doc.type !== "prompt" || typeof doc.instruction !== "string") continue;
+      const needle = squashWs(doc.instruction);
+      // 原文太短的不认（防「改一下」这类短句误命中一切指令）
+      if (needle.length >= 8 && needle.length > bestLen && hay.includes(needle)) { best = code; bestLen = needle.length; }
+    }
+    return best;
+  } catch { return null; }
+}
+
 /// 语音指令里识别 7 位分享码并生成注入块（edit-turn / command-turn 调用）。
 /// 断句归一（ASR 会把「456 3566」念成带空格/连字符/逗号的串）后取第一个
 /// 7 位边界数字；8 位以上（电话号）与首位 0 不命中。无码 → null；

@@ -107,6 +107,22 @@ describe("edit_photo tool", () => {
     const r = await runTool("edit_photo", { key: OLD, prompt: "用分享码风格改图" }, ctx);
     expect(r.ok).toBe(true);
     expect(calls.paint.body.xmp_meta).toEqual({ source: "voicedrop", magic: "4563566" });
+  });
+
+  it("长按菜单场景：指令文本命中自己的活跃分享 → 反查出 magic 进 xmp_meta", async () => {
+    const base = await makeCtx();
+    // 种上自己的分享索引 + 活跃副本（波普漫画风）
+    await base.env.FILES.put(`${SCOPE}prompt-shares.json`,
+      JSON.stringify({ byItem: { it1: { code: "7766443" } }, mintLog: [] }));
+    await base.env.FILES.put("shares/7766443", JSON.stringify({
+      type: "prompt", sub: "sub123", itemId: "it1",
+      label: "波普漫画风插图", instruction: "将图片改编为波普漫画风插画海报。保留人物原本的五官。",
+    }));
+    const ctx = { ...base, instruction: "对这张图执行：将图片改编为波普漫画风插画海报。保留人物原本的五官。" };
+    const calls = stubFetch();
+    const r = await runTool("edit_photo", { key: OLD, prompt: "pop art poster" }, ctx);
+    expect(r.ok).toBe(true);
+    expect(calls.paint.body.xmp_meta).toEqual({ source: "voicedrop", magic: "7766443" });
     expect(calls.paint.body.callback_meta.newKey).toMatch(/^photos\/171\/\d+-[a-z0-9]+\.jpg$/);
     expect(calls.paint.body.callback_meta.scope).toBe(SCOPE);
   });

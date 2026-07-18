@@ -9,6 +9,7 @@ import { ensureAccount } from "./usage_store.js";
 import { restyleArticle, ensurePhotoMarkers } from "./miner.js";
 import { silentM4aBytes } from "../../functions/lib/silent-m4a.js";
 import { snapSize, jpegDims, fitSize } from "./paint-size.js";
+import { findOwnShareMagic } from "./prompt-share.js";
 import { MERGE_ARTICLES_DESC, ADD_FOLLOWUPS_DESC, EDIT_PHOTO_DESC, NEW_PHOTO_DESC } from "./prompts/tool-desc.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
@@ -295,6 +296,12 @@ async function postPaintJob(ctx, { prompt, newKey, oldKey, size }) {
   const { env, scope, articleKey, origin, editId } = ctx;
   const paintBase = env.PAINT_BASE || "https://paint.jianshuo.dev";
   const meta = { scope, newKey, articleKey, editId: editId || null };
+  // 魔法数字进图：口播分享码优先；否则拿本轮指令原文反查自己的活跃分享
+  // （长按菜单调预设只发文本不带 itemId）。查过一次就记在 ctx 上，同轮多图不重查。
+  if (!ctx.sharedMagic && ctx.instruction && !ctx.sharedMagicChecked) {
+    ctx.sharedMagic = await findOwnShareMagic(env, scope, ctx.instruction);
+    ctx.sharedMagicChecked = true;
+  }
   const body = {
     prompt,
     size: snapSize(size, "1024x1024"), // 对齐 16 的倍数：paint 拒绝非 16 倍数的宽高

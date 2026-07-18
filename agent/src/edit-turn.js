@@ -185,8 +185,9 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   // articleIndex rides in ctx so edit_current_article patches the SAME article the
   // user is looking at (the inline-numbered article shown above).
   // sharedMagic：口播分享码命中时随 ctx 下行，edit_photo/new_photo 出图会把它写进
-  // 图片 XMP（paint:Magic）——图走到哪，同款指令的兑换码跟到哪
-  const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: shared?.magic || null };
+  // 图片 XMP（paint:Magic）——图走到哪，同款指令的兑换码跟到哪。instruction 原文
+  // 也下行：出图时若无口播码，拿它反查自己的活跃分享（长按菜单场景，findOwnShareMagic）
+  const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: shared?.magic || null, instruction };
   const result = await runAgentLoop({ callClaude, ctx, system: systemBlocks, userContent, history });
 
   const after = await env.FILES.get(articleKey);
