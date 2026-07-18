@@ -61,6 +61,27 @@ describe("paint 代理 — token 不下发，透传任务", () => {
     expect(seen[0].u).toBe("https://paint.jianshuo.dev/api/jobs");
     expect(seen[0].auth).toBe("Bearer paint-secret");
     expect(seen[0].body.size).toBe("1536x1024");
+    expect(seen[0].body.xmp_meta).toEqual({ source: "prompt-lab" });
+  });
+
+  it("POST 带 prompt_id/magic → 进 xmp_meta；非法 magic 丢弃", async () => {
+    const seen = [];
+    vi.stubGlobal("fetch", async (u, init) => {
+      seen.push({ body: JSON.parse(init.body) });
+      return { status: 202, json: async () => ({ job_id: "j-2" }) };
+    });
+    const env = { ...envWith(), PAINT_API_TOKEN: "paint-secret" };
+    await call(env, "/agent/prompt-lab/paint", {
+      method: "POST",
+      body: { prompt: "画", prompt_id: "voice-editor.longpress.text.insert.wechat-cover", magic: "1234567" },
+    });
+    expect(seen[0].body.xmp_meta).toEqual({
+      source: "prompt-lab",
+      prompt_id: "voice-editor.longpress.text.insert.wechat-cover",
+      magic: "1234567",
+    });
+    await call(env, "/agent/prompt-lab/paint", { method: "POST", body: { prompt: "画", magic: "0123456" } });
+    expect(seen[1].body.xmp_meta).toEqual({ source: "prompt-lab" });
   });
 
   it("POST 缺 prompt → 400；paint 挂了 → 502", async () => {

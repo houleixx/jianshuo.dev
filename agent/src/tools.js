@@ -283,6 +283,9 @@ async function postPaintJob(ctx, { prompt, newKey, oldKey, size }) {
     callback_url: `${origin}/agent/paint-callback`,
     callback_token: env.PAINT_CALLBACK_TOKEN,
     callback_meta: meta,
+    // XMP 溯源（paint spec 2026-07-19 §5）：口述蒸馏 prompt 属用户隐私，不写入图片；只标来源
+    xmp_prompt: false,
+    xmp_meta: { source: "voicedrop" },
   };
   if (oldKey) {
     body.image_url = `${origin}/files/api/photo/${scope}${oldKey}`;

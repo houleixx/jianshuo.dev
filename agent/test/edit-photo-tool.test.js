@@ -73,6 +73,9 @@ describe("edit_photo tool", () => {
     expect(calls.paint.body.callback_url).toBe("https://vd.test/agent/paint-callback");
     expect(calls.paint.body.callback_token).toBe("cbtok");
     expect(calls.paint.body.callback_meta.oldKey).toBe(OLD);
+    // XMP 溯源：口述蒸馏 prompt 属用户隐私不入图，只标来源
+    expect(calls.paint.body.xmp_prompt).toBe(false);
+    expect(calls.paint.body.xmp_meta).toEqual({ source: "voicedrop" });
     expect(calls.paint.body.callback_meta.newKey).toMatch(/^photos\/171\/\d+-[a-z0-9]+\.jpg$/);
     expect(calls.paint.body.callback_meta.scope).toBe(SCOPE);
   });

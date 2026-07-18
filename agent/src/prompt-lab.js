@@ -3,7 +3,8 @@
 // 页面与 /agent 同源，无需 CORS；paint 的 API_TOKEN 留在 Worker secret 里不下发浏览器。
 //
 // GET  /agent/prompt-lab/articles?limit=N → { articles: [{key, title, snippet, photos, uploaded}] }
-// POST /agent/prompt-lab/paint            → body {prompt, size?} 转发 paint /api/jobs，回 {job_id}
+// POST /agent/prompt-lab/paint            → body {prompt, size?, prompt_id?, magic?} 转发 paint /api/jobs，回 {job_id}
+//                                            （prompt_id/magic 进图片 XMP 溯源 xmp_meta，非法即丢）
 // GET  /agent/prompt-lab/paint/<jobId>    → 转发 paint 任务状态（含 result_url）
 import { bearerToken } from "../../functions/lib/auth.js";
 import { TITLE_FALLBACK, readArticleDoc, withTopLevelArticles } from "../../functions/lib/article-store.js";
@@ -52,12 +53,16 @@ export async function handlePromptLab(request, env, url) {
     const body = await request.json().catch(() => null);
     if (!body || typeof body.prompt !== "string" || !body.prompt.trim()) return J({ error: "expected {prompt}" }, 400);
     const size = snapSize(body.size, "1536x1024"); // 对齐 16 的倍数：paint 拒绝非 16 倍数的宽高
+    // XMP 溯源（paint spec 2026-07-19 §5）：标来源 + 页面选中的指令 id + 活跃分享码（都是尽力而为，非法即丢）
+    const xmpMeta = { source: "prompt-lab" };
+    if (typeof body.prompt_id === "string" && /^[\w.-]{1,64}$/.test(body.prompt_id)) xmpMeta.prompt_id = body.prompt_id;
+    if (typeof body.magic === "string" && /^[1-9][0-9]{6}$/.test(body.magic)) xmpMeta.magic = body.magic;
     let resp;
     try {
       resp = await globalThis.fetch(`${paintBase}/api/jobs`, {
         method: "POST",
         headers: { Authorization: `Bearer ${env.PAINT_API_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: body.prompt, size, format: "jpeg" }),
+        body: JSON.stringify({ prompt: body.prompt, size, format: "jpeg", xmp_meta: xmpMeta }),
       });
     } catch { resp = null; }
     if (!resp || (resp.status !== 202 && resp.status !== 200)) return J({ error: "paint-unavailable", status: resp?.status || 0 }, 502);
