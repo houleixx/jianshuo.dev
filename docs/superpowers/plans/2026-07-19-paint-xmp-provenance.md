@@ -14,7 +14,9 @@
 
 - 零运行时依赖：只许 `node:*` 内置模块，不装任何 npm 包、不装系统工具。
 - 所有命令在 `paint/` 目录下执行；测试命令：`npm test`（= `node --import tsx --test test/*.test.ts`）。
-- `xmp_meta`：只收字符串值；key 必须匹配 `^[A-Za-z0-9_]{1,32}$`；`JSON.stringify` 总长 > 4096 → 整个请求 400（不静默截断）。
+- `xmp_meta`：只收字符串值；key 必须匹配 `^[A-Za-z_][A-Za-z0-9_]{0,31}$`（首字符不能是数字）；
+  key 大小写不敏感地等于保留字段 `jobId`/`model`，或与另一个 key 碰撞，一律 400；
+  `JSON.stringify` 总长 > 4096 → 整个请求 400（不静默截断）。
 - `xmp_prompt` 默认 `true`；只有显式 `false` 才不写 prompt。
 - 元数据写入失败绝不让任务失败：catch + log，照常 done + 回调。
 - WebP 与无法识别的文件格式：跳过写入，log 一行。
@@ -366,9 +368,14 @@ Expected: 第一条 PASS（未知字段本就被忽略），第二条 FAIL（坏
   if (body.xmp_meta !== undefined) {
     if (typeof body.xmp_meta !== "object" || body.xmp_meta === null || Array.isArray(body.xmp_meta))
       return sendJson(res, 400, { error: "xmp_meta must be an object" });
+    const seenKeys = new Set<string>();
     for (const [k, v] of Object.entries(body.xmp_meta)) {
-      if (!/^[A-Za-z0-9_]{1,32}$/.test(k)) return sendJson(res, 400, { error: `xmp_meta bad key: ${k}` });
+      if (!/^[A-Za-z_][A-Za-z0-9_]{0,31}$/.test(k)) return sendJson(res, 400, { error: `xmp_meta bad key: ${k}` });
       if (typeof v !== "string") return sendJson(res, 400, { error: "xmp_meta values must be strings" });
+      const lower = k.toLowerCase();
+      if (lower === "jobid" || lower === "model") return sendJson(res, 400, { error: `xmp_meta key reserved: ${k}` });
+      if (seenKeys.has(lower)) return sendJson(res, 400, { error: `xmp_meta key collides case-insensitively: ${k}` });
+      seenKeys.add(lower);
     }
     if (JSON.stringify(body.xmp_meta).length > 4096) return sendJson(res, 400, { error: "xmp_meta too large (4KB)" });
     xmpMeta = body.xmp_meta;

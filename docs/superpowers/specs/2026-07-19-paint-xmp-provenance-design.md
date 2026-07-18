@@ -38,8 +38,10 @@ xmp_prompt?: boolean   // 默认 true：prompt 全文写入 dc:description；敏
 xmp_meta?:   object    // 自定义字段，如 {"magic":"1234567","source":"prompt-lab"}
 ```
 
-- `xmp_meta` 只收字符串值；key 限 `^[A-Za-z0-9_]{1,32}$`；序列化总量封顶 4KB，
-  超限整个请求 400（宁缺勿错，别静默截断）。
+- `xmp_meta` 只收字符串值；key 限 `^[A-Za-z_][A-Za-z0-9_]{0,31}$`（首字符不能是数字，否则
+  `paint:<Key>` 不是合法 XML 属性名）；序列化总量封顶 4KB，超限整个请求 400（宁缺勿错，
+  别静默截断）。key 大小写不敏感地等于保留字段 `jobId`/`model`，或与另一个 `xmp_meta`
+  key 大写化后碰撞，一律 400——防止伪造 provenance。
 - **魔法数字不特殊处理**——就是 `xmp_meta` 里一个普通 key。paint 不懂
   VoiceDrop 业务，边界干净。
 - 老调用方零改动；不传参数 = 默认行为（prompt 全文入档，无附加字段）。

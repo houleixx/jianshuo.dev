@@ -186,5 +186,11 @@ test("POST /api/jobs 400 on bad xmp_meta", async () => {
   assert.equal((await post({ prompt: "a cat", xmp_meta: { magic: 123 } })).status, 400);
   // 总量超 4KB
   assert.equal((await post({ prompt: "a cat", xmp_meta: { big: "x".repeat(5000) } })).status, 400);
+  // key 以数字开头（非法 XML 属性名）
+  assert.equal((await post({ prompt: "a cat", xmp_meta: { "7days": "v" } })).status, 400);
+  // key 与保留字段 jobId 大小写不敏感碰撞
+  assert.equal((await post({ prompt: "a cat", xmp_meta: { jobId: "x" } })).status, 400);
+  // 两个 key 大写化后互相碰撞
+  assert.equal((await post({ prompt: "a cat", xmp_meta: { magic: "1", Magic: "2" } })).status, 400);
   app.close();
 });

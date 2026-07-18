@@ -192,9 +192,14 @@ async function submitJob(body: any, cfg: Config, store: JobStore, worker: Worker
   if (body.xmp_meta !== undefined) {
     if (typeof body.xmp_meta !== "object" || body.xmp_meta === null || Array.isArray(body.xmp_meta))
       return sendJson(res, 400, { error: "xmp_meta must be an object" });
+    const seenKeys = new Set<string>();
     for (const [k, v] of Object.entries(body.xmp_meta)) {
-      if (!/^[A-Za-z0-9_]{1,32}$/.test(k)) return sendJson(res, 400, { error: `xmp_meta bad key: ${k}` });
+      if (!/^[A-Za-z_][A-Za-z0-9_]{0,31}$/.test(k)) return sendJson(res, 400, { error: `xmp_meta bad key: ${k}` });
       if (typeof v !== "string") return sendJson(res, 400, { error: "xmp_meta values must be strings" });
+      const lower = k.toLowerCase();
+      if (lower === "jobid" || lower === "model") return sendJson(res, 400, { error: `xmp_meta key reserved: ${k}` });
+      if (seenKeys.has(lower)) return sendJson(res, 400, { error: `xmp_meta key collides case-insensitively: ${k}` });
+      seenKeys.add(lower);
     }
     if (JSON.stringify(body.xmp_meta).length > 4096) return sendJson(res, 400, { error: "xmp_meta too large (4KB)" });
     xmpMeta = body.xmp_meta;
