@@ -813,6 +813,33 @@ async function handleRequest(context) {
     return json({ url: `https://voicedrop.cn/${id}` });
   }
 
+  // Pre-save WeChat credential check. The app calls this before persisting
+  // WECHAT.json: the relay fetches a real access_token from the whitelisted VPS
+  // IP, so a wrong AppID/AppSecret or a missing IP-whitelist entry fails HERE
+  // (relay returns {ok:false,errcode,errmsg}, e.g. 40164 = IP not whitelisted)
+  // instead of surfacing at first publish. Auth'd like every other route; the
+  // creds are only forwarded to the relay, never stored by this endpoint.
+  if (request.method === 'POST' && action === 'wechat-validate') {
+    if (!env.WECHAT_RELAY_URL || !env.WECHAT_RELAY_SECRET) {
+      return json({ error: 'relay_not_configured' }, 500);
+    }
+    let creds = null;
+    try { creds = await request.json(); } catch {}
+    if (!creds || !creds.appid || !creds.secret) return json({ error: 'missing appid/secret' }, 400);
+    try {
+      const rr = await fetch(env.WECHAT_RELAY_URL.replace(/\/publish$/, '') + '/validate', {
+        method: 'POST',
+        headers: { 'X-Relay-Secret': env.WECHAT_RELAY_SECRET, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appid: creds.appid, secret: creds.secret }),
+      });
+      const relay = await rr.json().catch(() => null);
+      if (!rr.ok || !relay) return json({ error: 'relay_error', detail: relay }, 502);
+      return json(relay);
+    } catch (e) {
+      return json({ error: 'relay_unreachable', detail: String((e && e.message) || e) }, 502);
+    }
+  }
+
   // On-demand WeChat draft push for ONE mined article. The app calls this when
   // the user taps 发布微信公众号草稿. WeChat's API only works from the whitelisted
   // Tokyo proxy (in GitHub Actions), so we can't push from here — instead dispatch
