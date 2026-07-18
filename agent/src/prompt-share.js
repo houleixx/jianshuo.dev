@@ -178,29 +178,22 @@ export async function resolvePromptShare(env, code) {
   } catch { return null; }
 }
 
-/// 文本反查自己的活跃分享码（长按菜单场景）：客户端调预设指令只发文本不带 itemId，
-/// 出图侧拿本轮指令文本对比自己每条活跃分享副本的原文——两边去掉全部空白后做包含
-/// 匹配，命中多条取原文最长者（更具体者胜）。只在真要出图时才调用（次数少），
-/// R2 读次数 = 活跃分享数；任何异常回 null，绝不打断出图。
-const squashWs = (s) => String(s || "").replace(/\s+/g, "");
-export async function findOwnShareMagic(env, scope, text) {
+/// item_id 精确解析魔法数字（出图侧）：客户端随编辑 payload 带上被调用指令的
+/// item_id，这里从服务端事实推码——自己的活跃分享（byItem）优先，其次未删的
+/// 导入件出处（importedFrom，码属原作者）。两条路都验 shares/<码> 还活着；
+/// 任何异常回 null，绝不打断出图。
+export async function magicForItem(env, scope, itemId) {
   try {
-    const hay = squashWs(text);
-    if (!hay) return null;
+    if (!itemId) return null;
     const { byItem } = await loadIndex(env, scope);
-    let best = null, bestLen = 0;
-    for (const entry of Object.values(byItem).slice(0, 50)) {
-      const code = entry?.code;
-      if (!code) continue;
-      const o = await env.FILES.get(`shares/${code}`);
-      if (!o) continue; // 开关已关，码失效
-      let doc; try { doc = JSON.parse(await o.text()); } catch { continue; }
-      if (!doc || doc.type !== "prompt" || typeof doc.instruction !== "string") continue;
-      const needle = squashWs(doc.instruction);
-      // 原文太短的不认（防「改一下」这类短句误命中一切指令）
-      if (needle.length >= 8 && needle.length > bestLen && hay.includes(needle)) { best = code; bestLen = needle.length; }
-    }
-    return best;
+    const own = byItem[itemId]?.code;
+    if (own && (await env.FILES.head(`shares/${own}`))) return own;
+    const doc = await loadUserPrompts(env, scope);
+    const flat = [];
+    for (const n of doc?.items || []) { flat.push(n); for (const c of n?.children || []) flat.push(c); }
+    const hit = flat.find((n) => n && n.id === itemId && typeof n.importedFrom === "string" && n.importedFrom);
+    if (hit && (await env.FILES.head(`shares/${hit.importedFrom}`))) return hit.importedFrom;
+    return null;
   } catch { return null; }
 }
 

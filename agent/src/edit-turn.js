@@ -81,7 +81,7 @@ async function imageBlocks(images, { env, scope, origin }) {
   return out;
 }
 
-export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, anchor = null, system, history = [], callClaude }) {
+export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, anchor = null, itemId = null, system, history = [], callClaude }) {
   const obj = await env.FILES.get(articleKey);
   if (!obj) return { ok: false, reply: "", article: null, hadError: true };
   const doc = JSON.parse(await obj.text());
@@ -185,9 +185,9 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   // articleIndex rides in ctx so edit_current_article patches the SAME article the
   // user is looking at (the inline-numbered article shown above).
   // sharedMagic：口播分享码命中时随 ctx 下行，edit_photo/new_photo 出图会把它写进
-  // 图片 XMP（paint:Magic）——图走到哪，同款指令的兑换码跟到哪。instruction 原文
-  // 也下行：出图时若无口播码，拿它反查自己的活跃分享（长按菜单场景，findOwnShareMagic）
-  const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: shared?.magic || null, instruction };
+  // 图片 XMP（paint:Magic）——图走到哪，同款指令的兑换码跟到哪。itemId：客户端
+  // 长按菜单调指令时随 payload 带上的指令 id，出图时精确解析成码（magicForItem）
+  const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: shared?.magic || null, itemId: itemId || null };
   const result = await runAgentLoop({ callClaude, ctx, system: systemBlocks, userContent, history });
 
   const after = await env.FILES.get(articleKey);

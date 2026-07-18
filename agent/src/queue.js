@@ -40,9 +40,9 @@ export function makeMemStore(now = () => Date.now()) {
   const rows = new Map(); // id -> row
   let maxSeq = 0;
   return {
-    insert({ id, text, images, article_index, anchor }) {
+    insert({ id, text, images, article_index, anchor, item_id }) {
       const t = now();
-      const row = { id, seq: ++maxSeq, text, images: images ?? null, status: "pending", reply: null, error: null, created_at: t, updated_at: t, article_index: article_index ?? null, anchor: anchor ?? null };
+      const row = { id, seq: ++maxSeq, text, images: images ?? null, status: "pending", reply: null, error: null, created_at: t, updated_at: t, article_index: article_index ?? null, anchor: anchor ?? null, item_id: item_id ?? null };
       rows.set(id, row);
       return { ...row };
     },
@@ -64,11 +64,11 @@ export function makeMemStore(now = () => Date.now()) {
 // makeMemStore. `sql` must be bound to the DO (e.g. this.sql.bind(this)).
 export function makeSqlStore(sql, now = () => Date.now()) {
   return {
-    insert({ id, text, images, article_index, anchor }) {
+    insert({ id, text, images, article_index, anchor, item_id }) {
       const seq = (sql`SELECT COALESCE(MAX(seq),0) AS m FROM queue`[0]?.m || 0) + 1;
       const t = now();
-      sql`INSERT INTO queue (id, seq, text, images, status, reply, error, created_at, updated_at, article_index, anchor)
-          VALUES (${id}, ${seq}, ${text}, ${images ?? null}, 'pending', NULL, NULL, ${t}, ${t}, ${article_index ?? null}, ${anchor ?? null})`;
+      sql`INSERT INTO queue (id, seq, text, images, status, reply, error, created_at, updated_at, article_index, anchor, item_id)
+          VALUES (${id}, ${seq}, ${text}, ${images ?? null}, 'pending', NULL, NULL, ${t}, ${t}, ${article_index ?? null}, ${anchor ?? null}, ${item_id ?? null})`;
       return this.get(id);
     },
     get(id) { return sql`SELECT * FROM queue WHERE id = ${id}`[0] || null; },
@@ -97,10 +97,10 @@ export class ArticleQueue {
   // `anchor` is already a JSON string or null by the time it gets here (the
   // caller runs it through normalizeAnchor() first, same treatment article_index
   // gets) — this method just stores/threads it through, same as article_index.
-  async submit({ id, text, images, article_index, anchor }) {
+  async submit({ id, text, images, article_index, anchor, item_id }) {
     const existing = this.store.get(id);
     if (existing) return { kind: "replay", row: existing };
-    this.store.insert({ id, text, images: images ? JSON.stringify(images) : null, article_index, anchor: anchor ?? null });
+    this.store.insert({ id, text, images: images ? JSON.stringify(images) : null, article_index, anchor: anchor ?? null, item_id: item_id ?? null });
     return { kind: "enqueued" };
   }
 

@@ -46,6 +46,20 @@ describe("ArticleQueue.submit", () => {
     await q.submit({ id: "a", text: "x" });
     expect(store.get("a").anchor).toBeNull();
   });
+
+  // item_id 透传（anchor 同待遇）：长按菜单的指令 id 随 submit 落 row，出图侧
+  // magicForItem 用它精确解析魔法数字；老 app 不带 → null。
+  it("item_id 随 submit 落到 row；缺省为 null", async () => {
+    const { q, store, ran } = harness({
+      runTurn: async (row) => { ran.push(row); return { ok: true, reply: "好", article: {} }; },
+    });
+    await q.submit({ id: "a", text: "x", item_id: "p_pop_art" });
+    expect(store.get("a").item_id).toBe("p_pop_art");
+    await q.drain();
+    expect(ran[0].item_id).toBe("p_pop_art");
+    await q.submit({ id: "b", text: "y" });
+    expect(store.get("b").item_id).toBeNull();
+  });
 });
 
 describe("normalizeAnchor — WS 消息里 anchor 的校验（非对象/type 非法 → null）", () => {

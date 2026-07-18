@@ -103,6 +103,7 @@ export class ArticleEditor extends Agent {
     // Migrate queue rows created before anchor existed (锚点协议 spec §4.1) — same
     // treatment as article_index above.
     try { this.sql`ALTER TABLE queue ADD COLUMN anchor TEXT`; } catch (_) {}
+    try { this.sql`ALTER TABLE queue ADD COLUMN item_id TEXT`; } catch (_) {}
     // Recover after hibernation/eviction: reset any leftover 'running' row and
     // drain whatever is pending — even with no client connected.
     if (this._queue.recover()) this.schedule(0, "drainQueue");
@@ -209,7 +210,7 @@ export class ArticleEditor extends Agent {
     try { anchor = row.anchor ? JSON.parse(row.anchor) : null; } catch (_) { anchor = null; }
     const res = await runEditTurn({
       env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev",
-      editId: row.id, instruction: row.text, images, articleIndex, anchor, system: SYSTEM, history, callClaude,
+      editId: row.id, instruction: row.text, images, articleIndex, anchor, itemId: row.item_id || null, system: SYSTEM, history, callClaude,
     });
     editPreview.finish();   // 幽灵稿收尾（updated 紧随其后广播）
 
@@ -251,8 +252,11 @@ export class ArticleEditor extends Agent {
     // 锚点协议（spec §3/§4）：长按图片/文字菜单动作随手势带的结构化定位，可选字段。
     // 老 app / 语音自由指令没有这个字段 → normalizeAnchor 落 null，现状行为不变。
     const anchor = normalizeAnchor(msg.anchor);
+    // 长按菜单调指令时客户端随手势带上的指令 id（传事实不传结论）——出图侧用它精确
+    // 解析魔法数字进 XMP（magicForItem）。老 app / 语音自由指令没有 → null，行为不变。
+    const item_id = (typeof msg.itemId === "string" && /^[\w.-]{1,64}$/.test(msg.itemId)) ? msg.itemId : null;
 
-    const r = await this._queue.submit({ id, text: instruction, images, article_index, anchor });
+    const r = await this._queue.submit({ id, text: instruction, images, article_index, anchor, item_id });
     if (r.kind === "replay") {
       // Already known — re-push its cached result to THIS caller, never re-run.
       const row = r.row;
