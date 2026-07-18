@@ -6,16 +6,36 @@
 const STEP = 16;
 const MIN = 256;
 const MAX = 4096;
+// gpt-image-2 CLI 还要求总像素 ≥ 655360（= 640×1024）。长边缩到 1024 的竖图
+// （如 9:16 → 576x1024 = 58.9 万）单边都合法但总像素不够，会被 paint 整单拒掉
+// （2026-07-18「竖版照片死活改不了风格」事故）。不够就等比放大到达标。
+const MIN_PIXELS = 655360;
 
 function snapDim(n) {
   const v = Math.round(Number(n) / STEP) * STEP;
   return Math.max(MIN, Math.min(MAX, v)); // MIN/MAX 都是 16 的倍数，夹紧后仍对齐
 }
 
+function snapDimUp(n) {
+  const v = Math.ceil(Number(n) / STEP) * STEP;
+  return Math.max(MIN, Math.min(MAX, v));
+}
+
+// 总像素不足下限时等比放大（向上取 16 倍数）；极端比例被 MAX 夹住时抬另一边兜底。
+function ensureMinPixels(w, h) {
+  if (w * h >= MIN_PIXELS) return `${w}x${h}`;
+  const k = Math.sqrt(MIN_PIXELS / (w * h));
+  let W = snapDimUp(w * k), H = snapDimUp(h * k);
+  while (W * H < MIN_PIXELS && (W < MAX || H < MAX)) {
+    if (W <= H && W < MAX) W += STEP; else H += STEP;
+  }
+  return `${W}x${H}`;
+}
+
 export function snapSize(size, fallback = "1024x1024") {
   const m = typeof size === "string" && size.match(/^(\d{2,4})x(\d{2,4})$/);
   if (!m) return fallback;
-  return `${snapDim(m[1])}x${snapDim(m[2])}`;
+  return ensureMinPixels(snapDim(m[1]), snapDim(m[2]));
 }
 
 // JPEG SOF 头解析：顺着段结构找 SOFn 取宽高，不解码像素。给 edit_photo 用——
@@ -41,9 +61,10 @@ export function jpegDims(bytes) {
   return null;
 }
 
-// 按原图宽高比出目标尺寸：长边缩到 longSide，两边吸附 16 倍数并夹紧上下限。
+// 按原图宽高比出目标尺寸：长边缩到 longSide，两边吸附 16 倍数并夹紧上下限，
+// 总像素不足 gpt-image-2 下限时再等比放大到达标（竖图 9:16 必踩，见顶部注释）。
 export function fitSize(w, h, longSide = 1024) {
   if (!(w > 0 && h > 0)) return null;
   const k = longSide / Math.max(w, h);
-  return `${snapDim(w * k)}x${snapDim(h * k)}`;
+  return ensureMinPixels(snapDim(w * k), snapDim(h * k));
 }

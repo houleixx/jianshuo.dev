@@ -13,8 +13,12 @@ describe("snapSize", () => {
   it("越界的维度夹到 [256,4096]，且仍是 16 的倍数", () => {
     expect(snapSize("9999x100", "1024x1024")).toBe("4096x256");
   });
-  it("360 这类非对齐值吸附到最近的 16 倍数", () => {
-    expect(snapSize("640x360")).toBe("640x368"); // 360/16=22.5 → Math.round 上取 23 → 368
+  it("360 这类非对齐值吸附到 16 倍数后，总像素不足下限 → 等比放大到达标", () => {
+    // 640x368 = 23.6 万 < 65.5 万下限，等比 ×1.668 后向上对齐 16
+    expect(snapSize("640x360")).toBe("1072x624"); // 1072*624 = 668928 ≥ 655360
+  });
+  it("竖图 576x1024 低于 gpt-image-2 总像素下限 → 放大（2026-07-18 竖版照片改风格必失败的回归）", () => {
+    expect(snapSize("576x1024")).toBe("608x1088"); // 608*1088 = 661504 ≥ 655360，比例基本不变
   });
   it("格式不合法或缺省 → 回退给定 fallback", () => {
     expect(snapSize(undefined, "1536x1024")).toBe("1536x1024");
@@ -49,10 +53,14 @@ describe("fitSize", () => {
   it("4:3 横图 → 1024x768", () => expect(fitSize(4000, 3000)).toBe("1024x768"));
   it("3:4 竖图 → 768x1024", () => expect(fitSize(3000, 4000)).toBe("768x1024"));
   it("方图 → 1024x1024", () => expect(fitSize(3024, 3024)).toBe("1024x1024"));
+  it("9:16 手机竖拍 → 放大到总像素达标而非 576x1024（回归）", () => {
+    expect(fitSize(1080, 1920)).toBe("608x1088");
+  });
   it("非法输入 → null", () => expect(fitSize(0, 100)).toBeNull());
-  it("极端全景短边夹到下限且对齐 16", () => {
+  it("极端全景短边夹到下限、对齐 16 且总像素达标", () => {
     const m = fitSize(8000, 1000).match(/^(\d+)x(\d+)$/);
     expect(Number(m[1]) % 16).toBe(0);
-    expect(Number(m[2])).toBeGreaterThanOrEqual(256);
+    expect(Number(m[2]) % 16).toBe(0);
+    expect(Number(m[1]) * Number(m[2])).toBeGreaterThanOrEqual(655360);
   });
 });
