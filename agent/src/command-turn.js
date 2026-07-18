@@ -30,14 +30,14 @@ export async function runCommandTurn({ env, scope, token, origin, turnId, instru
     { type: "text", text: `用户的写作风格（合并/重写时保持）：\n${style || "（未设置）"}`, cache_control: { type: "ephemeral" } },
   ];
   // 指令里报了 7 位分享码 → 追加对应的共享指令块（一次性参考；查无则软备注）。
-  const sharedBlock = await resolveSharedPromptBlock(env, instruction);
+  const shared = await resolveSharedPromptBlock(env, instruction);
   const userContent = [
     "编号清单（用户此刻在屏幕上看到的顺序，第N篇 ↔ stem）：",
     refLines,
     "",
     "这次的语音指令：",
     instruction,
-    ...(sharedBlock ? ["", sharedBlock] : []),
+    ...(shared ? ["", shared.block] : []),
   ].join("\n");
 
   // ctx 带 callClaude —— merge_articles 需要内部再调一次 Claude 做揉合成。

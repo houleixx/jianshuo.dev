@@ -244,7 +244,8 @@ describe("resolveSharedPromptBlock", () => {
   const seeded = () => makeEnv({ "shares/4563566": sharedDoc(), "shares/7654321": sharedDoc({ label: "另一条", instruction: "另一条指令。" }) });
 
   it("hits a plain 7-digit code; block carries delimiters + label + text, no placeholder note", async () => {
-    const block = await resolveSharedPromptBlock(seeded(), "用4563566改这段");
+    const { block, magic } = await resolveSharedPromptBlock(seeded(), "用4563566改这段");
+    expect(magic).toBe("4563566");
     expect(block).toContain("【分享提示词开始】");
     expect(block).toContain("【分享提示词结束】");
     expect(block).toContain("更毒舌");
@@ -254,19 +255,19 @@ describe("resolveSharedPromptBlock", () => {
   });
   it("adds the placeholder note only when the instruction contains {{", async () => {
     const e = makeEnv({ "shares/4563566": sharedDoc({ instruction: "把第{{LINE}}行改好。" }) });
-    const block = await resolveSharedPromptBlock(e, "用4563566");
+    const { block } = await resolveSharedPromptBlock(e, "用4563566");
     expect(block).toContain("占位符");
   });
   it("⑧ 注入块含「若上下文提供了用户长按的目标」补句 —— 与占位符注解无关，恒出现", async () => {
     // 无占位符的分享文本也要有这句：分享码常在语音指令里搭配 anchor 一起出现。
-    expect(await resolveSharedPromptBlock(seeded(), "用4563566改这段")).toContain("若上下文提供了『用户长按的目标』，提示词里说的『这张图/这段』即指它");
+    expect((await resolveSharedPromptBlock(seeded(), "用4563566改这段")).block).toContain("若上下文提供了『用户长按的目标』，提示词里说的『这张图/这段』即指它");
     const e = makeEnv({ "shares/4563566": sharedDoc({ instruction: "把第{{LINE}}行改好。" }) });
-    expect(await resolveSharedPromptBlock(e, "用4563566")).toContain("若上下文提供了『用户长按的目标』，提示词里说的『这张图/这段』即指它");
+    expect((await resolveSharedPromptBlock(e, "用4563566")).block).toContain("若上下文提供了『用户长按的目标』，提示词里说的『这张图/这段』即指它");
   });
   it("normalizes ASR pauses: spaces / hyphens / 中文逗号 between digits", async () => {
-    expect(await resolveSharedPromptBlock(seeded(), "用 456 3566 处理")).toContain("更毒舌");
-    expect(await resolveSharedPromptBlock(seeded(), "用456-3566处理")).toContain("更毒舌");
-    expect(await resolveSharedPromptBlock(seeded(), "用456，3566处理")).toContain("更毒舌");
+    expect((await resolveSharedPromptBlock(seeded(), "用 456 3566 处理")).block).toContain("更毒舌");
+    expect((await resolveSharedPromptBlock(seeded(), "用456-3566处理")).block).toContain("更毒舌");
+    expect((await resolveSharedPromptBlock(seeded(), "用456，3566处理")).block).toContain("更毒舌");
   });
   it("ignores 8+ digit runs and leading-zero runs", async () => {
     expect(await resolveSharedPromptBlock(seeded(), "打电话13800138000")).toBe(null);
@@ -276,14 +277,16 @@ describe("resolveSharedPromptBlock", () => {
     expect(await resolveSharedPromptBlock(seeded(), "把这段改得简洁点")).toBe(null);
   });
   it("first code wins when two are present", async () => {
-    const block = await resolveSharedPromptBlock(seeded(), "先用4563566再用7654321");
+    const { block, magic } = await resolveSharedPromptBlock(seeded(), "先用4563566再用7654321");
     expect(block).toContain("更毒舌");
     expect(block).not.toContain("另一条");
+    expect(magic).toBe("4563566");
   });
-  it("valid-format but unknown code → soft not-found note; config can silence it", async () => {
-    const note = await resolveSharedPromptBlock(makeEnv(), "用9999999改");
+  it("valid-format but unknown code → soft not-found note (magic 为 null); config can silence it", async () => {
+    const { block: note, magic } = await resolveSharedPromptBlock(makeEnv(), "用9999999改");
     expect(note).toContain("9999999");
     expect(note).toContain("无效");
+    expect(magic).toBe(null);
     const silent = makeEnv({ "config/prompt-share.json": JSON.stringify({ notFoundNote: false }) });
     expect(await resolveSharedPromptBlock(silent, "用9999999改")).toBe(null);
   });

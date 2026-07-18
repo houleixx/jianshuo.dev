@@ -163,8 +163,8 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   varLines.push("", "这次的语音指令：", instruction);
 
   // 指令里报了 7 位分享码 → 追加对应的共享指令块（一次性参考；查无则软备注）。
-  const sharedBlock = await resolveSharedPromptBlock(env, instruction);
-  if (sharedBlock) varLines.push("", sharedBlock);
+  const shared = await resolveSharedPromptBlock(env, instruction);
+  if (shared) varLines.push("", shared.block);
 
   const userContent = [
     ...(await imageBlocks(images, { env, scope, origin })),
@@ -184,7 +184,9 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
 
   // articleIndex rides in ctx so edit_current_article patches the SAME article the
   // user is looking at (the inline-numbered article shown above).
-  const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx };
+  // sharedMagic：口播分享码命中时随 ctx 下行，edit_photo/new_photo 出图会把它写进
+  // 图片 XMP（paint:Magic）——图走到哪，同款指令的兑换码跟到哪
+  const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: shared?.magic || null };
   const result = await runAgentLoop({ callClaude, ctx, system: systemBlocks, userContent, history });
 
   const after = await env.FILES.get(articleKey);
