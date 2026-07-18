@@ -18,7 +18,7 @@
 // its 文风 section is parsed out. Writers only ever write CLAUDE.json, so an old
 // CLAUDE.md is retired the first time a user saves.
 
-export const STYLE_MAX_VERSIONS = 10;
+export const STYLE_MAX_VERSIONS = 20;
 
 // 存储键 —— 本模块的私有约定，调用方一律只传 scope（"users/<sub>/"），
 // 永远不自己拼 CLAUDE.json / CLAUDE.md（readProfileName 同款封装原则）。
