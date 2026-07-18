@@ -13,7 +13,18 @@ voicedrop.cn, www.voicedrop.cn {
                 redir * {uri} permanent
         }
 
-        # 接口与图片透传(分享页的照片、og 图都走这里)
+        # 照片/封面等纯静态大图不过这台机器——本机跨境回源 CF 只有 ~60KB/s，
+        # 一页 5 张 500KB 的图并行拉直接把分享页拖到「看不到图」。302 到
+        # jianshuo.dev 后图片字节走用户↔CF edge 直连；子资源跨域不触发微信
+        # 「非官方网页」提示(那只看顶层页面域名)。2026-07-18 修。
+        handle /files/api/photo/* {
+                redir * https://jianshuo.dev{uri}
+        }
+        handle /files/api/asset/* {
+                redir * https://jianshuo.dev{uri}
+        }
+
+        # 其余接口透传(小 JSON,不受带宽瓶颈影响;og 图等静态图已在上面 302)
         handle /files/* {
                 reverse_proxy https://jianshuo-dev.pages.dev {
                         header_up Host jianshuo-dev.pages.dev
