@@ -240,13 +240,32 @@ function relKey({ articleKey, scope }) {
   return articleKey.slice(scope.length);
 }
 
-// 编辑结果的新 R2 相对键：保留原图的 session 目录、换新时间戳文件名 + 随机后缀、
-// 跟原图一样的 .jpg（paint 走 jpeg 输出）。scope+此键必须匹配公开 /photo 端点的
-// photos/*.(jpg|png)。
+// 编辑结果的新 R2 相对键：保留原图的 session 目录 + 偏移前缀，只换随机尾——同前缀
+// 让人在同目录一眼找到原图；文件名绝不再用绝对时间戳（2026-07-19 反馈修正）。
+// .jpg 因 paint 走 jpeg 输出。scope+此键必须匹配公开 /photo 端点的 photos/*.(jpg|png)。
 export function makeEditedKey(oldKey, nowMs, rand = "0") {
-  const m = /^photos\/([^/]+)\//.exec(String(oldKey || ""));
-  const session = m ? m[1] : String(nowMs);
-  return `photos/${session}/${nowMs}-${rand}.jpg`;
+  const m = /^photos\/([^/]+)\/([^/.]+)\.[A-Za-z0-9]+$/.exec(String(oldKey || ""));
+  if (!m) {
+    const s = Math.floor(nowMs / 1000);
+    return `photos/${s}/${s}-${rand}.jpg`;
+  }
+  const prefix = m[2].replace(/-[A-Za-z0-9]+$/, "");
+  if (`${prefix}-${rand}` === m[2]) rand += "x"; // 随机尾撞了原图名就补一位，绝不同名覆盖
+  return `photos/${m[1]}/${prefix}-${rand}.jpg`;
+}
+
+// 生成图（无原图可承前缀）：session 沿用文章的录音会话目录，前缀 = 会话开始到此刻的
+// 秒偏移（相对值）。stem 是设备本地时间、这里按 UTC 解析——斜差只影响偏移大小不影响
+// 唯一性（随机尾兜底），负值钳 0。stem 无时间戳 → 退回秒级 now。
+export function makeGeneratedKey(articleKey, nowMs, rand) {
+  const m = /(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(String(articleKey || ""));
+  if (m) {
+    const start = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    const off = Math.max(0, Math.floor((nowMs - start) / 1000));
+    return `photos/${m[1]}-${m[2]}-${m[3]}-${m[4]}${m[5]}${m[6]}/${off}-${rand}.jpg`;
+  }
+  const s = Math.floor(nowMs / 1000);
+  return `photos/${s}/${s}-${rand}.jpg`;
 }
 
 async function postFiles(path, { token, origin }) {
@@ -283,9 +302,10 @@ async function postPaintJob(ctx, { prompt, newKey, oldKey, size }) {
     callback_url: `${origin}/agent/paint-callback`,
     callback_token: env.PAINT_CALLBACK_TOKEN,
     callback_meta: meta,
-    // XMP 溯源（paint spec 2026-07-19 §5）：口述蒸馏 prompt 属用户隐私，不写入图片；只标来源
+    // XMP 溯源（paint spec 2026-07-19 §5）：口述蒸馏 prompt 属用户隐私，不写入图片；
+    // 标来源 + 口播分享码（magic 是公开分享码不是隐私，图带着它 = 同款指令的入口）
     xmp_prompt: false,
-    xmp_meta: { source: "voicedrop" },
+    xmp_meta: ctx.sharedMagic ? { source: "voicedrop", magic: ctx.sharedMagic } : { source: "voicedrop" },
   };
   if (oldKey) {
     body.image_url = `${origin}/files/api/photo/${scope}${oldKey}`;
@@ -399,7 +419,7 @@ register(
     if (!articles.length) return { error: "no_article" };
     const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
 
-    const newKey = makeEditedKey("", now, Math.random().toString(36).slice(2, 8));
+    const newKey = makeGeneratedKey(articleKey, now, Math.random().toString(36).slice(2, 8));
     const marker = `[[photo:${newKey}]]`;
     const r = applyArticleEdits(String(articles[idx].body || ""), [{ op: "insert_after", line: Number(after_line) || 0, text: marker }]);
     if (r.error) return r; // surface line_not_found etc.

@@ -1,18 +1,41 @@
 import { vi, describe, it, expect, afterEach } from "vitest";
-import { makeEditedKey, runTool } from "../src/tools.js";
+import { makeEditedKey, makeGeneratedKey, runTool } from "../src/tools.js";
 import { fakeEnv, fakeD1, usageSql } from "./fakes.js";
 
 describe("makeEditedKey", () => {
-  it("keeps session dir, new ts, rand suffix, .jpg", () => {
-    expect(makeEditedKey("photos/1719900000/1719900000.jpg", 1719999999, "abc"))
-      .toBe("photos/1719900000/1719999999-abc.jpg");
+  it("keeps session dir AND offset prefix, swaps only the rand tail (原图易寻)", () => {
+    expect(makeEditedKey("photos/2026-07-02-000000/12-abc.jpg", 1719999999000, "xyz"))
+      .toBe("photos/2026-07-02-000000/12-xyz.jpg");
   });
-  it("falls back to nowMs session when unparseable", () => {
-    expect(makeEditedKey("weird", 42, "z9")).toBe("photos/42/42-z9.jpg");
+  it("legacy name without rand tail keeps whole name as prefix, appends rand", () => {
+    expect(makeEditedKey("photos/1719900000/1719900000.jpg", 1719999999000, "abc"))
+      .toBe("photos/1719900000/1719900000-abc.jpg");
+  });
+  it("never returns the original key even when rand collides", () => {
+    expect(makeEditedKey("photos/s/12-abc.jpg", 1, "abc")).not.toBe("photos/s/12-abc.jpg");
+  });
+  it("falls back to now-seconds session when unparseable", () => {
+    expect(makeEditedKey("weird", 42_000, "z9")).toBe("photos/42/42-z9.jpg");
   });
   it("result matches the public /photo key shape after scope prefix", () => {
     const rel = makeEditedKey("photos/abc/def.png", 7, "xy");
     expect("users/sub/" + rel).toMatch(/^users\/[^/]+\/photos\/.+\.(jpe?g|png)$/i);
+  });
+});
+
+describe("makeGeneratedKey", () => {
+  it("uses the article's session dir + second-offset from session start（相对值，非绝对时间戳）", () => {
+    const base = Date.UTC(2026, 6, 2, 0, 0, 0);
+    expect(makeGeneratedKey("users/u/articles/VoiceDrop-2026-07-02-000000.json", base + 90_000, "abcdef"))
+      .toBe("photos/2026-07-02-000000/90-abcdef.jpg");
+  });
+  it("clamps negative offsets to 0（时区斜差容忍）", () => {
+    const base = Date.UTC(2026, 6, 2, 0, 0, 0);
+    expect(makeGeneratedKey("users/u/articles/VoiceDrop-2026-07-02-000000.json", base - 5_000, "ab"))
+      .toBe("photos/2026-07-02-000000/0-ab.jpg");
+  });
+  it("falls back to now-seconds session when stem has no timestamp", () => {
+    expect(makeGeneratedKey("users/u/articles/foo.json", 42_000, "z9")).toBe("photos/42/42-z9.jpg");
   });
 });
 
@@ -76,6 +99,14 @@ describe("edit_photo tool", () => {
     // XMP 溯源：口述蒸馏 prompt 属用户隐私不入图，只标来源
     expect(calls.paint.body.xmp_prompt).toBe(false);
     expect(calls.paint.body.xmp_meta).toEqual({ source: "voicedrop" });
+  });
+
+  it("carries the spoken share code into xmp_meta.magic when ctx has sharedMagic", async () => {
+    const ctx = { ...(await makeCtx()), sharedMagic: "4563566" };
+    const calls = stubFetch();
+    const r = await runTool("edit_photo", { key: OLD, prompt: "用分享码风格改图" }, ctx);
+    expect(r.ok).toBe(true);
+    expect(calls.paint.body.xmp_meta).toEqual({ source: "voicedrop", magic: "4563566" });
     expect(calls.paint.body.callback_meta.newKey).toMatch(/^photos\/171\/\d+-[a-z0-9]+\.jpg$/);
     expect(calls.paint.body.callback_meta.scope).toBe(SCOPE);
   });
@@ -126,7 +157,8 @@ describe("new_photo tool", () => {
     expect(calls.paint.body.callback_meta.oldKey).toBeUndefined();
     expect(calls.paint.body.callback_meta.scope).toBe(SCOPE);
     expect(calls.paint.body.callback_meta.articleKey).toBe(ARTICLE_KEY);
-    expect(calls.paint.body.callback_meta.newKey).toMatch(/^photos\/.+\.jpg$/);
+    // 生成图落在文章会话目录下，前缀是秒偏移（相对值），不是绝对毫秒时间戳
+    expect(calls.paint.body.callback_meta.newKey).toMatch(/^photos\/2026-07-02-000000\/\d{1,10}-[a-z0-9]+\.jpg$/);
   });
 
   it("rejects when balance < imageCostUY (no paint call)", async () => {
