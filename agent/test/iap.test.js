@@ -6,7 +6,7 @@ vi.mock("agents", () => ({
 }));
 import { fakeD1, fakeFetch, usageSql } from "./fakes.js";
 import { handleIapRoute, processTransaction, revokeTransaction, appleJWT, decodeJWSPayload } from "../src/iap.js";
-import { SUB_PRODUCT_MONTHLY, SUB_GRANT_SUANLI, SUB_BUCKET_GRACE_MS, suanliToUY } from "../src/usage.js";
+import { SUB_PRODUCT_MONTHLY, SUB_GRANT_SUANLI, SUB_BUCKET_GRACE_MS, suanliToUY, uyToSuanli, SIGNUP_GRANT_UY } from "../src/usage.js";
 import { anonScopeFromToken } from "../../functions/lib/auth.js";
 
 const SQL = usageSql();
@@ -54,6 +54,8 @@ const appleRoute = (payload, base = PROD) => ({
     () => ({ ok: true, status: 200, body: { signedTransactionInfo: fakeJWS(payload) } }),
 });
 
+const SIGNUP_SUANLI = Math.round(uyToSuanli(SIGNUP_GRANT_UY));   // 注册赠送（随 usage.js 单一真源走；round 对齐下面 suanli() 的取整口径）
+
 async function suanli(db, scope) {
   const now = Date.now();
   const r = db.prepare("SELECT COALESCE(SUM(remaining_uy),0) AS s FROM bucket WHERE user_sub=? AND (expires_at IS NULL OR expires_at > ?)").bind(scope, now).first();
@@ -84,7 +86,7 @@ describe("POST /agent/iap/claim", () => {
     expect(r.status).toBe(200);
     const body = await r.json();
     expect(body).toMatchObject({ ok: true, granted: true, suanli: SUB_GRANT_SUANLI });
-    expect(await suanli(db, scope)).toBe(500 + SUB_GRANT_SUANLI); // signup 500 + 订阅 200
+    expect(await suanli(db, scope)).toBe(SIGNUP_SUANLI + SUB_GRANT_SUANLI); // signup + 订阅 200
     const bucket = db.prepare("SELECT * FROM bucket WHERE source='subscription'").bind().first();
     expect(bucket.expires_at).toBe(payload.expiresDate + SUB_BUCKET_GRACE_MS);
     expect(bucket.amount_uy).toBe(suanliToUY(SUB_GRANT_SUANLI));
@@ -101,7 +103,7 @@ describe("POST /agent/iap/claim", () => {
     const r2 = await call(env, "/agent/iap/claim", { method: "POST", token: TOK, body: { transaction_id: "1000000001" } });
     const body = await r2.json();
     expect(body).toMatchObject({ ok: true, granted: false, already: true });
-    expect(await suanli(db, scope)).toBe(500 + SUB_GRANT_SUANLI);
+    expect(await suanli(db, scope)).toBe(SIGNUP_SUANLI + SUB_GRANT_SUANLI);
   });
 
   it("续费 = 新 transactionId 同 originalTransactionId → 再发一桶（月月 200）", async () => {
@@ -113,7 +115,7 @@ describe("POST /agent/iap/claim", () => {
     await call(env, "/agent/iap/claim", { method: "POST", token: TOK, body: { transaction_id: "1000000001" } });
     const r = await call(env, "/agent/iap/claim", { method: "POST", token: TOK, body: { transaction_id: "1000000002" } });
     expect((await r.json()).granted).toBe(true);
-    expect(await suanli(db, scope)).toBe(500 + 2 * SUB_GRANT_SUANLI);
+    expect(await suanli(db, scope)).toBe(SIGNUP_SUANLI + 2 * SUB_GRANT_SUANLI);
   });
 
   it("同一订阅链换账号 claim → 409 bound-elsewhere，不发钱", async () => {
@@ -170,7 +172,7 @@ describe("POST /agent/iap/notifications (ASN V2)", () => {
     const r = await call(env, "/agent/iap/notifications", { method: "POST", body: asnBody("DID_RENEW", renew) });
     expect(r.status).toBe(200);
     expect((await r.json()).granted).toBe(true);
-    expect(await suanli(db, scope)).toBe(500 + 2 * SUB_GRANT_SUANLI);
+    expect(await suanli(db, scope)).toBe(SIGNUP_SUANLI + 2 * SUB_GRANT_SUANLI);
   });
 
   it("通知里的交易内容不可信：入账金额以回查结果为准（伪造 payload 查无 → 跳过）", async () => {
@@ -196,10 +198,10 @@ describe("POST /agent/iap/notifications (ASN V2)", () => {
     const env = mkEnv(db, appleRoute(payload));
     const scope = await anonScopeFromToken(TOK);
     await call(env, "/agent/iap/claim", { method: "POST", token: TOK, body: { transaction_id: "1000000001" } });
-    expect(await suanli(db, scope)).toBe(500 + SUB_GRANT_SUANLI);
+    expect(await suanli(db, scope)).toBe(SIGNUP_SUANLI + SUB_GRANT_SUANLI);
     const r = await call(env, "/agent/iap/notifications", { method: "POST", body: asnBody("REFUND", payload) });
     expect((await r.json()).revoked).toBe(true);
-    expect(await suanli(db, scope)).toBe(500);
+    expect(await suanli(db, scope)).toBe(SIGNUP_SUANLI);
     expect(db.prepare("SELECT status FROM iap_sub").bind().first().status).toBe("revoked");
   });
 

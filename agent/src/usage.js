@@ -15,7 +15,7 @@ export const suanliToUY = (s) => Math.round((s / RATE) * 1e6); // 算力 -> 微�
 export const uyToSuanli = (uy) => (uy * RATE) / 1e6;        // 微元 -> 算力
 export const uyToYuan = (uy) => uy / 1e6;                   // 微元 -> 元
 
-export const SIGNUP_GRANT_UY = suanliToUY(500);            // 一次性 500 算力
+export const SIGNUP_GRANT_UY = suanliToUY(200);            // 一次性 200 算力（2026-07-19 从 500 下调）
 
 // Prompt-caching pricing multipliers (Anthropic): a cache WRITE (5-min ephemeral)
 // bills at 1.25x base input, a cache READ at 0.1x. `input_tokens` from the API is

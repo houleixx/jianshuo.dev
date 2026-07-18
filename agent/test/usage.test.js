@@ -23,8 +23,8 @@ describe("usage pricing", () => {
     expect(asrCostUY(3600)).toBe(800000);
     expect(uyToSuanli(800000)).toBeCloseTo(18.4, 5);
   });
-  it("signup grant ≈ 500 算力", () => {
-    expect(uyToSuanli(SIGNUP_GRANT_UY)).toBeCloseTo(500, 2);
+  it("signup grant ≈ 200 算力", () => {
+    expect(uyToSuanli(SIGNUP_GRANT_UY)).toBeCloseTo(200, 2);
   });
 });
 

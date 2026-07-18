@@ -18,12 +18,12 @@ function req(path, { method = "GET", token } = {}) {
 }
 
 describe("usage routes", () => {
-  it("balance route lazily creates account and returns ~500 算力", async () => {
+  it("balance route lazily creates account and returns ~200 算力", async () => {
     const env = { USAGE: fakeD1(SQL), SESSION_SECRET: "" }; // anon token path
     const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/balance"), req("/agent/usage/balance", { token: "anon_unittesttoken_abcdefghijklmnop" }), env);
     expect(r.status).toBe(200);
     const body = await r.json();
-    expect(Math.round(body.suanli)).toBe(500);
+    expect(Math.round(body.suanli)).toBe(200);
   });
   it("ledger 出口把 reason 翻成中文，reason_code 保留英文码，DB 不动", async () => {
     const db = fakeD1(SQL);
@@ -62,7 +62,7 @@ describe("usage routes", () => {
     const db = fakeD1(usageSql());
     const env = { USAGE: db, SESSION_SECRET: "" };
     const tok = "anon_unittesttoken_abcdefghijklmnop";
-    // Bootstrap the account (creates the 500-算力 signup bucket + caches balance_uy=SIGNUP_GRANT_UY)
+    // Bootstrap the account (creates the 200-算力 signup bucket + caches balance_uy=SIGNUP_GRANT_UY)
     await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/balance"),
       req("/agent/usage/balance", { token: tok }), env);
     // Expire every bucket: live sum is now 0, but account.balance_uy still caches 500
@@ -74,7 +74,7 @@ describe("usage routes", () => {
   });
   it("admin accounts lists live (bucket) balance", async () => {
     const env = { USAGE: fakeD1(usageSql()), FILES_TOKEN: "admintok" };
-    // 触发一个用户的 signup（500 算力桶）
+    // 触发一个用户的 signup（200 算力桶）
     await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/balance"),
       req("/agent/usage/balance", { token: "anon_unittesttoken_abcdefghijklmnop" }), env);
     const r = await handleUsageRoute(new URL("https://jianshuo.dev/agent/usage/admin/accounts"),
@@ -82,7 +82,7 @@ describe("usage routes", () => {
     expect(r.status).toBe(200);
     const body = await r.json();
     expect(body.accounts.length).toBe(1);
-    expect(Math.round(body.accounts[0].balance_suanli)).toBe(500);
+    expect(Math.round(body.accounts[0].balance_suanli)).toBe(200);
   });
   it("admin mint 账本汇总收益/排行/流水，且要 FILES_TOKEN", async () => {
     const db = fakeD1(usageSql());
@@ -212,14 +212,14 @@ describe("usage summary + ledger pagination routes", () => {
     expect(r.status).toBe(200);
     const body = await r.json();
     const g = Object.fromEntries(body.granted.map((x) => [x.reason, x.suanli]));
-    expect(g["注册赠送"]).toBe(500);
+    expect(g["注册赠送"]).toBe(200);
     expect(g["活动赠送"]).toBe(150);            // campaign:a + campaign:b 合并
     expect(g["邀请奖励"]).toBe(80);
     const s = Object.fromEntries(body.spent.map((x) => [x.reason, x.suanli]));
     expect(s["挖文章"]).toBe(9);
     expect(s["语音转写"]).toBe(1);
     expect(body.spent.find((x) => x.reason === "挖文章").count).toBe(1);
-    expect(body.granted_suanli).toBe(730);
+    expect(body.granted_suanli).toBe(430);   // 注册 200 + 活动 150 + 邀请 80
     expect(body.spent_suanli).toBe(10);
   });
   it("ledger 翻页：limit+before 游标、has_more/next，两页拼起来不重不漏", async () => {

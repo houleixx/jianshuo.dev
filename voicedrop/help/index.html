@@ -180,7 +180,7 @@
 <li><strong>离线与失败重试</strong>：没网也能录。录音先存在手机本地队列里，联网后自动上传；单次上传失败会自动重试（最多 3 次，间隔 1.5 秒、3 秒），失败的文件留在本地不丢，下次继续传；网络恢复的一刻会自动重新上传。</li>
 <li><strong>录音时长上限</strong>：单条录音最长 <strong>3 小时</strong>，超过会标「录音过长」不处理。</li>
 <li><strong>转写太短</strong>：识别出的文字少于 20 个字会判为「录得太短」，不成文。</li>
-<li><strong>算力（费用）</strong>：新用户注册一次性赠送 <strong>500 算力</strong>（有效期 1 年）；23 算力 = 1 元。语音转写按时长计费（约 0.8 元/小时），挖文章按 AI 用量计费。余额为 0（余额不足）时不再处理新录音，需充值。</li>
+<li><strong>算力（费用）</strong>：新用户注册一次性赠送 <strong>200 算力</strong>（有效期 1 年）；23 算力 = 1 元。语音转写按时长计费（约 0.8 元/小时），挖文章按 AI 用量计费。余额为 0（余额不足）时不再处理新录音，需充值。</li>
 <li><strong>追加/编辑逻辑</strong>：每段录音对应它自己的文章，没有"把新录音接到旧文章后面"的操作；要改已有文章用「按住说话修改」口述指令，要整体重来用「重写」重新挖。</li>
 <li><strong>从标签页录音</strong>：如果你是在某个标签页里点录音键发起的，挖出的文章会默认带上那个标签。</li>
 </ul></div>
@@ -509,7 +509,7 @@
     </div>
     <div class="f-body">
       <div class="blk"><p><strong>算力</strong>是 VoiceDrop 内部统一的计费单位。你在 app 里做的每一件要用到 AI 的事——把录音转成文字、把口述「挖」成文章、用语音反复修改文章、生成卡通解释图——都会按实际用量从你的算力余额里扣。</p>
-<p>新用户不用先充值。注册后系统会一次性赠送 <strong>500 算力</strong>，有效期 <strong>365 天（一年）</strong>，日常口述、挖文章足够用很久。算力还可以通过<strong>活动赠送</strong>和<strong>社区投币</strong>继续获得。</p>
+<p>新用户不用先充值。注册后系统会一次性赠送 <strong>200 算力</strong>，有效期 <strong>365 天（一年）</strong>，日常口述、挖文章足够用很久。算力还可以通过<strong>活动赠送</strong>和<strong>社区投币</strong>继续获得。</p>
 <p>算力的余额和每一笔进出，都记在<strong>设置 → 算力</strong>页里，公开透明：顶部大字是剩余算力和它大约能挖多少篇，下面分「算力来源」和「明细」两块，来龙去脉一目了然。当余额见底时，需要算力的操作会被暂时拦下并给出提示，已完成的内容不受影响。</p></div>
       <h3 class="blk-h">怎么用</h3>
       <div class="blk steps"><ol>
@@ -521,7 +521,7 @@
 </ol></div>
       <h3 class="blk-h">细节与规则</h3>
       <div class="blk rules"><ul>
-<li><strong>新用户赠送</strong>：注册即得 <strong>500 算力</strong>，有效期 <strong>365 天</strong>。</li>
+<li><strong>新用户赠送</strong>：注册即得 <strong>200 算力</strong>，有效期 <strong>365 天</strong>。</li>
 <li><strong>挖文章（挖矿）</strong>：按 AI 实际消耗的 token 计费，一篇大约 <strong>9 算力</strong>（app 里就是按「9 算力/篇」来估算「还能挖几篇」的）。</li>
 <li><strong>语音转写</strong>：按录音时长计费，单价 <strong>¥0.8/小时</strong>（约 18 算力/小时）。</li>
 <li><strong>语音修改</strong>：按每次修改实际用量计费；<strong>同一篇文章最多修改 100 次</strong>，到顶后会提示「这篇已达编辑上限（100 次）」。</li>
@@ -535,7 +535,7 @@
 <li><strong>计价基准</strong>：内部按 <strong>23 算力 = ¥1</strong> 折算。</li>
 </ul></div>
       <h3 class="blk-h">常见问题</h3>
-      <div class="blk faqs"><details class="faq"><summary>新注册送多少算力？能用多久？</summary><div class="fa">注册就送 500 算力，有效期一年（365 天）。一篇文章大约花 9 算力，加上按 ¥0.8/小时计费的转写，日常口述挖文章可以用很久。</div></details><details class="faq"><summary>挖一篇文章、生成一张图分别花多少算力？</summary><div class="fa">挖一篇文章按 AI 实际用量扣，大约 9 算力；生成一张卡通解释图/编辑图固定 1.8 算力。语音转写另按录音时长计费（¥0.8/小时）。</div></details><details class="faq"><summary>除了充值，还能怎么免费拿算力？</summary><div class="fa">两个途径：一是活动赠送（官方不定期发放）；二是把文章分享到社区，别人给你「投币」时，你和投币的人都会到账算力奖励（这类奖励 90 天内有效）。包月订阅还在开发中，暂未上线。</div></details><details class="faq"><summary>算力用完了会怎样？我的文章会丢吗？</summary><div class="fa">不会丢。余额见底时，新录音的转写和挖文章会被暂停并标记（等有算力后可继续处理），语音修改会提示「算力不足」。已经生成好的文章和所有历史记录都还在。</div></details></div>
+      <div class="blk faqs"><details class="faq"><summary>新注册送多少算力？能用多久？</summary><div class="fa">注册就送 200 算力，有效期一年（365 天）。一篇文章大约花 9 算力，加上按 ¥0.8/小时计费的转写，日常口述挖文章可以用很久。</div></details><details class="faq"><summary>挖一篇文章、生成一张图分别花多少算力？</summary><div class="fa">挖一篇文章按 AI 实际用量扣，大约 9 算力；生成一张卡通解释图/编辑图固定 1.8 算力。语音转写另按录音时长计费（¥0.8/小时）。</div></details><details class="faq"><summary>除了充值，还能怎么免费拿算力？</summary><div class="fa">两个途径：一是活动赠送（官方不定期发放）；二是把文章分享到社区，别人给你「投币」时，你和投币的人都会到账算力奖励（这类奖励 90 天内有效）。包月订阅还在开发中，暂未上线。</div></details><details class="faq"><summary>算力用完了会怎样？我的文章会丢吗？</summary><div class="fa">不会丢。余额见底时，新录音的转写和挖文章会被暂停并标记（等有算力后可继续处理），语音修改会提示「算力不足」。已经生成好的文章和所有历史记录都还在。</div></details></div>
     </div>
   </section>
 
