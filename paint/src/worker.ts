@@ -7,6 +7,7 @@ import type { JobStore, Job } from "./store.js";
 import type { EventHub } from "./events.js";
 import { buildArgs, parseResult, parseEventLine } from "./engine.js";
 import { deliver, type CallbackPayload } from "./callback.js";
+import { buildXmp, embedXmp } from "./xmp.js";
 
 const EXT: Record<string, string> = { png: "png", jpeg: "jpg", webp: "webp" };
 
@@ -79,6 +80,22 @@ export class Worker {
     if (!ok) {
       await this.fail(job, error ?? { code: "unknown", message: "generation failed" }, attempts);
       return;
+    }
+
+    // 出图后、回调前：嵌 XMP 溯源。失败绝不连累任务（spec §4）。
+    try {
+      const xmp = buildXmp({
+        prompt: job.xmpPrompt === false ? undefined : job.prompt,
+        jobId: id,
+        model: "gpt-image-2",
+        createDate: new Date().toISOString(),
+        meta: job.xmpMeta,
+      });
+      const embed = await embedXmp(outPath, xmp);
+      if (embed.embedded) bytes = (await stat(outPath)).size; // 文件变大了，bytes 取嵌入后的
+      else console.log(`[worker] xmp skipped for ${id}: ${embed.reason}`);
+    } catch (e) {
+      console.error(`[worker] xmp embed failed for ${id}`, e);
     }
 
     const done = await this.store.update(id, {

@@ -143,6 +143,37 @@ test("buildArgs failure → failed, input cleaned, pool still processes next", a
   await waitFor(async () => (await store.get("after"))?.status === "done");
 });
 
+test("worker embeds XMP into real PNG result before done", async () => {
+  const { store, worker, cfg } = await setup();
+  await store.create(job("x1", { prompt: "REALPNG a cat", xmpMeta: { magic: "1234567" } }));
+  worker.enqueue("x1");
+  await waitFor(async () => (await store.get("x1"))?.status === "done");
+  const buf = await readFile(join(cfg.resultsDir, "x1.png"));
+  assert.ok(buf.includes(Buffer.from("W5M0MpCehiHzreSzNTczkc9d"))); // XMP 已入文件
+  assert.ok(buf.includes(Buffer.from("REALPNG a cat")));            // prompt 默认写入
+  assert.ok(buf.includes(Buffer.from('paint:Magic="1234567"')));    // xmp_meta 透传
+  const j = await store.get("x1");
+  assert.equal(j?.bytes, buf.length); // bytes 是嵌入后的大小
+});
+
+test("worker respects xmpPrompt=false (no prompt in file)", async () => {
+  const { store, worker, cfg } = await setup();
+  await store.create(job("x2", { prompt: "REALPNG secret words", xmpPrompt: false }));
+  worker.enqueue("x2");
+  await waitFor(async () => (await store.get("x2"))?.status === "done");
+  const buf = await readFile(join(cfg.resultsDir, "x2.png"));
+  assert.ok(buf.includes(Buffer.from("W5M0MpCehiHzreSzNTczkc9d"))); // 基础字段仍写
+  assert.ok(!buf.includes(Buffer.from("secret words")));            // prompt 不写
+});
+
+test("worker still completes when result is not embeddable", async () => {
+  const { store, worker, cfg } = await setup();
+  await store.create(job("x3")); // 默认 fake 写 "FAKEPNGDATA"，非 PNG → 跳过嵌入
+  worker.enqueue("x3");
+  await waitFor(async () => (await store.get("x3"))?.status === "done");
+  assert.equal(await readFile(join(cfg.resultsDir, "x3.png"), "utf8"), "FAKEPNGDATA"); // 文件原样
+});
+
 test("pool drains all queued jobs", async () => {
   const { store, worker } = await setup();
   const ids = ["m1", "m2", "m3", "m4"];

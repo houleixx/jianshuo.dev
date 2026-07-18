@@ -3,6 +3,7 @@
 // stdout 吐 --json 信封。prompt 含 "FAIL" 则返回错误信封 + 退出码 1。
 // prompt 含 "FLAKY"：第一次调用报 missing_image_result，第二次成功（用 out 旁的
 // marker 文件记次数）。prompt 含 "ALWAYSMISSING"：每次都报 missing_image_result。
+// prompt 含 "REALPNG"：写一张真实 1×1 PNG（测 XMP 嵌入用）。
 import { writeFileSync, existsSync } from "node:fs";
 
 const args = process.argv.slice(2);
@@ -43,7 +44,11 @@ if (prompt.includes("FLAKY")) {
   }
 }
 
-if (out) writeFileSync(out, "FAKEPNGDATA");
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+if (out) writeFileSync(out, prompt.includes("REALPNG") ? TINY_PNG : "FAKEPNGDATA");
 process.stderr.write(JSON.stringify({ data: { percent: 100, phase: "output_saved" }, kind: "progress", type: "output_saved" }) + "\n");
 process.stdout.write(JSON.stringify({ ok: true, output: { path: out, bytes: 11 } }));
 process.exit(0);
