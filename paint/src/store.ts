@@ -27,6 +27,9 @@ export interface Job {
   callbackUrl?: string;
   callbackToken?: string;
   callbackMeta?: unknown;
+  /** false = 不把 prompt 写入图片 XMP（默认写）；spec 2026-07-19-paint-xmp-provenance */
+  xmpPrompt?: boolean;
+  xmpMeta?: Record<string, string>;
   callbackStatus?: "pending" | "delivered" | "failed";
   callbackAttempts?: number;
   lastCallbackAt?: string;

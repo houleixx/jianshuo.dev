@@ -158,3 +158,33 @@ test("GET /log renders a jobs table with prompts", async () => {
   assert.match(html, /LOGTEST-PROMPT-xyz/);
   app.close();
 });
+
+test("POST /api/jobs accepts xmp_prompt and xmp_meta", async () => {
+  const { app, base } = await boot();
+  const res = await fetch(`${base}/api/jobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer secret" },
+    body: JSON.stringify({ prompt: "a cat", xmp_prompt: false, xmp_meta: { magic: "1234567" } }),
+  });
+  assert.equal(res.status, 202);
+  app.close();
+});
+
+test("POST /api/jobs 400 on bad xmp_meta", async () => {
+  const { app, base } = await boot();
+  const post = (body: unknown) =>
+    fetch(`${base}/api/jobs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer secret" },
+      body: JSON.stringify(body),
+    });
+  // 非对象
+  assert.equal((await post({ prompt: "a cat", xmp_meta: "nope" })).status, 400);
+  // 坏 key（带连字符）
+  assert.equal((await post({ prompt: "a cat", xmp_meta: { "bad-key": "v" } })).status, 400);
+  // 非字符串值
+  assert.equal((await post({ prompt: "a cat", xmp_meta: { magic: 123 } })).status, 400);
+  // 总量超 4KB
+  assert.equal((await post({ prompt: "a cat", xmp_meta: { big: "x".repeat(5000) } })).status, 400);
+  app.close();
+});

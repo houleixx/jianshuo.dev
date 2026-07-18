@@ -187,6 +187,19 @@ async function submitJob(body: any, cfg: Config, store: JobStore, worker: Worker
   if (!VALID_QUALITY.has(quality)) return sendJson(res, 400, { error: "bad quality" });
   const transparent = body.transparent === true;
 
+  // XMP 溯源参数（spec: docs/superpowers/specs/2026-07-19-paint-xmp-provenance-design.md）
+  let xmpMeta: Record<string, string> | undefined;
+  if (body.xmp_meta !== undefined) {
+    if (typeof body.xmp_meta !== "object" || body.xmp_meta === null || Array.isArray(body.xmp_meta))
+      return sendJson(res, 400, { error: "xmp_meta must be an object" });
+    for (const [k, v] of Object.entries(body.xmp_meta)) {
+      if (!/^[A-Za-z0-9_]{1,32}$/.test(k)) return sendJson(res, 400, { error: `xmp_meta bad key: ${k}` });
+      if (typeof v !== "string") return sendJson(res, 400, { error: "xmp_meta values must be strings" });
+    }
+    if (JSON.stringify(body.xmp_meta).length > 4096) return sendJson(res, 400, { error: "xmp_meta too large (4KB)" });
+    xmpMeta = body.xmp_meta;
+  }
+
   const id = randomUUID();
   let mode: "generate" | "edit" = "generate";
   let inputPath: string | undefined;
@@ -235,6 +248,8 @@ async function submitJob(body: any, cfg: Config, store: JobStore, worker: Worker
     callbackUrl: typeof body.callback_url === "string" ? body.callback_url : undefined,
     callbackToken: typeof body.callback_token === "string" ? body.callback_token : undefined,
     callbackMeta: body.callback_meta,
+    xmpPrompt: body.xmp_prompt !== false,
+    xmpMeta,
     createdAt: new Date().toISOString(),
   };
   await store.create(job);
