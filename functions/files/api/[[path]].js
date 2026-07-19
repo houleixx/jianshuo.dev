@@ -370,7 +370,11 @@ async function handleRequest(context) {
       headers: {
         'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg',
         'Content-Length': String(obj.size),
-        'Cache-Control': 'public, max-age=86400',
+        // Photo keys are write-once (hashed uid + timestamp + random tail; AI regen
+        // mints a NEW key), so a found photo is immutable — cache it for a year
+        // everywhere (EO edge follows origin, CF edge, browsers, iOS). Only the 404
+        // above must stay no-store (clients poll until the object appears).
+        'Cache-Control': 'public, max-age=31536000, immutable',
         'Access-Control-Allow-Origin': '*',
       },
     });
