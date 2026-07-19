@@ -1,5 +1,7 @@
 // CF Workers outbound WebSocket requires an https:// URL + `Upgrade: websocket`
 // header — a wss:// scheme makes fetch() throw "Fetch API cannot load".
+import { asrCorpus } from "./asr-hotwords.js";
+
 const VOLC_ASR_ENDPOINT = "https://openspeech.bytedance.com/api/v3/sauc/bigmodel";
 const VOLC_ASR_RESOURCE_ID = "volc.bigasr.sauc.duration";
 
@@ -28,6 +30,53 @@ export async function toSendablePayload(data) {
     return await data.arrayBuffer();
   }
   return data;
+}
+
+async function pipeBytes(bytes, transform) {
+  const resp = new Response(new Blob([bytes]).stream().pipeThrough(transform));
+  return new Uint8Array(await resp.arrayBuffer());
+}
+const gzipBytes   = (b) => pipeBytes(b, new CompressionStream("gzip"));
+const gunzipBytes = (b) => pipeBytes(b, new DecompressionStream("gzip"));
+
+// Inject the server-side hotword list into the sauc "full client request" frame
+// (the app builds this frame — VoiceDropApp/VolcASRProtocol.swift — and doesn't
+// know about hotwords; keeping the list here means every client gets it with no
+// app release). Frame layout: 4-byte header | 4-byte sequence (when flags≠0) |
+// 4-byte BE payload size | payload (JSON, gzip when the compression nibble says so).
+// Audio-only frames (message type 0b0010) return early on the type check, so this
+// runs on every client→upstream frame at negligible cost. Any parse/format surprise
+// falls through to forwarding the original frame untouched — never break the stream.
+export async function injectAsrHotwords(data) {
+  try {
+    if (!(data instanceof ArrayBuffer) || data.byteLength < 12) return data;
+    const buf = new Uint8Array(data);
+    const headerSize    = (buf[0] & 0x0f) * 4;
+    const messageType   = (buf[1] >> 4) & 0x0f;
+    const flags         = buf[1] & 0x0f;
+    const serialization = (buf[2] >> 4) & 0x0f;
+    const compression   = buf[2] & 0x0f;
+    if (messageType !== 0b0001 || serialization !== 0b0001) return data; // not a JSON full client request
+    let off = headerSize;
+    if (flags & 0x01 || flags & 0x02) off += 4; // sequence — same test as the app's parser
+    const size = new DataView(data, off, 4).getUint32(0);
+    off += 4;
+    if (off + size > buf.byteLength) return data;
+    let payload = buf.slice(off, off + size);
+    if (compression === 0b0001) payload = await gunzipBytes(payload);
+    const req = JSON.parse(new TextDecoder().decode(payload));
+    req.request = req.request || {};
+    req.request.corpus = { ...(req.request.corpus || {}), ...asrCorpus() };
+    let out = new TextEncoder().encode(JSON.stringify(req));
+    if (compression === 0b0001) out = await gzipBytes(out);
+    const frame = new Uint8Array(off + out.byteLength);
+    frame.set(buf.subarray(0, off - 4), 0);
+    new DataView(frame.buffer).setUint32(off - 4, out.byteLength);
+    frame.set(out, off);
+    return frame.buffer;
+  } catch (_) {
+    return data;
+  }
 }
 
 export async function proxyVolcAsrWebSocket(request, env) {
@@ -65,17 +114,21 @@ export async function proxyVolcAsrWebSocket(request, env) {
 
   // Forward messages through a per-direction promise chain so that the async
   // Blob→ArrayBuffer normalization can't reorder frames (audio order matters).
-  const forwarder = (target, failReason) => {
+  const forwarder = (target, failReason, transform) => {
     let chain = Promise.resolve();
     return (event) => {
       const data = event.data;
       chain = chain.then(async () => {
-        try { target.send(await toSendablePayload(data)); }
+        try {
+          let payload = await toSendablePayload(data);
+          if (transform) payload = await transform(payload);
+          target.send(payload);
+        }
         catch (_) { closeBoth(1011, failReason); }
       });
     };
   };
-  server.addEventListener("message", forwarder(upstream, "upstream send failed"));
+  server.addEventListener("message", forwarder(upstream, "upstream send failed", injectAsrHotwords));
   upstream.addEventListener("message", forwarder(server, "client send failed"));
   server.addEventListener("close", (event) => closeBoth(event.code || 1000, event.reason || "client closed"));
   upstream.addEventListener("close", (event) => closeBoth(event.code || 1000, event.reason || "upstream closed"));
