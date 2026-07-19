@@ -1,0 +1,74 @@
+{
+  "ZoneId": "zone-3sqpugiqdegc",
+  "Rules": [
+    {
+      "RuleName": "voicedrop-cn-cache",
+      "Status": "enable",
+      "Description": [
+        "分支按序: 1照片/封面缓存遵循源站; 2其余/files/*不缓存(鉴权接口); 3静态后缀缓存1天; 4默认不缓存"
+      ],
+      "Branches": [
+        {
+          "Condition": "${http.request.host} in ['voicedrop.cn', 'www.voicedrop.cn']",
+          "Actions": [],
+          "SubRules": [
+            {
+              "Description": ["cache-chain"],
+              "Branches": [
+                {
+                  "Condition": "${http.request.uri.path} in ['/files/api/photo/*', '/files/api/asset/*']",
+                  "Actions": [
+                    {
+                      "Name": "Cache",
+                      "CacheParameters": {
+                        "FollowOrigin": {
+                          "Switch": "on",
+                          "DefaultCache": "on",
+                          "DefaultCacheStrategy": "off",
+                          "DefaultCacheTime": 86400
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Condition": "${http.request.uri.path} in ['/files/*']",
+                  "Actions": [
+                    {
+                      "Name": "Cache",
+                      "CacheParameters": { "NoCache": { "Switch": "on" } }
+                    }
+                  ]
+                },
+                {
+                  "Condition": "${http.request.file_extension} in ['js', 'css', 'png', 'jpg', 'jpeg', 'ico', 'gif', 'svg', 'woff', 'woff2', 'apk']",
+                  "Actions": [
+                    {
+                      "Name": "Cache",
+                      "CacheParameters": {
+                        "CustomTime": {
+                          "Switch": "on",
+                          "IgnoreCacheControl": "off",
+                          "CacheTime": 86400
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "Condition": "*",
+                  "Actions": [
+                    {
+                      "Name": "Cache",
+                      "CacheParameters": { "NoCache": { "Switch": "on" } }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
