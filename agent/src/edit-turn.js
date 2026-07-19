@@ -162,7 +162,9 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   if (anchorLine) varLines.push("", anchorLine);
   varLines.push("", "这次的语音指令：", instruction);
 
-  // 指令里报了 7 位分享码 → 追加对应的共享指令块（一次性参考；查无则软备注）。
+  // 指令里报了干净的 7 位分享码 → 零延迟 fast path，预注入共享指令块（一次性参考；
+  // 查无则软备注）。被 ASR 打歪的码（汉字数字/怪断句）和未来的非 7 位码这里不命中，
+  // 由模型在 loop 里调 use_shared_prompt 工具推断解析（见 tools.js / EDIT_SYSTEM）。
   const shared = await resolveSharedPromptBlock(env, instruction);
   if (shared) varLines.push("", shared.block);
 

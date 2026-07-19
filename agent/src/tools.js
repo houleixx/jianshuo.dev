@@ -9,7 +9,7 @@ import { ensureAccount } from "./usage_store.js";
 import { restyleArticle, ensurePhotoMarkers } from "./miner.js";
 import { silentM4aBytes } from "../../functions/lib/silent-m4a.js";
 import { snapSize, jpegDims, fitSize } from "./paint-size.js";
-import { magicForItem } from "./prompt-share.js";
+import { magicForItem, resolvePromptShare, sanitizeMagicCode, sharedPromptUsageNote } from "./prompt-share.js";
 import { MERGE_ARTICLES_DESC, ADD_FOLLOWUPS_DESC, EDIT_PHOTO_DESC, NEW_PHOTO_DESC } from "./prompts/tool-desc.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
@@ -287,6 +287,33 @@ register(
 register(
   { name: "share_to_community", description: "把当前这篇文章分享到 VoiceDrop 社区（立即分享）。", input_schema: { type: "object", properties: {}, additionalProperties: false } },
   async (_args, ctx) => postFiles(`community/share/${relKey(ctx)}`, ctx)
+);
+
+// 分享码（魔法数字）模型侧推断解析——正则 fast path（prompt-share.js，只认干净的
+// 7 位阿拉伯数字）漏掉的码走这里：ASR 汉字数字（「七七六六四四3」）、怪异断句、
+// 未来的 4 位等短码。模型归一化后传入，服务端验 shares/<码> 存活——模型幻觉码在
+// 这一步天然被拦住。命中即写 ctx.sharedMagic，下游 edit_photo/new_photo 出图照常
+// 把码带进 XMP（paint:Magic），与 fast path 同一条溯源链。
+register(
+  {
+    name: "use_shared_prompt",
+    description:
+      "按分享码（魔法数字）取出其他用户分享的提示词，供本次任务一次性参考。当语音指令里出现疑似分享码、而上下文中没有对应的【分享提示词】块时调用。ASR 常把码转成汉字数字或混合形式（「七七六六四四3」= 7766443），先归一化成纯阿拉伯数字再传入；分享码是 3 位以上、不以 0 开头的纯数字，长度不固定。若本次要按该提示词出图（edit_photo / new_photo），必须先调本工具成功后再出图。只传指令里真实出现的码，绝不要凭空猜码。",
+    input_schema: {
+      type: "object",
+      properties: { code: { type: "string", description: "归一化成纯阿拉伯数字的分享码" } },
+      required: ["code"],
+      additionalProperties: false,
+    },
+  },
+  async ({ code }, ctx) => {
+    const c = sanitizeMagicCode(code);
+    if (!c) return { error: "bad_code", hint: "分享码应为 3 位以上、不以 0 开头的纯数字" };
+    const hit = await resolvePromptShare(ctx.env, c);
+    if (!hit) return { error: "not_found", code: c, hint: "码无效或分享已关闭，如实告诉用户，不要另猜一个码" };
+    ctx.sharedMagic = c;
+    return { code: c, label: hit.label, instruction: hit.instruction, note: `仅供完成本次任务一次性参考使用，不改变任何设置。${sharedPromptUsageNote(hit)}` };
+  }
 );
 
 // Shared paint-job POST for both edit_photo (oldKey present → edit mode with
@@ -584,7 +611,7 @@ register(
 // 刻意不含 edit_current_article / write_article / publish_wechat / share_to_community
 //（那些都绑定单一 articleKey，库级命令 turn 不设 articleKey，调了会报错）。
 export const COMMAND_TOOL_NAMES = [
-  "list_articles", "read_article",
+  "list_articles", "read_article", "use_shared_prompt",
   "merge_articles", "delete_article", "restyle_article", "tag_article",
   "read_style", "write_style",
 ];

@@ -11,7 +11,7 @@ import { hmacSign, b64url, anonScopeFromToken } from "../../functions/lib/auth.j
 import {
   PROMPT_SHARE_DEFAULTS, loadPromptShareConfig, mintCode,
   handlePromptShareRoutes, resolvePromptShare, resolveSharedPromptBlock, refreshPromptShare, shareStates,
-  magicForItem,
+  magicForItem, sanitizeMagicCode,
 } from "../src/prompt-share.js";
 import worker from "../src/index.js";
 
@@ -290,6 +290,28 @@ describe("resolveSharedPromptBlock", () => {
     expect(magic).toBe(null);
     const silent = makeEnv({ "config/prompt-share.json": JSON.stringify({ notFoundNote: false }) });
     expect(await resolveSharedPromptBlock(silent, "用9999999改")).toBe(null);
+  });
+});
+
+describe("sanitizeMagicCode（use_shared_prompt 工具的码校验——长度不写死）", () => {
+  it("accepts 7-digit (现行) / 4-digit (未来) / 3-digit (下限)", () => {
+    expect(sanitizeMagicCode("7766443")).toBe("7766443");
+    expect(sanitizeMagicCode("2026")).toBe("2026");
+    expect(sanitizeMagicCode("345")).toBe("345");
+  });
+  it("strips separator noise between digits (同 fast path 断句归一口径)", () => {
+    expect(sanitizeMagicCode("456 3566")).toBe("4563566");
+    expect(sanitizeMagicCode("456-3566")).toBe("4563566");
+    expect(sanitizeMagicCode("456，3566")).toBe("4563566");
+  });
+  it("rejects: <3 digits / leading zero / non-digit / phone-length runs", () => {
+    expect(sanitizeMagicCode("42")).toBe(null);
+    expect(sanitizeMagicCode("0123456")).toBe(null);
+    expect(sanitizeMagicCode("七七六六四四3")).toBe(null); // 归一化是模型的活，服务端只认阿拉伯数字
+    expect(sanitizeMagicCode("abc1234")).toBe(null);
+    expect(sanitizeMagicCode("13800138000138000")).toBe(null); // 17 位超上限
+    expect(sanitizeMagicCode("")).toBe(null);
+    expect(sanitizeMagicCode(null)).toBe(null);
   });
 });
 
