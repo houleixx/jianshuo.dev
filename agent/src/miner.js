@@ -18,6 +18,7 @@ import { callAnthropic } from "./anthropic.js";
 import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit, asrCharged } from "./usage_store.js";
 import { sendPush } from "./push.js";
+import { asrCorpus } from "./asr-hotwords.js";
 import { hmacSign } from "../../functions/lib/auth.js";
 import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
@@ -342,7 +343,7 @@ async function asrSubmit(audioUrl, env) {
     body: JSON.stringify({
       user: { uid: "wjs-asr" },
       audio: { format: "m4a", url: audioUrl, codec: "raw" },
-      request: { model_name: "bigmodel", enable_itn: true, enable_punc: true, show_utterances: true },
+      request: { model_name: "bigmodel", enable_itn: true, enable_punc: true, show_utterances: true, corpus: asrCorpus() },
     }),
   });
   await resp.text();
