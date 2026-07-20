@@ -10,6 +10,20 @@
 
 const db = (env) => env.CORE || null;
 
+// 读会话（D1 read replication，2026-07-20 接入）：
+//   · fresh=false（默认）→ "first-unconstrained"：首查路由到最近副本（国内用户就近，
+//     不跨洋回主库 WNAM），容忍秒级复制延迟。用于高频展示读（列表/归因/计数/举报展示）。
+//   · fresh=true → "first-primary"：走主库，保证读到最新。用于一致性敏感读
+//     （登录找回 scope、鉴权门槛、铸码去重/日上限、销号读绑定）——读到旧值会出真 bug。
+// 写路径不走这里：默认 db(env).prepare(...) 恒走主库，永远最新。
+// 运行时无 Sessions API（旧 workerd / 测试 fake）→ 退回主库句柄，行为不变。
+function reader(env, fresh = false) {
+  const d = env.CORE;
+  if (!d) return null;
+  if (typeof d.withSession !== "function") return d;
+  return d.withSession(fresh ? "first-primary" : "first-unconstrained");
+}
+
 // ── refhits（归因 IP 指纹；原 refhits/<fp>/<ts> 对象树）─────────────────────
 
 export async function coreWriteRefhit(env, fingerprint, ts, owner, token) {
@@ -25,7 +39,7 @@ export async function coreWriteRefhit(env, fingerprint, ts, owner, token) {
 
 /// 该指纹 sinceTs 之后的全部命中。→ [{owner,token,ts}]；D1 不可用 → null。
 export async function coreRefhitRows(env, fingerprint, sinceTs) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const r = await d.prepare(
@@ -37,7 +51,7 @@ export async function coreRefhitRows(env, fingerprint, sinceTs) {
 
 /// 全表（admin 一览用，量级：2 天窗口内几百行）。→ rows | null。
 export async function coreAllRefhits(env, limit = 5000) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const r = await d.prepare(
@@ -59,7 +73,7 @@ export async function coreCleanupRefhits(env, cutoffTs) {
 
 /// → {owner,name,ts}；查无 → false；D1 不可用 → null。
 export async function coreGetInvite(env, code) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const row = await d.prepare(
@@ -99,7 +113,7 @@ export async function coreBumpImportCount(env, code) {
 
 /// → 计数 number；无行 → false；D1 不可用 → null。
 export async function coreImportCount(env, code) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const row = await d.prepare("SELECT import_count FROM share_stats WHERE code=?").bind(String(code)).first();
@@ -123,7 +137,7 @@ export async function coreSeedImportCount(env, code, count) {
 
 /// → {byItem:{itemId:{code,createdAt}}}；D1 不可用 → null。空对象 = 确实没有。
 export async function coreLoadPromptShares(env, scope) {
-  const d = db(env);
+  const d = reader(env, true);
   if (!d) return null;
   try {
     const r = await d.prepare(
@@ -163,7 +177,7 @@ export async function coreRekeyPromptShare(env, scope, fromItemId, toItemId) {
 
 /// 当日已铸码数（每日上限用）。todayPrefix = "YYYY-MM-DD"。→ number | null。
 export async function coreMintedToday(env, scope, todayPrefix) {
-  const d = db(env);
+  const d = reader(env, true);
   if (!d) return null;
   try {
     const row = await d.prepare(
@@ -226,7 +240,7 @@ export async function coreDeleteArticle(env, scope, stem) {
 
 /// → [{stem, entry(字符串|null), empty, blocked, tags}]（created_ms 倒序）| null。
 export async function coreListArticles(env, scope) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const r = await d.prepare(
@@ -258,7 +272,7 @@ export async function coreReplaceArticles(env, scope, rows) {
 }
 
 export async function coreCountArticles(env, scope) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const row = await d.prepare("SELECT COUNT(*) AS n FROM articles WHERE user_sub=?").bind(scope).first();
@@ -291,7 +305,7 @@ export async function coreDeleteRecording(env, scope, leaf) {
 
 /// → { "<leaf>.m4a": {uploaded} } | null。
 export async function coreListRecordings(env, scope) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const r = await d.prepare("SELECT leaf, uploaded FROM recordings WHERE user_sub=?").bind(scope).all();
@@ -316,7 +330,7 @@ export async function coreReplaceRecordings(env, scope, items) {
 }
 
 export async function coreCountRecordings(env, scope) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const row = await d.prepare("SELECT COUNT(*) AS n FROM recordings WHERE user_sub=?").bind(scope).first();
@@ -328,7 +342,7 @@ export async function coreCountRecordings(env, scope) {
 // → user_sub 字符串 | false（无绑定）| null（D1 不可用）。first-write-wins。
 
 export async function coreGetIdentity(env, provider, externalId) {
-  const d = db(env);
+  const d = reader(env, true);
   if (!d) return null;
   try {
     const row = await d.prepare(
@@ -354,7 +368,7 @@ export async function corePutIdentity(env, provider, externalId, userSub, linked
 // → 档案对象（含 apple_sub 等）| false（无档案）| null（D1 不可用）。
 
 export async function coreGetProfile(env, scope) {
-  const d = db(env);
+  const d = reader(env, true);
   if (!d) return null;
   try {
     const row = await d.prepare("SELECT * FROM user_profiles WHERE user_sub=?").bind(scope).first();
@@ -365,7 +379,7 @@ export async function coreGetProfile(env, scope) {
 /// 「这个 scope 绑过实名身份吗」= 档案里 apple/wechat 任一非空。
 /// true/false | null（D1 不可用，调用方落 R2）。
 export async function coreHasBinding(env, scope) {
-  const d = db(env);
+  const d = reader(env, true);
   if (!d) return null;
   try {
     const row = await d.prepare(
@@ -398,7 +412,7 @@ export async function coreUpsertProfile(env, scope, fields) {
 // → {token, env} | false（无）| null（D1 不可用）。
 
 export async function coreGetPushToken(env, scope) {
-  const d = db(env);
+  const d = reader(env, true);
   if (!d) return null;
   try {
     const row = await d.prepare("SELECT token, env FROM push_tokens WHERE user_sub=?").bind(scope).first();
@@ -429,7 +443,7 @@ export async function coreDeletePushToken(env, scope) {
 // → {shareId, status, firstAt, reporters:[]} | false（无）| null（D1 不可用）。
 
 export async function coreGetReport(env, shareId) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const row = await d.prepare("SELECT status, first_at, reporters FROM community_reports WHERE share_id=?").bind(shareId).first();
@@ -462,7 +476,7 @@ export async function coreDeleteReport(env, shareId) {
 /// 待处理举报的 shareId 集合（community list 的 hidden 集 / 全量对账用）。
 /// → Set<shareId> | null（D1 不可用）。
 export async function corePendingReportIds(env) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const r = await d.prepare("SELECT share_id FROM community_reports WHERE status='pending'").all();
@@ -472,7 +486,7 @@ export async function corePendingReportIds(env) {
 
 /// admin 举报列表（全部 pending 明细）。→ rows | null。
 export async function coreListReports(env) {
-  const d = db(env);
+  const d = reader(env);
   if (!d) return null;
   try {
     const r = await d.prepare(
