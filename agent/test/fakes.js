@@ -142,8 +142,8 @@ export function usageSql() {
 }
 
 // voicedrop-core 库全部迁移（P1: refhits/invites/share_stats/prompt_shares；
-// P2: articles/recordings）。
+// P2: articles/recordings；P3: identities/user_profiles/push_tokens/community_reports）。
 export function coreSql() {
   const f = (name) => readFileSync(fileURLToPath(new URL("../migrations-core/" + name, import.meta.url)), "utf8");
-  return f("0001_core.sql") + "\n" + f("0002_articles_recordings.sql");
+  return f("0001_core.sql") + "\n" + f("0002_articles_recordings.sql") + "\n" + f("0003_identity_push_reports.sql");
 }

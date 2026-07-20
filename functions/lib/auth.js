@@ -1,10 +1,14 @@
 // Auth + crypto primitives — SINGLE SOURCE OF TRUTH.
 //
+// coreHasBinding：存储迁移 P3 用 D1 user_profiles 判「绑过实名」。core-db 不 import
+// 本模块，无循环依赖。
+//
 // Token verification is security-sensitive: the Files API
 // (functions/files/api/[[path]].js) and the agent worker (agent/src/index.js)
 // must verify/sign tokens IDENTICALLY. These were previously copy-pasted
 // "verbatim" in both places — a drift here would be a security bug. Keep them
 // HERE only; both import from this module. Do not re-inline.
+import { coreHasBinding } from "./core-db.js";
 
 // Strip the "Bearer " prefix off a request's Authorization header ("" if absent).
 // SINGLE SOURCE for token extraction — was hand-inlined ~28x across workers.
@@ -91,7 +95,11 @@ export async function anonScopeFromToken(token) {
 // 「实名 session」或「绑过实名的匿名 scope」二者取其一（设计定稿 2026-07-16）。
 // 从未绑定过的裸匿名 token 仍然 403，引导登录。
 export async function hasVerifiedBinding(env, scope) {
-  if (!scope || !scope.startsWith("users/") || !env.FILES) return false;
+  if (!scope || !scope.startsWith("users/")) return false;
+  // 存储迁移 P3：D1 user_profiles 优先。true/false 直接采信；null=D1 不可用，落 R2。
+  const d1 = await coreHasBinding(env, scope);
+  if (d1 !== null) return d1;
+  if (!env.FILES) return false;
   try {
     const obj = await env.FILES.get(`${scope}ACCOUNT.json`);
     if (!obj) return false;

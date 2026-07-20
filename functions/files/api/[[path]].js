@@ -28,7 +28,7 @@ import { shareIdFor, communityKey, reportKey, isShareId, promptPostTitle } from 
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
-import { coreLoadPromptShares, coreDeleteUserData, coreListArticles, coreReplaceArticles, coreCountArticles, coreUpsertRecording, coreDeleteRecording, coreListRecordings, coreReplaceRecordings, coreCountRecordings } from "../../lib/core-db.js";
+import { coreLoadPromptShares, coreDeleteUserData, coreListArticles, coreReplaceArticles, coreCountArticles, coreUpsertRecording, coreDeleteRecording, coreListRecordings, coreReplaceRecordings, coreCountRecordings, coreGetIdentity, corePutIdentity, coreUpsertProfile, coreGetProfile, corePutPushToken, corePutReport, coreDeleteReport, coreGetReport, corePendingReportIds, coreListReports } from "../../lib/core-db.js";
 
 // Miner sidecars that live under articles/ and end in .json but are NOT article
 // docs: <stem>.asr.json (resumable-ASR task) and <stem>.asrdone.json (ASR
@@ -251,18 +251,24 @@ async function handleRequest(context) {
     // Bind (alias) this Apple identity to a data box. If we've seen this sub,
     // reuse its bound scope; otherwise bind it to the caller's current anon box
     // (no data moves) or a fresh users/<sub>/ if they have none.
-    const linkKey = `links/apple-${sanitizeSeg(sub)}.json`;
+    const appleExtId = sanitizeSeg(sub);
+    const linkKey = `links/apple-${appleExtId}.json`;
     let scope = null;
-    const existing = await env.FILES.get(linkKey);
-    if (existing) {
-      try { scope = JSON.parse(await existing.text()).scope; } catch {}
+    // 存储迁移 P3：身份→scope 解析 D1 优先，查无落 R2（未回填的老绑定）。
+    const d1scope = await coreGetIdentity(env, 'apple', appleExtId);
+    if (typeof d1scope === 'string') scope = d1scope;
+    if (!scope && d1scope !== false) {
+      const existing = await env.FILES.get(linkKey);
+      if (existing) { try { scope = JSON.parse(await existing.text()).scope; } catch {} }
     }
     const now = Date.now();
     if (!scope) {
       const callerAnon = bearerToken(request);
       scope = (await anonScopeFromToken(callerAnon)) || `users/${sanitizeSeg(sub)}/`;
+      // 双写：R2 link 对象 + D1 identities 行（first-write-wins）。
       await env.FILES.put(linkKey, JSON.stringify({ scope, linkedAt: now }),
         { httpMetadata: { contentType: 'application/json' } });
+      await corePutIdentity(env, 'apple', appleExtId, scope, now);
     }
     // Persist the Apple-provided identity. fullName is handed over ONLY on the first
     // authorization (and again only if the user revokes + re-grants), so it is
@@ -278,9 +284,16 @@ async function handleRequest(context) {
       acct.lastSeenAt = now;
       const email = tokenEmail || bodyEmail;
       if (email) acct.email = email;
-      if (bodyName && !acct.name) acct.name = bodyName;
+      const nameSet = !!(bodyName && !acct.name);   // 本次首次采纳名字（first-write-wins）
+      if (nameSet) acct.name = bodyName;
       await env.FILES.put(acctKey, JSON.stringify(acct),
         { httpMetadata: { contentType: 'application/json' } });
+      // 存储迁移 P3：档案双写 D1。name 只在本次刚采纳时传，COALESCE 不覆盖 D1 已有名字。
+      await coreUpsertProfile(env, scope, {
+        apple_sub: sub, email: email || undefined,
+        name: nameSet ? bodyName : undefined,
+        linked_at: acct.linkedAt, last_seen_at: now,
+      });
     }
     const session = await mintSession(scope, true, env.SESSION_SECRET);
     return json({ session, scope });
@@ -315,11 +328,15 @@ async function handleRequest(context) {
       return json({ error: 'invalid wechat code', detail: String(e.message || e) }, 401);
     }
     const wechatId = wx.unionid ? `unionid-${wx.unionid}` : `openid-${wx.openid}`;
-    const linkKey = `links/wechat-${sanitizeSeg(wechatId)}.json`;
+    const wechatExtId = sanitizeSeg(wechatId);
+    const linkKey = `links/wechat-${wechatExtId}.json`;
     let scope = null;
-    const existing = await env.FILES.get(linkKey);
-    if (existing) {
-      try { scope = JSON.parse(await existing.text()).scope; } catch {}
+    // 存储迁移 P3：身份→scope D1 优先，查无落 R2。
+    const d1scope = await coreGetIdentity(env, 'wechat', wechatExtId);
+    if (typeof d1scope === 'string') scope = d1scope;
+    if (!scope && d1scope !== false) {
+      const existing = await env.FILES.get(linkKey);
+      if (existing) { try { scope = JSON.parse(await existing.text()).scope; } catch {} }
     }
     const now = Date.now();
     if (!scope) {
@@ -327,6 +344,7 @@ async function handleRequest(context) {
       scope = (await anonScopeFromToken(callerAnon)) || `users/wechat-${sanitizeSeg(wechatId)}/`;
       await env.FILES.put(linkKey, JSON.stringify({ scope, linkedAt: now }),
         { httpMetadata: { contentType: 'application/json' } });
+      await corePutIdentity(env, 'wechat', wechatExtId, scope, now);
     }
     {
       const acctKey = `${scope}ACCOUNT.json`;
@@ -338,10 +356,18 @@ async function handleRequest(context) {
       if (!acct.wechatLinkedAt) acct.wechatLinkedAt = now;
       if (!acct.linkedAt) acct.linkedAt = now;
       acct.lastSeenAt = now;
-      if (nickname && !acct.name) acct.name = String(nickname).slice(0, 80);
-      if (avatar) acct.avatar = String(avatar).slice(0, 500);
+      const nameSet = !!(nickname && !acct.name);
+      if (nameSet) acct.name = String(nickname).slice(0, 80);
+      const av = avatar ? String(avatar).slice(0, 500) : null;
+      if (av) acct.avatar = av;
       await env.FILES.put(acctKey, JSON.stringify(acct),
         { httpMetadata: { contentType: 'application/json' } });
+      // 存储迁移 P3：档案双写 D1。
+      await coreUpsertProfile(env, scope, {
+        wechat_openid: wx.openid, wechat_unionid: wx.unionid || undefined,
+        name: nameSet ? acct.name : undefined, avatar: av || undefined,
+        linked_at: acct.linkedAt, wechat_linked_at: acct.wechatLinkedAt, last_seen_at: now,
+      });
     }
     const session = await mintWechatSession(scope, env.SESSION_SECRET);
     return json({ session, scope });
@@ -428,7 +454,10 @@ async function handleRequest(context) {
     } else {
       const cm = await env.FILES.get(communityKey(id));
       if (cm) {
-        if (await env.FILES.head(reportKey(id))) return json({ error: 'not found' }, 404);
+        // 存储迁移 P3：举报=隐藏，D1 优先判定，null 落回 R2 head。
+        const rep = await coreGetReport(env, id);
+        const reported = rep ? true : (rep === false ? false : !!(await env.FILES.head(reportKey(id))));
+        if (reported) return json({ error: 'not found' }, 404);
         type = 'community';
         try { key = JSON.parse(await cm.text()).articleKey || null; } catch { /* fallthrough */ }
       }
@@ -516,16 +545,25 @@ async function handleRequest(context) {
     if (!scope) return json({ error: 'admin token cannot delete an account' }, 400);
 
     // Grab identity bindings before the scope (and its ACCOUNT.json) is wiped.
+    // 存储迁移 P3：D1 档案优先，缺行落回 R2 ACCOUNT.json（未回填的老账号）。
     let appleSub = null, wechatUnionid = null, wechatOpenid = null;
-    try {
-      const acct = await env.FILES.get(`${scope}ACCOUNT.json`);
-      if (acct) {
-        const parsed = JSON.parse(await acct.text());
-        appleSub = parsed.appleSub || null;
-        wechatUnionid = parsed.wechatUnionid || null;
-        wechatOpenid = parsed.wechatOpenid || null;
-      }
-    } catch {}
+    const prof = await coreGetProfile(env, scope);
+    if (prof) {
+      appleSub = prof.apple_sub || null;
+      wechatUnionid = prof.wechat_unionid || null;
+      wechatOpenid = prof.wechat_openid || null;
+    }
+    if (prof === null || prof === false) {
+      try {
+        const acct = await env.FILES.get(`${scope}ACCOUNT.json`);
+        if (acct) {
+          const parsed = JSON.parse(await acct.text());
+          appleSub = parsed.appleSub || null;
+          wechatUnionid = parsed.wechatUnionid || null;
+          wechatOpenid = parsed.wechatOpenid || null;
+        }
+      } catch {}
+    }
 
     let communityPosts = 0;
     {
@@ -539,6 +577,7 @@ async function handleRequest(context) {
           if (p.owner !== scope) return;
           await env.FILES.delete(o.key);
           await env.FILES.delete(reportKey(p.shareId)).catch(() => {});
+          await coreDeleteReport(env, p.shareId);   // P3：D1 举报行同生同死
           communityPosts++;
         } catch {}
       });
@@ -812,6 +851,15 @@ async function handleRequest(context) {
     // recordings 轻量接口靠它告诉 App「这条待处理录音带标签，去拉内容」。
     const mTag = /^(.*\/)articles\/([^/]+)\.tags$/.exec(key);
     if (mTag) await setIndexFlag(env, mTag[1], mTag[2], 'tags');
+    // 存储迁移 P3：push token 由 App 走本上传路由写 users/<sub>/push-token.json，
+    // 这里顺手双写 D1 push_tokens（sendPush 读它）。scope 已鉴权，key 形态固定。
+    const mPush = /^(users\/[^/]+\/)push-token\.json$/.exec(key);
+    if (mPush) {
+      try {
+        const reg = JSON.parse(await (await env.FILES.get(key)).text());
+        if (reg && reg.token) await corePutPushToken(env, mPush[1], reg.token, reg.env, reg.updatedAt || Date.now());
+      } catch {}
+    }
     return json({ ok: true, name });
   }
 
@@ -1123,8 +1171,13 @@ async function handleRequest(context) {
       const ex0 = cardExtras(articles, photos, p.owner);
       const ex = k === 'prompt' ? { hasPhoto: false, ...(ex0.preview ? { preview: ex0.preview } : {}) } : ex0;
       const title = articles[0]?.title ?? p.title ?? '';
-      const hid = hidden !== null ? (hidden ? 1 : 0)
-        : ((await env.FILES.head(reportKey(p.shareId))) ? 1 : 0);
+      // 存储迁移 P3：hidden 未显式给定时查举报态——D1 优先，null 落回 R2 head。
+      let hid;
+      if (hidden !== null) hid = hidden ? 1 : 0;
+      else {
+        const rep = await coreGetReport(env, p.shareId);
+        hid = rep ? 1 : (rep === false ? 0 : ((await env.FILES.head(reportKey(p.shareId))) ? 1 : 0));
+      }
       await env.RECO_DB.prepare(
         `INSERT INTO community_posts (share_id, owner, article_key, author, title, preview,
            cover_photo_key, has_photo, article_count, first_shared_at, updated_at, reply_to, hidden, kind)
@@ -1162,9 +1215,13 @@ async function handleRequest(context) {
   // （hidden 随 report 标记），最后把 R2 已不存在的行从索引删掉。
   async function reconcileIndex() {
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
-    const hidden = new Set(listed.objects
-      .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
-      .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
+    // 存储迁移 P3：隐藏集 D1 优先（一条 SELECT），null 落回 R2 report 对象扫描。
+    let hidden = await corePendingReportIds(env);
+    if (hidden === null) {
+      hidden = new Set(listed.objects
+        .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
+        .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
+    }
     const postObjects = listed.objects.filter(o => /^community\/[^/]+\.json$/.test(o.key));
     const seen = new Set();
     let indexed = 0;
@@ -1236,11 +1293,14 @@ async function handleRequest(context) {
       if (waitUntil) waitUntil(reconcileIndex().catch(() => {}));
     }
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
-    // Apple 1.2: a reported post is HIDDEN immediately (pending owner review). Report
-    // markers live at community/reports/<shareId>.json; drop those shareIds from the feed.
-    const hidden = new Set(listed.objects
-      .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
-      .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
+    // Apple 1.2: a reported post is HIDDEN immediately (pending owner review).
+    // 存储迁移 P3：隐藏集 D1 优先，null 落回 R2 report 对象扫描。
+    let hidden = await corePendingReportIds(env);
+    if (hidden === null) {
+      hidden = new Set(listed.objects
+        .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
+        .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
+    }
     const postObjects = listed.objects
       .filter(o => /^community\/[^/]+\.json$/.test(o.key))
       .filter(o => !hidden.has(o.key.replace('community/', '').replace(/\.json$/, '')))
@@ -1318,12 +1378,19 @@ async function handleRequest(context) {
     let reason = ''; try { const b = await request.clone().json(); reason = (b && b.reason) || ''; } catch {}
     const rk = reportKey(shareId);
     let rec = { shareId, status: 'pending', firstAt: Date.now(), reporters: [] };
-    const ex = await env.FILES.get(rk);
-    if (ex) { try { rec = { ...rec, ...JSON.parse(await ex.text()), status: 'pending' }; } catch {} }
+    // 存储迁移 P3：既有举报记录 D1 优先，缺行落 R2。
+    const d1rec = await coreGetReport(env, shareId);
+    if (d1rec) rec = { ...rec, ...d1rec, status: 'pending' };
+    else if (d1rec === null || d1rec === false) {
+      const ex = await env.FILES.get(rk);
+      if (ex) { try { rec = { ...rec, ...JSON.parse(await ex.text()), status: 'pending' }; } catch {} }
+    }
     if (!Array.isArray(rec.reporters)) rec.reporters = [];
     const by = scope || 'admin';
     if (!rec.reporters.some(r => r.by === by)) rec.reporters.push({ by, at: Date.now(), reason: String(reason).slice(0, 200) });
+    // 双写：R2 对象 + D1 行。
     await env.FILES.put(rk, JSON.stringify(rec), { httpMetadata: { contentType: 'application/json' } });
+    await corePutReport(env, shareId, 'pending', rec.firstAt, rec.reporters);
     await indexSetHidden(shareId, true);
     return json({ ok: true });
   }
@@ -1331,12 +1398,21 @@ async function handleRequest(context) {
   // Admin: list pending reports with the reported post's current title/author/excerpt.
   if (request.method === 'GET' && action === 'community' && sub2 === 'reports') {
     if (scope !== '') return json({ error: 'admin only' }, 403);
-    const listed = await env.FILES.list({ prefix: 'community/reports/', limit: 1000 });
+    // 存储迁移 P3：pending 举报明细 D1 优先（一条 SELECT），null 落回 R2 扫描。
+    let base = await coreListReports(env);
+    if (base === null) {
+      const listed = await env.FILES.list({ prefix: 'community/reports/', limit: 1000 });
+      base = [];
+      for (const o of listed.objects) {
+        const shareId = o.key.replace('community/reports/', '').replace(/\.json$/, '');
+        let rec = null; try { rec = JSON.parse(await (await env.FILES.get(o.key)).text()); } catch {}
+        if (!rec || rec.status !== 'pending') continue;
+        base.push({ shareId, firstAt: rec.firstAt, reporters: rec.reporters || [] });
+      }
+    }
     const out = [];
-    for (const o of listed.objects) {
-      const shareId = o.key.replace('community/reports/', '').replace(/\.json$/, '');
-      let rec = null; try { rec = JSON.parse(await (await env.FILES.get(o.key)).text()); } catch {}
-      if (!rec || rec.status !== 'pending') continue;
+    for (const rec of base) {
+      const shareId = rec.shareId;
       let title = '', author = '', body = '', gone = false;
       const pObj = await env.FILES.get(communityKey(shareId));
       if (!pObj) gone = true;
@@ -1385,10 +1461,12 @@ async function handleRequest(context) {
       } catch {}
       await env.FILES.delete(key).catch(() => {});
       await env.FILES.delete(reportKey(shareId)).catch(() => {});
+      await coreDeleteReport(env, shareId);
       await indexDelete(shareId);
       return json({ ok: true, removed: true });
     }
     await env.FILES.delete(reportKey(shareId)).catch(() => {});
+    await coreDeleteReport(env, shareId);
     await indexSetHidden(shareId, false);
     return json({ ok: true, restored: true });
   }

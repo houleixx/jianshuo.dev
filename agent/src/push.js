@@ -2,6 +2,8 @@
 // 用途：①「文章挖好了」通知用户 ②运维报警（4xx/5xx 风暴）推给管理员。
 // 设备 token 由 iOS 端存到 R2 `users/<sub>/push-token.json`（{token, env, updatedAt}）。
 // secrets：APNS_KEY_P8（.p8 全文）/ APNS_KEY_ID / APNS_TEAM_ID；缺任一则静默降级为 no-op。
+import { coreGetPushToken, coreDeletePushToken } from "../../functions/lib/core-db.js";
+
 const APNS_TOPIC = "com.wangjianshuo.VoiceDrop";
 
 // JWT 缓存（APNs 要求 20~60 分钟内复用，太频繁签发会被拒）。isolate 生命周期内有效。
@@ -44,14 +46,18 @@ export async function sendPush(env, scope, { title, body, threadId, link }) {
       console.log("[push] skip: APNs 未配置（secrets 或 FILES 绑定缺失）", scope);
       return false;
     }
-    const obj = await env.FILES.get(`${scope}push-token.json`);
-    if (!obj) {
-      console.log("[push] skip: 该用户没有 push-token.json", scope);
-      return false;
+    // 存储迁移 P3：D1 push_tokens 优先，缺行/不可用落回 R2 push-token.json。
+    let reg = await coreGetPushToken(env, scope);
+    if (reg === null || reg === false) {
+      const obj = await env.FILES.get(`${scope}push-token.json`);
+      if (!obj) {
+        console.log("[push] skip: 该用户没有 push token（D1/R2 均无）", scope);
+        return false;
+      }
+      reg = JSON.parse(await obj.text());
     }
-    const reg = JSON.parse(await obj.text());
     if (!reg?.token) {
-      console.log("[push] skip: push-token.json 里没有 token 字段", scope);
+      console.log("[push] skip: push token 里没有 token 字段", scope);
       return false;
     }
     const host = reg.env === "dev" ? "api.sandbox.push.apple.com" : "api.push.apple.com";
@@ -71,7 +77,9 @@ export async function sendPush(env, scope, { title, body, threadId, link }) {
       }),
     });
     if (resp.status === 410) {
+      // 双删（R2 对象 + D1 行）。
       await env.FILES.delete(`${scope}push-token.json`).catch(() => {});
+      await coreDeletePushToken(env, scope);
       console.log("[push] token gone (410), removed", scope);
       return false;
     }

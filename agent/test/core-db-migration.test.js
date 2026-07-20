@@ -11,7 +11,11 @@ import {
   coreUpsertArticleEntry, coreSetArticleFlag, coreDeleteArticle, coreListArticles,
   coreReplaceArticles, coreCountArticles,
   coreUpsertRecording, coreDeleteRecording, coreListRecordings, coreReplaceRecordings,
+  coreGetIdentity, corePutIdentity, coreGetProfile, coreHasBinding, coreUpsertProfile,
+  coreGetPushToken, corePutPushToken, coreDeletePushToken,
+  coreGetReport, corePutReport, coreDeleteReport, corePendingReportIds, coreListReports,
 } from "../../functions/lib/core-db.js";
+import { hasVerifiedBinding } from "../../functions/lib/auth.js";
 
 const SECRET = "test-secret";
 const coreEnv = (seed = {}) => ({ ...fakeEnv(seed), CORE: fakeD1(coreSql()) });
@@ -206,20 +210,95 @@ describe("recordings 表（P2）", () => {
   });
 });
 
+describe("identities + user_profiles（P3）", () => {
+  it("identity first-write-wins；查无 false / 不可用 null", async () => {
+    const env = coreEnv();
+    expect(await coreGetIdentity(env, "apple", "SUB1")).toBe(false);
+    expect(await coreGetIdentity(fakeEnv(), "apple", "SUB1")).toBeNull();
+    await corePutIdentity(env, "apple", "SUB1", "users/anon-a/", 100);
+    await corePutIdentity(env, "apple", "SUB1", "users/anon-OTHER/", 200); // 不覆盖
+    expect(await coreGetIdentity(env, "apple", "SUB1")).toBe("users/anon-a/");
+  });
+
+  it("profile 行级合并：name first-write-wins（不传就不动）", async () => {
+    const env = coreEnv();
+    const scope = "users/anon-p/";
+    await coreUpsertProfile(env, scope, { apple_sub: "S", email: "a@b.c", name: "建硕", linked_at: 1, last_seen_at: 1 });
+    await coreUpsertProfile(env, scope, { last_seen_at: 2 }); // 只刷 last_seen，不传 name → COALESCE 保旧
+    const p = await coreGetProfile(env, scope);
+    expect(p.name).toBe("建硕");
+    expect(p.email).toBe("a@b.c");
+    expect(p.last_seen_at).toBe(2);
+  });
+
+  it("hasBinding / hasVerifiedBinding：D1 有绑定 → true，无 → false", async () => {
+    const env = coreEnv();
+    const scope = "users/anon-b/";
+    expect(await coreHasBinding(env, scope)).toBe(false);
+    expect(await hasVerifiedBinding(env, scope)).toBe(false);      // D1 空行也算无绑定
+    await coreUpsertProfile(env, scope, { wechat_openid: "OPENID", last_seen_at: 1 });
+    expect(await coreHasBinding(env, scope)).toBe(true);
+    expect(await hasVerifiedBinding(env, scope)).toBe(true);
+  });
+
+  it("hasVerifiedBinding：无 D1 绑定 → 落回 R2 ACCOUNT.json", async () => {
+    const scope = "users/anon-legacy/";
+    const env = fakeEnv({ [`${scope}ACCOUNT.json`]: JSON.stringify({ appleSub: "OLD" }) });
+    expect(await hasVerifiedBinding(env, scope)).toBe(true);       // 无 CORE 绑定 → R2 命中
+  });
+});
+
+describe("push_tokens（P3）", () => {
+  it("put / get / delete round-trip", async () => {
+    const env = coreEnv();
+    const scope = "users/anon-pt/";
+    expect(await coreGetPushToken(env, scope)).toBe(false);
+    await corePutPushToken(env, scope, "TOK1", "prod", 100);
+    expect(await coreGetPushToken(env, scope)).toEqual({ token: "TOK1", env: "prod" });
+    await corePutPushToken(env, scope, "TOK2", "dev", 200); // 覆盖
+    expect((await coreGetPushToken(env, scope)).token).toBe("TOK2");
+    await coreDeletePushToken(env, scope);
+    expect(await coreGetPushToken(env, scope)).toBe(false);
+  });
+});
+
+describe("community_reports（P3）", () => {
+  it("put / get / pending 集 / list / delete", async () => {
+    const env = coreEnv();
+    await corePutReport(env, "abc123def456", "pending", 100, [{ by: "users/anon-x/", at: 100, reason: "spam" }]);
+    const rec = await coreGetReport(env, "abc123def456");
+    expect(rec.reporters.length).toBe(1);
+    expect(rec.status).toBe("pending");
+    const pend = await corePendingReportIds(env);
+    expect(pend.has("abc123def456")).toBe(true);
+    const list = await coreListReports(env);
+    expect(list[0].shareId).toBe("abc123def456");
+    await coreDeleteReport(env, "abc123def456");
+    expect(await coreGetReport(env, "abc123def456")).toBe(false);
+    expect((await corePendingReportIds(env)).size).toBe(0);
+  });
+});
+
 describe("销号清理", () => {
-  it("coreDeleteUserData 清四张表的关联行", async () => {
+  it("coreDeleteUserData 清全部关联表（含 P3 身份/档案/push）", async () => {
     const env = coreEnv();
     const scope = "users/anon-del/";
     await coreUpsertPromptShare(env, scope, "p_1", "9999999", "2026-07-20T00:00:00.000Z");
     await coreBumpImportCount(env, "9999999");
     await corePutInvite(env, "DEAD01", scope, "", 1);
     await coreWriteRefhit(env, "5.5.5.5", Date.now(), scope, "DEAD01");
+    await corePutIdentity(env, "apple", "DELSUB", scope, 1);
+    await coreUpsertProfile(env, scope, { apple_sub: "DELSUB", last_seen_at: 1 });
+    await corePutPushToken(env, scope, "DELTOK", "prod", 1);
     // 别人的数据不受影响
     await coreUpsertPromptShare(env, "users/anon-keep/", "p_2", "8888888", "2026-07-20T00:00:00.000Z");
     await coreDeleteUserData(env, scope);
     expect((await coreLoadPromptShares(env, scope)).byItem).toEqual({});
     expect(await coreGetInvite(env, "DEAD01")).toBe(false);
     expect(await coreImportCount(env, "9999999")).toBe(false);
+    expect(await coreGetIdentity(env, "apple", "DELSUB")).toBe(false);
+    expect(await coreGetProfile(env, scope)).toBe(false);
+    expect(await coreGetPushToken(env, scope)).toBe(false);
     expect((await coreLoadPromptShares(env, "users/anon-keep/")).byItem.p_2.code).toBe("8888888");
   });
 });

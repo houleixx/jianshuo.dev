@@ -324,6 +324,168 @@ export async function coreCountRecordings(env, scope) {
   } catch (e) { console.error("[core-db] countRecordings:", e && e.message); return null; }
 }
 
+// ── identities 身份绑定（P3；原 links/<provider>-<extId>.json）───────────────
+// → user_sub 字符串 | false（无绑定）| null（D1 不可用）。first-write-wins。
+
+export async function coreGetIdentity(env, provider, externalId) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const row = await d.prepare(
+      "SELECT user_sub FROM identities WHERE provider=? AND external_id=?"
+    ).bind(provider, externalId).first();
+    return row ? row.user_sub : false;
+  } catch (e) { console.error("[core-db] getIdentity:", e && e.message); return null; }
+}
+
+/// first-write-wins：已存在则不动（OR IGNORE）。返回是否写入。
+export async function corePutIdentity(env, provider, externalId, userSub, linkedAt) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    await d.prepare(
+      "INSERT OR IGNORE INTO identities (provider, external_id, user_sub, linked_at) VALUES (?,?,?,?)"
+    ).bind(provider, externalId, userSub, linkedAt).run();
+    return true;
+  } catch (e) { console.error("[core-db] putIdentity:", e && e.message); return false; }
+}
+
+// ── user_profiles 用户档案（P3；原 ACCOUNT.json）────────────────────────────
+// → 档案对象（含 apple_sub 等）| false（无档案）| null（D1 不可用）。
+
+export async function coreGetProfile(env, scope) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const row = await d.prepare("SELECT * FROM user_profiles WHERE user_sub=?").bind(scope).first();
+    return row || false;
+  } catch (e) { console.error("[core-db] getProfile:", e && e.message); return null; }
+}
+
+/// 「这个 scope 绑过实名身份吗」= 档案里 apple/wechat 任一非空。
+/// true/false | null（D1 不可用，调用方落 R2）。
+export async function coreHasBinding(env, scope) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const row = await d.prepare(
+      "SELECT 1 AS ok FROM user_profiles WHERE user_sub=? AND (apple_sub IS NOT NULL OR wechat_openid IS NOT NULL OR wechat_unionid IS NOT NULL)"
+    ).bind(scope).first();
+    return !!row;
+  } catch (e) { console.error("[core-db] hasBinding:", e && e.message); return null; }
+}
+
+/// RMW 合并的行级版：只写传入的非 undefined 字段（COALESCE 保留旧值，name/linked
+/// 类 first-write-wins 交由调用方按 ACCOUNT.json 原语义决定是否传值）。
+export async function coreUpsertProfile(env, scope, fields) {
+  const d = db(env);
+  if (!d) return false;
+  const cols = ["apple_sub", "wechat_openid", "wechat_unionid", "email", "name", "avatar",
+    "linked_at", "wechat_linked_at", "last_seen_at"];
+  const present = cols.filter((c) => fields[c] !== undefined);
+  try {
+    // 先确保行存在，再逐列 COALESCE 更新（传 undefined 的列用 NULL bind + COALESCE 保旧值）。
+    await d.prepare("INSERT OR IGNORE INTO user_profiles (user_sub) VALUES (?)").bind(scope).run();
+    if (!present.length) return true;
+    const set = present.map((c) => `${c}=COALESCE(?, ${c})`).join(", ");
+    const binds = present.map((c) => fields[c]);
+    await d.prepare(`UPDATE user_profiles SET ${set} WHERE user_sub=?`).bind(...binds, scope).run();
+    return true;
+  } catch (e) { console.error("[core-db] upsertProfile:", e && e.message); return false; }
+}
+
+// ── push_tokens（P3；原 push-token.json）──────────────────────────────────────
+// → {token, env} | false（无）| null（D1 不可用）。
+
+export async function coreGetPushToken(env, scope) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const row = await d.prepare("SELECT token, env FROM push_tokens WHERE user_sub=?").bind(scope).first();
+    return row || false;
+  } catch (e) { console.error("[core-db] getPushToken:", e && e.message); return null; }
+}
+
+export async function corePutPushToken(env, scope, token, pushEnv, updatedAt) {
+  const d = db(env);
+  if (!d || !token) return false;
+  try {
+    await d.prepare(
+      "INSERT INTO push_tokens (user_sub, token, env, updated_at) VALUES (?,?,?,?) " +
+      "ON CONFLICT(user_sub) DO UPDATE SET token=excluded.token, env=excluded.env, updated_at=excluded.updated_at"
+    ).bind(scope, token, pushEnv || null, updatedAt || 0).run();
+    return true;
+  } catch (e) { console.error("[core-db] putPushToken:", e && e.message); return false; }
+}
+
+export async function coreDeletePushToken(env, scope) {
+  const d = db(env);
+  if (!d) return false;
+  try { await d.prepare("DELETE FROM push_tokens WHERE user_sub=?").bind(scope).run(); return true; }
+  catch (e) { console.error("[core-db] deletePushToken:", e && e.message); return false; }
+}
+
+// ── community_reports（P3；原 community/reports/<shareId>.json）───────────────
+// → {shareId, status, firstAt, reporters:[]} | false（无）| null（D1 不可用）。
+
+export async function coreGetReport(env, shareId) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const row = await d.prepare("SELECT status, first_at, reporters FROM community_reports WHERE share_id=?").bind(shareId).first();
+    if (!row) return false;
+    let reporters = [];
+    try { reporters = JSON.parse(row.reporters) || []; } catch {}
+    return { shareId, status: row.status, firstAt: row.first_at, reporters };
+  } catch (e) { console.error("[core-db] getReport:", e && e.message); return null; }
+}
+
+export async function corePutReport(env, shareId, status, firstAt, reporters) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    await d.prepare(
+      "INSERT INTO community_reports (share_id, status, first_at, reporters) VALUES (?,?,?,?) " +
+      "ON CONFLICT(share_id) DO UPDATE SET status=excluded.status, reporters=excluded.reporters"
+    ).bind(shareId, status, firstAt, JSON.stringify(reporters || [])).run();
+    return true;
+  } catch (e) { console.error("[core-db] putReport:", e && e.message); return false; }
+}
+
+export async function coreDeleteReport(env, shareId) {
+  const d = db(env);
+  if (!d) return false;
+  try { await d.prepare("DELETE FROM community_reports WHERE share_id=?").bind(shareId).run(); return true; }
+  catch (e) { console.error("[core-db] deleteReport:", e && e.message); return false; }
+}
+
+/// 待处理举报的 shareId 集合（community list 的 hidden 集 / 全量对账用）。
+/// → Set<shareId> | null（D1 不可用）。
+export async function corePendingReportIds(env) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const r = await d.prepare("SELECT share_id FROM community_reports WHERE status='pending'").all();
+    return new Set((r.results || []).map((row) => row.share_id));
+  } catch (e) { console.error("[core-db] pendingReportIds:", e && e.message); return null; }
+}
+
+/// admin 举报列表（全部 pending 明细）。→ rows | null。
+export async function coreListReports(env) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const r = await d.prepare(
+      "SELECT share_id, status, first_at, reporters FROM community_reports WHERE status='pending'"
+    ).all();
+    return (r.results || []).map((row) => {
+      let reporters = [];
+      try { reporters = JSON.parse(row.reporters) || []; } catch {}
+      return { shareId: row.share_id, firstAt: row.first_at, reporters };
+    });
+  } catch (e) { console.error("[core-db] listReports:", e && e.message); return null; }
+}
+
 // ── 销号清理（account/delete 主路径之外的 best-effort 补充）────────────────
 
 export async function coreDeleteUserData(env, scope) {
@@ -337,6 +499,10 @@ export async function coreDeleteUserData(env, scope) {
       d.prepare("DELETE FROM refhits WHERE owner=?").bind(scope),
       d.prepare("DELETE FROM articles WHERE user_sub=?").bind(scope),
       d.prepare("DELETE FROM recordings WHERE user_sub=?").bind(scope),
+      // P3：身份绑定按 scope 反查删、档案与 push token 按 user_sub 删。
+      d.prepare("DELETE FROM identities WHERE user_sub=?").bind(scope),
+      d.prepare("DELETE FROM user_profiles WHERE user_sub=?").bind(scope),
+      d.prepare("DELETE FROM push_tokens WHERE user_sub=?").bind(scope),
     ];
     for (const row of codes.results || []) stmts.push(d.prepare("DELETE FROM share_stats WHERE code=?").bind(row.code));
     await d.batch(stmts);
