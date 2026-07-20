@@ -173,6 +173,157 @@ export async function coreMintedToday(env, scope, todayPrefix) {
   } catch (e) { console.error("[core-db] mintedToday:", e && e.message); return null; }
 }
 
+// ── articles 摘要索引（P2；原 users/<sub>/articles-index.json）──────────────
+// entry 原样存 R2 索引的 entry JSON 字符串——列表返回给客户端的对象逐字节不变。
+// created_ms 由调用方用 articleTime() 归一后传入（core-db 不 import article-store，
+// 避免环）。flags 与 entry 独立维护，UPSERT 互不覆盖。
+
+export async function coreUpsertArticleEntry(env, scope, stem, entryJson, fp, createdMs) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    await d.prepare(
+      "INSERT INTO articles (user_sub, stem, entry, fp, created_ms) VALUES (?,?,?,?,?) " +
+      "ON CONFLICT(user_sub, stem) DO UPDATE SET entry=excluded.entry, fp=excluded.fp, created_ms=excluded.created_ms"
+    ).bind(scope, stem, entryJson, fp || null, createdMs || 0).run();
+    return true;
+  } catch (e) { console.error("[core-db] upsertArticleEntry:", e && e.message); return false; }
+}
+
+export async function coreSetArticleFlag(env, scope, stem, flag, on) {
+  const d = db(env);
+  if (!d) return false;
+  const col = { empty: "flag_empty", blocked: "flag_blocked", tags: "flag_tags" }[flag];
+  if (!col) return false;
+  try {
+    if (on) {
+      await d.prepare(
+        `INSERT INTO articles (user_sub, stem, ${col}) VALUES (?,?,1) ` +
+        `ON CONFLICT(user_sub, stem) DO UPDATE SET ${col}=1`
+      ).bind(scope, stem).run();
+    } else {
+      await d.batch([
+        d.prepare(`UPDATE articles SET ${col}=0 WHERE user_sub=? AND stem=?`).bind(scope, stem),
+        // 与 R2 版同语义：既无摘要也无任何标记 → 整行摘掉
+        d.prepare(
+          "DELETE FROM articles WHERE user_sub=? AND stem=? AND entry IS NULL " +
+          "AND flag_empty=0 AND flag_blocked=0 AND flag_tags=0"
+        ).bind(scope, stem),
+      ]);
+    }
+    return true;
+  } catch (e) { console.error("[core-db] setArticleFlag:", e && e.message); return false; }
+}
+
+export async function coreDeleteArticle(env, scope, stem) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    await d.prepare("DELETE FROM articles WHERE user_sub=? AND stem=?").bind(scope, stem).run();
+    return true;
+  } catch (e) { console.error("[core-db] deleteArticle:", e && e.message); return false; }
+}
+
+/// → [{stem, entry(字符串|null), empty, blocked, tags}]（created_ms 倒序）| null。
+export async function coreListArticles(env, scope) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const r = await d.prepare(
+      "SELECT stem, entry, flag_empty, flag_blocked, flag_tags FROM articles WHERE user_sub=? ORDER BY created_ms DESC"
+    ).bind(scope).all();
+    return (r.results || []).map((row) => ({
+      stem: row.stem, entry: row.entry,
+      empty: !!row.flag_empty, blocked: !!row.flag_blocked, tags: !!row.flag_tags,
+    }));
+  } catch (e) { console.error("[core-db] listArticles:", e && e.message); return null; }
+}
+
+/// 对账整体回写（reconcile 修 R2 索引的同时把 D1 拉齐；batch = 单事务，无撕裂态）。
+/// rows: [{stem, entryJson|null, fp, createdMs, empty, blocked, tags}]
+export async function coreReplaceArticles(env, scope, rows) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    const stmts = [d.prepare("DELETE FROM articles WHERE user_sub=?").bind(scope)];
+    for (const r of rows) {
+      stmts.push(d.prepare(
+        "INSERT INTO articles (user_sub, stem, entry, fp, created_ms, flag_empty, flag_blocked, flag_tags) VALUES (?,?,?,?,?,?,?,?)"
+      ).bind(scope, r.stem, r.entryJson || null, r.fp || null, r.createdMs || 0,
+        r.empty ? 1 : 0, r.blocked ? 1 : 0, r.tags ? 1 : 0));
+    }
+    await d.batch(stmts);
+    return true;
+  } catch (e) { console.error("[core-db] replaceArticles:", e && e.message); return false; }
+}
+
+export async function coreCountArticles(env, scope) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const row = await d.prepare("SELECT COUNT(*) AS n FROM articles WHERE user_sub=?").bind(scope).first();
+    return row ? row.n : 0;
+  } catch (e) { console.error("[core-db] countArticles:", e && e.message); return null; }
+}
+
+// ── recordings 录音索引（P2；原 users/<sub>/recordings-index.json）───────────
+
+export async function coreUpsertRecording(env, scope, leaf, uploaded) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    await d.prepare(
+      "INSERT INTO recordings (user_sub, leaf, uploaded) VALUES (?,?,?) " +
+      "ON CONFLICT(user_sub, leaf) DO UPDATE SET uploaded=excluded.uploaded"
+    ).bind(scope, leaf, String(uploaded || "")).run();
+    return true;
+  } catch (e) { console.error("[core-db] upsertRecording:", e && e.message); return false; }
+}
+
+export async function coreDeleteRecording(env, scope, leaf) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    await d.prepare("DELETE FROM recordings WHERE user_sub=? AND leaf=?").bind(scope, leaf).run();
+    return true;
+  } catch (e) { console.error("[core-db] deleteRecording:", e && e.message); return false; }
+}
+
+/// → { "<leaf>.m4a": {uploaded} } | null。
+export async function coreListRecordings(env, scope) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const r = await d.prepare("SELECT leaf, uploaded FROM recordings WHERE user_sub=?").bind(scope).all();
+    const items = {};
+    for (const row of r.results || []) items[row.leaf] = { uploaded: row.uploaded };
+    return items;
+  } catch (e) { console.error("[core-db] listRecordings:", e && e.message); return null; }
+}
+
+export async function coreReplaceRecordings(env, scope, items) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    const stmts = [d.prepare("DELETE FROM recordings WHERE user_sub=?").bind(scope)];
+    for (const [leaf, meta] of Object.entries(items)) {
+      stmts.push(d.prepare("INSERT INTO recordings (user_sub, leaf, uploaded) VALUES (?,?,?)")
+        .bind(scope, leaf, String((meta && meta.uploaded) || "")));
+    }
+    await d.batch(stmts);
+    return true;
+  } catch (e) { console.error("[core-db] replaceRecordings:", e && e.message); return false; }
+}
+
+export async function coreCountRecordings(env, scope) {
+  const d = db(env);
+  if (!d) return null;
+  try {
+    const row = await d.prepare("SELECT COUNT(*) AS n FROM recordings WHERE user_sub=?").bind(scope).first();
+    return row ? row.n : 0;
+  } catch (e) { console.error("[core-db] countRecordings:", e && e.message); return null; }
+}
+
 // ── 销号清理（account/delete 主路径之外的 best-effort 补充）────────────────
 
 export async function coreDeleteUserData(env, scope) {
@@ -184,6 +335,8 @@ export async function coreDeleteUserData(env, scope) {
       d.prepare("DELETE FROM prompt_shares WHERE user_sub=?").bind(scope),
       d.prepare("DELETE FROM invites WHERE owner=?").bind(scope),
       d.prepare("DELETE FROM refhits WHERE owner=?").bind(scope),
+      d.prepare("DELETE FROM articles WHERE user_sub=?").bind(scope),
+      d.prepare("DELETE FROM recordings WHERE user_sub=?").bind(scope),
     ];
     for (const row of codes.results || []) stmts.push(d.prepare("DELETE FROM share_stats WHERE code=?").bind(row.code));
     await d.batch(stmts);

@@ -12,6 +12,8 @@
 // 文章无标题时的统一显示值 —— 单一真源（曾漂移出 "（无题）"/"无题" 两个变体）。
 export const TITLE_FALLBACK = "(无题)";
 
+import { coreUpsertArticleEntry, coreSetArticleFlag, coreDeleteArticle } from "./core-db.js";
+
 
 export const MAX_VERSIONS = 10;
 
@@ -120,10 +122,14 @@ async function upsertIndexEntry(env, key, doc, putResult) {
     }
     // 保留已有的 sidecar 标记（empty/blocked/tags）——它们由 setIndexFlag 维护，
     // 文章 doc 的写入不该抹掉。
+    const entry = indexEntryFor(loc.stem, doc);
     idx.items[loc.stem] = { ...(idx.items[loc.stem] || {}),
-      fp: (putResult && putResult.etag) || null, entry: indexEntryFor(loc.stem, doc) };
+      fp: (putResult && putResult.etag) || null, entry };
     idx.updatedAt = Date.now();
     await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
+    // 存储迁移 P2：D1 行级 UPSERT 同步维护（列表读的主路径）。best-effort 同上。
+    await coreUpsertArticleEntry(env, loc.scope, loc.stem, JSON.stringify(entry),
+      (putResult && putResult.etag) || null, articleTime(entry.createdAt));
   } catch { /* 索引是加速层，绝不打断写主路径 */ }
 }
 
@@ -151,6 +157,8 @@ export async function setIndexFlag(env, scope, stem, flag, on = true) {
     }
     idx.updatedAt = Date.now();
     await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
+    // 存储迁移 P2：D1 标记列同步（on/off 与「无摘要无标记整行摘掉」语义一致）。
+    await coreSetArticleFlag(env, scope, stem, flag, on);
   } catch { /* 同上：加速层，绝不打断写主路径 */ }
 }
 
@@ -168,6 +176,8 @@ export async function removeIndexEntry(env, key) {
       idx.updatedAt = Date.now();
       await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
     }
+    // 存储迁移 P2：D1 行同步删除（索引文件缺失时也要删，别包在上面的 if 里）。
+    await coreDeleteArticle(env, loc.scope, loc.stem);
   } catch {}
 }
 

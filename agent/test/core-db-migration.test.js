@@ -8,6 +8,9 @@ import {
   coreGetInvite, corePutInvite, coreBumpImportCount, coreImportCount, coreSeedImportCount,
   coreLoadPromptShares, coreUpsertPromptShare, coreRekeyPromptShare, coreMintedToday,
   coreDeleteUserData,
+  coreUpsertArticleEntry, coreSetArticleFlag, coreDeleteArticle, coreListArticles,
+  coreReplaceArticles, coreCountArticles,
+  coreUpsertRecording, coreDeleteRecording, coreListRecordings, coreReplaceRecordings,
 } from "../../functions/lib/core-db.js";
 
 const SECRET = "test-secret";
@@ -140,6 +143,66 @@ describe("prompt_shares：索引行为 + re-key + 日上限", () => {
     await coreUpsertPromptShare(env, "users/anon-u/", "b", "5555555", "2026-07-20T02:00:00.000Z");
     await coreUpsertPromptShare(env, "users/anon-u/", "c", "6666666", "2026-07-19T02:00:00.000Z");
     expect(await coreMintedToday(env, "users/anon-u/", "2026-07-20")).toBe(2);
+  });
+});
+
+describe("articles 表（P2）：entry 原样存取 + 标记语义", () => {
+  const scope = "users/anon-a/";
+  const entry = (stem, createdAt) => JSON.stringify({ stem, title: "题", head: 2, createdAt, updatedAt: createdAt, count: 1 });
+
+  it("upsert 保留标记；标记 off 且无 entry → 整行摘掉", async () => {
+    const env = coreEnv();
+    await coreSetArticleFlag(env, scope, "s1", "tags", true);
+    await coreUpsertArticleEntry(env, scope, "s1", entry("s1", "2026-07-20T00:00:00.000Z"), "etag1", 100);
+    let rows = await coreListArticles(env, scope);
+    expect(rows.length).toBe(1);
+    expect(rows[0].tags).toBe(true);                       // upsert 不覆盖标记
+    expect(JSON.parse(rows[0].entry).title).toBe("题");    // entry 原样回吐
+    // 只有标记、无 entry 的行：off 后整行消失
+    await coreSetArticleFlag(env, scope, "s2", "empty", true);
+    expect((await coreListArticles(env, scope)).length).toBe(2);
+    await coreSetArticleFlag(env, scope, "s2", "empty", false);
+    expect((await coreListArticles(env, scope)).length).toBe(1);
+    // 有 entry 的行：off 只清位不删行
+    await coreSetArticleFlag(env, scope, "s1", "tags", false);
+    rows = await coreListArticles(env, scope);
+    expect(rows.length).toBe(1);
+    expect(rows[0].tags).toBe(false);
+  });
+
+  it("created_ms 倒序 + replace 整体对账 + count", async () => {
+    const env = coreEnv();
+    await coreUpsertArticleEntry(env, scope, "old", entry("old", "2026-07-18T00:00:00.000Z"), null, 100);
+    await coreUpsertArticleEntry(env, scope, "new", entry("new", "2026-07-20T00:00:00.000Z"), null, 300);
+    let rows = await coreListArticles(env, scope);
+    expect(rows.map((r) => r.stem)).toEqual(["new", "old"]);
+    await coreReplaceArticles(env, scope, [
+      { stem: "only", entryJson: entry("only", "x"), fp: "e", createdMs: 5, empty: false, blocked: true, tags: false },
+    ]);
+    rows = await coreListArticles(env, scope);
+    expect(rows.length).toBe(1);
+    expect(rows[0].blocked).toBe(true);
+    expect(await coreCountArticles(env, scope)).toBe(1);
+    await coreDeleteArticle(env, scope, "only");
+    expect(await coreCountArticles(env, scope)).toBe(0);
+  });
+});
+
+describe("recordings 表（P2）", () => {
+  it("upsert / delete / replace round-trip", async () => {
+    const env = coreEnv();
+    const scope = "users/anon-r/";
+    await coreUpsertRecording(env, scope, "VoiceDrop-a.m4a", "2026-07-20T01:00:00.000Z");
+    await coreUpsertRecording(env, scope, "VoiceDrop-b.m4a", "2026-07-20T02:00:00.000Z");
+    let items = await coreListRecordings(env, scope);
+    expect(Object.keys(items).sort()).toEqual(["VoiceDrop-a.m4a", "VoiceDrop-b.m4a"]);
+    expect(items["VoiceDrop-a.m4a"].uploaded).toBe("2026-07-20T01:00:00.000Z");
+    await coreDeleteRecording(env, scope, "VoiceDrop-a.m4a");
+    items = await coreListRecordings(env, scope);
+    expect(Object.keys(items)).toEqual(["VoiceDrop-b.m4a"]);
+    await coreReplaceRecordings(env, scope, { "VoiceDrop-c.m4a": { uploaded: "t" } });
+    items = await coreListRecordings(env, scope);
+    expect(Object.keys(items)).toEqual(["VoiceDrop-c.m4a"]);
   });
 });
 

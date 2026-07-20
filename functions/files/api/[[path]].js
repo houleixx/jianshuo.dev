@@ -22,13 +22,13 @@
 //   SESSION_SECRET   (Pages secret) — HMAC key for minting/verifying session JWTs
 //   APPLE_BUNDLE_ID  (var)          — expected `aud`, the iOS app bundle id
 
-import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst, indexEntryFor, removeIndexEntry, setIndexFlag } from "../../lib/article-store.js";
+import { TITLE_FALLBACK, readArticleDoc, writeArticleDoc, setHead, setQuestionStatus, resolveArticles, withTopLevelArticles, byNewestFirst, articleTime, indexEntryFor, removeIndexEntry, setIndexFlag } from "../../lib/article-store.js";
 import { silentM4aBytes } from "../../lib/silent-m4a.js";
 import { shareIdFor, communityKey, reportKey, isShareId, promptPostTitle } from "../../lib/community-store.js";
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
-import { coreLoadPromptShares, coreDeleteUserData } from "../../lib/core-db.js";
+import { coreLoadPromptShares, coreDeleteUserData, coreListArticles, coreReplaceArticles, coreCountArticles, coreUpsertRecording, coreDeleteRecording, coreListRecordings, coreReplaceRecordings, coreCountRecordings } from "../../lib/core-db.js";
 
 // Miner sidecars that live under articles/ and end in .json but are NOT article
 // docs: <stem>.asr.json (resumable-ASR task) and <stem>.asrdone.json (ASR
@@ -122,6 +122,21 @@ async function reconcileArticlesIndex(env, articleScope) {
     ).catch(() => {});
   }
 
+  // 存储迁移 P2：对账顺手把 D1 articles 表拉齐（脏了必写；不脏也比对行数，
+  // 覆盖「D1 尚未回填过的老用户」——第一次打开后 D1 就绪，之后列表走 D1）。
+  try {
+    const n = await coreCountArticles(env, articleScope);
+    if (n !== null && (dirty || n !== Object.keys(index).length)) {
+      await coreReplaceArticles(env, articleScope, Object.entries(index).map(([s, it]) => ({
+        stem: s,
+        entryJson: it.entry ? JSON.stringify(it.entry) : null,
+        fp: it.fp || null,
+        createdMs: it.entry ? articleTime(it.entry.createdAt) : 0,
+        empty: !!it.empty, blocked: !!it.blocked, tags: !!it.tags,
+      })));
+    }
+  } catch { /* D1 同步是加速层，绝不打断对账 */ }
+
   articles.sort(byNewestFirst);
   return articles;
 }
@@ -156,6 +171,11 @@ async function reconcileRecordingsIndex(env, scope) {
         JSON.stringify({ schema: 1, updatedAt: Date.now(), items }),
         { httpMetadata: { contentType: 'application/json' } });
     }
+    // 存储迁移 P2：D1 recordings 表拉齐（变了必写；没变也比对行数，覆盖未回填用户）。
+    const n = await coreCountRecordings(env, scope);
+    if (n !== null && (!same || n !== Object.keys(items).length)) {
+      await coreReplaceRecordings(env, scope, items);
+    }
   } catch { /* 加速层 */ }
   return items;
 }
@@ -168,10 +188,17 @@ async function updateRecordingsIndex(env, scope, leaf, meta /* null = 删 */) {
     if (io) { try { const p = JSON.parse(await io.text()); if (p && p.items) idx = p; } catch {} }
     if (meta) idx.items[leaf] = meta;
     else if (leaf in idx.items) delete idx.items[leaf];
-    else return;
+    else {
+      // R2 索引里本就没有：D1 行照删（迁移期两层可能不同步）。
+      await coreDeleteRecording(env, scope, leaf);
+      return;
+    }
     idx.updatedAt = Date.now();
     await env.FILES.put(recordingsIndexKey(scope), JSON.stringify(idx),
       { httpMetadata: { contentType: 'application/json' } });
+    // 存储迁移 P2：D1 行级同步（上传 UPSERT / 删除 DELETE）。
+    if (meta) await coreUpsertRecording(env, scope, leaf, meta.uploaded);
+    else await coreDeleteRecording(env, scope, leaf);
   } catch { /* 加速层 */ }
 }
 
@@ -662,6 +689,30 @@ async function handleRequest(context) {
   // 个 key，1.0-1.6s，不达标，所以也退到后台）；老数据的标记回填同理。
   if (request.method === 'GET' && action === 'recordings') {
     if (!scope) return json({ error: 'user token required' }, 400);
+    // 存储迁移 P2 快路径：两张 D1 表两条 SELECT 直出（行数 >0 才算就绪；
+    // 空表可能是未回填的老用户，落回 R2 索引路径，由后台对账回填 D1）。
+    if (waitUntil) {
+      const [d1Recs, d1Arts] = await Promise.all([coreListRecordings(env, scope), coreListArticles(env, scope)]);
+      if (d1Recs && Object.keys(d1Recs).length) {
+        const flags = {};
+        for (const a of d1Arts || []) flags[a.stem] = a;
+        const recordings = Object.entries(d1Recs).map(([leaf, meta]) => {
+          const it = flags[leaf.slice(0, -4)] || {};
+          return {
+            name: leaf,
+            uploaded: meta.uploaded || '',
+            hasArticles: !!it.entry,
+            isEmpty: !!it.empty,
+            blocked: !!it.blocked,
+            hasTags: !!it.tags,
+          };
+        });
+        // 权威仍是 R2 listing：后台对账两个索引（同时拉齐 R2 索引与 D1 表）。
+        waitUntil(reconcileRecordingsIndex(env, scope).catch(() => {}));
+        waitUntil(reconcileArticlesIndex(env, scope).catch(() => {}));
+        return json({ recordings });
+      }
+    }
     const [recItems, artItems] = await Promise.all([
       (async () => {
         try {
@@ -1654,6 +1705,23 @@ async function handleRequest(context) {
     // 索引缺失/空/损坏，或运行时没有 waitUntil（测试）→ 同步对账，行为同旧版。
     if (request.method === 'GET' && !stem) {
       const indexKey = `${articleScope}articles-index.json`;
+      // 存储迁移 P2 快路径：D1 一条 SELECT 直出（entry 原样回吐，与 R2 索引
+      // 逐字节一致）。空表 = 未回填的老用户 → 落回 R2 索引路径。
+      if (waitUntil) {
+        const d1rows = await coreListArticles(env, articleScope);
+        if (d1rows && d1rows.length) {
+          const cached = [];
+          for (const r of d1rows) {
+            if (!r.entry) continue;
+            try { cached.push(JSON.parse(r.entry)); } catch {}
+          }
+          if (cached.length) {
+            cached.sort(byNewestFirst);
+            waitUntil(reconcileArticlesIndex(env, articleScope).catch(() => {}));
+            return json({ articles: cached });
+          }
+        }
+      }
       if (waitUntil) {
         try {
           const io = await env.FILES.get(indexKey);
