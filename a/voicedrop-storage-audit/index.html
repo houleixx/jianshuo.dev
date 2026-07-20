@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop 数据存储排查与 D1 迁移评估：R2/D1/DO 实测规模、慢与不稳的根源诊断、分期迁移方案与实施状态。">
+<title>VoiceDrop 数据存储排查 · D1 迁移评估</title>
+<style>
+:root{
+  --bg:#FAFAF7; --panel:#FFFFFF; --panel2:#F3F2ED; --line:#E3E1D8;
+  --ink:#20262B; --ink2:#5A6470; --ink3:#8A94A0;
+  --accent:#0E6E66; --accent-soft:#E3F0EE;
+  --r2:#A05A0C; --r2-bg:#F7EDDD;
+  --d1:#0E6E66; --d1-bg:#DFEEEB;
+  --do:#5B3FA8; --do-bg:#EAE4F6;
+  --bad:#B42323; --bad-bg:#F9E7E5;
+  --warn:#8A6A0F; --warn-bg:#F6EFD8;
+  --mono:ui-monospace,"SF Mono","Menlo",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#15191D; --panel:#1C2227; --panel2:#232A30; --line:#333B42;
+    --ink:#E6E4DE; --ink2:#A7B0B8; --ink3:#79838C;
+    --accent:#4FB3A9; --accent-soft:#1D3330;
+    --r2:#D9A05B; --r2-bg:#3A2F1E;
+    --d1:#4FB3A9; --d1-bg:#1D3330;
+    --do:#A78BE8; --do-bg:#2C2440;
+    --bad:#E07070; --bad-bg:#3A2222;
+    --warn:#D8B95C; --warn-bg:#37301C;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#FAFAF7; --panel:#FFFFFF; --panel2:#F3F2ED; --line:#E3E1D8;
+  --ink:#20262B; --ink2:#5A6470; --ink3:#8A94A0;
+  --accent:#0E6E66; --accent-soft:#E3F0EE;
+  --r2:#A05A0C; --r2-bg:#F7EDDD; --d1:#0E6E66; --d1-bg:#DFEEEB;
+  --do:#5B3FA8; --do-bg:#EAE4F6; --bad:#B42323; --bad-bg:#F9E7E5;
+  --warn:#8A6A0F; --warn-bg:#F6EFD8;
+}
+:root[data-theme="dark"]{
+  --bg:#15191D; --panel:#1C2227; --panel2:#232A30; --line:#333B42;
+  --ink:#E6E4DE; --ink2:#A7B0B8; --ink3:#79838C;
+  --accent:#4FB3A9; --accent-soft:#1D3330;
+  --r2:#D9A05B; --r2-bg:#3A2F1E; --d1:#4FB3A9; --d1-bg:#1D3330;
+  --do:#A78BE8; --do-bg:#2C2440; --bad:#E07070; --bad-bg:#3A2222;
+  --warn:#D8B95C; --warn-bg:#37301C;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.75 -apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:0 auto;padding:48px 24px 96px}
+header.hero{border-bottom:2px solid var(--ink);padding-bottom:28px;margin-bottom:36px}
+.eyebrow{font-size:13px;letter-spacing:.18em;color:var(--accent);font-weight:600;text-transform:uppercase}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.25;margin:10px 0 12px;font-weight:700;text-wrap:balance}
+.sub{color:var(--ink2);max-width:46em;margin:0}
+.meta{margin-top:14px;font-size:13px;color:var(--ink3)}
+h2{font-size:22px;margin:64px 0 6px;font-weight:700;display:flex;align-items:baseline;gap:12px}
+h2 .no{font-family:var(--mono);font-size:14px;color:var(--accent);font-weight:600}
+h3{font-size:17px;margin:32px 0 8px;font-weight:600}
+.lede{color:var(--ink2);margin:0 0 20px;max-width:48em}
+p{max-width:48em}
+code,.mono{font-family:var(--mono);font-size:.86em}
+code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;white-space:nowrap}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:28px 0}
+.stat{background:var(--panel);padding:16px 18px}
+.stat b{display:block;font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.stat span{font-size:13px;color:var(--ink2)}
+.stat em{font-style:normal;font-size:12px;color:var(--ink3);display:block}
+.chip{display:inline-block;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:99px;vertical-align:1px;letter-spacing:.02em}
+.chip.r2{color:var(--r2);background:var(--r2-bg)}
+.chip.d1{color:var(--d1);background:var(--d1-bg)}
+.chip.do{color:var(--do);background:var(--do-bg)}
+.chip.bad{color:var(--bad);background:var(--bad-bg)}
+.chip.warn{color:var(--warn);background:var(--warn-bg)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:16px 0 8px}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--panel)}
+th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:600;text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
+td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.6}
+tr:last-child td{border-bottom:none}
+td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.bar{height:8px;border-radius:4px;background:var(--r2);opacity:.85;min-width:2px}
+.barcell{min-width:120px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:20px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.card h4{margin:0 0 6px;font-size:15px;display:flex;gap:8px;align-items:center}
+.card p{font-size:14px;color:var(--ink2);margin:6px 0 0}
+.card ul{font-size:13.5px;color:var(--ink2);margin:8px 0 0;padding-left:18px}
+.card li{margin:3px 0}
+.tree{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 22px;font-family:var(--mono);font-size:13px;line-height:1.9;overflow-x:auto;margin:16px 0}
+.tree i{font-style:normal;color:var(--ink3)}
+.tree b{font-weight:600}
+.tree .hot{color:var(--bad);font-weight:600}
+.finding{border:1px solid var(--line);border-left:4px solid var(--bad);border-radius:8px;background:var(--panel);padding:16px 20px;margin:14px 0}
+.finding.w{border-left-color:var(--warn)}
+.finding h4{margin:0 0 4px;font-size:15.5px}
+.finding p{margin:4px 0;font-size:14.5px;color:var(--ink2)}
+.finding .ev{font-family:var(--mono);font-size:12px;color:var(--ink3);margin-top:6px}
+.phase{display:flex;gap:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:18px 20px;margin:12px 0}
+.phase .pno{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:15px;white-space:nowrap}
+.phase h4{margin:0 0 4px;font-size:15.5px}
+.phase p{margin:4px 0;font-size:14px;color:var(--ink2)}
+.verdict{background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;padding:20px 24px;margin:24px 0}
+.verdict h3{margin:0 0 8px;color:var(--accent)}
+.verdict p{margin:6px 0;font-size:15px}
+.small{font-size:13px;color:var(--ink3)}
+.good{color:var(--accent);font-weight:600}
+.risk{color:var(--bad);font-weight:600}
+ul.tight{margin:8px 0;padding-left:20px}
+ul.tight li{margin:5px 0;max-width:46em}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header class="hero">
+  <div class="eyebrow">VoiceDrop · 存储系统排查</div>
+  <h1>数据现状盘点与 D1 迁移评估</h1>
+  <p class="sub">对 <span class="mono">jianshuo.dev</span> Pages Functions、voicedrop-agent Worker、reco Worker、EdgeOne 边缘层与东京 VPS 中继的全量数据面排查，含线上真实规模数据。</p>
+  <div class="meta">2026-07-20 · 排查范围：~/code/jianshuo.dev + ~/code/voicedrop · 线上数据取自 Cloudflare API 实测</div>
+</header>
+
+<div class="verdict" style="border-color:var(--d1)">
+  <h3>✅ 实施状态（2026-07-20 当天完成 P0–P3，全部上线）</h3>
+  <p><b>P0–P3 已部署生产并线上验证</b>：voicedrop-core 库 <b>10 张表</b>——P1/P2 的 refhits·invites·share_stats·prompt_shares·articles·recordings，加 P3 的 identities·user_profiles·push_tokens·community_reports。全部走双写 + D1 优先 + R2 兜底 + 自愈；存量 backfill 全部对齐源计数（identities 57 / profiles 53 / push_tokens 120 / reports 1）。上传→双写→D1 直出→挖矿标记→销号双删全链路实测通过；1232 个测试全绿。生产已观测到自愈生效：articles/recordings 由真实用户打开列表自动回填至 347/335 行。提交 <span class="mono">8c5e8ff</span>(P1) · <span class="mono">bd048a3</span>(P2) · <span class="mono">3908919</span>(P3)。仅剩「D1 跑稳后移除逐次对账」按计划观察后再做。</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><b>18,407</b><span>R2 对象总数</span><em>桶 jianshuo-dev-files</em></div>
+  <div class="stat"><b>2.06 GB</b><span>R2 总体积</span><em>桶位于北美西部 WNAM</em></div>
+  <div class="stat"><b>589</b><span>用户目录</span><em>users/ 前缀，1.84 GB</em></div>
+  <div class="stat"><b>8 张表</b><span>已在 D1 运行</span><em>usage 3.1MB + reco 0.9MB</em></div>
+  <div class="stat"><b>11+</b><span>R2 list() 扫描点</span><em>最大一处扫全桶</em></div>
+  <div class="stat"><b>10+</b><span>读-改-写竞态点</span><em>R2 无原子操作</em></div>
+</div>
+
+<div class="verdict">
+  <h3>一句话结论</h3>
+  <p><b>该迁，且只迁一半。</b>慢和不稳的根源不是「用了 R2」，而是「把 R2 当数据库用」：所有列表、索引、计数、指针都是 R2 里的小 JSON 文件，靠读-改-写维护、靠全前缀 list() 扫描兜底自愈。音频、照片、文章正文这些 blob 放 R2 是对的；<b>需要迁走的是那一层「手工索引 + 计数器 + 指针」，它们天然是数据库的活</b>。币记账本（6 张表）和社区索引（2 张表）已经在 D1 上验证过这条路能走通。</p>
+</div>
+
+<!-- ===================================================== -->
+<h2><span class="no">01</span>存储全景：数据现在都在哪</h2>
+<p class="lede">三种后端并存。颜色约定贯穿全文：<span class="chip r2">R2</span> 对象存储 · <span class="chip d1">D1</span> SQLite 数据库 · <span class="chip do">DO</span> Durable Object 实例态。</p>
+
+<div class="cols">
+  <div class="card">
+    <h4><span class="chip r2">R2</span> jianshuo-dev-files（主力，问题所在）</h4>
+    <p>18,407 对象 / 2.06 GB。文章、文风、录音、照片、身份绑定、分享、社区指针、归因指纹、配置、日志——<b>所有用户可见数据</b>都在这里，包括本应是数据库行的索引与计数。</p>
+  </div>
+  <div class="card">
+    <h4><span class="chip d1">D1</span> 两个库（已跑通）</h4>
+    <p><code>voicedrop-usage</code>：account·ledger·bucket·mint·iap_txn·iap_sub，币记/订阅全部资金态（537 账户、8,728 条流水）。<br><code>voicedrop-reco</code>：community_posts（156）·engagement（4,069），社区展示索引与互动。</p>
+  </div>
+  <div class="card">
+    <h4><span class="chip do">DO</span> 7 个类（各司其职，不用动）</h4>
+    <p>ArticleEditor / LibraryAgent 内嵌 SQLite 存编辑队列与历史；StatusHub / LinkBroker 存设备配对态；Miner 存告警计数与闹钟；两个 Relay 无状态。均为实例协调态，<b>不是 D1 候选</b>。</p>
+  </div>
+  <div class="card">
+    <h4>东京 VPS 中继（无关迁移）</h4>
+    <p>wechat-relay 只有一个本地文件 <code>imgcache.json</code>（微信图片 CDN URL 缓存，30 天 TTL），不碰 R2。EdgeOne 边缘层纯反代 + 缓存规则，无持久数据。</p>
+  </div>
+</div>
+
+<h3>R2 前缀实测规模（2026-07-20）</h3>
+<div class="tablewrap"><table>
+<tr><th>前缀</th><th>内容</th><th>对象数</th><th class="barcell">分布</th><th>体积</th></tr>
+<tr><td class="mono">users/</td><td>589 个用户的全部数据（音频占大头）</td><td class="num">6,500</td><td><div class="bar" style="width:78%"></div></td><td class="num">1,836 MB</td></tr>
+<tr><td class="mono">llmlogs/</td><td>每次 LLM 调用一个 JSON，按日分目录</td><td class="num">8,289</td><td><div class="bar" style="width:100%"></div></td><td class="num">172 MB</td></tr>
+<tr><td class="mono">minelogs/</td><td>每次挖矿一个日志</td><td class="num">2,700</td><td><div class="bar" style="width:33%"></div></td><td class="num">1.5 MB</td></tr>
+<tr><td class="mono">shares/</td><td>分享码 → 文章 key / 提示词 JSON（一名两制）</td><td class="num">364</td><td><div class="bar" style="width:4.4%"></div></td><td class="num">0.1 MB</td></tr>
+<tr><td class="mono">refhits/</td><td>归因指纹命中（127 个指纹，2 天生命周期）</td><td class="num">290</td><td><div class="bar" style="width:3.5%"></div></td><td class="num">&lt;0.1 MB</td></tr>
+<tr><td class="mono">community/</td><td>社区帖指针 + 举报记录</td><td class="num">162</td><td><div class="bar" style="width:2%"></div></td><td class="num">0.1 MB</td></tr>
+<tr><td class="mono">links/</td><td>Apple/微信身份 → 数据箱映射</td><td class="num">57</td><td><div class="bar" style="width:.7%"></div></td><td class="num">&lt;0.1 MB</td></tr>
+<tr><td class="mono">invites/ · config/ · assets/ · debug/</td><td>邀请码 29 · 配置 4 · 公众号封面 20（50.8MB）· 调试 3</td><td class="num">56</td><td><div class="bar" style="width:.7%"></div></td><td class="num">51 MB</td></tr>
+</table></div>
+<p class="small">桶位置 WNAM（北美西部）：中国用户的每一次对象读写都跨太平洋往返。这放大了下文所有 N+1 问题。</p>
+
+<!-- ===================================================== -->
+<h2><span class="no">02</span>数据结构：每类数据长什么样</h2>
+<p class="lede">抽样自线上真实对象 + 代码 schema 定义（<span class="mono">functions/lib/article-store.js</span> 等）。</p>
+
+<h3>单个用户目录（users/&lt;sub&gt;/）</h3>
+<div class="tree">
+users/anon-01298f…/<br>
+├─ <b>CLAUDE.json</b>            <i>文风文档，schema-3 版本化 {head, versions[≤20], profile}</i><br>
+├─ <b>CONFIG.json</b>            <i>用户设置 {autoShareCommunity,…}</i><br>
+├─ <b>ACCOUNT.json</b>           <i>身份记录 {appleSub, wechatOpenid, email,…} — <span class="hot">RMW 合并</span></i><br>
+├─ <b>WECHAT.json</b>            <i>公众号发布凭据 {appid, secret, coverMediaIds}</i><br>
+├─ <b>push-token.json</b>        <i>APNs 设备令牌</i><br>
+├─ <b>prompts.json</b>           <i>提示词树（整树覆盖写）</i><br>
+├─ <b>prompt-shares.json</b>     <i>分享码索引 {byItem, mintLog[]} — <span class="hot">真实丢更新风险</span></i><br>
+├─ <b>articles-index.json</b>    <i>文章摘要索引 — <span class="hot">RMW 加速层 + list() 全量对账</span></i><br>
+├─ <b>recordings-index.json</b>  <i>录音索引 — <span class="hot">同上，对账实测 1.0–1.6s</span></i><br>
+├─ VoiceDrop-*.m4a           <i>原始音频（体积大头，该留 R2）</i><br>
+├─ photos/&lt;session&gt;/*.jpg    <i>照片/AI 图，key 写后不变（该留 R2）</i><br>
+├─ style/&lt;id&gt;.json           <i>文风语料样本 — <span class="hot">读取时 list+逐个 GET（N+1）</span></i><br>
+└─ articles/<br>
+&nbsp;&nbsp;&nbsp;├─ &lt;stem&gt;.json            <i>文章文档：{head, versions[≤10] 整史内嵌, transcript, srt, photos, questions,…}</i><br>
+&nbsp;&nbsp;&nbsp;├─ &lt;stem&gt;.srt             <i>字幕</i><br>
+&nbsp;&nbsp;&nbsp;└─ &lt;stem&gt;.{empty|blocked|tags|minefail|asr.json|asrdone.json}  <i>6 种 sidecar 标记（存在性即状态位）</i>
+</div>
+
+<h3>值得注意的结构决策</h3>
+<ul class="tight">
+  <li><b>版本历史内嵌正文</b>：文章的 10 个版本、文风的 20 个版本全部内嵌在同一个 JSON 里，每次保存整读整写，文档只增不减。</li>
+  <li><b>「存在性即状态」</b>：<code>.empty</code>/<code>.blocked</code>/<code>.tags</code> 等 sidecar 用文件存在与否表达状态位，再由 RMW 把状态镜像进 articles-index——一个布尔字段被拆成了两次对象写。</li>
+  <li><b>一名两制的 shares/</b>：同一命名空间下，文章分享存纯文本 key，提示词分享存 JSON，靠「解析失败即 fallthrough」区分。</li>
+  <li><b>社区双写</b>：R2 <code>community/*.json</code> 是真源，D1 <code>community_posts</code> 是展示索引，靠每次列表后的 waitUntil 全量对账收敛。</li>
+</ul>
+
+<!-- ===================================================== -->
+<h2><span class="no">03</span>诊断：慢和不稳的六个根源</h2>
+<p class="lede">全部有代码注释或事故记录佐证，file:line 可直接跳转。</p>
+
+<div class="finding">
+  <h4>① 挖矿调度靠扫全桶</h4>
+  <p><code>scanUnprocessed</code> 的 sweep 模式对<b>整个桶 18,407 个对象</b>分页 list()，在内存里做集合运算推导「哪些音频还没挖」。对象越多越慢，且随全站增长线性恶化——为此才被迫拆出 per-user 分片。</p>
+  <div class="ev">agent/src/miner.js:1562 · index.js:559（分片注释）</div>
+</div>
+<div class="finding">
+  <h4>② 列表页靠「手工索引 + 全量对账」自愈</h4>
+  <p>articles-index / recordings-index 两个 JSON 是为绕开 list() 慢而造的加速层：每次写文章都 RMW 更新索引（try/catch 吞错），再靠全前缀 list() 对账兜底。代码注释实测：~1,500 个 key 扫一遍 1.0–1.6 秒，「不达标」才挪进后台；首次调用仍同步对账 ~1.3s。</p>
+  <div class="ev">functions/lib/article-store.js:42-158 · [[path]].js:1644-1660, 652</div>
+</div>
+<div class="finding">
+  <h4>③ 归因查询 N+1：一次 list + 最多 80 个 GET</h4>
+  <p>refhits 按 IP 指纹分目录存对象，查一次归因要 list 整个前缀再逐条 GET（上限 80 个），每个 GET 都是跨洋往返。这是典型的「该用一条 SELECT 的地方用了 81 次对象操作」。</p>
+  <div class="ev">agent/src/referral.js:55-75 · functions/lib/refhits.js:31-49</div>
+</div>
+<div class="finding">
+  <h4>④ R2 无原子操作 → 读-改-写丢更新</h4>
+  <p>R2 没有 CAS、没有原子自增，最后写者赢。已知竞态点：<code>prompt-shares.json</code>（byItem + mintLog + 每日上限三件事夹在一次 RMW 里，<b>真实丢更新风险</b>）、<code>shares/&lt;code&gt;</code> 的 importCount（代码注释自认「并发导入偶尔丢计数」）、两个 index JSON、ACCOUNT.json、举报 reporters[]、config/prompts.json。</p>
+  <div class="ev">agent/src/prompt-share.js:339,424 · prompt-routes.js:317 · [[path]].js:243-317, 1258</div>
+</div>
+<div class="finding">
+  <h4>⑤ 串行对象操作堆出来的延迟事故</h4>
+  <p>「打开分享 10 秒」= 15 个串行 R2 操作，靠 Promise.all + waitUntil 缓解；删账户扫全前缀逐 key 删，913 个对象的账号曾打爆 subrequest 预算，改成 1000/轮批删。这些补丁都在对抗同一件事：把数据库工作负载放在了对象存储上。</p>
+  <div class="ev">agent/src/prompt-share.js:79 注释 · [[path]].js:503-567 注释</div>
+</div>
+<div class="finding w">
+  <h4>⑥ 桶在北美西部，用户在中国</h4>
+  <p>WNAM 桶位置使上述每一次对象操作都自带跨太平洋 RTT。迁 D1 后写路径同样要去主区域，但<b>请求次数从 N 次降到 1 次</b>，且 D1 读复制可把读就近化——这是数量级差异的来源。</p>
+  <div class="ev">wrangler r2 bucket info 实测 location: WNAM</div>
+</div>
+
+<!-- ===================================================== -->
+<h2><span class="no">04</span>方案：迁什么、不迁什么</h2>
+<p class="lede">原则一句话：<b>blob 留 R2，状态进 D1，协调留 DO</b>。R2 保持真源直到切换完成，随时可回退。</p>
+
+<div class="cols">
+  <div class="card">
+    <h4><span class="chip r2">R2</span> 留下（是它的本职）</h4>
+    <ul>
+      <li>音频 .m4a、照片 photos/（1.8 GB 大头）</li>
+      <li>文章/文风正文 JSON（版本体可后置再议）</li>
+      <li>llmlogs/ minelogs/ 原始日志（建议加生命周期）</li>
+      <li>config/*.json 零部署调参（单写者、无竞态）</li>
+      <li>assets/ 公众号封面</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4><span class="chip d1">D1</span> 迁入（新库 voicedrop-core）</h4>
+    <ul>
+      <li>articles 元数据表 ← articles-index.json + sidecar 状态位</li>
+      <li>recordings 表（含 mine_state 工作队列列）← recordings-index.json + 全桶扫描</li>
+      <li>shares / invites / prompt_shares ← 三类指针与计数</li>
+      <li>refhits ← 归因指纹（一条 SELECT 取代 81 次操作）</li>
+      <li>identities / push_tokens ← links/*、ACCOUNT.json、push-token.json</li>
+      <li>community_reports ← reporters[] RMW</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4><span class="chip do">DO</span> 不动（已是正确形态）</h4>
+    <ul>
+      <li>编辑/指令队列（DO 内嵌 SQLite，强一致）</li>
+      <li>设备配对、状态推送、告警计数、挖矿闹钟</li>
+      <li>ASR 断点续传 checkpoint 留 R2（与音频同生命周期）</li>
+    </ul>
+  </div>
+</div>
+
+<h3>目标表设计（voicedrop-core）</h3>
+<div class="tablewrap"><table>
+<tr><th>表</th><th>关键列</th><th>取代的 R2 结构</th><th>消灭的问题</th></tr>
+<tr><td class="mono">articles</td><td class="mono">user_sub, stem PK, title, head, status, tags, flag_empty, flag_blocked, created_at, updated_at</td><td class="mono">articles-index.json + .empty/.blocked/.tags 镜像</td><td>索引 RMW、对账扫描、状态位双写</td></tr>
+<tr><td class="mono">recordings</td><td class="mono">user_sub, key PK, uploaded_at, mine_state, fail_count</td><td class="mono">recordings-index.json + .minefail + 全桶扫描</td><td>miner 扫全桶 → <code>WHERE mine_state='pending'</code></td></tr>
+<tr><td class="mono">shares</td><td class="mono">code PK, type, owner, target_key, payload, import_count, created_at</td><td class="mono">shares/&lt;code&gt; + prompt-shares.json</td><td>一名两制、importCount 丢计数（原子 UPDATE）、丢更新</td></tr>
+<tr><td class="mono">invites</td><td class="mono">code PK, owner, name, ts</td><td class="mono">invites/&lt;CODE&gt;</td><td>—（顺手，量小）</td></tr>
+<tr><td class="mono">refhits</td><td class="mono">fingerprint, ts, owner, token · 索引(fingerprint, ts)</td><td class="mono">refhits/&lt;ip&gt;/&lt;ts&gt; 对象树</td><td>list+80 GET → 1 条 SELECT；cron DELETE 取代生命周期</td></tr>
+<tr><td class="mono">identities</td><td class="mono">provider, external_id PK, user_sub, linked_at</td><td class="mono">links/apple-*.json · links/wechat-*.json</td><td>登录多一次跨洋 GET；first-write-wins 改唯一约束</td></tr>
+<tr><td class="mono">user_profile</td><td class="mono">user_sub PK, email, name, avatar, push_token, push_env, last_seen_at</td><td class="mono">ACCOUNT.json + push-token.json</td><td>RMW 合并竞态</td></tr>
+<tr><td class="mono">community_reports</td><td class="mono">share_id, reporter, at, reason · PK(share_id, reporter)</td><td class="mono">community/reports/*.json 的 reporters[]</td><td>举报并发 RMW；顺带精确去重</td></tr>
+</table></div>
+<p class="small">规模评估：全部候选数据现约几 MB、行数万级，距 D1 单库 10 GB 上限有三个数量级余量。注意已知坑：绑定参数上限 100（reco 已按 90 分块）；跨库无 JOIN——core 与 usage/reco 本就不需要 JOIN。</p>
+
+<h3>热路径收益预估</h3>
+<div class="tablewrap"><table>
+<tr><th>路径</th><th>现在</th><th>迁移后</th></tr>
+<tr><td>打开文章列表</td><td>读索引 JSON + 后台对账 list() 1.0–1.6s（首次同步 ~1.3s）</td><td class="good">1 条 SELECT，无对账</td></tr>
+<tr><td>挖矿找活</td><td>sweep 全桶 18k 对象分页 list</td><td class="good">1 条 WHERE mine_state='pending'</td></tr>
+<tr><td>归因判定</td><td>1 list + ≤80 GET（跨洋）</td><td class="good">1 条 SELECT</td></tr>
+<tr><td>分享导入计数</td><td>RMW，并发丢计数（代码自认）</td><td class="good">UPDATE … SET import_count=import_count+1</td></tr>
+<tr><td>每次写文章</td><td>正文 PUT + 索引 RMW（GET+PUT）+ 状态位镜像</td><td class="good">正文 PUT + 1 条 UPSERT</td></tr>
+<tr><td>删账户</td><td>3 个前缀全扫 + 千级批删</td><td class="good">blob 批删不变，状态一条 DELETE 每表</td></tr>
+</table></div>
+
+<!-- ===================================================== -->
+<h2><span class="no">05</span>实施：三期走，每期独立回退</h2>
+
+<div class="phase"><div class="pno">P0 ✅</div><div>
+  <h4>准备（半天）</h4>
+  <p>建库 voicedrop-core + migrations；写 backfill 脚本（walk R2 → INSERT，幂等可重跑）；共享 lib 里加 D1 访问层。所有新读路径挂 feature flag，R2 写照旧。</p>
+</div></div>
+<div class="phase"><div class="pno">P1 ✅</div><div>
+  <h4>高收益低风险：指针与计数（1–2 天）</h4>
+  <p>refhits、shares、invites、prompt-shares 切 D1。这四类量小（合计 <740 对象）、调用方集中、不碰移动端接口形状，却直接消灭 N+1 归因查询和两处真实丢更新。双写一周对账无差异后停写 R2。</p>
+</div></div>
+<div class="phase"><div class="pno">P2 ✅</div><div>
+  <h4>核心收益：索引层（3–5 天 → 实际当天完成）</h4>
+  <p>articles / recordings 两表落地：写文章时 UPSERT，GET /articles、/recordings 直接 SELECT（entry 原样存取，接口 JSON 形状逐字节不变，iOS 无感）。实施中的现场修正：<b>挖矿扫描不动</b>——全桶扫描只发生在 6 小时 cron 的兜底 sweep（非热路径），每用户前缀扫描量级有界；老用户无需全量 backfill，第一次打开列表时后台对账自动把 D1 拉齐（自愈式迁移）。reconcile 暂保留为每次列表后的后台对账，等 D1 跑稳后降频/改手动。</p>
+</div></div>
+<div class="phase"><div class="pno">P3 ✅</div><div>
+  <h4>收尾：身份与举报（当天完成）</h4>
+  <p>identities / user_profiles / push_tokens / community_reports 四表迁入：Apple/微信登录的 scope 解析与社区写门槛 hasVerifiedBinding 改查 D1；push token 上传即双写、sendPush D1 优先、410 双删；举报的隐藏集/详情/对账都变成一条 SELECT（取代 community/reports/ 前缀扫描）。文章正文与版本史继续留 R2（拆版本表是另一个话题）。<b>「取消每次列表后的全量对账」暂缓</b>——留作 D1 稳定运行观察后的收尾，现阶段 reconcile 仍作后台自愈兜底。</p>
+</div></div>
+
+<h3>风险与对策</h3>
+<ul class="tight">
+  <li><b>D1 写也在单一主区域</b>：对中国用户写延迟与 R2 相当，但请求数从 N→1；读可开 D1 read replication 就近。净收益为正。</li>
+  <li><b>迁移期一致性</b>：全程「R2 真源 + D1 影子」双写，flag 控制读路径，任何异常一键翻回；reconcile 逻辑先降级为对账工具而非删除。</li>
+  <li><b>三处调用方</b>（Pages Functions / agent worker / reco worker）共享 lib 但 reco 的 auth 是手抄分叉——趁这次把分叉收敛，避免三处各写一套 D1 访问。</li>
+  <li><b>部署纪律</b>：voicedrop-agent 是 wrangler 整包覆盖，切换期务必先合 origin/main 再部署（已有既定纪律）。</li>
+</ul>
+
+<!-- ===================================================== -->
+<h2><span class="no">06</span>顺手发现的独立隐患（与迁移无关，建议单独处理）</h2>
+<ul class="tight">
+  <li><span class="chip bad">隐私</span> <code>DEBUG_PLAINTEXT_IP = true</code>（refhits.js:14）仍开着——归因指纹和 PostHog distinct_id 目前存<b>明文 IP</b>，备忘录里写的是「确认后翻回 false」。</li>
+  <li><span class="chip warn">漂移</span> reco worker 的 auth 是 functions/lib/auth.js 的手抄副本（reco/src/auth.js:1 自注「复刻自核心」），会随时间漂移。</li>
+  <li><span class="chip warn">账本</span> usage_store 的 grantBucket/debit 把 bucket 变更与 ledger 写分成两次 batch，中间崩溃会丢流水行（余额不受影响，代码自注「fast-follow」）。迁移 P0 顺手改成单事务成本极低。</li>
+  <li><span class="chip warn">膨胀</span> llmlogs/ 已 8,289 对象 / 172 MB 且持续增长，无清理策略；建议加 R2 生命周期（如 30 天）。</li>
+</ul>
+
+<p class="small" style="margin-top:48px;border-top:1px solid var(--line);padding-top:16px">
+数据来源：三路并行代码全扫（Pages Functions 1,920 行主文件 + agent worker 44 个源文件 + reco/EdgeOne/VPS）交叉印证；线上规模取自 Cloudflare API 与 wrangler d1 实测。文中 file:line 均可在仓库直接定位。
+</p>
+</div>
+</body>
+</html>
