@@ -182,7 +182,7 @@ export async function onRequest(context) {
   const visitorIP = context.request.headers?.get?.('CF-Connecting-IP');
   if (!fwdHost && shareOwner && visitorIP && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(
-      writeRefhit({ FILES: env.FILES }, visitorIP, env.SESSION_SECRET, shareOwner, id, Date.now())
+      writeRefhit({ FILES: env.FILES, CORE: env.CORE }, visitorIP, env.SESSION_SECRET, shareOwner, id, Date.now())
         .catch(() => {}));
   }
   // CTA 实时价：worker 铸币后发布的现价 + 面额配置，任一读不到就走通用文案。
@@ -215,7 +215,7 @@ async function promptSharePage(context, env, id, ptr, code = id) {
   const visitorIP = request.headers?.get?.('CF-Connecting-IP');
   if (!fwdHost && shareOwner && visitorIP && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(
-      writeRefhit({ FILES: env.FILES }, visitorIP, env.SESSION_SECRET, shareOwner, id, Date.now())
+      writeRefhit({ FILES: env.FILES, CORE: env.CORE }, visitorIP, env.SESSION_SECRET, shareOwner, id, Date.now())
         .catch(() => {}));
   }
   let rate = null, refCfg = null;

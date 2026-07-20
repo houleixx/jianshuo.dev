@@ -21,6 +21,7 @@ import { sendPush } from "./push.js";
 import { runMine, scopesWithWork, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
+import { coreCleanupRefhits } from "../../functions/lib/core-db.js";
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
 import { buildBroadcastMessage, createPairing, verifyPairing, completePairing, resolveMatchingScopes, genDistinctCodes, CODE_TTL_MS } from "./devicelink.js";
 import { writeLlmLog } from "./llmlog.js";
@@ -1499,6 +1500,8 @@ export default {
     ctx.waitUntil(stub.fetch(new Request("https://miner/trigger", { method: "POST" })));
     // 6h 一次顺手刷新落地页 CTA 汇率（冷启动没铸币也有价可显示）。
     if (env.USAGE) ctx.waitUntil(publishMintRate(env, env.USAGE, Date.now()));
+    // refhits 过期清理（对齐原 R2 lifecycle 2 天；存储迁移 P1）。
+    ctx.waitUntil(coreCleanupRefhits(env, Date.now() - 2 * 86400000));
   },
 };
 

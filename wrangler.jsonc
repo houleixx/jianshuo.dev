@@ -8,6 +8,9 @@
   // 社区展示索引：与 voicedrop-reco worker 同一个 D1 库（community_posts 表）。
   // files API 在 share/unshare/report/get 时双写索引，/reco/feed 从索引出列表。
   "d1_databases": [
-    { "binding": "RECO_DB", "database_name": "voicedrop-reco", "database_id": "feeee5df-0f48-43ca-8845-473d8b4809c3" }
+    { "binding": "RECO_DB", "database_name": "voicedrop-reco", "database_id": "feeee5df-0f48-43ca-8845-473d8b4809c3" },
+    // 核心状态库（2026-07-20 存储迁移 P1）：refhits/invites/share_stats/prompt_shares。
+    // 与 voicedrop-agent worker 共用；访问一律走 functions/lib/core-db.js。
+    { "binding": "CORE", "database_name": "voicedrop-core", "database_id": "2895c066-d96f-45e2-b52f-d81e44e02b16" }
   ]
 }

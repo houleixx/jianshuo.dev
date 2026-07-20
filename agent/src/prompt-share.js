@@ -22,6 +22,10 @@ import { promptPostTitle } from "../../functions/lib/community-store.js";
 // spec §8「读不到名字 → 不显示『来自』行」，客户端靠空串隐藏整行。调用处仍
 // try/catch 兜底空串，扛的是真正的读取异常（R2 抖动），是另一回事。
 import { readProfileName } from "../../functions/lib/style-store.js";
+import {
+  coreLoadPromptShares, coreUpsertPromptShare, coreRekeyPromptShare, coreMintedToday,
+  coreImportCount, coreSeedImportCount,
+} from "../../functions/lib/core-db.js";
 
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
 
@@ -57,7 +61,8 @@ export async function mintCode(env, rand = randomCode) {
 
 const indexKey = (scope) => `${scope}prompt-shares.json`;
 
-async function loadIndex(env, scope) {
+// R2 版索引（迁移期兜底真源；存储迁移 P1 之前的唯一实现）。
+async function loadIndexR2(env, scope) {
   try {
     const o = await env.FILES.get(indexKey(scope));
     if (o) {
@@ -65,6 +70,23 @@ async function loadIndex(env, scope) {
       return { byItem: doc.byItem && typeof doc.byItem === "object" ? doc.byItem : {}, mintLog: Array.isArray(doc.mintLog) ? doc.mintLog : [] };
     }
   } catch { /* 坏文件当没有 */ }
+  return { byItem: {}, mintLog: [] };
+}
+
+// 统一入口（存储迁移 P1）：D1 优先；D1 空但 R2 有 → 用 R2 并回填 D1（自愈，
+// 覆盖 backfill 之前的老用户）；D1 不可用 → R2。mintLog 只在 R2 路径有值——
+// 每日铸码上限在 D1 路径直接 COUNT（见 coreMintedToday 调用处）。
+async function loadIndex(env, scope) {
+  const d1 = await coreLoadPromptShares(env, scope);
+  if (d1 === null) return await loadIndexR2(env, scope);
+  if (Object.keys(d1.byItem).length) return { byItem: d1.byItem, mintLog: null };
+  const r2 = await loadIndexR2(env, scope);
+  if (Object.keys(r2.byItem).length) {
+    for (const [itemId, e] of Object.entries(r2.byItem)) {
+      if (e && e.code) await coreUpsertPromptShare(env, scope, itemId, e.code, e.createdAt || new Date().toISOString());
+    }
+    return r2;
+  }
   return { byItem: {}, mintLog: [] };
 }
 
@@ -165,6 +187,12 @@ export async function resolvePromptShare(env, code) {
     const doc = JSON.parse(await o.text());
     if (!doc || doc.type !== "prompt" || typeof doc.instruction !== "string") return null;
     const groupPath = sanitizeGroupPath(doc.groupPath);
+    // importCount（存储迁移 P1）：D1 share_stats 是权威计数（原子自增）；无行时用
+    // 文档旧值并顺手播种 D1（自愈）。D1 不可用 → 文档值。取 max 防止过渡期回退。
+    let importCount = doc.importCount || 0;
+    const d1c = await coreImportCount(env, code);
+    if (typeof d1c === "number") importCount = Math.max(d1c, importCount);
+    else if (d1c === false && importCount > 0) await coreSeedImportCount(env, code, importCount);
     return {
       code, sub: doc.sub, itemId: doc.itemId,
       label: doc.label || "分享指令", instruction: doc.instruction,
@@ -173,7 +201,7 @@ export async function resolvePromptShare(env, code) {
       ...(doc.kind !== undefined ? { kind: doc.kind } : {}),
       // 老副本没有 groupPath → 字段缺失，导入照旧落顶层。
       ...(groupPath.length ? { groupPath } : {}),
-      importCount: doc.importCount || 0,
+      importCount,
     };
   } catch { return null; }
 }
@@ -343,16 +371,28 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   let code = existing?.code;
   let created = false;
   if (!code) {
-    // 只有真铸新码才占日上限（幂等重开不算）。
+    // 只有真铸新码才占日上限（幂等重开不算）。D1 直接 COUNT 当日行；
+    // D1 不可用时退回 R2 mintLog（此时 idx 必然来自 R2 路径，mintLog 是数组）。
     const today = new Date().toISOString().slice(0, 10);
-    const mintedToday = idx.mintLog.filter((ts) => String(ts).slice(0, 10) === today).length;
+    let mintedToday = await coreMintedToday(env, scope, today);
+    if (mintedToday === null) {
+      mintedToday = Array.isArray(idx.mintLog) ? idx.mintLog.filter((ts) => String(ts).slice(0, 10) === today).length : 0;
+    }
     if (mintedToday >= cfg.dailyCapPerUser) return J({ error: "daily cap" }, 429);
     code = await mintCode(env);
     if (!code) return J({ error: "try again" }, 500);
     created = true;
-    idx.byItem[itemId] = { code, createdAt: new Date().toISOString() };
-    idx.mintLog.push(new Date().toISOString());
-    await env.FILES.put(indexKey(scope), JSON.stringify(idx, null, 2));
+    const createdAt = new Date().toISOString();
+    idx.byItem[itemId] = { code, createdAt };
+    // 索引落盘（存储迁移 P1）：D1 行是主路径；R2 索引照写兜底（读时自愈依赖它）。
+    // R2 写失败不再阻断铸码——D1 已落行，码可用。
+    await coreUpsertPromptShare(env, scope, itemId, code, createdAt);
+    try {
+      const r2idx = await loadIndexR2(env, scope);
+      r2idx.byItem[itemId] = { code, createdAt };
+      r2idx.mintLog.push(createdAt);
+      await env.FILES.put(indexKey(scope), JSON.stringify(r2idx, null, 2));
+    } catch (e) { console.error("[prompt-share] r2 index write failed:", e && e.message); }
   }
 
   // 幂等重开（sharing 已经是 true，这条 POST 只是重放）不能把 importCount 清零——
@@ -428,9 +468,11 @@ export async function rekeyForkedShares(env, scope, items) {
   try {
     const forked = collectForkedEntities(items);
     if (!forked.length) return;
-    const idx = await loadIndex(env, scope);
+    // re-key 双轨（存储迁移 P1）：D1 行 UPDATE + R2 索引 RMW，语义一致（目标 id 已占则不动）。
+    const idx = await loadIndexR2(env, scope);
     let changed = false;
     for (const { id, forkedFrom } of forked) {
+      await coreRekeyPromptShare(env, scope, forkedFrom, id);
       if (idx.byItem[forkedFrom] && !idx.byItem[id]) {
         idx.byItem[id] = idx.byItem[forkedFrom];
         delete idx.byItem[forkedFrom];

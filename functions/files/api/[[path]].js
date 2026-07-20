@@ -28,6 +28,7 @@ import { shareIdFor, communityKey, reportKey, isShareId, promptPostTitle } from 
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
+import { coreLoadPromptShares, coreDeleteUserData } from "../../lib/core-db.js";
 
 // Miner sidecars that live under articles/ and end in .json but are NOT article
 // docs: <stem>.asr.json (resumable-ASR task) and <stem>.asrdone.json (ASR
@@ -538,19 +539,29 @@ async function handleRequest(context) {
     // 也在那个前缀下。读不到/坏 JSON 静默跳过：销号主路径不能被它打断。
     let promptCodes = 0;
     {
+      // 码来源两处并集（存储迁移 P1 过渡期）：R2 索引 + D1 prompt_shares 行。
+      const codes = new Set();
       try {
         const obj = await env.FILES.get(`${scope}prompt-shares.json`);
         if (obj) {
           const idx = JSON.parse(await obj.text());
           const byItem = idx && typeof idx.byItem === 'object' && idx.byItem ? idx.byItem : {};
-          await mapLimit(Object.values(byItem), 16, async (entry) => {
-            if (!entry || !entry.code) return;
-            await env.FILES.delete(`shares/${entry.code}`).catch(() => {});
-            promptCodes++;
-          });
+          for (const entry of Object.values(byItem)) if (entry && entry.code) codes.add(String(entry.code));
         }
       } catch {}
+      try {
+        const d1 = await coreLoadPromptShares(env, scope);
+        if (d1) for (const entry of Object.values(d1.byItem)) if (entry && entry.code) codes.add(String(entry.code));
+      } catch {}
+      await mapLimit([...codes], 16, async (code) => {
+        await env.FILES.delete(`shares/${code}`).catch(() => {});
+        promptCodes++;
+      });
     }
+
+    // D1 侧行清理（prompt_shares / invites / refhits / share_stats）——best-effort，
+    // 绝不打断销号主路径。
+    await coreDeleteUserData(env, scope);
 
     // The whole user prefix, re-listing until empty (R2 lists max 1000 per call).
     // MUST delete as an array — R2 bulk delete takes up to 1000 keys as ONE

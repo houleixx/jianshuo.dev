@@ -8,6 +8,7 @@
 // 到不了这里——universal link 直接拉起 App（归因第 1 层）。
 import { metaTags } from "../[token].js";
 import { writeRefhit, ipHash } from "../../lib/refhits.js";
+import { coreGetInvite } from "../../lib/core-db.js";
 import { phCapture } from "../../lib/posthog.js";
 
 const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
@@ -20,10 +21,13 @@ export async function onRequest(context) {
   if (!/^[A-Za-z0-9]{6,16}$/.test(raw)) return context.next();
   const code = raw.toUpperCase();
 
-  const obj = await env.FILES.get(`invites/${code}`);
-  if (!obj) return notFound();
-  let inv;
-  try { inv = JSON.parse(await obj.text()); } catch { return notFound(); }
+  // 邀请码：D1 优先（存储迁移 P1），查无/不可用落回 R2。
+  let inv = await coreGetInvite(env, code);
+  if (inv === null || inv === false) {
+    const obj = await env.FILES.get(`invites/${code}`);
+    if (!obj) return notFound();
+    try { inv = JSON.parse(await obj.text()); } catch { return notFound(); }
+  }
   if (!inv || !/^users\/[^/]+\/$/.test(inv.owner || "")) return notFound();
   const name = String(inv.name || "").trim();
 
@@ -42,7 +46,7 @@ export async function onRequest(context) {
   const visitorId = ip && env.SESSION_SECRET ? await ipHash(ip, env.SESSION_SECRET) : `anon-${code}`;
   if (!fwdHost && ip && env.SESSION_SECRET && context.waitUntil) {
     context.waitUntil(
-      writeRefhit({ FILES: env.FILES }, ip, env.SESSION_SECRET, inv.owner, code, Date.now())
+      writeRefhit({ FILES: env.FILES, CORE: env.CORE }, ip, env.SESSION_SECRET, inv.owner, code, Date.now())
         .catch(() => {}));
   }
 

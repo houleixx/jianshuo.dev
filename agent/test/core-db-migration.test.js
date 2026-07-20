@@ -1,0 +1,162 @@
+// 存储迁移 P1（R2 → voicedrop-core D1）：refhits / invites / share_stats /
+// prompt_shares 的「D1 优先、R2 兜底、双写、自愈回填」四条约定的行为测试。
+import { describe, it, expect } from "vitest";
+import { fakeEnv, fakeD1, coreSql } from "./fakes.js";
+import { writeRefhit, lookupRefhit, DEBUG_PLAINTEXT_IP } from "../../functions/lib/refhits.js";
+import {
+  coreWriteRefhit, coreRefhitRows, coreAllRefhits, coreCleanupRefhits,
+  coreGetInvite, corePutInvite, coreBumpImportCount, coreImportCount, coreSeedImportCount,
+  coreLoadPromptShares, coreUpsertPromptShare, coreRekeyPromptShare, coreMintedToday,
+  coreDeleteUserData,
+} from "../../functions/lib/core-db.js";
+
+const SECRET = "test-secret";
+const coreEnv = (seed = {}) => ({ ...fakeEnv(seed), CORE: fakeD1(coreSql()) });
+
+describe("refhits：双写 + D1 优先查询 + R2 兜底", () => {
+  it("writeRefhit 同时落 R2 对象与 D1 行", async () => {
+    const env = coreEnv();
+    const now = Date.now();
+    await writeRefhit(env, "1.2.3.4", SECRET, "users/anon-abc/", "CODE01", now);
+    // R2 侧
+    const listed = await env.FILES.list({ prefix: "refhits/" });
+    expect(listed.objects.length).toBe(1);
+    // D1 侧
+    const fp = DEBUG_PLAINTEXT_IP ? "1.2.3.4" : null;
+    const rows = await coreRefhitRows(env, fp, now - 1000);
+    expect(rows.length).toBe(1);
+    expect(rows[0].owner).toBe("users/anon-abc/");
+    expect(rows[0].token).toBe("CODE01");
+  });
+
+  it("lookupRefhit：D1 有行 → 不碰 R2 list；唯一 owner 命中", async () => {
+    const env = coreEnv();
+    const now = Date.now();
+    await coreWriteRefhit(env, "9.9.9.9", now - 1000, "users/anon-xyz/", "TOK");
+    const hit = await lookupRefhit(env, "9.9.9.9", SECRET, now);
+    expect(hit).toEqual({ owner: "users/anon-xyz/", token: "TOK" });
+  });
+
+  it("lookupRefhit：D1 里多 owner → null（宁漏不错，不再看 R2）", async () => {
+    const env = coreEnv();
+    const now = Date.now();
+    await coreWriteRefhit(env, "8.8.8.8", now - 2000, "users/anon-a/", "T1");
+    await coreWriteRefhit(env, "8.8.8.8", now - 1000, "users/anon-b/", "T2");
+    expect(await lookupRefhit(env, "8.8.8.8", SECRET, now)).toBeNull();
+  });
+
+  it("lookupRefhit：D1 空但 R2 有旧数据（backfill 前）→ 落回 R2 路径", async () => {
+    const now = Date.now();
+    const env = coreEnv({
+      [`refhits/7.7.7.7/${now - 1000}`]: JSON.stringify({ owner: "users/anon-old/", token: "OLD", ts: now - 1000 }),
+    });
+    const hit = await lookupRefhit(env, "7.7.7.7", SECRET, now);
+    expect(hit).toEqual({ owner: "users/anon-old/", token: "OLD" });
+  });
+
+  it("无 CORE 绑定 → 完全走 R2 老路径（回归保护）", async () => {
+    const now = Date.now();
+    const env = fakeEnv({
+      [`refhits/6.6.6.6/${now - 1000}`]: JSON.stringify({ owner: "users/anon-r2/", token: "R2", ts: now - 1000 }),
+    });
+    const hit = await lookupRefhit(env, "6.6.6.6", SECRET, now);
+    expect(hit).toEqual({ owner: "users/anon-r2/", token: "R2" });
+  });
+
+  it("coreCleanupRefhits 只清 cutoff 之前的行", async () => {
+    const env = coreEnv();
+    const now = Date.now();
+    await coreWriteRefhit(env, "a", now - 3 * 86400000, "users/anon-1/", null);
+    await coreWriteRefhit(env, "b", now - 1000, "users/anon-2/", null);
+    await coreCleanupRefhits(env, now - 2 * 86400000);
+    const all = await coreAllRefhits(env);
+    expect(all.length).toBe(1);
+    expect(all[0].fingerprint).toBe("b");
+  });
+});
+
+describe("invites：UPSERT + 大小写归一", () => {
+  it("corePutInvite / coreGetInvite round-trip；查无返回 false", async () => {
+    const env = coreEnv();
+    expect(await coreGetInvite(env, "ABC123")).toBe(false);
+    await corePutInvite(env, "abc123", "users/anon-o/", "建硕", 123);
+    const row = await coreGetInvite(env, "ABC123");
+    expect(row.owner).toBe("users/anon-o/");
+    expect(row.name).toBe("建硕");
+    // 重写覆盖（改名跟着走）
+    await corePutInvite(env, "ABC123", "users/anon-o/", "新名", 456);
+    expect((await coreGetInvite(env, "abc123")).name).toBe("新名");
+  });
+
+  it("无 CORE 绑定 → null（调用方落 R2）", async () => {
+    expect(await coreGetInvite(fakeEnv(), "ABC123")).toBeNull();
+  });
+});
+
+describe("share_stats：原子自增 + 播种不回退", () => {
+  it("并发 bump 不丢计数（对照 R2 RMW 的丢更新）", async () => {
+    const env = coreEnv();
+    await Promise.all(Array.from({ length: 25 }, () => coreBumpImportCount(env, "1234567")));
+    expect(await coreImportCount(env, "1234567")).toBe(25);
+  });
+
+  it("seed 只抬升不回退", async () => {
+    const env = coreEnv();
+    await coreSeedImportCount(env, "7654321", 10);
+    expect(await coreImportCount(env, "7654321")).toBe(10);
+    await coreSeedImportCount(env, "7654321", 3); // 不回退
+    expect(await coreImportCount(env, "7654321")).toBe(10);
+    await coreSeedImportCount(env, "7654321", 15);
+    expect(await coreImportCount(env, "7654321")).toBe(15);
+  });
+});
+
+describe("prompt_shares：索引行为 + re-key + 日上限", () => {
+  it("upsert / load round-trip", async () => {
+    const env = coreEnv();
+    await coreUpsertPromptShare(env, "users/anon-u/", "p_1", "1111111", "2026-07-20T00:00:00.000Z");
+    const idx = await coreLoadPromptShares(env, "users/anon-u/");
+    expect(idx.byItem).toEqual({ p_1: { code: "1111111", createdAt: "2026-07-20T00:00:00.000Z" } });
+  });
+
+  it("rekey：目标空位则挪，目标已占则不动（与 R2 版语义一致）", async () => {
+    const env = coreEnv();
+    await coreUpsertPromptShare(env, "users/anon-u/", "sys_a", "2222222", "2026-07-19T00:00:00.000Z");
+    await coreRekeyPromptShare(env, "users/anon-u/", "sys_a", "p_new");
+    let idx = await coreLoadPromptShares(env, "users/anon-u/");
+    expect(idx.byItem.p_new.code).toBe("2222222");
+    expect(idx.byItem.sys_a).toBeUndefined();
+    // 目标已占：不动
+    await coreUpsertPromptShare(env, "users/anon-u/", "sys_b", "3333333", "2026-07-19T00:00:00.000Z");
+    await coreRekeyPromptShare(env, "users/anon-u/", "sys_b", "p_new");
+    idx = await coreLoadPromptShares(env, "users/anon-u/");
+    expect(idx.byItem.p_new.code).toBe("2222222");
+    expect(idx.byItem.sys_b.code).toBe("3333333");
+  });
+
+  it("coreMintedToday 只数当日", async () => {
+    const env = coreEnv();
+    await coreUpsertPromptShare(env, "users/anon-u/", "a", "4444444", "2026-07-20T01:00:00.000Z");
+    await coreUpsertPromptShare(env, "users/anon-u/", "b", "5555555", "2026-07-20T02:00:00.000Z");
+    await coreUpsertPromptShare(env, "users/anon-u/", "c", "6666666", "2026-07-19T02:00:00.000Z");
+    expect(await coreMintedToday(env, "users/anon-u/", "2026-07-20")).toBe(2);
+  });
+});
+
+describe("销号清理", () => {
+  it("coreDeleteUserData 清四张表的关联行", async () => {
+    const env = coreEnv();
+    const scope = "users/anon-del/";
+    await coreUpsertPromptShare(env, scope, "p_1", "9999999", "2026-07-20T00:00:00.000Z");
+    await coreBumpImportCount(env, "9999999");
+    await corePutInvite(env, "DEAD01", scope, "", 1);
+    await coreWriteRefhit(env, "5.5.5.5", Date.now(), scope, "DEAD01");
+    // 别人的数据不受影响
+    await coreUpsertPromptShare(env, "users/anon-keep/", "p_2", "8888888", "2026-07-20T00:00:00.000Z");
+    await coreDeleteUserData(env, scope);
+    expect((await coreLoadPromptShares(env, scope)).byItem).toEqual({});
+    expect(await coreGetInvite(env, "DEAD01")).toBe(false);
+    expect(await coreImportCount(env, "9999999")).toBe(false);
+    expect((await coreLoadPromptShares(env, "users/anon-keep/")).byItem.p_2.code).toBe("8888888");
+  });
+});

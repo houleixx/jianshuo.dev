@@ -10,6 +10,7 @@ import { loadPromptTemplate, templateIndex } from "./prompt-template.js";
 import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, preserveImportMarkers, MAX_LABEL, MAX_PROMPT } from "./prompts.js";
 import { loadUserPrompts, saveUserPrompts } from "./prompt-store.js";
 import { resolvePromptShare, refreshPromptShare, shareStates, rekeyForkedShares } from "./prompt-share.js";
+import { coreBumpImportCount } from "../../functions/lib/core-db.js";
 
 const J = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
@@ -314,13 +315,16 @@ export async function handlePromptImport(request, env, scope) {
   if (err) return J({ error: err }, 400);
   await saveUserPrompts(env, scope, items);
 
-  // importCount +1 —— best-effort。R2 没有原子自增，并发导入偶尔丢计数（虚荣数字，
-  // spec §8 已接受）。失败不影响导入本身：导入已经落盘了，回写计数只是锦上添花。
+  // importCount +1 —— D1 share_stats 原子自增（存储迁移 P1，丢计数问题就此了结）；
+  // R2 副本照旧回写（落地页直读文档显示计数），值对齐 D1 权威计数。失败不影响
+  // 导入本身：导入已经落盘了，回写计数只是锦上添花。
+  const bumped = await coreBumpImportCount(env, code);
   try {
     const obj = await env.FILES.get(`shares/${code}`);
     if (obj) {
       const share = JSON.parse(await obj.text());
-      share.importCount = (share.importCount || 0) + 1;
+      // max：老码 backfill 缺行时 D1 首增=1，不能把文档历史计数写倒退。
+      share.importCount = Math.max(typeof bumped === "number" ? bumped : 0, (share.importCount || 0) + 1);
       await env.FILES.put(`shares/${code}`, JSON.stringify(share, null, 2));
     }
   } catch (e) { console.error("[prompts] importCount bump failed:", e && e.message); }

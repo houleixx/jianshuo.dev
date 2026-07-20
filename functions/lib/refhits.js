@@ -4,6 +4,7 @@
 // 查询语义「宁漏不错」：24h 窗口内该 IP 只见过一个 owner 才算命中，
 // 多 owner（CGNAT/办公网）或零命中一律 null，由上层落到下一归因层。
 import { hmacSign } from "./auth.js";
+import { coreWriteRefhit, coreRefhitRows } from "./core-db.js";
 
 const DAY_MS = 86400000;
 
@@ -24,13 +25,31 @@ export async function writeRefhit(env, ip, secret, owner, token, ts) {
   // 反而屏蔽他们的 hello 归因（2026-07-17 实锤：自测手机因此被拦，靠剪贴板兜底）。
   if (String(owner).startsWith("users/test-")) return;
   const h = await ipHash(ip, secret);
-  await env.FILES.put(`refhits/${h}/${ts}`, JSON.stringify({ owner, token, ts }));
+  // 迁移期双写：R2 对象照写（真源兜底），D1 落行（查询主路径）。互不阻断。
+  await Promise.allSettled([
+    env.FILES.put(`refhits/${h}/${ts}`, JSON.stringify({ owner, token, ts })),
+    coreWriteRefhit(env, h, ts, owner, token),
+  ]);
 }
 
 // 24h 窗口内该 IP 访问过的分享页：owner 唯一 → {owner, token}；0 个或多个 → null。
 export async function lookupRefhit(env, ip, secret, now) {
   if (!ip || !secret) return null;
   const h = await ipHash(ip, secret);
+  // D1 主路径：一条 SELECT 取代「list + 逐 key GET」（原路径最多 81 次跨洋往返）。
+  // rows === null（D1 不可用）或空集（backfill 前的旧数据）→ 落回 R2 老路径。
+  const rows = await coreRefhitRows(env, h, now - DAY_MS);
+  if (rows && rows.length) {
+    const owners = new Map();
+    for (const rec of rows) {
+      if (!rec.owner || rec.ts > now + 60000) continue;
+      const prev = owners.get(rec.owner);
+      if (!prev || rec.ts > prev.ts) owners.set(rec.owner, rec);
+    }
+    if (owners.size !== 1) return null;
+    const rec = owners.values().next().value;
+    return { owner: rec.owner, token: rec.token || null };
+  }
   const listed = await env.FILES.list({ prefix: `refhits/${h}/` });
   const owners = new Map(); // owner → latest {owner, token, ts}
   for (const o of listed.objects || []) {

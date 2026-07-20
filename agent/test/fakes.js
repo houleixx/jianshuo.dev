@@ -140,3 +140,8 @@ export function usageSql() {
   const f = (name) => readFileSync(fileURLToPath(new URL("../migrations/" + name, import.meta.url)), "utf8");
   return f("0001_usage.sql") + "\n" + f("0002_buckets.sql") + "\n" + f("0003_mint.sql") + "\n" + f("0004_iap.sql");
 }
+
+// voicedrop-core 库迁移（存储迁移 P1：refhits/invites/share_stats/prompt_shares）。
+export function coreSql() {
+  return readFileSync(fileURLToPath(new URL("../migrations-core/0001_core.sql", import.meta.url)), "utf8");
+}

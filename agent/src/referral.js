@@ -7,6 +7,7 @@
 import { verifySession, anonScopeFromToken, bearerToken, sha256hex } from "../../functions/lib/auth.js";
 import { isShareId, communityKey } from "../../functions/lib/community-store.js";
 import { lookupRefhit, writeRefhit, ipHash } from "../../functions/lib/refhits.js";
+import { coreAllRefhits, coreGetInvite, corePutInvite } from "../../functions/lib/core-db.js";
 import { phCapture } from "../../functions/lib/posthog.js";
 import { sendPush } from "./push.js";
 import { grantBucket, ensureAccount } from "./usage_store.js";
@@ -52,6 +53,28 @@ export async function publishMintRate(env, db, now) {
 // 标注来源页；值读取封顶 80 个指纹（worker 子请求预算），超出的只列指纹不标来源。
 // HTML 页与后台 JSON（?format=json）共用这一份。
 async function refhitsRows(env) {
+  const fam = (fp) => fp.includes(":") ? "v6" : fp.includes(".") ? "v4" : "hash";
+  // D1 主路径：一条 SELECT 全表（2 天窗口内几百行），彻底取代 list+80 GET。
+  // null（不可用）或空表（backfill 前）→ 落回 R2 老路径。
+  const d1rows = await coreAllRefhits(env);
+  if (d1rows && d1rows.length) {
+    const byFp = new Map(); // fp → {tss:[], latest}
+    for (const r of d1rows) {
+      const rec = byFp.get(r.fingerprint) || { tss: [], latest: null, latestTs: 0, firstTs: Infinity };
+      rec.tss.push(r.ts);
+      if (r.ts > rec.latestTs) { rec.latestTs = r.ts; rec.latest = r; }
+      if (r.ts < rec.firstTs) rec.firstTs = r.ts;
+      byFp.set(r.fingerprint, rec);
+    }
+    const rows = [...byFp.entries()]
+      .sort((a, b) => b[1].latestTs - a[1].latestTs)
+      .map(([fp, rec]) => ({
+        fp, family: fam(fp), hits: rec.tss.length, firstTs: rec.firstTs, lastTs: rec.latestTs,
+        token: String(rec.latest.token || ""),
+        owner: String(rec.latest.owner || "").replace("users/", "").replace("anon-", "").replace(/\/$/, "").slice(0, 8),
+      }));
+    return { rows, plain: rows.filter((r) => r.family !== "hash").length, generatedAt: Date.now() };
+  }
   const listed = await env.FILES.list({ prefix: "refhits/", limit: 1000 });
   const byFp = new Map(); // fp → {tss:[], latestKey}
   for (const o of listed.objects || []) {
@@ -66,7 +89,6 @@ async function refhitsRows(env) {
     byFp.set(parts[1], rec);
   }
   const sorted = [...byFp.entries()].sort((a, b) => b[1].latestTs - a[1].latestTs);
-  const fam = (fp) => fp.includes(":") ? "v6" : fp.includes(".") ? "v4" : "hash";
   const rows = [];
   for (const [i, [fp, rec]] of sorted.entries()) {
     let v = null;
@@ -128,8 +150,13 @@ async function ownerFromToken(env, token) {
     if (cm) { try { key = JSON.parse(await cm.text()).articleKey || null; } catch {} }
   }
   if (!key && /^[A-Za-z0-9]{6,16}$/.test(id)) {
-    const inv = await env.FILES.get(`invites/${id.toUpperCase()}`);
-    if (inv) { try { const o = JSON.parse(await inv.text()).owner; if (/^users\/[^/]+\/$/.test(o)) return o; } catch {} }
+    // 邀请码：D1 优先，查无/不可用落回 R2（迁移期兜底）。
+    const row = await coreGetInvite(env, id);
+    if (row && /^users\/[^/]+\/$/.test(row.owner)) return row.owner;
+    if (row === null || row === false) {
+      const inv = await env.FILES.get(`invites/${id.toUpperCase()}`);
+      if (inv) { try { const o = JSON.parse(await inv.text()).owner; if (/^users\/[^/]+\/$/.test(o)) return o; } catch {} }
+    }
   }
   const m = key && key.match(/^(users\/[^/]+\/)/);
   return m ? m[1] : null;
@@ -144,6 +171,10 @@ export async function inviteCodeForScope(env, scope, secret) {
   for (const len of [6, 10, 16]) {
     const code = hex.slice(0, len).toUpperCase();
     if (code.length < len) break;                       // 源串不够长，用上一档
+    // 占用检查：D1 与 R2 都看（迁移期两边都可能有旧记录；都空才算空位）。
+    const row = await coreGetInvite(env, code);
+    if (row && row.owner === scope) return code;
+    if (row) continue;                                  // D1 里被别人占
     const cur = await env.FILES.get(`invites/${code}`);
     if (!cur) return code;
     try { if (JSON.parse(await cur.text()).owner === scope) return code; } catch { return code; }
@@ -169,7 +200,12 @@ async function handleInviteLink(request, env) {
     const o = await env.FILES.get(`${scope}CLAUDE.json`);
     if (o) name = String(JSON.parse(await o.text())?.profile?.name || "").trim().slice(0, 20);
   } catch {}
-  await env.FILES.put(`invites/${code}`, JSON.stringify({ owner: scope, name, ts: Date.now() }));
+  // 迁移期双写：R2 照写（真源兜底），D1 落行（查询主路径）。
+  const invTs = Date.now();
+  await Promise.allSettled([
+    env.FILES.put(`invites/${code}`, JSON.stringify({ owner: scope, name, ts: invTs })),
+    corePutInvite(env, code, scope, name, invTs),
+  ]);
 
   let rate = null;
   try { const o = await env.FILES.get("config/mint-rate.json"); if (o) rate = JSON.parse(await o.text()); } catch {}
