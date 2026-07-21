@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>什么是 Zero Trust（零信任）| 从不信任，永远验证</title>
+<meta name="description" content="零信任安全模型科普：从「城堡+护城河」到「从不信任、永远验证」。四条核心原则、和传统 VPN 的对比、与 Cloudflare One / ZTNA 的关系，以及 SASE、BeyondCorp 等黑话速查。">
+<meta property="og:title" content="什么是 Zero Trust（零信任）">
+<meta property="og:description" content="从不信任，永远验证——每一步都得重新证明自己。">
+<meta property="og:type" content="article">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#eef3f5; --bg2:#e2ebef; --card:#ffffff; --ink:#26333a; --ink2:#465861;
+    --soft:#7d929c; --line:rgba(38,51,58,.12);
+    --brand:#0e7d90; --brand2:#16a2b8; --brand-soft:#d3ecf1;
+    --warn:#c2704a; --warn-soft:#f7e3d7;
+  }
+  html{scroll-behavior:smooth}
+  body{background:radial-gradient(ellipse 120% 80% at 50% -10%,#e6f2f4,var(--bg));color:var(--ink);font-family:'Nunito',sans-serif;-webkit-font-smoothing:antialiased;line-height:1.72}
+  .wrap{max-width:940px;margin:0 auto;padding:0 26px}
+  h1,h2,h3,.q{font-family:'Quicksand',sans-serif;letter-spacing:-.01em}
+  ::selection{background:var(--brand-soft)}
+  a{color:var(--brand)}
+
+  .nav{position:sticky;top:0;z-index:50;background:rgba(238,243,245,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .nav-inner{max-width:940px;margin:0 auto;padding:12px 26px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .nav-brand{display:flex;align-items:center;gap:10px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:1rem;color:var(--ink);text-decoration:none}
+  .nav-brand .blob{width:26px;height:26px;border-radius:42% 58% 60% 40%/45% 45% 55% 55%;background:linear-gradient(135deg,var(--brand2),var(--brand))}
+  .nav-links{display:flex;gap:4px;flex-wrap:wrap}
+  .nav-links a{font-size:.82rem;color:var(--soft);text-decoration:none;padding:6px 12px;border-radius:999px;transition:.2s;white-space:nowrap;font-weight:700}
+  .nav-links a:hover{background:var(--brand-soft);color:var(--brand)}
+  @media(max-width:680px){.nav-links{display:none}}
+
+  .hero{padding:76px 0 46px}
+  .hero .kicker{display:inline-flex;align-items:center;gap:9px;font-size:.78rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--brand);margin-bottom:20px}
+  .hero .kicker span{width:28px;height:2px;background:var(--brand);border-radius:2px;opacity:.7}
+  .hero h1{font-weight:700;font-size:clamp(2.1rem,6vw,3.4rem);line-height:1.14;color:var(--ink)}
+  .hero h1 em{font-style:normal;color:var(--brand)}
+  .hero .lede{margin-top:22px;font-size:1.1rem;color:var(--ink2);font-weight:600;max-width:720px}
+  .hero .lede b{color:var(--ink);font-weight:800}
+
+  .tldr{background:linear-gradient(135deg,#eafafd,#ffffff);border:1.5px solid var(--brand-soft);border-radius:24px;padding:30px;margin:8px 0;box-shadow:0 14px 40px rgba(14,125,144,.10)}
+  .tldr .tag{font-family:'Quicksand',sans-serif;font-weight:700;font-size:.8rem;color:var(--brand);letter-spacing:.05em;text-transform:uppercase}
+  .tldr p{margin-top:12px;font-size:1.28rem;font-weight:800;line-height:1.55;color:var(--ink);font-family:'Quicksand',sans-serif}
+  .tldr p mark{background:linear-gradient(180deg,transparent 58%,var(--brand-soft) 58%);color:inherit;padding:0 2px}
+
+  section{padding:46px 0}
+  .eyebrow{display:block;font-size:.76rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--soft);margin-bottom:11px}
+  .stitle{font-weight:700;font-size:clamp(1.5rem,3.6vw,2.05rem);line-height:1.3;color:var(--ink)}
+  .lead{margin-top:14px;font-size:1.02rem;color:var(--ink2);max-width:760px;font-weight:600}
+  .lead b{color:var(--ink);font-weight:800}
+  .divider{height:1px;background:var(--line)}
+
+  /* VS compare */
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:30px}
+  @media(max-width:640px){.vs{grid-template-columns:1fr}}
+  .col{border-radius:20px;padding:26px 24px;box-shadow:0 12px 34px rgba(38,51,58,.08)}
+  .col.old{background:linear-gradient(160deg,#faefe8,#fff8f3);border:1px solid var(--warn-soft)}
+  .col.new{background:linear-gradient(160deg,#e7f6f8,#ffffff);border:1px solid var(--brand-soft)}
+  .col .h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .col .emoji{font-size:1.5rem}
+  .col h3{font-weight:700;font-size:1.2rem}
+  .col.old h3{color:var(--warn)}
+  .col.new h3{color:var(--brand)}
+  .col .sub{font-size:.82rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+  .col.old .sub{color:#c2704a}
+  .col.new .sub{color:var(--brand)}
+  .col ul{margin:16px 0 0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+  .col li{font-size:.94rem;color:var(--ink2);font-weight:600;padding-left:24px;position:relative}
+  .col.old li::before{content:"✕";position:absolute;left:2px;color:var(--warn);font-weight:900;font-size:.85rem}
+  .col.new li::before{content:"✓";position:absolute;left:2px;color:var(--brand);font-weight:900;font-size:.9rem}
+  .col b{color:var(--ink);font-weight:800}
+
+  /* principles */
+  .prin{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:30px}
+  @media(max-width:640px){.prin{grid-template-columns:1fr}}
+  .p{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 10px 28px rgba(38,51,58,.06);position:relative;overflow:hidden}
+  .p::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--brand)}
+  .p .n{font-family:'Quicksand',sans-serif;font-weight:700;font-size:.78rem;color:var(--brand);letter-spacing:.1em}
+  .p h3{font-weight:700;font-size:1.14rem;margin:6px 0 8px;color:var(--ink)}
+  .p p{font-size:.94rem;color:var(--ink2);font-weight:600}
+  .p p b{color:var(--ink);font-weight:800}
+
+  /* cf box */
+  .cf{background:linear-gradient(160deg,#173b42,#0f2b31);border-radius:24px;padding:38px 34px;color:#e6f2f3;margin-top:8px;box-shadow:0 20px 50px rgba(15,43,49,.30)}
+  .cf .eyebrow{color:#66c2cf}
+  .cf h2{color:#fff;font-weight:700;font-size:clamp(1.4rem,3.2vw,1.9rem);margin-top:6px}
+  .cf p{margin-top:16px;font-size:1.02rem;color:#d3e6e8;font-weight:600;line-height:1.8}
+  .cf p b{color:#8fe0ea}
+  .cf .flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:24px}
+  .cf .node{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:12px 16px;font-family:'Quicksand',sans-serif;font-weight:700;font-size:.88rem;color:#fff}
+  .cf .node.deny{background:rgba(194,112,74,.22);border-color:rgba(194,112,74,.5)}
+  .cf .arw{color:#66c2cf;font-weight:900;font-size:1.1rem}
+  .cf .link{display:inline-block;margin-top:20px;color:#8fe0ea;text-decoration:none;font-weight:800;font-size:.92rem}
+
+  .gloss{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:26px}
+  @media(max-width:640px){.gloss{grid-template-columns:1fr}}
+  .term{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:0 8px 24px rgba(38,51,58,.05)}
+  .term h4{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1rem;color:var(--brand)}
+  .term p{margin-top:6px;font-size:.9rem;color:var(--ink2);font-weight:600}
+
+  .kick{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--brand);border-radius:14px;padding:22px 24px;margin-top:30px;font-size:1.14rem;font-weight:800;color:var(--ink);font-family:'Quicksand',sans-serif;line-height:1.5}
+  .kick mark{background:var(--brand-soft);padding:0 4px;border-radius:4px}
+
+  footer{text-align:center;padding:44px 0 60px;font-size:.8rem;color:var(--soft);font-weight:700}
+  footer a{color:var(--brand);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="nav"><div class="nav-inner">
+  <a class="nav-brand" href="/a/"><span class="blob"></span>jianshuo.dev/a</a>
+  <div class="nav-links">
+    <a href="#tldr">一句话</a><a href="#vs">城堡 vs 零信任</a><a href="#prin">四原则</a><a href="#cf">和 Cloudflare</a><a href="#gloss">黑话</a>
+    <a href="/a/cloudflare-growth/">← Cloudflare 增长</a>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="kicker"><span></span>安全模型 · 科普</div>
+    <h1>什么是 <em>Zero Trust</em>（零信任）？</h1>
+    <p class="lede">核心信条一句话：<b>「从不信任，永远验证」</b>（never trust, always verify）。不管你是谁、在公司内网还是星巴克，<b>每一次访问都要重新验证</b>——没有任何人或设备因为「在墙内」就自动被信任。</p>
+  </div>
+
+  <div class="tldr" id="tldr">
+    <span class="tag">TL;DR · 一句话</span>
+    <p>Zero Trust 是一种安全模型：<mark>默认谁都不信</mark>，每次访问都重新验证「你是谁 + 你的设备健康吗 + 你现在做的事正常吗」，<mark>只给最小权限</mark>，而且按「一个具体应用」授权，不按「整个内网」。</p>
+  </div>
+
+  <section id="vs">
+    <span class="eyebrow">The shift</span>
+    <h2 class="stitle">它要取代谁：城堡 + 护城河</h2>
+    <p class="lead">传统企业安全是「<b>城堡护城河</b>」思路——建一圈防火墙 / VPN 当城墙，墙外危险、墙内可信。问题是：只要有一个账号被钓鱼、一台设备中招，攻击者<b>一旦进城就能横着走</b>。而如今人在家办公、用 SaaS、用手机，「墙内墙外」这条线本身就模糊了。</p>
+
+    <div class="vs">
+      <div class="col old">
+        <div class="h"><span class="emoji">🏰</span><div><div class="sub">旧模型</div><h3>城堡 + 护城河</h3></div></div>
+        <ul>
+          <li>进了城（连上 VPN）就<b>默认可信</b></li>
+          <li>可在内网<b>横向移动</b>，访问一堆系统</li>
+          <li>一处失守 = 全线失守</li>
+          <li>假设「内网 = 安全」，但这前提早就不成立</li>
+        </ul>
+      </div>
+      <div class="col new">
+        <div class="h"><span class="emoji">🛂</span><div><div class="sub">零信任</div><h3>从不信任，永远验证</h3></div></div>
+        <ul>
+          <li>内网 IP、VPN 隧道都<b>不代表可信</b></li>
+          <li>每次访问<b>重新验证</b>身份 + 设备 + 行为</li>
+          <li>只给<b>最小权限</b>，按应用授权</li>
+          <li>一处失守，也炸不到别处</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <section id="prin">
+    <span class="eyebrow">Principles</span>
+    <h2 class="stitle">四条核心原则</h2>
+    <div class="prin">
+      <div class="p"><div class="n">01</div><h3>默认不信任</h3><p>内网 IP、VPN 隧道都<b>不代表可信</b>。信任不是「进了门」就有的默认值。</p></div>
+      <div class="p"><div class="n">02</div><h3>每次都验证</h3><p>验证的不只是「你是谁」（身份），还有<b>设备健康吗、位置 / 行为正常吗</b>——综合打分再放行。</p></div>
+      <div class="p"><div class="n">03</div><h3>最小权限</h3><p>只给完成这件事所需的<b>最小访问权</b>，而不是「进城随便逛」。</p></div>
+      <div class="p"><div class="n">04</div><h3>按应用授权</h3><p>你被授权访问的是<b>某一个具体应用</b>，不是整个内网。一处失守炸不到别处。</p></div>
+    </div>
+  </section>
+
+  <section id="cf">
+    <div class="cf">
+      <span class="eyebrow">In practice</span>
+      <h2>和 Cloudflare 的关系</h2>
+      <p>Cloudflare One / Cloudflare Access 卖的就是这套：员工访问内部系统<b>不再拉 VPN</b>，而是流量先到 Cloudflare 边缘，验明身份 + 设备状态，<b>再代理到目标应用</b>。这属于 <b>ZTNA</b>（Zero Trust Network Access），是它替代传统 VPN、和 Zscaler 抢的核心战场，也是它从 CDN 往高利润安全业务扩张的关键一步。</p>
+      <div class="flow">
+        <span class="node">员工 + 设备</span><span class="arw">→</span>
+        <span class="node">Cloudflare 边缘验证</span><span class="arw">→</span>
+        <span class="node">✓ 只放行这一个应用</span>
+        <span class="arw">·</span>
+        <span class="node deny">✕ 内网其余不可见</span>
+      </div>
+      <a class="link" href="/a/cloudflare-growth/">← 回到「Cloudflare 的增长引擎」，看它为什么靠这个扩张</a>
+    </div>
+  </section>
+
+  <section id="gloss">
+    <span class="eyebrow">Glossary</span>
+    <h2 class="stitle">相关黑话速查</h2>
+    <div class="gloss">
+      <div class="term"><h4>ZTNA</h4><p>Zero Trust Network Access，零信任网络访问——取代 VPN 的那部分，只放行你被授权的具体应用。</p></div>
+      <div class="term"><h4>SASE</h4><p>把网络（SD-WAN）+ 安全（含零信任）打包成一朵云上服务。Cloudflare One 就是 SASE。</p></div>
+      <div class="term"><h4>BeyondCorp</h4><p>Google 最早的零信任内部实践，是这套理念的鼻祖案例。</p></div>
+      <div class="term"><h4>横向移动</h4><p>Lateral movement——攻击者进入内网后从一台机器挪到另一台。零信任就是要掐死它。</p></div>
+    </div>
+
+    <div class="kick">一句话记住它：<mark>「你连进来了」不等于「你可信」</mark>——每一步都得重新证明自己。</div>
+  </section>
+</div>
+
+<footer>jianshuo.dev/a · 由 Claude Code 生成 · <a href="/a/cloudflare-growth/">← Cloudflare 的增长引擎</a> · 回到 <a href="/a/">归档</a></footer>
+
+<!-- Cloudflare Web Analytics --><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "34108fa3d3204951afa585ccb3976c88"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
