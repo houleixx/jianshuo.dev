@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="description" content="Download VoiceDrop for Android">
+<link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/apk/">
+<link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/apk/">
+<link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/apk/">
+<title>VoiceDrop · Android</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#FAF6EF;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased;color:#2A2521}
+  a{color:inherit}
+  .vd-btn:active{transform:scale(.96)}
+</style>
+</head>
+<body>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center">
+
+  <a href="https://jianshuo.dev/voicedrop/en/" style="text-decoration:none;display:flex;align-items:flex-end;gap:9px">
+    <span style="display:inline-flex;align-items:flex-end;gap:2.5px;height:24px"><span style="width:3px;height:10px;background:#D8593B;border-radius:2px"></span><span style="width:3px;height:18px;background:#D8593B;border-radius:2px"></span><span style="width:3px;height:24px;background:#D8593B;border-radius:2px"></span><span style="width:3px;height:15px;background:#D8593B;border-radius:2px"></span><span style="width:3px;height:8px;background:#D8593B;border-radius:2px"></span></span>
+    <span style="font:600 18px -apple-system;letter-spacing:-.01em">VoiceDrop</span>
+  </a>
+
+  <h1 style="margin:30px 0 0;font:600 34px/1.2 -apple-system;letter-spacing:-.02em">Android</h1>
+  <p style="margin:14px auto 0;font:400 15px/1.7 -apple-system;color:#6b5f51;max-width:22em">Speak it, it files itself.</p>
+
+  <!-- 发新版时只改下面这一个 href（和版本号文字） -->
+  <div style="margin-top:32px">
+    <a class="vd-btn" href="https://jianshuo.dev/gh/houleixx/voicedrop-android/releases/download/v0.6.0/voicedrop-0.6.0.apk" style="display:inline-block;font:600 16px -apple-system;color:#fff;background:#D8593B;padding:15px 36px;border-radius:10px;box-shadow:0 10px 26px -8px rgba(216,89,59,.55);text-decoration:none">Download VoiceDrop.apk</a>
+    <p style="font:400 12.5px -apple-system;color:#9a8f7f;margin:14px 0 0">v0.6.0 · 8.0 MB</p>
+  </div>
+
+  <p style="margin:26px auto 0;font:400 12.5px/1.8 -apple-system;color:#9a8f7f;max-width:24em">
+    If your system warns that installing from unknown sources isn't allowed,<br>just enable it for your browser in Settings.
+  </p>
+
+  <p style="margin:34px 0 0;font:400 13px -apple-system;color:#9a8f7f">
+    iPhone users can download from the <a href="https://apps.apple.com/cn/app/id6781565141" style="color:#D8593B;text-decoration:none">App Store</a>
+  </p>
+
+  <p style="margin:20px 0 0;font:400 12px -apple-system">
+    <a href="/voicedrop/apk/" style="color:#9a8f7f;text-decoration:underline">中文</a>
+  </p>
+
+</div>
+
+<!-- 微信 / QQ 内置浏览器引导蒙层：不做任何跳转，只提示用系统浏览器打开 -->
+<div id="wx-mask" style="display:none;position:fixed;inset:0;z-index:99;background:rgba(20,16,12,.92);color:#fff;text-align:center">
+  <div style="position:absolute;top:10px;right:26px;font-size:44px;line-height:1">⤴</div>
+  <div style="padding:110px 32px 0">
+    <p style="font:600 19px/1.6 -apple-system;margin:0">Can't download the installer inside WeChat</p>
+    <p style="font:400 15px/2 -apple-system;color:#d8cfc2;margin:18px 0 0">
+      Tap <span style="display:inline-block;background:#3a332b;border-radius:6px;padding:0 10px;font-weight:600;letter-spacing:2px">···</span> in the top right<br>
+      choose "<b style="color:#fff">Open in Browser</b>", then tap download
+    </p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var ua = navigator.userAgent;
+  if (/MicroMessenger/i.test(ua) || / QQ\//i.test(ua)) {
+    var mask = document.getElementById('wx-mask');
+    mask.style.display = 'block';
+    mask.addEventListener('click', function(){ mask.style.display = 'none'; });
+  }
+})();
+</script>
+
+</body>
+</html>

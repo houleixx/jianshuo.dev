@@ -20,6 +20,7 @@
 | voicedrop/developer/api.html | voicedrop/en/developer/api.html |
 | voicedrop/developer/api.md | voicedrop/en/developer/api.md |
 | voicedrop/developer/wjs-voicedrop.html | voicedrop/en/developer/wjs-voicedrop.html |
+| voicedrop/apk/index.html | voicedrop/en/apk/index.html |
 
 **不翻**：voicedrop/admin/**（内部后台）、voicedrop/shared.js（纯代码）、voicedrop/api.html。
 
@@ -71,6 +72,7 @@
 - API 文档里服务端实际返回的中文协议字符串（如 `"message":"正在修改，请稍候"`）保留中文原文，后面加英文注释——那是协议契约不是文案。
 - articles 页的「中文/EN」切换链接要用 onclick 把 `location.search`（JWT token）带过去，否则切语言丢 token。
 - welcome 页英文版复用中文页同一张群二维码（绝对路径 `/voicedrop/welcome/group-qr.jpg`）。
+- apk 页没有 header nav 也没有 footer 链接组（就是个居中的下载卡片），「中文」链接加成卡片底部单独一行小字（复用页面里 muted 文字的字号/配色），不新增 nav/footer 结构。
 
 ## 夜间同步约定
 
