@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /agent
+Disallow: /developer
+Disallow: /i/
+Disallow: /files/api/
+
+Sitemap: https://voicedrop.cn/sitemap.xml
