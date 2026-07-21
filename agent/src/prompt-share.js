@@ -14,7 +14,7 @@ import { checkArticlesShareable, loadShareBlocklist } from "../../functions/lib/
 import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList } from "./prompts.js";
 import { loadUserPrompts } from "./prompt-store.js";
-import { publishPromptPost, retractPromptPost, promptShareId } from "./prompt-community.js";
+import { retractPromptPost, promptShareId } from "./prompt-community.js";
 import { promptPostTitle } from "../../functions/lib/community-store.js";
 // author 显示名 —— SINGLE SOURCE OF TRUTH，见 style-store.js#readProfileName 上方
 // 注释："the share endpoint, miner, and mint all import this"。这里显式传
@@ -406,12 +406,12 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
       if (prevDoc) importCount = JSON.parse(await prevDoc.text()).importCount || 0;
     } catch { /* 坏文档当没有，从 0 起 */ }
   }
-  // shares/<码> 必须同步落盘（响应一到，码就得能兑换/能被落地页读到）；
-  // 发社区帖挪后台（本来就 best-effort，失败由 reconcile/get 自愈），
-  // communityShareId 从码确定性派生，不用等发帖落地。
+  // shares/<码> 必须同步落盘（响应一到，码就得能兑换/能被落地页读到）。
+  // 2026-07-22 提示词退出社区 feed（Prompt Manager 设计定稿第 8 轮）：开分享不再
+  // 发社区帖（publishPromptPost 不再调用）——提示词的公共曝光走 /agent/prompt-market。
+  // 关分享的 retractPromptPost 保留：清理历史遗留的 prompt 帖。
+  // communityShareId 仍按码派生返回，客户端契约不变（老版本 App 读它不炸）。
   await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, existing?.createdAt, importCount));
-  const publish = publishPromptPost(env, scope, code, leaf);
-  if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(publish); else await publish;
   const communityShareId = await promptShareId(code, env.SESSION_SECRET);
   return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true, communityShareId });
 }

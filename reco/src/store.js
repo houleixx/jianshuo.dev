@@ -42,10 +42,13 @@ export async function countsFor(env, shareIds) {
 // 社区展示索引（community_posts,files API 双写维护）：feed 用的可见帖全量行,
 // 时间倒序。500 封顶——超过再谈分页,现在整个社区才百余帖。
 export async function feedRows(env) {
+  // 2026-07-22 提示词退出社区 feed（Prompt Manager 设计定稿第 8 轮）：feed 只出
+  // 文章帖；提示词的浏览/导入入口移到提示词管理页（/agent/prompt-market）。
+  // 旧 kind='prompt' 行保留不删——回滚 = 去掉这个过滤条件。
   const { results } = await env.DB.prepare(
     `SELECT share_id, owner, author, title, preview, cover_photo_key, has_photo,
             article_count, first_shared_at, updated_at, reply_to, kind
-     FROM community_posts WHERE hidden=0
+     FROM community_posts WHERE hidden=0 AND kind!='prompt'
      ORDER BY first_shared_at DESC LIMIT 500`,
   ).all();
   return results || [];

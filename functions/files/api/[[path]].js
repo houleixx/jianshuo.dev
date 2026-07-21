@@ -1272,9 +1272,10 @@ async function handleRequest(context) {
     if (env.RECO_DB) {
       try {
         const { results } = await env.RECO_DB.prepare(
+          // 提示词退出社区 feed（2026-07-22，同 reco feedRows）：只出文章帖。
           `SELECT share_id, owner, author, title, preview, cover_photo_key, has_photo,
                   article_count, first_shared_at, updated_at, reply_to, kind
-           FROM community_posts WHERE hidden=0
+           FROM community_posts WHERE hidden=0 AND kind!='prompt'
            ORDER BY first_shared_at DESC LIMIT 200`).all();
         if (results && results.length) {
           if (waitUntil) waitUntil(reconcileIndex().catch(() => {}));
@@ -1311,6 +1312,7 @@ async function handleRequest(context) {
       if (!obj) return null;
       try {
         const p = JSON.parse(await obj.text());
+        if (p.kind === 'prompt') return null;   // 提示词退出社区 feed（2026-07-22，同 D1 快路径过滤）
         // Seed from stored data (schema-1 fallback); overwrite with live article for schema-2.
         let title = p.title || '', count = (p.articles || []).length, updatedAt = p.updatedAt || p.firstSharedAt;
         let extras = cardExtras(p.articles || [], p.photos, p.owner);

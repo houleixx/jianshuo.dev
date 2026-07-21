@@ -647,14 +647,13 @@ describe("铸码 POST /agent/prompt-share — 新模型（自建项也能铸）"
 // 裸匿名 token 连码都不再能铸——分享=发帖是一个不可拆分的动作。POST 还多一道
 // 审核闸（与文章分享同一把 checkArticlesShareable）。
 describe("分享即发帖（2026-07-15 提示词社区帖）", () => {
-  it("开分享 → 铸码 + 社区帖 + communityShareId 字段", async () => {
+  it("开分享 → 铸码 + communityShareId 字段；不再发社区帖（2026-07-22 提示词退出社区 feed）", async () => {
     const e = makeEnv();
     const r = await post(e, { id: SYS_ITEM });
     const body = await r.json();
     expect(r.status).toBe(200);
-    expect(body.communityShareId).toMatch(/^[A-Za-z0-9_-]{12}$/);
-    const p = JSON.parse(await (await e.FILES.get(`community/${body.communityShareId}.json`)).text());
-    expect(p).toMatchObject({ kind: "prompt", promptCode: body.code, owner: OWNER });
+    expect(body.communityShareId).toMatch(/^[A-Za-z0-9_-]{12}$/);   // 客户端契约字段保留（老 App 不炸）
+    expect(await e.FILES.get(`community/${body.communityShareId}.json`)).toBeNull(); // 不再发帖
   });
 
   it("匿名 token 403 needs_apple_signin，不铸码不发帖", async () => {
@@ -713,18 +712,19 @@ describe("分享即发帖（2026-07-15 提示词社区帖）", () => {
     expect((await r.json()).error).toBe("content_flagged");
   });
 
-  it("关分享 → 帖同死；再开 → 同码同帖复活且 firstSharedAt 保留", async () => {
+  it("关分享 → 历史遗留帖同死（retract 保留清理旧帖）；再开 → 同码，不再建新帖", async () => {
     const e = makeEnv();
     const first = await (await post(e, { id: SYS_ITEM })).json();
     const postKey = `community/${first.communityShareId}.json`;
-    const t0 = JSON.parse(await (await e.FILES.get(postKey)).text()).firstSharedAt;
+    // 模拟旧版本「分享即发帖」时代留下的 prompt 帖
+    await e.FILES.put(postKey, JSON.stringify({ schema: 2, shareId: first.communityShareId,
+      kind: "prompt", promptCode: first.code, owner: OWNER, firstSharedAt: 1 }));
     await del(e, SYS_ITEM);
-    expect(await e.FILES.get(postKey)).toBeNull();
+    expect(await e.FILES.get(postKey)).toBeNull();          // 遗留帖被清
     const again = await (await post(e, { id: SYS_ITEM })).json();
     expect(again.code).toBe(first.code);
     expect(again.communityShareId).toBe(first.communityShareId);
-    // 复活后 firstSharedAt 重置为新时间是可接受的（帖曾被删除）；只断言帖回来了
-    expect(await e.FILES.get(postKey)).toBeTruthy();
+    expect(await e.FILES.get(postKey)).toBeNull();          // 不再复活帖
   });
 });
 

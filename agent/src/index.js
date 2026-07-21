@@ -34,6 +34,7 @@ import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleIapRoute } from "./iap.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { handlePromptShareRoutes, shareStates } from "./prompt-share.js";
+import { handlePromptMarket } from "./prompt-market.js";
 import { writeStyleDoc } from "../../functions/lib/style-store.js";
 import { distillStyle, buildStyleIntroArticle, STYLE_INTRO_STEM, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
 import { silentM4aBytes } from "../../functions/lib/silent-m4a.js";
@@ -1446,6 +1447,8 @@ export default {
 
     // 指令分享码（魔法数字：POST 开分享 / DELETE 关分享）—— src/prompt-share.js
     { const r = await handlePromptShareRoutes(url, request, env, ctx); if (r) return r; }
+    // 提示词市场（Prompt Manager 第 8 轮）：热门/最新列表 — src/prompt-market.js
+    { const r = await handlePromptMarket(url, request, env); if (r) return r; }
 
     { const r = await handleUsageRoute(url, request, env); if (r) return r; }
 
