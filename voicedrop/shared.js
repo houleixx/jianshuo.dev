@@ -43,7 +43,7 @@ async function vdAdminExchange(sessionToken) {
   if (r.status === 403) {
     msg = `你的身份不在白名单（scope：${b.scope || '?'}，ID：${b.code || '?'}${b.name ? '，名字：' + b.name : ''}）。把 scope 或 ID 加入 ADMIN_SCOPES 即可。`;
   } else if (r.status === 401) {
-    msg = 'session token 无效或已过期，请重新登录后复制。';
+    msg = '访问令牌无效，请从 App「账户 → 访问令牌」复制完整 anon_ 令牌。';
   } else {
     msg = b.error || ('HTTP ' + r.status);
   }

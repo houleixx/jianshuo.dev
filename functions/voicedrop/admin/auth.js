@@ -11,9 +11,14 @@
 // 两者都由登录身份推导、用户不可篡改 —— 不用显示名（那是可自设字段，会被冒充）。
 // env.ADMIN_SCOPES 里两种写法都认：完整 scope `users/anon-xxxx/` 或短码 `AE209A`。
 //
+// 用户粘的 token = App「账户 → 访问令牌」复制的 anon_… 令牌（app 所有 API 的默认凭证，
+// Apple 登录后也不变）。它经 anonScopeFromToken = sha256(token) 前32位 → users/anon-<hash>/，
+// 与 App「你的 ID」显示的 anon-<hash> 一致、与 whitelist 里的 scope 一致，且 token 不可伪造出
+// 别的 scope。也兼容签名 session JWT（先试它）。解析口径与全局 resolveScope 一致。
+//
 // 未命中时 403 回显你的 scope / code / name，方便照抄进 ADMIN_SCOPES 完成 bootstrap。
 
-import { verifySession } from "../../lib/auth.js";
+import { verifySession, anonScopeFromToken } from "../../lib/auth.js";
 import { readProfileName } from "../../lib/style-store.js";
 
 // 把名单拆成 { scopes:Set, codes:Set }。带 users/ 或以 / 结尾 → 当 scope；否则当短码（大写）。
@@ -57,10 +62,11 @@ export async function onRequestPost({ request, env }) {
 
   if (!env.SESSION_SECRET) return J({ error: "server misconfigured" }, 500);
 
-  // 只认真正签发过的 session（Apple / 微信登录），不认匿名 token —— admin 必须是实名身份。
+  // 解析 scope：先试签名 session（Apple/微信），再退回匿名令牌（anon_… → users/anon-<hash>/）。
+  // 与 agent 的 resolveScope 同口径。两种都是密钥级 bearer，scope 由 token 单向哈希绑定、不可伪造。
   const sess = await verifySession(token, env.SESSION_SECRET);
-  if (!sess || !sess.scope) return J({ error: "invalid session" }, 401);
-  const scope = sess.scope;
+  const scope = (sess && sess.scope) || (await anonScopeFromToken(token));
+  if (!scope) return J({ error: "invalid token" }, 401);
   const code = idCode(scope);
 
   const { scopes, codes } = parseAllowlist(env.ADMIN_SCOPES);
