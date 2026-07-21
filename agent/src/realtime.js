@@ -6,6 +6,11 @@ import { toSendablePayload } from "./asr-proxy.js";
 import { realtimeCostUY } from "./usage.js";
 import { ensureAccount, debit } from "./usage_store.js";
 import { currentColo } from "./anthropic.js";
+import { alertAdminThrottled } from "./push.js";
+
+// OpenAI 侧发起的、代表「采访对所有用户不可用」的硬失败关闭原因（余额/配额耗尽、
+// 计费问题）。命中就报警——这类不是跨境弱网，重连也没用，必须人工去 OpenAI 处理。
+const OPENAI_FATAL_RE = /insufficient_quota|billing|exceeded_current_quota|account_deactivated/i;
 
 // 采访员系统提示词。以后调这段就是调采访员的行为。
 // 版本史：07-08 安静版（默认沉默、卡住才插话）→ 07-09 健谈版（用户反馈「不太会
@@ -250,11 +255,22 @@ export async function proxyRealtimeWebSocket(request, env, scope, ctx, fetchImpl
   const closeBoth = (code = 1000, reason = "closed", source = "relay") => {
     if (closed) return;
     closed = true;
+    const reasonStr = String(reason).slice(0, 120);
     console.log("[realtime] relay close", JSON.stringify({
-      scope, source, code, reason: String(reason).slice(0, 120),
+      scope, source, code, reason: reasonStr,
       aliveMs: Date.now() - openedAt, usage,
     }));
     settle();
+    // 重要失败：OpenAI 把采访关掉且原因是余额/配额耗尽（线上见过 1013
+    // insufficient_quota）——采访对所有用户不可用、重连无益，第一时间报警给管理员。
+    // 节流 60 分钟一条，避免客户端重连风暴把报警刷成灾。
+    if (source === "openai" && OPENAI_FATAL_RE.test(reasonStr)) {
+      const p = alertAdminThrottled(env, "realtime-openai-fatal", 60 * 60 * 1000, {
+        title: "⚠️ AI 采访挂了：OpenAI 额度/计费",
+        body: `采访对所有用户不可用（close ${code} ${reasonStr}）。去 platform.openai.com 查 Billing / usage limit 并充值。`,
+      });
+      if (ctx?.waitUntil) ctx.waitUntil(p); else p.catch(() => {});
+    }
     try { server.close(code, reason); } catch (_) {}
     try { upstream.close(code, reason); } catch (_) {}
   };

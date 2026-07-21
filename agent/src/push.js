@@ -96,3 +96,30 @@ export async function sendPush(env, scope, { title, body, threadId, link }) {
     return false;
   }
 }
+
+/// 运维报警（节流版）：把一条「重要失败」推给管理员（env.ADMIN_SCOPE），但同一
+/// ruleKey 在 windowMs 内只推一次——失败往往成串（如重连风暴），不节流会把管理员
+/// 手机轰炸成灾。节流 marker 存 R2（ops/alerts/<ruleKey>.json，{at}），因为报警可能
+/// 从一次性的中继 DO 里发出（DO storage 用完即弃，跨会话去重靠 R2 这个共享真源）。
+/// 尽力而为：任何失败只 console.log，绝不向上抛。返回是否真的推了一条。
+export async function alertAdminThrottled(env, ruleKey, windowMs, { title, body, link } = {}, push = sendPush) {
+  try {
+    if (!env.ADMIN_SCOPE) { console.log("[alert] skip: 无 ADMIN_SCOPE", ruleKey); return false; }
+    const markKey = `ops/alerts/${ruleKey}.json`;
+    if (env.FILES) {
+      const prev = await env.FILES.get(markKey).catch(() => null);
+      if (prev) {
+        let at = 0;
+        try { at = Number(JSON.parse(await prev.text())?.at) || 0; } catch (_) {}
+        if (Date.now() - at < windowMs) { console.log(`[alert] throttled ${ruleKey} (${Math.round((Date.now() - at) / 1000)}s ago)`); return false; }
+      }
+      // 先落 marker 再推：并发关闭最坏多推一条，但绝不会漏记时间戳导致持续刷屏。
+      await env.FILES.put(markKey, JSON.stringify({ at: Date.now() })).catch(() => {});
+    }
+    console.log(`[alert] → admin ${ruleKey}: ${title}`);
+    return await push(env, env.ADMIN_SCOPE, { title, body, threadId: "ops-alert", link });
+  } catch (e) {
+    console.log("[alert] error", String(e?.message || e).slice(0, 200));
+    return false;
+  }
+}
