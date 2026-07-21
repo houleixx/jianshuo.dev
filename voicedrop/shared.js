@@ -41,7 +41,7 @@ async function vdAdminExchange(sessionToken) {
   try { b = await r.json(); } catch {}
   let msg;
   if (r.status === 403) {
-    msg = `你的身份不在白名单（名字：${b.name || '未设置'}，ID：${b.code || '?'}）。把它加入 ADMIN_NAMES 即可。`;
+    msg = `你的身份不在白名单（scope：${b.scope || '?'}，ID：${b.code || '?'}${b.name ? '，名字：' + b.name : ''}）。把 scope 或 ID 加入 ADMIN_SCOPES 即可。`;
   } else if (r.status === 401) {
     msg = 'session token 无效或已过期，请重新登录后复制。';
   } else {
