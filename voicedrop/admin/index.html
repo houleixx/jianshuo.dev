@@ -77,8 +77,8 @@ window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];va
 <div id="gate" hidden style="max-width:430px">
   <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
   <h1>VoiceDrop 控制台</h1>
-  <p>输入 master token 查看全系统状态。token 只存在本机浏览器，不上传。</p>
-  <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+  <p>粘贴白名单内的 session token 查看全系统状态。token 只存在本机浏览器，不上传。</p>
+  <input id="tok" type="password" placeholder="你的 session token" autocomplete="off" spellcheck="false"/>
   <div class="err" id="gateErr"></div>
   <button class="btn primary block" id="enter">进入</button>
 </div>
@@ -158,8 +158,8 @@ window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];va
 <script src="/voicedrop/shared.js"></script>
 <script>
 const API = '/files/api';
-const TKEY = 'vd_admin_token';
-let TOKEN = localStorage.getItem(TKEY) || '';
+const TKEY = 'vd_admin_sess';   // 存用户 session token（换 FILES_TOKEN 用）
+let TOKEN = '';   // 换回来的 admin FILES_TOKEN，仅内存
 
 // $ / esc / resolveArticles come from /voicedrop/shared.js (single source of truth).
 const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e; };
@@ -427,18 +427,26 @@ async function fillDetail(detail, r, wrap){
 // ---- gate / boot ----
 function showGate(msg){ $('#app').hidden=true; $('#gate').hidden=false; $('#gateErr').textContent=msg||''; $('#tok').focus(); }
 function logout(msg){ TOKEN=''; localStorage.removeItem(TKEY); showGate(msg); }
-function enter(){
+async function enter(){
   const v=$('#tok').value.trim();
-  if(!v){ $('#gateErr').textContent='请输入 token'; return; }
-  TOKEN=v; localStorage.setItem(TKEY,v);
-  $('#gate').hidden=true; $('#app').hidden=false; load(); loadModelCfg();
+  if(!v){ $('#gateErr').textContent='请粘贴你的 session token'; return; }
+  $('#gateErr').textContent='校验中…';
+  let ft; try{ ft=await vdAdminExchange(v); }
+  catch(e){ $('#gateErr').textContent=e.message; return; }
+  TOKEN=ft; localStorage.setItem(TKEY,v); $('#gate').hidden=true; $('#app').hidden=false; load(); loadModelCfg();
 }
 $('#enter').onclick=enter;
 $('#tok').addEventListener('keydown',e=>{ if(e.key==='Enter')enter(); });
 $('#refresh').onclick=load;
 $('#logout').onclick=()=>logout();
 
-if(TOKEN){ $('#app').hidden=false; load(); loadModelCfg(); } else { showGate(); }
+(async()=>{
+  const sess=localStorage.getItem(TKEY)||'';
+  if(!sess){ showGate(); return; }
+  try{ TOKEN=await vdAdminExchange(sess); }
+  catch(e){ localStorage.removeItem(TKEY); showGate(e.message||''); return; }
+  $('#app').hidden=false; load(); loadModelCfg();
+})();
 
 // ── 模型设置 ──────────────────────────────────────────────────────────────────
 const PROVIDERS = {

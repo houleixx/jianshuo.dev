@@ -57,8 +57,8 @@ window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];va
 <div id="gate" hidden style="max-width:430px">
   <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
   <h1>挖文日志</h1>
-  <p>输入 master token 查看每次挖文的详细步骤。</p>
-  <input id="tok" type="password" placeholder="FILES_TOKEN" autocomplete="off" spellcheck="false"/>
+  <p>粘贴白名单内的 session token 查看每次挖文的详细步骤。</p>
+  <input id="tok" type="password" placeholder="你的 session token" autocomplete="off" spellcheck="false"/>
   <div class="err" id="gateErr"></div>
   <button class="btn primary block" id="enter">进入</button>
 </div>
@@ -105,8 +105,8 @@ window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];va
 <script src="/voicedrop/shared.js"></script>
 <script>
 const API = '/files/api';
-const TKEY = 'vd_admin_token';
-let TOKEN = localStorage.getItem(TKEY) || '';
+const TKEY = 'vd_admin_sess';   // 存用户 session token（换 FILES_TOKEN 用）
+let TOKEN = '';   // 换回来的 admin FILES_TOKEN，仅内存
 let RECORDS = [];
 // $ / esc come from /voicedrop/shared.js (single source of truth).
 
@@ -240,10 +240,13 @@ async function boot(){
   try{ await loadDates(); }
   catch(e){ if(String(e.message).match(/unauthorized|admin only|HTTP 401|HTTP 403/)){ logout('token 无效'); } else { $('#list').innerHTML=`<div class="errbox">${esc(e.message)}</div>`; } }
 }
-function enter(){
+async function enter(){
   const v=$('#tok').value.trim();
-  if(!v){ $('#gateErr').textContent='请输入 token'; return; }
-  TOKEN=v; localStorage.setItem(TKEY,v); boot();
+  if(!v){ $('#gateErr').textContent='请粘贴你的 session token'; return; }
+  $('#gateErr').textContent='校验中…';
+  let ft; try{ ft=await vdAdminExchange(v); }
+  catch(e){ $('#gateErr').textContent=e.message; return; }
+  TOKEN=ft; localStorage.setItem(TKEY,v); boot();
 }
 
 $('#enter').addEventListener('click', enter);
@@ -252,7 +255,13 @@ $('#logout').addEventListener('click',()=>logout());
 $('#refresh').addEventListener('click',()=>{ const d=$('#date').value; if(d&&d!=='无数据') loadDay(d).catch((e)=>$('#list').innerHTML=`<div class="errbox">${esc(e.message)}</div>`); });
 $('#date').addEventListener('change',(e)=>{ const d=e.target.value; if(d&&d!=='无数据') loadDay(d).catch((er)=>$('#list').innerHTML=`<div class="errbox">${esc(er.message)}</div>`); });
 
-if(TOKEN) boot(); else showGate();
+(async()=>{
+  const sess=localStorage.getItem(TKEY)||'';
+  if(!sess){ showGate(); return; }
+  try{ TOKEN=await vdAdminExchange(sess); }
+  catch(e){ localStorage.removeItem(TKEY); showGate(e.message||''); return; }
+  boot();
+})();
 </script>
 </body>
 </html>

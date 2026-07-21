@@ -25,3 +25,27 @@ function resolveArticles(doc) {
   if (doc.body) return [{ title: doc.title, body: doc.body }];
   return [];
 }
+
+// ── /voicedrop/admin 后台准入（白名单）──────────────────────────────────────────
+// 后台页面不再让人粘 master token；改成粘自己的 session token，这里拿去 /voicedrop/
+// admin/auth 校验白名单，命中才换回 FILES_TOKEN（页面照旧用它调 API）。返回 FILES_TOKEN
+// 字符串；失败抛错，err.scope 带上你的 scope（未在白名单时）方便加名单。
+async function vdAdminExchange(sessionToken) {
+  const r = await fetch('/voicedrop/admin/auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: String(sessionToken || '').trim() }),
+  });
+  if (r.status === 200) return (await r.json()).ft;
+  let b = {};
+  try { b = await r.json(); } catch {}
+  let msg;
+  if (r.status === 403) {
+    msg = `你的身份不在白名单（名字：${b.name || '未设置'}，ID：${b.code || '?'}）。把它加入 ADMIN_NAMES 即可。`;
+  } else if (r.status === 401) {
+    msg = 'session token 无效或已过期，请重新登录后复制。';
+  } else {
+    msg = b.error || ('HTTP ' + r.status);
+  }
+  throw Object.assign(new Error(msg), { status: r.status, name: b.name, code: b.code, scope: b.scope });
+}
