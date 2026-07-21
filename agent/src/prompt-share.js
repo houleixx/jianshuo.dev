@@ -29,7 +29,7 @@ import {
 
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
 
-export const PROMPT_SHARE_DEFAULTS = { enabled: true, dailyCapPerUser: 20, maxLength: 4000, notFoundNote: true };
+export const PROMPT_SHARE_DEFAULTS = { enabled: true, dailyCapPerUser: 200, maxLength: 4000, notFoundNote: true };
 
 export async function loadPromptShareConfig(env) {
   try {
