@@ -211,6 +211,9 @@ export async function onRequest(context) {
   try {
     if (resp && resp.status >= 400 && resp.status !== 401) {
       const route = (Array.isArray(context.params.path) ? context.params.path[0] : context.params.path) || '?';
+      // photo 404 是业务预期（客户端轮询 AI 图直到生成 + 偶发死图），量大且无行动价值，
+      // 进报警只会淹掉真故障（2026-07-22 的 4xx 报警风暴一半是它）。photo 400/5xx 照报。
+      if (route === 'photo' && resp.status === 404) return resp;
       context.waitUntil(fetch('https://jianshuo.dev/agent/ops/tick', {
         method: 'POST',
         body: JSON.stringify({ route: `files/${route}`, status: resp.status }),
@@ -1141,7 +1144,11 @@ async function handleRequest(context) {
     let coverPhotoKey;
     if (m) {
       const rel = /^\d+$/.test(m[1]) ? (photos || [])[Number(m[1]) - 1] : m[1];
-      if (rel) coverPhotoKey = (owner || '') + rel;
+      // 封面 key 必须过与 /photo 路由同一把白名单尺（photos/ 前缀 + 图片扩展名）。
+      // 口述内容被误当 [[photo:]] 标记时（如 [[photo:最新截图]]），拼出来的畸形 key
+      // 进了 D1 封面索引 → 每个刷社区的用户拉一次 400 → 4xx 报警风暴（2026-07-22 实锤，
+      // 对账自愈还会把它反复写回）。形状不合法就当没封面，卡片走纯文字。
+      if (rel && /^photos\/.+\.(jpe?g|png)$/i.test(rel)) coverPhotoKey = (owner || '') + rel;
     }
     const preview = body
       .replace(/<!--[\s\S]*?-->/g, '')            // origin/meta comments
