@@ -215,3 +215,21 @@ describe("溯源转发（POST）", () => {
     expect(await coreMintedToday(e, IMPORTER, today)).toBe(0);
   });
 });
+
+describe("prompt-market 排除 borrowed 行", () => {
+  it("原作者一行 + 导入者 borrowed 行同码 → 市场只出一条", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    e.CORE = fakeD1(coreSql());
+    const ins = (sub, item, code, borrowed) =>
+      e.CORE.prepare("INSERT INTO prompt_shares (user_sub, item_id, code, created_at, borrowed) VALUES (?,?,?,?,?)")
+        .bind(sub, item, code, "2026-07-22T00:00:00.000Z", borrowed).run();
+    ins("users/other-author/", "p_origin1", ORIGIN_CODE, 0);
+    ins(IMPORTER, "p_imp009", ORIGIN_CODE, 1);
+    const req = new Request("https://jianshuo.dev/agent/prompt-market", {
+      headers: { Authorization: `Bearer ${await tok(IMPORTER)}` },
+    });
+    const r = await handlePromptMarket(new URL(req.url), req, e);
+    const { items } = await r.json();
+    expect(items.filter((i) => i.code === ORIGIN_CODE)).toHaveLength(1);
+  });
+});
