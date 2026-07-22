@@ -16,6 +16,7 @@ import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList, truncateUtf16, MAX_PROMPT } from "./prompts.js";
 import { loadUserPrompts } from "./prompt-store.js";
 import { retractPromptPost, promptShareId } from "./prompt-community.js";
+import { invalidateMarketCache } from "./prompt-market.js";
 import { promptPostTitle } from "../../functions/lib/community-store.js";
 // author 显示名 —— SINGLE SOURCE OF TRUTH，见 style-store.js#readProfileName 上方
 // 注释："the share endpoint, miner, and mint all import this"。这里显式传
@@ -415,11 +416,11 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
     }
     const code = entry?.code;
     if (code) {
-      // 删 shares/<码> 必须同步（码失效立即生效）；撤帖 best-effort 挪后台，
-      // 失败由 get/reconcile 自愈兜底。
+      // 删 shares/<码> 必须同步（码失效立即生效）；撤帖 + 市场缓存失效 best-effort
+      // 挪后台，失败由 get/reconcile 自愈兜底（缓存不删也只是陈旧 ≤5 分钟）。
       await env.FILES.delete(`shares/${code}`);
-      const retract = retractPromptPost(env, code);
-      if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(retract); else await retract;
+      const after = Promise.all([retractPromptPost(env, code), invalidateMarketCache(env)]);
+      if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(after); else await after;
     }
     return J({ ok: true, code: code || null, sharing: false });
   }
@@ -536,6 +537,8 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   // 关分享的 retractPromptPost 保留：清理历史遗留的 prompt 帖。
   // communityShareId 仍按码派生返回，客户端契约不变（老版本 App 读它不炸）。
   await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, ownEntry?.createdAt, importCount));
+  // 开分享 = 市场多一条：让物化缓存立即过期（best-effort，后台）。
+  if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(invalidateMarketCache(env)); else await invalidateMarketCache(env);
   const communityShareId = await promptShareId(code, env.SESSION_SECRET);
   return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true, communityShareId });
 }

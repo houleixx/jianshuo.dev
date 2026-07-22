@@ -1458,7 +1458,8 @@ export default {
     // 指令分享码（魔法数字：POST 开分享 / DELETE 关分享）—— src/prompt-share.js
     { const r = await handlePromptShareRoutes(url, request, env, ctx); if (r) return r; }
     // 提示词市场（Prompt Manager 第 8 轮）：热门/最新列表 — src/prompt-market.js
-    { const r = await handlePromptMarket(url, request, env); if (r) return r; }
+    // ctx 给物化缓存的 stale-while-revalidate 后台重建用。
+    { const r = await handlePromptMarket(url, request, env, ctx); if (r) return r; }
 
     { const r = await handleUsageRoute(url, request, env); if (r) return r; }
 

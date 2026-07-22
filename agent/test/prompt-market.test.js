@@ -67,3 +67,52 @@ describe("GET /agent/prompt-market", () => {
     expect(codes).toEqual(["2222222", "3333333"]);  // 仅图片 + 都行；仅文字被滤
   });
 });
+
+// ── 物化缓存（2026-07-23 提速）───────────────────────────────────────────────
+import { invalidateMarketCache } from "../src/prompt-market.js";
+
+describe("materialized cache", () => {
+  const CACHE_KEY = "market/prompt-market-cache.json";
+  async function seededEnv() {
+    const env = await makeEnv({ "shares/1111111": doc("活的", ["text"]) });
+    await coreUpsertPromptShare(env, "users/anon-a/", "p_1", "1111111", "2026-07-20T00:00:00.000Z");
+    return env;
+  }
+
+  it("首次现算后写缓存；第二次请求命中缓存（不再读 shares/）", async () => {
+    const env = await seededEnv();
+    await GET(env);                                       // 内联现算 + 写缓存
+    expect(env.FILES._store.has(CACHE_KEY)).toBe(true);
+    const reads = [];
+    const rawGet = env.FILES.get.bind(env.FILES);
+    env.FILES.get = async (k) => { reads.push(String(k)); return rawGet(k); };
+    const r = await GET(env);
+    expect(r.status).toBe(200);
+    expect((await r.json()).items.length).toBeGreaterThan(0);
+    expect(reads.filter((k) => k.startsWith("shares/"))).toHaveLength(0); // 只读缓存
+  });
+
+  it("缓存过期 + 有 ctx → 先回旧数据，后台重建（waitUntil）", async () => {
+    const env = await seededEnv();
+    await GET(env);
+    const doc = JSON.parse(env.FILES._store.get(CACHE_KEY));
+    doc.builtAt = Date.now() - 10 * 60 * 1000;            // 人为过期
+    env.FILES._store.set(CACHE_KEY, JSON.stringify(doc));
+    const waited = [];
+    const ctx = { waitUntil: (p) => waited.push(p) };
+    const req = new Request("https://jianshuo.dev/agent/prompt-market", { headers: { Authorization: `Bearer ${TOK}` } });
+    const r = await handlePromptMarket(new URL(req.url), req, env, ctx);
+    expect(r.status).toBe(200);                            // 立即响应（旧数据）
+    expect(waited).toHaveLength(1);
+    await Promise.all(waited);                             // 后台重建完成
+    expect(JSON.parse(env.FILES._store.get(CACHE_KEY)).builtAt).toBeGreaterThan(doc.builtAt);
+  });
+
+  it("invalidateMarketCache 删缓存对象", async () => {
+    const env = await seededEnv();
+    await GET(env);
+    expect(env.FILES._store.has(CACHE_KEY)).toBe(true);
+    await invalidateMarketCache(env);
+    expect(env.FILES._store.has(CACHE_KEY)).toBe(false);
+  });
+});
