@@ -72,7 +72,9 @@ export async function onRequest(context) {
   const id = params.token || '';
 
   // Only short, URL-safe ids are share links; anything else → static fallthrough.
-  if (!/^[A-Za-z0-9_-]{6,16}$/.test(id)) return context.next();
+  // 下限 4：魔法数字 4 位起步（占满升位）。4–5 字符的静态路径（admin/agent/help）
+  // 查无后照样 context.next() 回静态，只多两次 R2 miss，与既有 6+ 字符静态同款。
+  if (!/^[A-Za-z0-9_-]{4,16}$/.test(id)) return context.next();
 
   // ONE public page serves TWO link kinds, both resolving to an article key and
   // rendering identically (same og:image + description):
