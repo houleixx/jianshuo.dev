@@ -12,7 +12,9 @@ import { coreGetInvite } from "../../lib/core-db.js";
 import { phCapture } from "../../lib/posthog.js";
 
 const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
-const ANDROID_DL = "https://jianshuo.dev/voicedrop/apk/";
+// 应用宝落地页（2026-07-23 起）：腾讯官方渠道，微信内可直接打开安装，Android
+// 下载不再需要「去浏览器打开」蒙层。
+const ANDROID_DL = "https://a.app.qq.com/o/simple.jsp?pkgname=com.baixingai.voicedrop";
 const SUANLI_PER_ARTICLE = 9; // 与 App 的 Suanli.perArticle 一致（「约可成文 N 篇」）
 
 export async function onRequest(context) {
@@ -196,7 +198,9 @@ body{background:#211F1B;color:#fff;min-height:100dvh;display:flex;flex-direction
   var mask=document.getElementById('wx-mask');
   function tap(e){keep();if(wx){e.preventDefault();mask.style.display='block';}}
   var i=document.getElementById('dl-ios'),a=document.getElementById('dl-android');
-  i.addEventListener('click',tap);a.addEventListener('click',tap);
+  i.addEventListener('click',tap);
+  // Android 走应用宝：微信里原生可装，不拦蒙层，只写剪贴板保归因。
+  a.addEventListener('click',function(){keep();});
   mask.addEventListener('click',function(){mask.style.display='none';});
   if(/Android/i.test(ua))i.classList.add('dim');
   else if(/iPhone|iPad|iPod|Macintosh/i.test(ua))a.classList.add('dim');

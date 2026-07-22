@@ -38,6 +38,8 @@ async function trackShareView(context, env, id, kind, owner, extra = {}) {
 }
 
 const APP_STORE = "https://apps.apple.com/cn/app/id6781565141";
+// 应用宝落地页：腾讯官方渠道，微信内可直接安装（Android 下载不用出微信）。
+const ANDROID_STORE = "https://a.app.qq.com/o/simple.jsp?pkgname=com.baixingai.voicedrop";
 
 // 落地页 CTA：并进 footer 同一行——「由 VoiceDrop 口述生成。下载，你约得 X 算力，
 // 作者约得 Y 算力」（2026-07-09 用户定稿：低调，不影响阅读）。奖励数字按「访问时刻」
@@ -60,11 +62,13 @@ export function ctaHtml(rate, cfg, id = '', proxied = false) {
   const beacon = (id && proxied) ? `var H='https://jianshuo.dev/agent/referral/hit',C='${esc(id)}';
 try{(navigator.sendBeacon&&navigator.sendBeacon(H,C))||fetch(H,{method:'POST',body:C,mode:'no-cors',keepalive:true})}catch(e){}
 ` : '';
-  return `。<a id="vd-dl" href="${APP_STORE}">下载</a>${reward}
-<script>${beacon}document.getElementById('vd-dl').addEventListener('click',function(){
+  return `。<a id="vd-dl" href="${APP_STORE}">iOS 下载</a> / <a id="vd-dl-android" href="${ANDROID_STORE}">Android 下载</a>${reward}
+<script>${beacon}(function(){function keep(){
 try{var t=document.createElement('textarea');t.value=location.href;t.style.cssText='position:fixed;opacity:0';
 document.body.appendChild(t);t.select();t.setSelectionRange(0,99999);document.execCommand('copy');document.body.removeChild(t);}catch(e){}
-try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}})</script>`;
+try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}}
+var i=document.getElementById('vd-dl'),a=document.getElementById('vd-dl-android');
+if(i)i.addEventListener('click',keep);if(a)a.addEventListener('click',keep);})()</script>`;
 }
 
 export async function onRequest(context) {
@@ -256,7 +260,7 @@ export function promptShareHtml(label, code, instruction, host = '') {
 <div class="vd-prompt">${mdToHtml(instruction)}</div>
 ${note}
 <a class="vd-import" href="${importHref(code, host)}">一键收进我的工具箱</a>
-<p class="muted vd-import-note">装了 VoiceDrop 会直接打开导入页；还没装？<a href="${APP_STORE}">先下载</a>，回来再点一次。微信里点不动？点右上角 ⋯ 选「在 Safari 中打开」。</p>
+<p class="muted vd-import-note">装了 VoiceDrop 会直接打开导入页；还没装？先下载：<a href="${APP_STORE}">iOS</a> / <a href="${ANDROID_STORE}">Android</a>，回来再点一次。微信里点不动？点右上角 ⋯ 选「在 Safari 中打开」。</p>
 <h2>怎么用</h2>
 <ol>
 <li>打开 VoiceDrop，进入任意一篇文章，<strong>长按屏幕按住说话</strong>，说：「用 ${esc(code)} 改这段」——AI 会按上面这条提示词干活。只管这一次，不会改动你自己的任何设置。</li>

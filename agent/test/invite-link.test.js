@@ -230,7 +230,7 @@ describe("invite landing page", () => {
     expect(h).toContain("邀请你");
     expect(h).toContain("动动嘴");
     expect(h).toContain("apps.apple.com");
-    expect(h).toContain("voicedrop/apk");
+    expect(h).toContain("a.app.qq.com/o/simple.jsp?pkgname=com.baixingai.voicedrop"); // Android = 应用宝（微信内可装）
     expect(h).toContain("navigator.clipboard");
     expect(h).toContain(`各得 ${Math.round(9 * 5.6)} 算力`);
     expect(h).toContain("已自动记住舒博的邀请");
