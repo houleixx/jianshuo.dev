@@ -109,3 +109,76 @@ describe("effectiveLeaf importedFrom 透传", () => {
     expect(doc.importedFrom).toBeUndefined();
   });
 });
+
+describe("溯源转发（POST）", () => {
+  // 未改导入件：正文与 originDoc 完全一致
+  const cleanImport = { id: "p_imp002", type: "action", label: "随便改名也行", prompt: "把它改得更毒舌，观点不变。", appliesTo: ["text"], importedFrom: ORIGIN_CODE };
+
+  it("未改导入件 → 返回原码 original:true；不写穿原副本；不占 mintLog；索引落 borrowed", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [cleanImport]);
+    const j = await (await share(e, "p_imp002")).json();
+    expect(j.code).toBe(ORIGIN_CODE);
+    expect(j.original).toBe(true);
+    expect(j.created).toBe(false);
+    expect(j.sharing).toBe(true);
+    expect(j.url).toBe(`https://voicedrop.cn/${ORIGIN_CODE}`);
+    expect(typeof j.author).toBe("string");
+    const origin = JSON.parse(e.FILES._store.get(`shares/${ORIGIN_CODE}`));
+    expect(origin.sub).toBe("other-author");        // 副本没被写穿成导入者
+    expect(origin.importCount).toBe(5);
+    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    expect(idx.byItem.p_imp002).toMatchObject({ code: ORIGIN_CODE, borrowed: true });
+    expect(idx.mintLog).toHaveLength(0);            // 不占日上限
+  });
+  it("幂等重放：再 POST 一次仍返回原码，副本仍是原作者的", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [cleanImport]);
+    await share(e, "p_imp002");
+    const j2 = await (await share(e, "p_imp002")).json();
+    expect(j2.code).toBe(ORIGIN_CODE);
+    expect(j2.original).toBe(true);
+    expect(JSON.parse(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).sub).toBe("other-author");
+  });
+  it("原分享已关 → 正常铸自有码", async () => {
+    const e = env2(); // 不 seed shares/<原码>
+    await putTree(e, [cleanImport]);
+    const j = await (await share(e, "p_imp002")).json();
+    expect(j.code).not.toBe(ORIGIN_CODE);
+    expect(j.original).toBeUndefined();
+    expect(j.created).toBe(true);
+    expect(JSON.parse(e.FILES._store.get(`shares/${j.code}`)).sub).toBe("anon-importer1");
+  });
+  it("原作者后来改了原件（快照不再等同）→ 铸自有码", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc({ instruction: "原作者升级过的正文。" }) });
+    await putTree(e, [cleanImport]);
+    const j = await (await share(e, "p_imp002")).json();
+    expect(j.code).not.toBe(ORIGIN_CODE);
+    expect(j.created).toBe(true);
+  });
+  it("borrowed 之后导入者改了正文再 POST → 铸自有码替换 entry", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [cleanImport]);
+    await share(e, "p_imp002");                        // 先转发
+    await putTree(e, [{ ...cleanImport, prompt: "我自己改过的版本。" }]);
+    // 保存同步（refreshPromptShare）不得把导入者的新正文写穿进原作者的副本
+    expect(JSON.parse(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).instruction).toBe("把它改得更毒舌，观点不变。");
+    const j = await (await share(e, "p_imp002")).json();
+    expect(j.code).not.toBe(ORIGIN_CODE);
+    expect(j.created).toBe(true);
+    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    expect(idx.byItem.p_imp002.code).toBe(j.code);
+    expect(idx.byItem.p_imp002.borrowed).toBeUndefined();
+    expect(JSON.parse(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).sub).toBe("other-author"); // 原副本始终没动
+  });
+  it("带 CORE 时 borrowed 行落 D1 且不占 coreMintedToday", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    e.CORE = fakeD1(coreSql());
+    await putTree(e, [cleanImport]);
+    await share(e, "p_imp002");
+    const { byItem } = await coreLoadPromptShares(e, IMPORTER);
+    expect(byItem.p_imp002).toMatchObject({ code: ORIGIN_CODE, borrowed: true });
+    const today = new Date().toISOString().slice(0, 10);
+    expect(await coreMintedToday(e, IMPORTER, today)).toBe(0);
+  });
+});

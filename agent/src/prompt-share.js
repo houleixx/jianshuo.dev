@@ -162,8 +162,13 @@ function sharedDocFor(scope, itemId, leaf, createdAt, importCount = 0) {
 export async function refreshPromptShare(env, scope, itemId) {
   try {
     const { byItem } = await loadIndex(env, scope);
-    const code = byItem[itemId]?.code;
+    const entry = byItem[itemId];
+    const code = entry?.code;
     if (!code) return;
+    // borrowed（溯源转发）条目：码属原作者，shares/<码> 是【原作者的】写穿副本——
+    // 导入者改自己的副本绝不能刷进去（否则等于改写别人的分享）。导入者改文后
+    // 的分享归属由下一次 POST 的转发判定重算（正文不再一致 → 铸自有码）。
+    if (entry.borrowed) return;
     const existing = await env.FILES.get(`shares/${code}`);
     if (!existing) return; // 已关闭
     let createdAt, importCount = 0;
@@ -391,7 +396,33 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
 
   const existing = idx.byItem[itemId];
 
-  let code = existing?.code;
+  // 溯源转发（spec 2026-07-22-prompt-share-reshare-redirect）：还没有自有码（无 entry
+  // 或 entry 只是 borrowed）且条目是导入件 → 与原码活跃副本比 instruction 严格相等。
+  // 一致 = 同一作品：递原作者的码出去——不铸码、不写穿、不占日上限，索引记
+  // borrowed 条目（开关状态要能持久）。改过 / 原分享已关 → 掉下去走正常铸码，
+  // borrowed 条目被自有码替换。一旦铸过自有码，永远不再进这里（一辈子一个码）。
+  const ownEntry = existing && !existing.borrowed ? existing : null;
+  if (!ownEntry && leaf.importedFrom) {
+    const origin = await resolvePromptShare(env, leaf.importedFrom);
+    if (origin && origin.instruction === leaf.instruction) {
+      if (!existing || existing.code !== origin.code) {
+        const createdAt = new Date().toISOString();
+        idx.byItem[itemId] = { code: origin.code, createdAt, borrowed: true };
+        await coreUpsertPromptShare(env, scope, itemId, origin.code, createdAt, true);
+        try {
+          const r2idx = await loadIndexR2(env, scope);
+          r2idx.byItem[itemId] = { code: origin.code, createdAt, borrowed: true };
+          await env.FILES.put(indexKey(scope), JSON.stringify(r2idx, null, 2));
+        } catch (e) { console.error("[prompt-share] r2 index write failed:", e && e.message); }
+      }
+      let author = "";
+      try { author = (await readProfileName(env, `users/${origin.sub}/`, { fallback: "none" })) || ""; } catch { /* 无名不影响转发 */ }
+      const communityShareId = await promptShareId(origin.code, env.SESSION_SECRET);
+      return J({ code: origin.code, url: `https://voicedrop.cn/${origin.code}`, created: false, sharing: true, original: true, author, communityShareId });
+    }
+  }
+
+  let code = ownEntry?.code;
   let created = false;
   if (!code) {
     // 只有真铸新码才占日上限（幂等重开不算）。D1 直接 COUNT 当日行；
@@ -434,7 +465,7 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   // 发社区帖（publishPromptPost 不再调用）——提示词的公共曝光走 /agent/prompt-market。
   // 关分享的 retractPromptPost 保留：清理历史遗留的 prompt 帖。
   // communityShareId 仍按码派生返回，客户端契约不变（老版本 App 读它不炸）。
-  await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, existing?.createdAt, importCount));
+  await env.FILES.put(`shares/${code}`, sharedDocFor(scope, itemId, leaf, ownEntry?.createdAt, importCount));
   const communityShareId = await promptShareId(code, env.SESSION_SECRET);
   return J({ code, url: `https://voicedrop.cn/${code}`, created, sharing: true, communityShareId });
 }
