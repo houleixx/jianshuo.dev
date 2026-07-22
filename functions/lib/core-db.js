@@ -135,30 +135,44 @@ export async function coreSeedImportCount(env, code, count) {
 
 // ── prompt_shares（提示词分享码 owner 索引；原 users/<sub>/prompt-shares.json）──
 
-/// → {byItem:{itemId:{code,createdAt}}}；D1 不可用 → null。空对象 = 确实没有。
+/// → {byItem:{itemId:{code,createdAt,borrowed?:true}}}；D1 不可用 → null。空对象 =
+/// 确实没有。borrowed 仅在为真时出现（老行/自有码保持原形状，调用方按 falsy 处理）。
 export async function coreLoadPromptShares(env, scope) {
   const d = reader(env, true);
   if (!d) return null;
   try {
     const r = await d.prepare(
-      "SELECT item_id, code, created_at FROM prompt_shares WHERE user_sub=?"
+      "SELECT item_id, code, created_at, borrowed FROM prompt_shares WHERE user_sub=?"
     ).bind(scope).all();
     const byItem = {};
-    for (const row of r.results || []) byItem[row.item_id] = { code: row.code, createdAt: row.created_at };
+    for (const row of r.results || []) {
+      byItem[row.item_id] = { code: row.code, createdAt: row.created_at, ...(row.borrowed ? { borrowed: true } : {}) };
+    }
     return { byItem };
   } catch (e) { console.error("[core-db] loadPromptShares:", e && e.message); return null; }
 }
 
-export async function coreUpsertPromptShare(env, scope, itemId, code, createdAt) {
+export async function coreUpsertPromptShare(env, scope, itemId, code, createdAt, borrowed = false) {
   const d = db(env);
   if (!d) return false;
   try {
     await d.prepare(
-      "INSERT INTO prompt_shares (user_sub, item_id, code, created_at) VALUES (?,?,?,?) " +
-      "ON CONFLICT(user_sub, item_id) DO UPDATE SET code=excluded.code, created_at=excluded.created_at"
-    ).bind(scope, itemId, String(code), createdAt).run();
+      "INSERT INTO prompt_shares (user_sub, item_id, code, created_at, borrowed) VALUES (?,?,?,?,?) " +
+      "ON CONFLICT(user_sub, item_id) DO UPDATE SET code=excluded.code, created_at=excluded.created_at, borrowed=excluded.borrowed"
+    ).bind(scope, itemId, String(code), createdAt, borrowed ? 1 : 0).run();
     return true;
   } catch (e) { console.error("[core-db] upsertPromptShare:", e && e.message); return false; }
+}
+
+/// borrowed 条目关分享 = 删行（自有码关分享不删行——索引保留、同码复活，是另一条路；
+/// spec 2026-07-22 溯源转发 §5）。
+export async function coreDeletePromptShare(env, scope, itemId) {
+  const d = db(env);
+  if (!d) return false;
+  try {
+    await d.prepare("DELETE FROM prompt_shares WHERE user_sub=? AND item_id=?").bind(scope, itemId).run();
+    return true;
+  } catch (e) { console.error("[core-db] deletePromptShare:", e && e.message); return false; }
 }
 
 /// fork re-key：byItem 的 key 从旧 id 挪到新 id（码与 createdAt 不动）。
@@ -176,12 +190,13 @@ export async function coreRekeyPromptShare(env, scope, fromItemId, toItemId) {
 }
 
 /// 当日已铸码数（每日上限用）。todayPrefix = "YYYY-MM-DD"。→ number | null。
+/// borrowed 行不算——转发原码不是铸码（spec 2026-07-22 溯源转发 §6）。
 export async function coreMintedToday(env, scope, todayPrefix) {
   const d = reader(env, true);
   if (!d) return null;
   try {
     const row = await d.prepare(
-      "SELECT COUNT(*) AS n FROM prompt_shares WHERE user_sub=? AND created_at LIKE ?"
+      "SELECT COUNT(*) AS n FROM prompt_shares WHERE user_sub=? AND created_at LIKE ? AND borrowed=0"
     ).bind(scope, `${todayPrefix}%`).first();
     return row ? row.n : 0;
   } catch (e) { console.error("[core-db] mintedToday:", e && e.message); return null; }

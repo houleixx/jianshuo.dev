@@ -25,7 +25,7 @@ import { promptPostTitle } from "../../functions/lib/community-store.js";
 import { readProfileName } from "../../functions/lib/style-store.js";
 import {
   coreLoadPromptShares, coreUpsertPromptShare, coreRekeyPromptShare, coreMintedToday,
-  coreImportCount, coreSeedImportCount,
+  coreDeletePromptShare, coreImportCount, coreSeedImportCount,
 } from "../../functions/lib/core-db.js";
 
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
@@ -102,7 +102,7 @@ async function loadIndex(env, scope) {
   const r2 = await loadIndexR2(env, scope);
   if (Object.keys(r2.byItem).length) {
     for (const [itemId, e] of Object.entries(r2.byItem)) {
-      if (e && e.code) await coreUpsertPromptShare(env, scope, itemId, e.code, e.createdAt || new Date().toISOString());
+      if (e && e.code) await coreUpsertPromptShare(env, scope, itemId, e.code, e.createdAt || new Date().toISOString(), !!e.borrowed);
     }
     return r2;
   }
