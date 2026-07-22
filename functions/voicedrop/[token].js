@@ -95,8 +95,11 @@ export async function onRequest(context) {
         return context.next(); // 未知 typed 条目：不当文章 key 用
       }
     } catch { /* 纯文本文章 key，走原路 */ }
-  } else if (/^[1-9][0-9]{6}$/.test(id)) {
-    // 纯数字码永远不是静态资源；查无 = 作者已关闭分享（或码不存在）。
+  } else if (/^[1-9][0-9]{3,8}$/.test(id)) {
+    // 纯数字码（4–9 位，铸码 4 位起步占满升位）永远不是静态资源；
+    // 查无 = 作者已关闭分享（或码不存在）。上限收在 9 位：社区帖 id 是 12 位
+    // b64url，理论上可能全数字，不能被这个分支截胡（活跃码不受影响——上面
+    // shares/<id> 命中就直接渲染，与长度无关）。
     return html(page('分享已停止', '<p class="muted">这条分享已被作者停止，或者链接不存在。</p>'), 404);
   } else {
     const cm = await env.FILES.get(communityKey(id));

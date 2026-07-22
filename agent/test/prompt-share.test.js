@@ -90,19 +90,31 @@ describe("loadPromptShareConfig", () => {
 });
 
 describe("mintCode", () => {
-  it("returns a 7-digit code, first digit non-zero", async () => {
+  it("空间空旷时铸 4 位码，首位非零", async () => {
     const code = await mintCode(makeEnv());
-    expect(code).toMatch(/^[1-9][0-9]{6}$/);
+    expect(code).toMatch(/^[1-9][0-9]{3}$/);
+  });
+  it("默认 rand 的 4 位段避开年份（19xx/20xx）与整百（xx00）", async () => {
+    for (let i = 0; i < 50; i++) {
+      const code = await mintCode(makeEnv());
+      expect(code).not.toMatch(/^(19|20)/);
+      expect(code).not.toMatch(/00$/);
+    }
   });
   it("re-rolls on collision with an existing shares/<code>", async () => {
-    const e = makeEnv({ "shares/1234567": sharedDoc() });
-    const seq = ["1234567", "7654321"];
+    const e = makeEnv({ "shares/4321": sharedDoc() });
+    const seq = ["4321", "7654"];
     const code = await mintCode(e, () => seq.shift());
-    expect(code).toBe("7654321");
+    expect(code).toBe("7654");
   });
-  it("gives up (null) after 5 collisions", async () => {
-    const e = makeEnv({ "shares/1234567": sharedDoc() });
-    expect(await mintCode(e, () => "1234567")).toBe(null);
+  it("4 位候选全占 → 升到 5 位（占满升位）", async () => {
+    const e = makeEnv({ "shares/4321": sharedDoc() });
+    const code = await mintCode(e, (len) => (len === 4 ? "4321" : "43215"));
+    expect(code).toBe("43215");
+  });
+  it("gives up (null) when every length's candidates all collide", async () => {
+    const e = makeEnv({ "shares/4321": sharedDoc() });
+    expect(await mintCode(e, () => "4321")).toBe(null);
   });
 });
 
@@ -133,7 +145,7 @@ describe("POST /agent/prompt-share", () => {
     const r = await post(e, { id: SYS_ITEM });
     expect(r.status).toBe(200);
     const { code, url, created, sharing } = await r.json();
-    expect(code).toMatch(/^[1-9][0-9]{6}$/);
+    expect(code).toMatch(/^[1-9][0-9]{3}$/);
     expect(url).toBe(`https://voicedrop.cn/${code}`);
     expect(created).toBe(true);
     expect(sharing).toBe(true);
@@ -270,7 +282,13 @@ describe("resolveSharedPromptBlock", () => {
     expect((await resolveSharedPromptBlock(seeded(), "用456-3566处理")).block).toContain("更毒舌");
     expect((await resolveSharedPromptBlock(seeded(), "用456，3566处理")).block).toContain("更毒舌");
   });
-  it("ignores 8+ digit runs and leading-zero runs", async () => {
+  it("hits a plain 4-digit code (新默认码长)", async () => {
+    const e = makeEnv({ "shares/4563": sharedDoc() });
+    const { block, magic } = await resolveSharedPromptBlock(e, "用4563改这段");
+    expect(magic).toBe("4563");
+    expect(block).toContain("更毒舌");
+  });
+  it("ignores 10+ digit runs (手机号/时间戳) and leading-zero runs", async () => {
     expect(await resolveSharedPromptBlock(seeded(), "打电话13800138000")).toBe(null);
     expect(await resolveSharedPromptBlock(seeded(), "编号0123456")).toBe(null);
   });
@@ -544,7 +562,7 @@ describe("铸码 POST /agent/prompt-share — 新模型（自建项也能铸）"
     await PUTP(env, [{ id: "p_zq1f6e", type: "action", label: "写成小红书", prompt: "口语、emoji…", appliesTo: ["text"] }]);
     const res = await MINT(env, "p_zq1f6e");
     expect(res.status).toBe(200);
-    expect((await res.json()).code).toMatch(/^[1-9][0-9]{6}$/);
+    expect((await res.json()).code).toMatch(/^[1-9][0-9]{3}$/);
     const doc = shareDocOf(env);
     expect(doc.label).toBe("写成小红书");
     expect(doc.instruction).toContain("口语");
@@ -678,7 +696,7 @@ describe("分享即发帖（2026-07-15 提示词社区帖）", () => {
     const r1 = await handlePromptShareRoutes(new URL(mint.url), mint, e);
     expect(r1.status).toBe(200);
     const j1 = await r1.json();
-    expect(j1.code).toMatch(/^[1-9]\d{6}$/);
+    expect(j1.code).toMatch(/^[1-9]\d{3}$/);
     expect(j1.sharing).toBe(true);
 
     const off = new Request(`https://jianshuo.dev/agent/prompt-share/${encodeURIComponent(SYS_ITEM)}`, {

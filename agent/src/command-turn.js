@@ -29,7 +29,7 @@ export async function runCommandTurn({ env, scope, token, origin, turnId, instru
     { type: "text", text: COMMAND_SYSTEM, cache_control: { type: "ephemeral" } },
     { type: "text", text: `用户的写作风格（合并/重写时保持）：\n${style || "（未设置）"}`, cache_control: { type: "ephemeral" } },
   ];
-  // 指令里报了 7 位分享码 → 追加对应的共享指令块（一次性参考；查无则软备注）。
+  // 指令里报了分享码（4–9 位）→ 追加对应的共享指令块（一次性参考；查无则软备注）。
   const shared = await resolveSharedPromptBlock(env, instruction);
   const userContent = [
     "编号清单（用户此刻在屏幕上看到的顺序，第N篇 ↔ stem）：",

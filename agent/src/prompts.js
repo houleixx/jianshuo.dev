@@ -113,9 +113,10 @@ const APPLIES = new Set(["text", "image"]);
 const REF_ACTION_KEYS = new Set(["ref"]);
 const REF_GROUP_KEYS = new Set(["ref", "children"]);
 const ENTITY_ACTION_KEYS = new Set(["id", "type", "label", "prompt", "appliesTo", "kind", "imageParams", "forkedFrom", "importedFrom"]);
-// importedFrom = 这条实体当初是从哪个 7 位分享码导入的（导入幂等的识别键：
+// importedFrom = 这条实体当初是从哪个分享码导入的（导入幂等的识别键：
 // 「收下这条提示词」反复点，同码只落一条）。只在 action 实体上合法。
-export const IMPORT_CODE_RE = /^[1-9][0-9]{6}$/;
+// 码长 4–16 位（铸码 4 位起步、占满升位，见 prompt-share.js），存量 7 位码兼容。
+export const IMPORT_CODE_RE = /^[1-9][0-9]{3,15}$/;
 const ENTITY_GROUP_KEYS = new Set(["id", "type", "label", "children", "forkedFrom"]);
 
 /// kind/imageParams 只在字段白名单里对 action 放行——但白名单只挡键名，不挡值，

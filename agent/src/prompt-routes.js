@@ -7,7 +7,7 @@
 // 写操作只有【整树 PUT】：新建/删除/改名/改词/排序/分组/fork 全走它。客户端本来就
 // 整棵树拿在手里，所以不存在局部更新竞态。
 import { loadPromptTemplate, templateIndex } from "./prompt-template.js";
-import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, preserveImportMarkers, MAX_LABEL, MAX_PROMPT } from "./prompts.js";
+import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, preserveImportMarkers, MAX_LABEL, MAX_PROMPT, IMPORT_CODE_RE } from "./prompts.js";
 import { loadUserPrompts, saveUserPrompts } from "./prompt-store.js";
 import { resolvePromptShare, refreshPromptShare, shareStates, rekeyForkedShares } from "./prompt-share.js";
 import { coreBumpImportCount } from "../../functions/lib/core-db.js";
@@ -229,7 +229,7 @@ export async function handlePromptImport(request, env, scope) {
   if (request.method !== "POST") return J({ error: "method not allowed" }, 405);
   const body = await request.json().catch(() => ({}));
   const code = String(body.code || "").trim();
-  if (!/^[1-9][0-9]{6}$/.test(code)) return J({ error: "expected {code}" }, 400);
+  if (!IMPORT_CODE_RE.test(code)) return J({ error: "expected {code}" }, 400);
 
   const hit = await resolvePromptShare(env, code);
   if (!hit) return J({ error: "not-found" }, 404);

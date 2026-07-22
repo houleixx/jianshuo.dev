@@ -1460,7 +1460,7 @@ describe("POST /agent/prompts/import — 魔法数字导入（4b）", () => {
     expect(stored.items).toHaveLength(1);
   });
 
-  it("PUT 整树带 importedFrom 通过校验；非法格式（非 7 位码）400", async () => {
+  it("PUT 整树带 importedFrom 通过校验；非法格式（非数字码）400", async () => {
     const env = fakeEnv();
     const ok = await PUT(env, [
       { id: "p_import01", type: "action", label: "x", prompt: "y",
