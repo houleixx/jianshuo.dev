@@ -223,7 +223,8 @@ export const TOOLS = [
     name: "prompt_share_status",
     description:
       "查我的提示词分享状态一览：哪些条目铸过码、码是多少、当前是否在分享中。" +
-      "返回 byItem：{<提示词id>: {code, sharing}}。没铸过码的条目不出现。",
+      "返回 byItem：{<提示词id>: {code, sharing, borrowed?}}。没铸过码的条目不出现。" +
+      "borrowed:true 表示这是导入件在转发原作者的码（不是我的自有码，关掉不会使码失效）。",
     inputSchema: obj({}),
     handler: (_a, { client }) => client.agent("GET", "prompt-shares"),
   },

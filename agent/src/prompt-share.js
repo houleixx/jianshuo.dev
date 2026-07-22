@@ -13,7 +13,7 @@
 import { verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../functions/lib/auth.js";
 import { checkArticlesShareable, loadShareBlocklist } from "../../functions/lib/moderation.js";
 import { loadPromptTemplate } from "./prompt-template.js";
-import { resolveList } from "./prompts.js";
+import { resolveList, truncateUtf16, MAX_PROMPT } from "./prompts.js";
 import { loadUserPrompts } from "./prompt-store.js";
 import { retractPromptPost, promptShareId } from "./prompt-community.js";
 import { promptPostTitle } from "../../functions/lib/community-store.js";
@@ -79,6 +79,33 @@ export async function mintCode(env, rand = randomCodeOfLength) {
 }
 
 const indexKey = (scope) => `${scope}prompt-shares.json`;
+
+/// R2 owner 索引读改写（mint / 转发落索引 / borrowed 关分享共用——同一段
+/// load→mutate→put 别再各抄一份）。失败记日志并返回 false，调用方决定要不要把
+/// 失败升级成报错（borrowed 的状态只活在索引里，那边必须升级；mint 有 D1 主路径
+/// 兜着，best-effort 即可）。
+async function mutateIndexR2(env, scope, mutate) {
+  try {
+    const r2idx = await loadIndexR2(env, scope);
+    mutate(r2idx);
+    await env.FILES.put(indexKey(scope), JSON.stringify(r2idx, null, 2));
+    return true;
+  } catch (e) { console.error("[prompt-share] r2 index write failed:", e && e.message); return false; }
+}
+
+/// 作者显示名（spec §8：读不到 → 空串，客户端靠空串隐藏「来自」行）。
+/// GET 预览与转发响应共用——fallback 策略只写这一处。
+async function shareAuthorName(env, sub) {
+  try { return (await readProfileName(env, `users/${sub}/`, { fallback: "none" })) || ""; } catch { return ""; }
+}
+
+/// 转发判定的「没改过」口径：与原文严格相等；或与按 MAX_PROMPT 截断后的原文相等
+/// ——超限原文（旧码/后台调高 maxLength 铸的）导入时被 truncateUtf16 截过一刀
+/// （prompt-routes.js），快照未动也该转发：码递出去的是原作者的全文，归属才正确。
+function matchesOrigin(originInstruction, leafInstruction) {
+  return originInstruction === leafInstruction ||
+    truncateUtf16(originInstruction, MAX_PROMPT) === leafInstruction;
+}
 
 // R2 版索引（迁移期兜底真源；存储迁移 P1 之前的唯一实现）。
 async function loadIndexR2(env, scope) {
@@ -166,9 +193,22 @@ export async function refreshPromptShare(env, scope, itemId) {
     const code = entry?.code;
     if (!code) return;
     // borrowed（溯源转发）条目：码属原作者，shares/<码> 是【原作者的】写穿副本——
-    // 导入者改自己的副本绝不能刷进去（否则等于改写别人的分享）。导入者改文后
-    // 的分享归属由下一次 POST 的转发判定重算（正文不再一致 → 铸自有码）。
-    if (entry.borrowed) return;
+    // 导入者改自己的副本绝不能刷进去（否则等于改写别人的分享）。进一步：改完之后
+    // 正文与原文不再一致 = 转发关系已失效，把 borrowed 条目撤掉，分享开关如实归零
+    //（否则分享卡一直显示「分享中·码 X」而码里是原作者的旧文，MCP「改了自动跟着
+    // 更新」的契约被静默打破）。读不清楚（存储抖动/坏文档）就不动，宁可保守。
+    if (entry.borrowed) {
+      const o = await env.FILES.get(`shares/${code}`);
+      if (!o) return; // 原分享已关：sharing 本来就显示 false
+      let originDoc = null;
+      try { originDoc = JSON.parse(await o.text()); } catch { return; }
+      if (!originDoc || originDoc.type !== "prompt" || typeof originDoc.instruction !== "string") return;
+      const leaf2 = await effectiveLeaf(env, scope, itemId);
+      if (leaf2 && matchesOrigin(originDoc.instruction, leaf2.instruction)) return; // 仍一致，转发关系保持
+      await coreDeletePromptShare(env, scope, itemId);
+      await mutateIndexR2(env, scope, (r2idx) => { delete r2idx.byItem[itemId]; });
+      return;
+    }
     const existing = await env.FILES.get(`shares/${code}`);
     if (!existing) return; // 已关闭
     let createdAt, importCount = 0;
@@ -330,8 +370,7 @@ async function handlePromptShareGet(url, env) {
   if (!m) return J({ error: "not-found" }, 404); // 非法格式（非 4–16 位/首位 0/非数字）
   const hit = await resolvePromptShare(env, m[1]);
   if (!hit) return J({ error: "not-found" }, 404);
-  let author = "";
-  try { author = await readProfileName(env, `users/${hit.sub}/`, { fallback: "none" }) || ""; } catch { /* 无名不影响预览 */ }
+  const author = await shareAuthorName(env, hit.sub);
   return J({
     label: hit.label, prompt: hit.instruction, appliesTo: hit.appliesTo,
     ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
@@ -366,13 +405,12 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
     const entry = byItem[itemId];
     // borrowed（转发原码）关分享：只删自己的索引条目——shares/<码> 是原作者的分享
     // 本体绝不能碰，也没有自己的帖可撤。删行后再开 = 重新走转发判定（spec §5）。
+    // 两路必须都删干净才算关掉：D1 残行会被「D1 优先」读复活；R2 残条目会在 D1
+    // 变空时被自愈回填复活。任何一路失败都如实报错让客户端重试，不谎报已关。
     if (entry && entry.borrowed) {
-      await coreDeletePromptShare(env, scope, itemId);
-      try {
-        const r2idx = await loadIndexR2(env, scope);
-        delete r2idx.byItem[itemId];
-        await env.FILES.put(indexKey(scope), JSON.stringify(r2idx, null, 2));
-      } catch (e) { console.error("[prompt-share] r2 index write failed:", e && e.message); }
+      const d1ok = await coreDeletePromptShare(env, scope, itemId);
+      const r2ok = await mutateIndexR2(env, scope, (r2idx) => { delete r2idx.byItem[itemId]; });
+      if (!d1ok || !r2ok) return J({ error: "try again" }, 500);
       return J({ ok: true, code: entry.code, sharing: false });
     }
     const code = entry?.code;
@@ -409,28 +447,45 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   const existing = idx.byItem[itemId];
 
   // 溯源转发（spec 2026-07-22-prompt-share-reshare-redirect）：还没有自有码（无 entry
-  // 或 entry 只是 borrowed）且条目是导入件 → 与原码活跃副本比 instruction 严格相等。
-  // 一致 = 同一作品：递原作者的码出去——不铸码、不写穿、不占日上限，索引记
-  // borrowed 条目（开关状态要能持久）。改过 / 原分享已关 → 掉下去走正常铸码，
-  // borrowed 条目被自有码替换。一旦铸过自有码，永远不再进这里（一辈子一个码）。
+  // 或 entry 只是 borrowed）且条目是导入件 → 与原码活跃副本比 instruction（口径见
+  // matchesOrigin）。一致 = 同一作品：递原作者的码出去——不铸码、不写穿、不占
+  // 日上限，索引记 borrowed 条目（开关状态要能持久）。改过 / 原分享已关 → 掉下去
+  // 走正常铸码，borrowed 条目被自有码替换。一旦铸过自有码，永远不再进这里
+  //（一辈子一个码）。
   const ownEntry = existing && !existing.borrowed ? existing : null;
   if (!ownEntry && leaf.importedFrom) {
-    const origin = await resolvePromptShare(env, leaf.importedFrom);
-    if (origin && origin.instruction === leaf.instruction) {
-      if (!existing || existing.code !== origin.code) {
+    // 原码副本自己读（不走 resolvePromptShare）：①转发决策用不到 importCount，
+    // 省一次 D1 读；②【瞬时存储错误必须与「查无」区分】——读失败就报错让客户端
+    // 重试，绝不能误判成「原分享已关」而铸出重复码：一旦铸了自有码就永远回不到
+    // 转发，归属错误会固化。
+    let originText = null;
+    try {
+      const o = await env.FILES.get(`shares/${leaf.importedFrom}`);
+      originText = o ? await o.text() : null;
+    } catch { return J({ error: "try again" }, 500); }
+    let origin = null;
+    if (originText !== null) {
+      try {
+        const doc = JSON.parse(originText);
+        if (doc && doc.type === "prompt" && typeof doc.instruction === "string") origin = doc;
+      } catch { /* 老式文章条目（纯文本 key）→ 不是提示词分享，当查无走铸码 */ }
+    }
+    if (origin && matchesOrigin(origin.instruction, leaf.instruction)) {
+      if (!existing) {
         const createdAt = new Date().toISOString();
-        idx.byItem[itemId] = { code: origin.code, createdAt, borrowed: true };
-        await coreUpsertPromptShare(env, scope, itemId, origin.code, createdAt, true);
-        try {
-          const r2idx = await loadIndexR2(env, scope);
-          r2idx.byItem[itemId] = { code: origin.code, createdAt, borrowed: true };
-          await env.FILES.put(indexKey(scope), JSON.stringify(r2idx, null, 2));
-        } catch (e) { console.error("[prompt-share] r2 index write failed:", e && e.message); }
+        const d1ok = await coreUpsertPromptShare(env, scope, itemId, leaf.importedFrom, createdAt, true);
+        const r2ok = await mutateIndexR2(env, scope, (r2idx) => {
+          r2idx.byItem[itemId] = { code: leaf.importedFrom, createdAt, borrowed: true };
+        });
+        // borrowed 分享唯一的记录就是索引条目——两路都没写成时不能谎报 sharing:true
+        //（客户端会显示已分享而实际无任何落盘，下次启动开关静默归零）。
+        if (!d1ok && !r2ok) return J({ error: "try again" }, 500);
       }
-      let author = "";
-      try { author = (await readProfileName(env, `users/${origin.sub}/`, { fallback: "none" })) || ""; } catch { /* 无名不影响转发 */ }
-      const communityShareId = await promptShareId(origin.code, env.SESSION_SECRET);
-      return J({ code: origin.code, url: `https://voicedrop.cn/${origin.code}`, created: false, sharing: true, original: true, author, communityShareId });
+      const [author, communityShareId] = await Promise.all([
+        shareAuthorName(env, origin.sub),
+        promptShareId(leaf.importedFrom, env.SESSION_SECRET),
+      ]);
+      return J({ code: leaf.importedFrom, url: `https://voicedrop.cn/${leaf.importedFrom}`, created: false, sharing: true, original: true, author, communityShareId });
     }
   }
 
@@ -442,7 +497,12 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
     const today = new Date().toISOString().slice(0, 10);
     let mintedToday = await coreMintedToday(env, scope, today);
     if (mintedToday === null) {
-      mintedToday = Array.isArray(idx.mintLog) ? idx.mintLog.filter((ts) => String(ts).slice(0, 10) === today).length : 0;
+      // D1 COUNT 瞬时失败时不能默认 0——idx 走的是 D1 路径时 mintLog 是 null
+      //（loadIndex 的形状），直接 0 等于把日上限白送。退一步读 R2 mintLog（铸码
+      // 双写，R2 也有账）；连它也读不到才 0（放行优于误伤）。
+      let log = idx.mintLog;
+      if (!Array.isArray(log)) { try { log = (await loadIndexR2(env, scope)).mintLog; } catch { log = null; } }
+      mintedToday = Array.isArray(log) ? log.filter((ts) => String(ts).slice(0, 10) === today).length : 0;
     }
     if (mintedToday >= cfg.dailyCapPerUser) return J({ error: "daily cap" }, 429);
     code = await mintCode(env);
@@ -453,12 +513,10 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
     // 索引落盘（存储迁移 P1）：D1 行是主路径；R2 索引照写兜底（读时自愈依赖它）。
     // R2 写失败不再阻断铸码——D1 已落行，码可用。
     await coreUpsertPromptShare(env, scope, itemId, code, createdAt);
-    try {
-      const r2idx = await loadIndexR2(env, scope);
+    await mutateIndexR2(env, scope, (r2idx) => {
       r2idx.byItem[itemId] = { code, createdAt };
       r2idx.mintLog.push(createdAt);
-      await env.FILES.put(indexKey(scope), JSON.stringify(r2idx, null, 2));
-    } catch (e) { console.error("[prompt-share] r2 index write failed:", e && e.message); }
+    });
   }
 
   // 幂等重开（sharing 已经是 true，这条 POST 只是重放）不能把 importCount 清零——
@@ -496,7 +554,12 @@ export async function shareStates(env, scope) {
   // 各条写 out 的不同 key，无竞态。
   await Promise.all(Object.entries(byItem).map(async ([itemId, entry]) => {
     if (!entry?.code || !CODE_RE.test(entry.code)) return;
-    out[itemId] = { shareCode: entry.code, sharing: !!(await env.FILES.head(`shares/${entry.code}`)) };
+    // borrowed 标记透传给客户端：这是「转发原作者的码」不是自有码——share 卡不该
+    // 用「关掉后码立即失效」的文案（DELETE 只撤自己的转发状态，码还活在原作者手里）。
+    out[itemId] = {
+      shareCode: entry.code, sharing: !!(await env.FILES.head(`shares/${entry.code}`)),
+      ...(entry.borrowed ? { borrowed: true } : {}),
+    };
   }));
   return out;
 }

@@ -609,18 +609,20 @@ async function handleRequest(context) {
     let promptCodes = 0;
     {
       // 码来源两处并集（存储迁移 P1 过渡期）：R2 索引 + D1 prompt_shares 行。
+      // borrowed 条目必须跳过（溯源转发 spec 2026-07-22）：那些 code 指向【原作者的】
+      // shares/<码>，销号删它等于毁掉别人的活跃分享。
       const codes = new Set();
       try {
         const obj = await env.FILES.get(`${scope}prompt-shares.json`);
         if (obj) {
           const idx = JSON.parse(await obj.text());
           const byItem = idx && typeof idx.byItem === 'object' && idx.byItem ? idx.byItem : {};
-          for (const entry of Object.values(byItem)) if (entry && entry.code) codes.add(String(entry.code));
+          for (const entry of Object.values(byItem)) if (entry && entry.code && !entry.borrowed) codes.add(String(entry.code));
         }
       } catch {}
       try {
         const d1 = await coreLoadPromptShares(env, scope);
-        if (d1) for (const entry of Object.values(d1.byItem)) if (entry && entry.code) codes.add(String(entry.code));
+        if (d1) for (const entry of Object.values(d1.byItem)) if (entry && entry.code && !entry.borrowed) codes.add(String(entry.code));
       } catch {}
       await mapLimit([...codes], 16, async (code) => {
         await env.FILES.delete(`shares/${code}`).catch(() => {});

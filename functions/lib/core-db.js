@@ -161,14 +161,30 @@ export async function coreUpsertPromptShare(env, scope, itemId, code, createdAt,
       "ON CONFLICT(user_sub, item_id) DO UPDATE SET code=excluded.code, created_at=excluded.created_at, borrowed=excluded.borrowed"
     ).bind(scope, itemId, String(code), createdAt, borrowed ? 1 : 0).run();
     return true;
-  } catch (e) { console.error("[core-db] upsertPromptShare:", e && e.message); return false; }
+  } catch (e) {
+    // borrowed 列不存在（migration 0004 未应用的环境/回滚）：自有码退回老 4 列写法
+    // ——铸的码绝不能只落 R2（迁移补上后 D1 优先读会遮蔽 R2 条目 → 同一条目二次
+    // 铸码）。borrowed 行没列可表达，只能 false 交给调用方的 R2 路兜底。
+    if (/no such column|has no column named/i.test((e && e.message) || "") && !borrowed) {
+      try {
+        await d.prepare(
+          "INSERT INTO prompt_shares (user_sub, item_id, code, created_at) VALUES (?,?,?,?) " +
+          "ON CONFLICT(user_sub, item_id) DO UPDATE SET code=excluded.code, created_at=excluded.created_at"
+        ).bind(scope, itemId, String(code), createdAt).run();
+        return true;
+      } catch (e2) { console.error("[core-db] upsertPromptShare legacy:", e2 && e2.message); return false; }
+    }
+    console.error("[core-db] upsertPromptShare:", e && e.message);
+    return false;
+  }
 }
 
 /// borrowed 条目关分享 = 删行（自有码关分享不删行——索引保留、同码复活，是另一条路；
-/// spec 2026-07-22 溯源转发 §5）。
+/// spec 2026-07-22 溯源转发 §5）。没配 D1 → 没有行可删 = 成功（调用方把 false 当
+/// 「没删干净、须重试」处理，R2-only 部署不能因此永远 500）。
 export async function coreDeletePromptShare(env, scope, itemId) {
   const d = db(env);
-  if (!d) return false;
+  if (!d) return true;
   try {
     await d.prepare("DELETE FROM prompt_shares WHERE user_sub=? AND item_id=?").bind(scope, itemId).run();
     return true;
@@ -521,7 +537,10 @@ export async function coreDeleteUserData(env, scope) {
   const d = db(env);
   if (!d) return;
   try {
-    const codes = await d.prepare("SELECT code FROM prompt_shares WHERE user_sub=?").bind(scope).all();
+    // share_stats 只清自有码：borrowed 行的 code 属原作者，删了会把人家的
+    // importCount 权威计数清零（溯源转发 spec 2026-07-22）。prompt_shares 行本身
+    // 按 user_sub 全删（含 borrowed 行——那只是本人的转发开关状态）。
+    const codes = await d.prepare("SELECT code FROM prompt_shares WHERE user_sub=? AND borrowed=0").bind(scope).all();
     const stmts = [
       d.prepare("DELETE FROM prompt_shares WHERE user_sub=?").bind(scope),
       d.prepare("DELETE FROM invites WHERE owner=?").bind(scope),

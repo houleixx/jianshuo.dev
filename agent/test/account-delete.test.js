@@ -98,6 +98,32 @@ describe("POST account/delete", () => {
     expect(left).toContain("users/other/prompt-shares.json");    // other user's index untouched
   });
 
+  // 溯源转发（spec 2026-07-22）：borrowed 条目的 code 指向【原作者的】shares/<码>，
+  // 销号收集码时必须跳过——否则导入者销号会毁掉原作者的活跃分享。
+  it("skips borrowed entries: 销号不删原作者的 shares/<码>", async () => {
+    const scope = await anonScope();
+    const seed = {
+      [`${scope}ACCOUNT.json`]: JSON.stringify({}),
+      [`${scope}prompt-shares.json`]: JSON.stringify({
+        byItem: {
+          p_own: { code: "1112223", createdAt: "2026-07-01T00:00:00Z" },
+          p_imp: { code: "4563", createdAt: "2026-07-22T00:00:00Z", borrowed: true },
+        },
+        mintLog: [],
+      }),
+      "shares/1112223": JSON.stringify({ type: "prompt", sub: "x", label: "自有", instruction: "我的正文" }),
+      // borrowed 指向的原作者副本必须幸存
+      "shares/4563": JSON.stringify({ type: "prompt", sub: "origin-author", label: "原作者的", instruction: "原作者正文" }),
+    };
+    const context = ctx("POST", ["account", "delete"], { token: ANON, seed });
+    const resp = await onRequest(context);
+    expect(resp.status).toBe(200);
+    expect((await resp.json()).deleted.promptCodes).toBe(1);     // 只清了自有码
+    const left = [...context.env.FILES._store.keys()];
+    expect(left).not.toContain("shares/1112223");
+    expect(left).toContain("shares/4563");                       // 原作者的分享无恙
+  });
+
   it("works for a user with no Apple binding and no community activity", async () => {
     const scope = await anonScope();
     const seed = { [`${scope}VoiceDrop-b.m4a`]: "audio" };

@@ -102,6 +102,15 @@ export function resolveList(template, userDoc) {
 export const MAX_ITEMS = 200;
 export const MAX_LABEL = 40;
 export const MAX_PROMPT = 4000;
+
+/// UTF-16 安全截断（导入落库 & 转发判定共用）：截完多看一步，孤立的高位代理整个
+/// 丢掉（不补半个回来会超上限，留着半个是 mojibake，两头都不对，唯一选择是丢）。
+export function truncateUtf16(s, max) {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const last = cut.charCodeAt(cut.length - 1);
+  return (last >= 0xD800 && last <= 0xDBFF) ? cut.slice(0, -1) : cut;
+}
 export const MAX_KIND = 24;
 export const MAX_IMAGE_PARAMS_KEYS = 8;
 export const MAX_IMAGE_PARAM_VALUE = 40;

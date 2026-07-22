@@ -2,8 +2,10 @@
 // spec：voicedrop repo docs/superpowers/specs/2026-07-22-prompt-share-reshare-redirect-design.md
 import { vi, describe, it, expect } from "vitest";
 vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { fakeEnv, fakeD1, coreSql } from "./fakes.js";
-import { coreLoadPromptShares, coreUpsertPromptShare, coreDeletePromptShare, coreMintedToday } from "../../functions/lib/core-db.js";
+import { coreLoadPromptShares, coreUpsertPromptShare, coreDeletePromptShare, coreMintedToday, coreDeleteUserData } from "../../functions/lib/core-db.js";
 import { hmacSign, b64url } from "../../functions/lib/auth.js";
 import { handlePromptShareRoutes, shareStates } from "../src/prompt-share.js";
 import { handlePromptMarket } from "../src/prompt-market.js";
@@ -199,10 +201,10 @@ describe("溯源转发（POST）", () => {
     await putTree(e, [{ ...cleanImport, id: "p_imp003" }]);
     await share(e, "p_imp003");
     let st = await shareStates(e, IMPORTER);
-    expect(st.p_imp003).toEqual({ shareCode: ORIGIN_CODE, sharing: true });
+    expect(st.p_imp003).toEqual({ shareCode: ORIGIN_CODE, sharing: true, borrowed: true });
     e.FILES._store.delete(`shares/${ORIGIN_CODE}`);   // 原作者关分享
     st = await shareStates(e, IMPORTER);
-    expect(st.p_imp003).toEqual({ shareCode: ORIGIN_CODE, sharing: false });
+    expect(st.p_imp003).toEqual({ shareCode: ORIGIN_CODE, sharing: false, borrowed: true });
   });
   it("带 CORE 时 borrowed 行落 D1 且不占 coreMintedToday", async () => {
     const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
@@ -213,6 +215,120 @@ describe("溯源转发（POST）", () => {
     expect(byItem.p_imp002).toMatchObject({ code: ORIGIN_CODE, borrowed: true });
     const today = new Date().toISOString().slice(0, 10);
     expect(await coreMintedToday(e, IMPORTER, today)).toBe(0);
+  });
+});
+
+describe("review 修复（2026-07-22 code-review）", () => {
+  const cleanImport = { id: "p_imp004", type: "action", label: "更毒舌", prompt: "把它改得更毒舌，观点不变。", appliesTo: ["text"], importedFrom: ORIGIN_CODE };
+  const legacyCoreSql = () => ["0001_core.sql", "0002_articles_recordings.sql", "0003_identity_push_reports.sql"]
+    .map((n) => readFileSync(fileURLToPath(new URL("../migrations-core/" + n, import.meta.url)), "utf8")).join("\n");
+
+  it("V1: coreDeleteUserData 不清 borrowed 码的 share_stats（那是原作者的计数）", async () => {
+    const e = env2(); e.CORE = fakeD1(coreSql());
+    const ins = (sub, item, code, borrowed) =>
+      e.CORE.prepare("INSERT INTO prompt_shares (user_sub, item_id, code, created_at, borrowed) VALUES (?,?,?,?,?)")
+        .bind(sub, item, code, "2026-07-22T00:00:00.000Z", borrowed).run();
+    ins(IMPORTER, "p_own01", "7654", 0);
+    ins(IMPORTER, "p_imp004", ORIGIN_CODE, 1);
+    e.CORE.prepare("INSERT INTO share_stats (code, import_count, updated_at) VALUES (?,?,?)").bind(ORIGIN_CODE, 9, 0).run();
+    e.CORE.prepare("INSERT INTO share_stats (code, import_count, updated_at) VALUES (?,?,?)").bind("7654", 3, 0).run();
+    await coreDeleteUserData(e, IMPORTER);
+    expect(e.CORE.prepare("SELECT import_count AS n FROM share_stats WHERE code=?").bind(ORIGIN_CODE).first("n")).toBe(9); // 原作者计数健在
+    expect(e.CORE.prepare("SELECT COUNT(*) AS n FROM share_stats WHERE code=?").bind("7654").first("n")).toBe(0);          // 自有码计数清掉
+    expect(e.CORE.prepare("SELECT COUNT(*) AS n FROM prompt_shares WHERE user_sub=?").bind(IMPORTER).first("n")).toBe(0);  // 本人行全删
+  });
+
+  it("V2: DELETE borrowed 时 D1 删行失败 → 500，不谎报已关", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    e.CORE = fakeD1(coreSql());
+    await putTree(e, [cleanImport]);
+    await share(e, "p_imp004");
+    const rawPrepare = e.CORE.prepare.bind(e.CORE);
+    e.CORE.prepare = (sql) => { if (/DELETE FROM prompt_shares WHERE user_sub=\? AND item_id=\?/.test(sql)) throw new Error("d1 boom"); return rawPrepare(sql); };
+    expect((await unshare(e, "p_imp004")).status).toBe(500);
+    e.CORE.prepare = rawPrepare;
+    expect((await unshare(e, "p_imp004")).status).toBe(200); // 恢复后重试成功
+  });
+
+  it("V3: 转发落索引两路全失败 → 500，不返回假 sharing:true", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() }); // 无 CORE：D1 路必 false
+    await putTree(e, [cleanImport]);
+    const rawPut = e.FILES.put.bind(e.FILES);
+    e.FILES.put = async (k, v) => { if (String(k).endsWith("prompt-shares.json")) throw new Error("r2 boom"); return rawPut(k, v); };
+    expect((await share(e, "p_imp004")).status).toBe(500);
+    e.FILES.put = rawPut;
+    const j = await (await share(e, "p_imp004")).json(); // 恢复后转发成功
+    expect(j.code).toBe(ORIGIN_CODE);
+  });
+
+  it("V4: 读原码副本时 R2 抛错 → 500 重试，不误判「已关」铸新码", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [cleanImport]);
+    const rawGet = e.FILES.get.bind(e.FILES);
+    e.FILES.get = async (k) => { if (k === `shares/${ORIGIN_CODE}`) throw new Error("r2 blip"); return rawGet(k); };
+    expect((await share(e, "p_imp004")).status).toBe(500);
+    e.FILES.get = rawGet;
+    const j = await (await share(e, "p_imp004")).json();
+    expect(j.code).toBe(ORIGIN_CODE); // 抖动过后仍是转发，归属没有被固化成自有码
+    expect(j.original).toBe(true);
+  });
+
+  it("V5: 导入者改文保存 → 保存同步撤掉 borrowed 条目（开关如实归零）", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [cleanImport]);
+    await share(e, "p_imp004");
+    await putTree(e, [{ ...cleanImport, prompt: "我自己改过的版本。" }]);
+    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    expect(idx.byItem.p_imp004).toBeUndefined();                       // 转发关系失效即撤
+    expect(await shareStates(e, IMPORTER)).toEqual({});                // 分享卡不再显示分享中
+    expect(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).toBeTruthy();  // 原作者分享无恙
+  });
+
+  it("V5: 只改名不改正文 → borrowed 条目保持", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [cleanImport]);
+    await share(e, "p_imp004");
+    await putTree(e, [{ ...cleanImport, label: "新名字" }]);
+    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    expect(idx.byItem.p_imp004).toMatchObject({ code: ORIGIN_CODE, borrowed: true });
+  });
+
+  it("V7: 超限原文的截断导入件未改动 → 仍转发原码", async () => {
+    const longText = "毒".repeat(4500);
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc({ instruction: longText }) });
+    await putTree(e, [{ ...cleanImport, prompt: "毒".repeat(4000) }]); // 导入截断后的快照
+    const j = await (await share(e, "p_imp004")).json();
+    expect(j.code).toBe(ORIGIN_CODE);
+    expect(j.original).toBe(true);
+  });
+
+  it("V8: D1 COUNT 瞬时失败且 idx 来自 D1 → 回退数 R2 mintLog，日上限仍生效", async () => {
+    const today = new Date().toISOString();
+    const e = env2({
+      "config/prompt-share.json": JSON.stringify({ dailyCapPerUser: 1 }),
+      [`${IMPORTER}prompt-shares.json`]: JSON.stringify({ byItem: { p_other9: { code: "9871", createdAt: today } }, mintLog: [today] }),
+    });
+    e.CORE = fakeD1(coreSql());
+    e.CORE.prepare("INSERT INTO prompt_shares (user_sub, item_id, code, created_at, borrowed) VALUES (?,?,?,?,?)")
+      .bind(IMPORTER, "p_other9", "9871", today, 0).run();
+    const rawPrepare = e.CORE.prepare.bind(e.CORE);
+    e.CORE.prepare = (sql) => { if (/COUNT\(\*\)/.test(sql) && /created_at LIKE/.test(sql)) throw new Error("d1 count boom"); return rawPrepare(sql); };
+    await putTree(e, [{ id: "p_fresh01", type: "action", label: "新条目", prompt: "全新正文。", appliesTo: ["text"] }]);
+    expect((await share(e, "p_fresh01")).status).toBe(429); // 修复前这里会放行铸码
+  });
+
+  it("V6: 无 borrowed 列的旧库 → market 退回老 SQL 不 500；upsert 自有码退回 4 列写法", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    e.CORE = fakeD1(legacyCoreSql());
+    e.CORE.prepare("INSERT INTO prompt_shares (user_sub, item_id, code, created_at) VALUES (?,?,?,?)")
+      .bind("users/other-author/", "p_origin1", ORIGIN_CODE, "2026-07-22T00:00:00.000Z").run();
+    const req = new Request("https://jianshuo.dev/agent/prompt-market", { headers: { Authorization: `Bearer ${await tok(IMPORTER)}` } });
+    const r = await handlePromptMarket(new URL(req.url), req, e);
+    expect(r.status).toBe(200);
+    expect((await r.json()).items.some((i) => i.code === ORIGIN_CODE)).toBe(true);
+    expect(await coreUpsertPromptShare(e, IMPORTER, "p_own02", "7654", "2026-07-22T01:00:00.000Z")).toBe(true);
+    expect(e.CORE.prepare("SELECT code FROM prompt_shares WHERE user_sub=? AND item_id=?").bind(IMPORTER, "p_own02").first("code")).toBe("7654");
+    expect(await coreUpsertPromptShare(e, IMPORTER, "p_imp004", ORIGIN_CODE, "2026-07-22T01:00:00.000Z", true)).toBe(false); // borrowed 没列可表达
   });
 });
 

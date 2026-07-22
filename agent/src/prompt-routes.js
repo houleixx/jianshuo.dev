@@ -7,7 +7,7 @@
 // 写操作只有【整树 PUT】：新建/删除/改名/改词/排序/分组/fork 全走它。客户端本来就
 // 整棵树拿在手里，所以不存在局部更新竞态。
 import { loadPromptTemplate, templateIndex } from "./prompt-template.js";
-import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, preserveImportMarkers, MAX_LABEL, MAX_PROMPT, IMPORT_CODE_RE } from "./prompts.js";
+import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, preserveImportMarkers, MAX_LABEL, MAX_PROMPT, IMPORT_CODE_RE, truncateUtf16 } from "./prompts.js";
 import { loadUserPrompts, saveUserPrompts } from "./prompt-store.js";
 import { resolvePromptShare, refreshPromptShare, shareStates, rekeyForkedShares } from "./prompt-share.js";
 import { coreBumpImportCount } from "../../functions/lib/core-db.js";
@@ -180,14 +180,8 @@ function freshUserId(usedIds) {
 /// 数 code point 再截：那样会吐出一份自己都过不了 validateList 上限检查的字符串。
 /// 唯一的陷阱：截断点如果正好落在一个代理对（surrogate pair，如 emoji）中间，
 /// 会切出一个孤立的高位代理（\uD800-\uDBFF），下游拿去用会变成半个字符的乱码——
-/// 截完之后多看一步，孤立的高位代理整个丢掉（不补半个回来会超上限，留着半个是
-/// mojibake，两头都不对，唯一选择是丢）。
-function truncateUtf16(s, max) {
-  if (s.length <= max) return s;
-  const cut = s.slice(0, max);
-  const last = cut.charCodeAt(cut.length - 1);
-  return (last >= 0xD800 && last <= 0xDBFF) ? cut.slice(0, -1) : cut;
-}
+/// truncateUtf16 已上移到 prompts.js（转发判定也要用，且这里 import prompt-share
+/// 会成环）——本文件经上面的 import 使用。
 
 /// 顶层同名分组查找（导入落位用）：ref 组按模板解析出的 label 比、实体组按自己的
 /// label 比，都 trim 后精确匹配。只认顶层（两级封顶，组进不了组）、只认 group——

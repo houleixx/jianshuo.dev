@@ -56,12 +56,21 @@ export async function handlePromptMarket(url, request, env) {
     // 候选码：全部铸过的码（含已关的——下面 R2 命中过滤掉），带 importCount。
     // borrowed 行是导入件的转发状态不是作品——同码的作品行在原作者名下，
     // 不排除会同码重复展示（spec 2026-07-22 溯源转发 §6）。
-    const rows = (await env.CORE.prepare(
+    const marketSql = (withBorrowed) =>
       "SELECT ps.code, ps.user_sub, ps.created_at, COALESCE(ss.import_count, 0) AS imports " +
       "FROM prompt_shares ps LEFT JOIN share_stats ss ON ss.code = ps.code " +
-      "WHERE COALESCE(ps.borrowed, 0) = 0 " +
-      "ORDER BY ps.created_at DESC LIMIT 500"
-    ).all()).results || [];
+      (withBorrowed ? "WHERE ps.borrowed = 0 " : "") +
+      "ORDER BY ps.created_at DESC LIMIT 500";
+    let rowsRes;
+    try {
+      rowsRes = await env.CORE.prepare(marketSql(true)).all();
+    } catch (e) {
+      // borrowed 列不存在（回滚 Worker 之外单独缺了 migration 0004 的环境）——
+      // 退回老 SQL 保端点可用，代价只是 borrowed 行短暂重复展示，好过全员 500。
+      if (!/no such column|has no column named/i.test((e && e.message) || "")) throw e;
+      rowsRes = await env.CORE.prepare(marketSql(false)).all();
+    }
+    const rows = rowsRes.results || [];
 
     const now = Date.now();
     // 活码 + 内容：读写穿副本（副本在 = 分享中；label/appliesTo/kind 都在副本里）。

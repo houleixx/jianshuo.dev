@@ -1090,7 +1090,11 @@ export default {
       if (request.method !== "GET") return J({ error: "method not allowed" }, 405);
       const states = await shareStates(env, scope);
       const byItem = {};
-      for (const [itemId, s] of Object.entries(states)) byItem[itemId] = { code: s.shareCode, sharing: s.sharing };
+      // borrowed（溯源转发）标记原样透传：客户端据此区分「自有码」与「转发原作者的码」
+      //（后者关掉不使码失效）。老客户端不认识该字段，多余键无害。
+      for (const [itemId, s] of Object.entries(states)) {
+        byItem[itemId] = { code: s.shareCode, sharing: s.sharing, ...(s.borrowed ? { borrowed: true } : {}) };
+      }
       return J({ byItem });
     }
 
