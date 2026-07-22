@@ -344,6 +344,12 @@ export class LibraryAgent extends Agent {
     try { this.sql`ALTER TABLE history ADD COLUMN reply TEXT`; } catch (_) {}
     this.sql([QUEUE_TABLE_SQL]); // CREATE TABLE IF NOT EXISTS queue (...)
     try { this.sql`ALTER TABLE queue ADD COLUMN article_index INTEGER`; } catch (_) {}
+    // anchor/item_id 与 ArticleEditor 同款迁移——共享的 ArticleQueue INSERT 写这两列，
+    // 老 LibraryAgent DO 的表没有它们就会 SQLITE_ERROR「no column named anchor」，
+    // 长按语音指令入队即失败（2026-07-22 线上事故：锚点/item_id 改造只迁了
+    // ArticleEditor，漏了这里）。
+    try { this.sql`ALTER TABLE queue ADD COLUMN anchor TEXT`; } catch (_) {}
+    try { this.sql`ALTER TABLE queue ADD COLUMN item_id TEXT`; } catch (_) {}
     // Recover after hibernation/eviction: reset any leftover 'running' row and
     // drain whatever is pending — even with no client connected.
     if (this._queue.recover()) this.schedule(0, "drainQueue");
