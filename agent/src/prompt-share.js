@@ -363,7 +363,19 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   if (isDelete) {
     const itemId = decodeURIComponent(url.pathname.slice("/agent/prompt-share/".length));
     const { byItem } = await loadIndex(env, scope);
-    const code = byItem[itemId]?.code;
+    const entry = byItem[itemId];
+    // borrowed（转发原码）关分享：只删自己的索引条目——shares/<码> 是原作者的分享
+    // 本体绝不能碰，也没有自己的帖可撤。删行后再开 = 重新走转发判定（spec §5）。
+    if (entry && entry.borrowed) {
+      await coreDeletePromptShare(env, scope, itemId);
+      try {
+        const r2idx = await loadIndexR2(env, scope);
+        delete r2idx.byItem[itemId];
+        await env.FILES.put(indexKey(scope), JSON.stringify(r2idx, null, 2));
+      } catch (e) { console.error("[prompt-share] r2 index write failed:", e && e.message); }
+      return J({ ok: true, code: entry.code, sharing: false });
+    }
+    const code = entry?.code;
     if (code) {
       // 删 shares/<码> 必须同步（码失效立即生效）；撤帖 best-effort 挪后台，
       // 失败由 get/reconcile 自愈兜底。

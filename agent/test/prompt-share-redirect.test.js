@@ -171,6 +171,39 @@ describe("溯源转发（POST）", () => {
     expect(idx.byItem.p_imp002.borrowed).toBeUndefined();
     expect(JSON.parse(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).sub).toBe("other-author"); // 原副本始终没动
   });
+  it("DELETE borrowed → 原作者副本完好；自己索引 entry 消失；再 POST 重新转发", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [{ ...cleanImport, id: "p_imp003" }]);
+    await share(e, "p_imp003");
+    const r = await unshare(e, "p_imp003");
+    const j = await r.json();
+    expect(j.sharing).toBe(false);
+    expect(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).toBeTruthy();   // 原作者分享没被删
+    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    expect(idx.byItem.p_imp003).toBeUndefined();
+    const j2 = await (await share(e, "p_imp003")).json();               // 再开 → 重新转发
+    expect(j2.code).toBe(ORIGIN_CODE);
+    expect(j2.original).toBe(true);
+  });
+  it("DELETE borrowed 连 D1 行一起删", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    e.CORE = fakeD1(coreSql());
+    await putTree(e, [{ ...cleanImport, id: "p_imp003" }]);
+    await share(e, "p_imp003");
+    await unshare(e, "p_imp003");
+    const { byItem } = await coreLoadPromptShares(e, IMPORTER);
+    expect(byItem.p_imp003).toBeUndefined();
+  });
+  it("shareStates：borrowed 条目 sharing 随 shares/<原码> 存活联动", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [{ ...cleanImport, id: "p_imp003" }]);
+    await share(e, "p_imp003");
+    let st = await shareStates(e, IMPORTER);
+    expect(st.p_imp003).toEqual({ shareCode: ORIGIN_CODE, sharing: true });
+    e.FILES._store.delete(`shares/${ORIGIN_CODE}`);   // 原作者关分享
+    st = await shareStates(e, IMPORTER);
+    expect(st.p_imp003).toEqual({ shareCode: ORIGIN_CODE, sharing: false });
+  });
   it("带 CORE 时 borrowed 行落 D1 且不占 coreMintedToday", async () => {
     const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
     e.CORE = fakeD1(coreSql());
