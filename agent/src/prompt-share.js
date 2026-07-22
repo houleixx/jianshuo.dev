@@ -134,6 +134,9 @@ async function effectiveLeaf(env, scope, itemId) {
     label: hit.label, instruction: hit.prompt,
     appliesTo: hit.appliesTo,
     ...(hit.kind !== undefined ? { kind: hit.kind } : {}),
+    // importedFrom 只给转发判定用（POST 铸码前比对原码副本）；sharedDocFor 按字段
+    // 挑选写穿，这个字段不会进 shares/<码>。
+    ...(typeof hit.importedFrom === "string" && hit.importedFrom ? { importedFrom: hit.importedFrom } : {}),
     ...(entry.groupPath?.length ? { groupPath: entry.groupPath } : {}),
   };
 }

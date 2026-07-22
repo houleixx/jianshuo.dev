@@ -4,6 +4,50 @@ import { vi, describe, it, expect } from "vitest";
 vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
 import { fakeEnv, fakeD1, coreSql } from "./fakes.js";
 import { coreLoadPromptShares, coreUpsertPromptShare, coreDeletePromptShare, coreMintedToday } from "../../functions/lib/core-db.js";
+import { hmacSign, b64url } from "../../functions/lib/auth.js";
+import { handlePromptShareRoutes, shareStates } from "../src/prompt-share.js";
+import { handlePromptMarket } from "../src/prompt-market.js";
+import worker from "../src/index.js";
+
+const SECRET = "test-secret";
+async function tok(scope) {
+  const h = b64url(JSON.stringify({ alg: "HS256" }));
+  const p = b64url(JSON.stringify({ scope, apple: true }));
+  return `${h}.${p}.${await hmacSign(`${h}.${p}`, SECRET)}`;
+}
+const IMPORTER = "users/anon-importer1/";
+function env2(seed = {}) { const e = fakeEnv(seed); e.SESSION_SECRET = SECRET; return e; }
+// 原作者 other-author 的活跃分享副本（写穿格式，与 prompt-share.js sharedDocFor 对齐）
+const ORIGIN_CODE = "4563";
+const originDoc = (over = {}) => JSON.stringify({
+  type: "prompt", sub: "other-author", itemId: "p_origin1",
+  label: "更毒舌", instruction: "把它改得更毒舌，观点不变。", appliesTo: ["text"],
+  importCount: 5, createdAt: "2026-07-20T00:00:00.000Z", updatedAt: "2026-07-20T00:00:00.000Z", ...over,
+});
+async function putTree(e, items) {
+  const req = new Request("https://jianshuo.dev/agent/prompts", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${await tok(IMPORTER)}`, "content-type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  return worker.fetch(req, e);
+}
+async function share(e, id) {
+  const req = new Request("https://jianshuo.dev/agent/prompt-share", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${await tok(IMPORTER)}` },
+    body: JSON.stringify({ id }),
+  });
+  return handlePromptShareRoutes(new URL(req.url), req, e);
+}
+async function unshare(e, id) {
+  const req = new Request(`https://jianshuo.dev/agent/prompt-share/${encodeURIComponent(id)}`, {
+    method: "DELETE", headers: { Authorization: `Bearer ${await tok(IMPORTER)}` },
+  });
+  return handlePromptShareRoutes(new URL(req.url), req, e);
+}
+// 导入件（改过正文版）：importedFrom 在、正文与 originDoc 不同
+const editedImport = { id: "p_imp001", type: "action", label: "更毒舌", prompt: "改得更毒舌，再加点阴阳怪气。", appliesTo: ["text"], importedFrom: ORIGIN_CODE };
 
 describe("migration 0004: prompt_shares.borrowed", () => {
   it("borrowed 行可与原作者行同码共存；自有码（borrowed=0）唯一性保持", () => {
@@ -48,5 +92,20 @@ describe("core-db borrowed 读写", () => {
     await coreUpsertPromptShare(e, "users/b/", "p_1", "4563", `${today}T00:00:00.000Z`, true);
     await coreUpsertPromptShare(e, "users/b/", "p_2", "7654", `${today}T00:00:00.000Z`);
     expect(await coreMintedToday(e, "users/b/", today)).toBe(1);
+  });
+});
+
+describe("effectiveLeaf importedFrom 透传", () => {
+  it("改过正文的导入件分享 → 铸自有码；写穿副本无 importedFrom 字段", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
+    await putTree(e, [editedImport]);
+    const r = await share(e, "p_imp001");
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.code).not.toBe(ORIGIN_CODE);
+    expect(j.original).toBeUndefined();
+    const doc = JSON.parse(e.FILES._store.get(`shares/${j.code}`));
+    expect(doc.sub).toBe("anon-importer1");
+    expect(doc.importedFrom).toBeUndefined();
   });
 });
