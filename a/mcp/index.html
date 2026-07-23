@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="MCP 可视化调试器 — 连上任意 MCP 端点，把 initialize / tools/list / tools/call 的每一次 JSON-RPC 往返画成时序图，点开看原始报文。">
+<title>MCP 调试器 · 把协议对话画出来</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔬</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --paper:#fafbfd;
+  --grid:#e7edf5;
+  --ink:#1c2940;
+  --soft:#68788f;
+  --line:#d7dfea;
+  --card:#ffffff;
+  --client:#2563eb;      /* 客户端 → 服务器 */
+  --client-soft:#eaf0fe;
+  --server:#0d9488;      /* 服务器 → 客户端 */
+  --server-soft:#e4f5f2;
+  --err:#dc2626;
+  --err-soft:#fdeaea;
+  --note:#b45309;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --disp:'Space Grotesk','PingFang SC','Microsoft YaHei',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:24px 24px;
+  color:var(--ink);
+  font-family:var(--disp);
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+.wrap{max-width:1280px;margin:0 auto;padding:28px 24px 90px}
+
+/* ── header ── */
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+header h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
+header h1 .tag{color:var(--client)}
+header .sub{color:var(--soft);font-size:.88rem;font-weight:500}
+header .back{margin-left:auto;font-size:.82rem;font-weight:600;color:var(--soft);text-decoration:none;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card)}
+header .back:hover{color:var(--ink)}
+.lede{color:var(--soft);font-size:.9rem;line-height:1.6;margin:8px 0 20px;max-width:760px}
+.lede b{color:var(--ink);font-weight:600}
+
+/* ── connect bar ── */
+.connectbar{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 6px 24px rgba(28,41,64,.06)}
+.connectbar .field{display:flex;flex-direction:column;gap:4px;flex:1 1 260px}
+.connectbar .field.token{flex:0 1 300px}
+.connectbar label{font-size:.72rem;font-weight:600;color:var(--soft);letter-spacing:.02em}
+.connectbar input{font-family:var(--mono);font-size:.85rem;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fcfdff;color:var(--ink);outline:none;width:100%}
+.connectbar input:focus{border-color:var(--client);box-shadow:0 0 0 3px var(--client-soft)}
+.connectbar .btns{display:flex;align-items:flex-end;gap:8px}
+button{font-family:var(--disp);cursor:pointer;border:none;border-radius:10px;font-weight:600}
+.btn-primary{background:var(--client);color:#fff;font-size:.9rem;padding:10px 22px;box-shadow:0 4px 14px rgba(37,99,235,.3);transition:transform .15s}
+.btn-primary:hover{transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.5;cursor:wait;transform:none}
+.btn-ghost{background:transparent;color:var(--soft);font-size:.82rem;padding:10px 14px;border:1px solid var(--line)}
+.btn-ghost:hover{color:var(--ink);background:#f4f7fb}
+.hint{font-size:.74rem;color:var(--soft);margin-top:8px}
+.hint code{font-family:var(--mono);background:#eef2f8;padding:1px 5px;border-radius:5px}
+
+/* ── layout ── */
+.stage{display:grid;grid-template-columns:290px minmax(0,1fr) 400px;gap:16px;margin-top:18px;align-items:start}
+@media(max-width:1120px){.stage{grid-template-columns:260px minmax(0,1fr)}.detail{grid-column:1/-1}}
+@media(max-width:760px){.stage{grid-template-columns:1fr}.tools{max-height:none}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 24px rgba(28,41,64,.05);overflow:hidden}
+.panel h2{font-size:.8rem;font-weight:700;letter-spacing:.04em;color:var(--soft);padding:13px 16px 11px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.panel h2 .count{margin-left:auto;font-family:var(--mono);font-size:.72rem;font-weight:500;background:#eef2f8;border-radius:999px;padding:2px 9px;color:var(--soft)}
+
+/* ── tools panel ── */
+.tools{position:sticky;top:16px;max-height:calc(100vh - 32px);display:flex;flex-direction:column}
+.toollist{overflow-y:auto;flex:1;padding:6px}
+.toollist .empty{padding:26px 18px;font-size:.82rem;color:var(--soft);line-height:1.7}
+.tool{width:100%;text-align:left;background:transparent;padding:8px 11px;border-radius:10px;display:block}
+.tool:hover{background:#f4f7fb}
+.tool.on{background:var(--client-soft)}
+.tool .tname{font-family:var(--mono);font-size:.8rem;font-weight:600;color:var(--ink)}
+.tool.on .tname{color:var(--client)}
+.tool .tdesc{font-size:.72rem;color:var(--soft);line-height:1.45;margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* tool form */
+.toolform{border-top:1px solid var(--line);padding:14px 16px;background:#fcfdff;overflow-y:auto;max-height:46vh}
+.toolform .fdesc{font-size:.76rem;color:var(--soft);line-height:1.6;margin-bottom:12px;white-space:pre-wrap}
+.toolform .arg{margin-bottom:11px}
+.toolform .arg label{display:block;font-family:var(--mono);font-size:.76rem;font-weight:600;margin-bottom:4px}
+.toolform .arg label .req{color:var(--err)}
+.toolform .arg label .typ{color:var(--soft);font-weight:400;margin-left:6px}
+.toolform .arg .adesc{font-size:.7rem;color:var(--soft);line-height:1.5;margin:3px 0 5px;white-space:pre-wrap}
+.toolform input[type=text],.toolform input[type=number],.toolform textarea,.toolform select{width:100%;font-family:var(--mono);font-size:.8rem;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none}
+.toolform textarea{min-height:64px;resize:vertical}
+.toolform input:focus,.toolform textarea:focus{border-color:var(--client);box-shadow:0 0 0 3px var(--client-soft)}
+.toolform .check{display:flex;align-items:center;gap:8px;font-size:.8rem}
+.toolform .callbtn{width:100%;margin-top:4px;background:var(--client);color:#fff;font-size:.86rem;padding:10px;box-shadow:0 4px 12px rgba(37,99,235,.25)}
+.toolform .callbtn:disabled{opacity:.5;cursor:wait}
+
+/* ── sequence diagram ── */
+.seq{min-height:420px;display:flex;flex-direction:column}
+.seqhead{display:flex;justify-content:space-between;padding:14px 0 10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);z-index:2}
+.actor{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.86rem;width:150px;justify-content:center}
+.actor .dot{width:10px;height:10px;border-radius:3px}
+.actor.client .dot{background:var(--client)}
+.actor.server .dot{background:var(--server)}
+.seqbody{position:relative;flex:1;padding:10px 0 22px}
+.seqbody::before,.seqbody::after{content:'';position:absolute;top:0;bottom:0;border-left:2px dashed var(--line);z-index:0}
+.seqbody::before{left:60px}
+.seqbody::after{right:60px}
+.seq .empty{position:relative;z-index:1;text-align:center;padding:70px 30px;color:var(--soft);font-size:.86rem;line-height:2;background:linear-gradient(transparent,rgba(255,255,255,.7) 30%,rgba(255,255,255,.7) 70%,transparent)}
+.seq .empty .steps{font-family:var(--mono);font-size:.78rem}
+.seq .empty .steps b{color:var(--client);font-weight:600}
+
+.phasechip{position:relative;z-index:1;text-align:center;margin:16px 0 4px}
+.phasechip span{font-size:.7rem;font-weight:700;letter-spacing:.06em;color:var(--note);background:#fdf3e3;border:1px solid #f5dfb8;border-radius:999px;padding:3px 12px}
+
+.exchange{position:relative;z-index:1;padding:10px 60px 4px;cursor:pointer;border-radius:12px;transition:background .15s}
+.exchange:hover{background:#f6f9fc}
+.exchange.sel{background:var(--client-soft)}
+.msg{position:relative;height:26px;display:flex;align-items:center}
+.msg .wire{position:absolute;left:0;right:0;top:50%;height:2px}
+.msg.req .wire{background:var(--client)}
+.msg.res .wire{background:var(--server)}
+.msg.err .wire{background:var(--err)}
+.msg.pending .wire{background:repeating-linear-gradient(90deg,var(--soft) 0 8px,transparent 8px 16px);animation:crawl 1s linear infinite}
+@keyframes crawl{to{background-position:32px 0}}
+.msg .head{position:absolute;top:50%;width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent;transform:translateY(-50%)}
+.msg.req .head{right:-1px;border-left:9px solid var(--client)}
+.msg.res .head{left:-1px;border-right:9px solid var(--server)}
+.msg.err .head{left:-1px;border-right:9px solid var(--err)}
+.msg.pending .head{left:-1px;border-right:9px solid var(--soft)}
+.msg .lbl{position:relative;margin:0 auto;transform:translateY(-14px);font-family:var(--mono);font-size:.74rem;font-weight:600;background:var(--card);padding:1px 10px;border-radius:999px;border:1px solid var(--line);white-space:nowrap;max-width:92%;overflow:hidden;text-overflow:ellipsis}
+.exchange:hover .msg .lbl,.exchange.sel .msg .lbl{background:#fff}
+.msg.req .lbl{color:var(--client)}
+.msg.res .lbl{color:var(--server)}
+.msg.err .lbl{color:var(--err)}
+.msg.pending .lbl{color:var(--soft)}
+.msg.oneway{opacity:.85}
+.exchange .meta{text-align:center;font-size:.68rem;color:var(--soft);padding-bottom:6px;font-family:var(--mono)}
+.sysnote{position:relative;z-index:1;margin:10px 70px;font-size:.76rem;line-height:1.6;color:var(--err);background:var(--err-soft);border:1px solid #f6c9c9;border-radius:10px;padding:9px 14px}
+
+/* ── detail panel ── */
+.detail{position:sticky;top:16px;max-height:calc(100vh - 32px);display:flex;flex-direction:column}
+.detail .dempty{padding:40px 24px;font-size:.82rem;color:var(--soft);line-height:1.8;text-align:center}
+.dtabs{display:flex;gap:4px;padding:10px 12px 0;border-bottom:1px solid var(--line)}
+.dtab{font-size:.78rem;font-weight:600;padding:7px 16px;border-radius:9px 9px 0 0;background:transparent;color:var(--soft);border:1px solid transparent;border-bottom:none}
+.dtab.on{background:#f6f9fc;color:var(--ink);border-color:var(--line)}
+.dbody{overflow-y:auto;flex:1;padding:14px 16px 20px}
+.kv{font-family:var(--mono);font-size:.72rem;line-height:1.8;color:var(--soft);margin-bottom:12px;overflow-x:auto;white-space:nowrap}
+.kv b{color:var(--ink);font-weight:600}
+.sect{display:block;font-family:var(--disp);font-size:.7rem;font-weight:700;letter-spacing:.05em;color:var(--soft);margin:10px 0 4px}
+pre.code{font-family:var(--mono);font-size:.76rem;line-height:1.65;background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;white-space:pre;tab-size:2}
+.j-key{color:#1d4ed8}
+.j-str{color:#0f766e}
+.j-num{color:#b45309}
+.j-bool{color:#9333ea}
+.j-null{color:#9ca3af}
+.dactions{display:flex;gap:8px;margin:10px 0 4px;flex-wrap:wrap}
+.dactions button{font-size:.74rem;padding:6px 12px;background:#eef2f8;color:var(--ink);font-weight:600}
+.dactions button:hover{background:#e2e9f3}
+.stat{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.72rem;background:#eef2f8;border-radius:999px;padding:3px 10px;color:var(--soft);margin:0 6px 8px 0}
+.stat b{color:var(--ink)}
+
+/* footer */
+footer{text-align:center;margin-top:44px;font-size:.76rem;color:var(--soft)}
+footer a{color:var(--client);text-decoration:none}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#d3dce8;border-radius:99px}
+@media (prefers-reduced-motion:reduce){.msg.pending .wire{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>🔬 MCP 调试器 <span class="tag">/ 把协议对话画出来</span></h1>
+  <span class="sub">Model Context Protocol · JSON-RPC 2.0 · Streamable HTTP</span>
+  <a class="back" href="/a/">← /a 归档</a>
+</header>
+<p class="lede">连上任意 MCP 端点，中间的时序图会把 <b>initialize（握手）→ tools/list（拿菜单）→ tools/call（点菜）</b>的每一次往返画出来。点任何一支箭头，看这条消息在网线上<b>真实传输的内容</b>：请求头、JSON-RPC 报文、耗时、大小，还能复制成等价的 curl 命令。令牌只存在浏览器内存里，只发往你填的端点。</p>
+
+<div class="connectbar">
+  <div class="field">
+    <label for="endpoint">MCP 端点 URL</label>
+    <input id="endpoint" type="text" value="https://voicedrop.cn/mcp" spellcheck="false" autocomplete="off">
+  </div>
+  <div class="field token">
+    <label for="token">Bearer 令牌（可选）</label>
+    <input id="token" type="password" placeholder="anon_… / 留空匿名访问" spellcheck="false" autocomplete="off">
+  </div>
+  <div class="btns">
+    <button class="btn-primary" id="connectBtn" onclick="connect()">连接 →</button>
+    <button class="btn-ghost" onclick="resetAll()">清空</button>
+  </div>
+</div>
+<p class="hint">「连接」会依次发 <code>initialize</code> → <code>notifications/initialized</code> → <code>tools/list</code>。端点须允许浏览器跨域（CORS）；voicedrop.cn/mcp 是开的。</p>
+
+<div class="stage">
+
+  <div class="panel tools">
+    <h2>🧰 工具清单 <span class="count" id="toolCount">–</span></h2>
+    <div class="toollist" id="toolList">
+      <div class="empty">还没连接。<br><br>连接成功后，<code style="font-family:var(--mono)">tools/list</code> 返回的工具会列在这里——每个工具的参数表单是照它的 inputSchema 自动生成的，填好就能真调。</div>
+    </div>
+    <div class="toolform" id="toolForm" style="display:none"></div>
+  </div>
+
+  <div class="panel seq">
+    <div class="seqhead">
+      <div class="actor client"><span class="dot"></span>客户端（你的浏览器）</div>
+      <div class="actor server"><span class="dot"></span>服务器</div>
+    </div>
+    <div class="seqbody" id="seqBody"></div>
+  </div>
+
+  <div class="panel detail" id="detailPanel">
+    <h2>📄 报文详情</h2>
+    <div class="dempty" id="detailEmpty">点时序图里的任意一次往返，<br>这里显示它的原始传输内容。</div>
+    <div id="detailTabs" class="dtabs" style="display:none">
+      <button class="dtab on" id="tabReq" onclick="showTab('req')">↦ 请求</button>
+      <button class="dtab" id="tabRes" onclick="showTab('res')">↤ 响应</button>
+    </div>
+    <div class="dbody" id="detailBody" style="display:none"></div>
+  </div>
+
+</div>
+
+<footer>jianshuo.dev/a/mcp · 由 Claude Code 生成 · 回到 <a href="/a/">/a 归档</a></footer>
+</div>
+
+<script>
+'use strict';
+/* ───────────────────────── state ───────────────────────── */
+let frames = [];        // 每条 = 一次 HTTP 往返（或单向通知）
+let rpcId = 0;
+let selected = null;
+let activeTab = 'req';
+let currentTool = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ───────────────────────── JSON-RPC over fetch ───────────────────────── */
+function endpoint(){ return $('endpoint').value.trim(); }
+function authHeaders(){
+  const h = {'Content-Type':'application/json','Accept':'application/json, text/event-stream'};
+  const t = $('token').value.trim();
+  if (t) h['Authorization'] = 'Bearer ' + t;
+  return h;
+}
+
+async function rpc(method, params, opts){
+  opts = opts || {};
+  const notification = !!opts.notification;
+  const body = {jsonrpc:'2.0', method};
+  if (!notification) body.id = ++rpcId;
+  if (params !== undefined) body.params = params;
+  const headers = authHeaders();
+  const frame = {
+    n: frames.length, phase: opts.phase, method, notification,
+    reqHeaders: headers, reqBody: body,
+    status: 'pending', resStatus:null, resHeaders:null, resBody:null,
+    ms: null, bytes: null, error: null, sse: false,
+  };
+  frames.push(frame);
+  render();
+  const t0 = performance.now();
+  try {
+    const res = await fetch(endpoint(), {method:'POST', headers, body: JSON.stringify(body)});
+    frame.ms = Math.round(performance.now() - t0);
+    frame.resStatus = res.status;
+    frame.resHeaders = {};
+    res.headers.forEach((v,k)=>{ frame.resHeaders[k]=v; });
+    const text = await res.text();
+    frame.bytes = new Blob([text]).size;
+    const ct = res.headers.get('content-type') || '';
+    let parsed = null;
+    if (ct.indexOf('text/event-stream') !== -1) {     // Streamable HTTP 的 SSE 分支
+      frame.sse = true;
+      const datas = text.split('\n').filter(l=>l.indexOf('data:')===0).map(l=>l.slice(5).trim());
+      try { parsed = JSON.parse(datas[datas.length-1] || 'null'); } catch(e){ parsed = text; }
+    } else {
+      try { parsed = text ? JSON.parse(text) : null; } catch(e){ parsed = text; }
+    }
+    frame.resBody = parsed;
+    if (notification) {
+      frame.status = res.ok ? 'ok' : 'httperror';     // 通知：2xx 即成功，可能无响应体
+      if (!res.ok) frame.error = 'HTTP ' + res.status;
+    } else if (parsed && typeof parsed === 'object' && parsed.error) {
+      frame.status = 'rpcerror';
+      frame.error = parsed.error.message || JSON.stringify(parsed.error);
+    } else if (!res.ok) {
+      frame.status = 'httperror';
+      frame.error = 'HTTP ' + res.status;
+    } else {
+      frame.status = 'ok';
+    }
+  } catch (e) {
+    frame.ms = Math.round(performance.now() - t0);
+    frame.status = 'neterror';
+    frame.error = e.message + '（多半是网络不通，或该端点没开 CORS——浏览器跨域被拦在了发出去之前）';
+  }
+  render();
+  return frame;
+}
+
+/* ───────────────────────── flows ───────────────────────── */
+async function connect(){
+  const btn = $('connectBtn');
+  btn.disabled = true; btn.textContent = '连接中…';
+  try {
+    const init = await rpc('initialize', {
+      protocolVersion:'2025-03-26',
+      capabilities:{},
+      clientInfo:{name:'mcp-visual-debugger', version:'1.0', title:'jianshuo.dev/a/mcp'},
+    }, {phase:'① 握手 · initialize'});
+    if (init.status === 'ok') {
+      await rpc('notifications/initialized', undefined, {phase:'握手完成通知（单向，不期待响应）', notification:true});
+      const list = await rpc('tools/list', undefined, {phase:'② 拿菜单 · tools/list'});
+      if (list.status === 'ok' && list.resBody && list.resBody.result) {
+        renderTools(list.resBody.result.tools || []);
+      }
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = '连接 →';
+  }
+}
+
+async function callTool(){
+  if (!currentTool) return;
+  const args = collectArgs();
+  if (args === undefined) return;                     // 校验没过
+  const btn = $('callBtn');
+  btn.disabled = true; btn.textContent = '调用中…';
+  try {
+    await rpc('tools/call', {name: currentTool.name, arguments: args},
+              {phase:'③ 点菜 · tools/call → ' + currentTool.name});
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ 调用 ' + currentTool.name;
+  }
+}
+
+function resetAll(){
+  frames = []; rpcId = 0; selected = null; currentTool = null;
+  toolCache = [];
+  $('toolList').innerHTML = '<div class="empty">还没连接。<br><br>连接成功后，工具会列在这里。</div>';
+  $('toolForm').style.display = 'none';
+  $('toolCount').textContent = '–';
+  render();
+}
+
+/* ───────────────────────── tools panel ───────────────────────── */
+let toolCache = [];
+function renderTools(tools){
+  toolCache = tools;
+  $('toolCount').textContent = tools.length;
+  const box = $('toolList');
+  box.innerHTML = '';
+  tools.forEach((t,i)=>{
+    const b = document.createElement('button');
+    b.className = 'tool'; b.id = 'tool-'+i;
+    b.innerHTML = '<div class="tname">' + esc(t.name) + '</div><div class="tdesc">' + esc((t.description||'').split('\n')[0]) + '</div>';
+    b.onclick = ()=>selectTool(i);
+    box.appendChild(b);
+  });
+}
+
+function selectTool(i){
+  currentTool = toolCache[i];
+  document.querySelectorAll('.tool').forEach(el=>el.classList.remove('on'));
+  $('tool-'+i).classList.add('on');
+  const t = currentTool;
+  const props = (t.inputSchema && t.inputSchema.properties) || {};
+  const required = new Set((t.inputSchema && t.inputSchema.required) || []);
+  let html = '<div class="fdesc">' + esc(t.description||'（无描述）') + '</div>';
+  const keys = Object.keys(props);
+  if (!keys.length) html += '<div class="adesc" style="font-size:.74rem;color:var(--soft);margin-bottom:10px">这个工具不需要参数。</div>';
+  keys.forEach(k=>{
+    const p = props[k];
+    const typ = p.type || (p.enum ? 'enum' : 'any');
+    const req = required.has(k) ? '<span class="req">*</span>' : '';
+    html += '<div class="arg"><label>' + esc(k) + req + '<span class="typ">' + esc(typ) + '</span></label>';
+    if (p.description) html += '<div class="adesc">' + esc(p.description) + '</div>';
+    const id = 'arg-' + k;
+    if (p.enum) {
+      html += '<select id="'+id+'"><option value="">（不传）</option>' + p.enum.map(v=>'<option>'+esc(v)+'</option>').join('') + '</select>';
+    } else if (typ === 'boolean') {
+      html += '<div class="check"><input type="checkbox" id="'+id+'"><span>true / 不勾为不传</span></div>';
+    } else if (typ === 'number' || typ === 'integer') {
+      html += '<input type="number" id="'+id+'" placeholder="' + (required.has(k)?'必填':'可选') + '">';
+    } else if (typ === 'object' || typ === 'array') {
+      html += '<textarea id="'+id+'" placeholder=\'填 JSON，如 {"a":1}\'></textarea>';
+    } else {
+      html += '<input type="text" id="'+id+'" placeholder="' + (required.has(k)?'必填':'可选') + '" spellcheck="false">';
+    }
+    html += '</div>';
+  });
+  html += '<button class="callbtn" id="callBtn" onclick="callTool()">⚡ 调用 ' + esc(t.name) + '</button>';
+  const form = $('toolForm');
+  form.innerHTML = html; form.style.display = 'block';
+}
+
+function collectArgs(){
+  const t = currentTool;
+  const props = (t.inputSchema && t.inputSchema.properties) || {};
+  const required = new Set((t.inputSchema && t.inputSchema.required) || []);
+  const args = {};
+  for (const k of Object.keys(props)) {
+    const p = props[k]; const el = $('arg-'+k);
+    if (!el) continue;
+    const typ = p.type || (p.enum ? 'enum' : 'any');
+    let v;
+    if (typ === 'boolean') v = el.checked ? true : undefined;
+    else if (typ === 'number' || typ === 'integer') v = el.value === '' ? undefined : Number(el.value);
+    else if (typ === 'object' || typ === 'array') {
+      if (el.value.trim() === '') v = undefined;
+      else { try { v = JSON.parse(el.value); } catch(e){ alert('参数 ' + k + ' 不是合法 JSON'); return undefined; } }
+    }
+    else v = el.value === '' ? undefined : el.value;
+    if (v === undefined && required.has(k)) { alert('参数 ' + k + ' 是必填的'); el.focus(); return undefined; }
+    if (v !== undefined) args[k] = v;
+  }
+  return args;
+}
+
+/* ───────────────────────── sequence diagram ───────────────────────── */
+function render(){
+  const body = $('seqBody');
+  body.innerHTML = '';
+  if (!frames.length) {
+    body.innerHTML = '<div class="empty">时序图还是空的。点上面的「连接」，看三步剧本怎么走：<br>' +
+      '<span class="steps"><b>① initialize</b> 握手对版本 → <b>② tools/list</b> 拿工具菜单 → <b>③ tools/call</b> 真正干活</span></div>';
+    renderDetail();
+    return;
+  }
+  let lastPhase = null;
+  frames.forEach(f=>{
+    if (f.phase && f.phase !== lastPhase) {
+      const chip = document.createElement('div');
+      chip.className = 'phasechip';
+      chip.innerHTML = '<span>' + esc(f.phase) + '</span>';
+      body.appendChild(chip);
+      lastPhase = f.phase;
+    }
+    const ex = document.createElement('div');
+    ex.className = 'exchange' + (selected === f.n ? ' sel' : '');
+    ex.onclick = ()=>{ selected = f.n; activeTab = 'req'; render(); };
+    const reqLabel = f.method + (f.method === 'tools/call' ? ' · ' + (f.reqBody.params && f.reqBody.params.name) : '');
+    let html = '<div class="msg req' + (f.notification?' oneway':'') + '">' +
+        '<div class="wire"></div><div class="head"></div>' +
+        '<div class="lbl">' + esc(reqLabel) + (f.notification?' ⚡单向':'') + '</div></div>';
+    if (f.status === 'pending') {
+      html += '<div class="msg res pending"><div class="wire"></div><div class="head"></div><div class="lbl">等待响应…</div></div>';
+    } else if (f.status === 'neterror') {
+      html += '<div class="sysnote">✗ 发送失败：' + esc(f.error) + '</div>';
+    } else if (f.notification) {
+      html += '<div class="meta">HTTP ' + f.resStatus + ' · ' + f.ms + 'ms · 通知没有响应体，这是设计如此</div>';
+    } else {
+      const isErr = f.status !== 'ok';
+      const tag = isErr ? (f.status==='rpcerror' ? 'error ' + ((f.resBody&&f.resBody.error&&f.resBody.error.code)!=null?f.resBody.error.code:'') : 'HTTP ' + f.resStatus)
+                        : 'result';
+      html += '<div class="msg res' + (isErr?' err':'') + '"><div class="wire"></div><div class="head"></div>' +
+          '<div class="lbl">' + esc(tag) + '</div></div>' +
+        '<div class="meta">' + f.ms + 'ms · ' + fmtBytes(f.bytes) + (f.sse?' · SSE':'') + (isErr&&f.error?' · '+esc(f.error).slice(0,80):'') + '</div>';
+    }
+    ex.innerHTML = html;
+    body.appendChild(ex);
+  });
+  renderDetail();
+}
+
+function fmtBytes(b){
+  if (b == null) return '';
+  return b < 1024 ? b + ' B' : (b/1024).toFixed(1) + ' KB';
+}
+
+/* ───────────────────────── detail panel ───────────────────────── */
+function showTab(t){ activeTab = t; renderDetail(); }
+
+function renderDetail(){
+  const f = frames.find(x=>x.n === selected);
+  const has = !!f;
+  $('detailEmpty').style.display = has ? 'none' : 'block';
+  $('detailTabs').style.display = has ? 'flex' : 'none';
+  $('detailBody').style.display = has ? 'block' : 'none';
+  if (!has) return;
+  $('tabReq').className = 'dtab' + (activeTab==='req' ? ' on' : '');
+  $('tabRes').className = 'dtab' + (activeTab==='res' ? ' on' : '');
+  const box = $('detailBody');
+  if (activeTab === 'req') {
+    box.innerHTML =
+      '<div><span class="stat">方向 <b>客户端 → 服务器</b></span><span class="stat">方法 <b>' + esc(f.method) + '</b></span>' +
+      (f.notification ? '<span class="stat">类型 <b>通知（无 id）</b></span>' : '<span class="stat">id <b>' + f.reqBody.id + '</b></span>') + '</div>' +
+      '<div class="kv"><span class="sect">请求行 &amp; 头</span><b>POST</b> ' + esc(endpoint()) + '<br>' +
+        Object.entries(f.reqHeaders).map(([k,v])=>'<b>'+esc(k)+':</b> '+esc(k==='Authorization' ? v.slice(0,14)+'…（已折叠）' : v)).join('<br>') + '</div>' +
+      '<span class="sect">JSON-RPC 报文（真实请求体）</span>' +
+      '<pre class="code">' + hl(f.reqBody) + '</pre>' +
+      '<div class="dactions">' +
+        '<button onclick="copyText(' + f.n + ',\'req\')">复制 JSON</button>' +
+        '<button onclick="copyText(' + f.n + ',\'curl\')">复制为 curl</button>' +
+      '</div>';
+  } else {
+    if (f.status === 'pending') { box.innerHTML = '<div class="dempty">还在等响应…</div>'; return; }
+    if (f.status === 'neterror') { box.innerHTML = '<div class="sysnote">✗ ' + esc(f.error) + '</div>'; return; }
+    const keep = ['content-type','content-length','mcp-session-id','access-control-allow-origin','server','date'];
+    const rh = f.resHeaders ? Object.entries(f.resHeaders).filter(([k])=>keep.indexOf(k)!==-1) : [];
+    box.innerHTML =
+      '<div><span class="stat">方向 <b>服务器 → 客户端</b></span><span class="stat">HTTP <b>' + f.resStatus + '</b></span><span class="stat">耗时 <b>' + f.ms + 'ms</b></span><span class="stat">大小 <b>' + fmtBytes(f.bytes) + '</b></span>' + (f.sse?'<span class="stat">传输 <b>SSE 流</b></span>':'') + '</div>' +
+      '<div class="kv"><span class="sect">响应头（节选）</span>' + (rh.map(([k,v])=>'<b>'+esc(k)+':</b> '+esc(v)).join('<br>')||'（无）') + '</div>' +
+      '<span class="sect">JSON-RPC 报文（真实响应体）</span>' +
+      '<pre class="code">' + (f.resBody===null ? '<span class="j-null">（空响应体）</span>' : hl(f.resBody)) + '</pre>' +
+      nestedText(f) +
+      '<div class="dactions"><button onclick="copyText(' + f.n + ',\'res\')">复制 JSON</button></div>';
+  }
+}
+
+/* tools/call 的 result.content[].text 往往还是一层 JSON——拆出来再展示 */
+function nestedText(f){
+  try {
+    const c = f.resBody.result.content;
+    if (!Array.isArray(c)) return '';
+    const texts = c.filter(x=>x.type==='text').map(x=>x.text);
+    if (!texts.length) return '';
+    let inner;
+    try { inner = hl(JSON.parse(texts[0])); }
+    catch(e){ inner = esc(texts[0]); }
+    return '<span class="sect">↳ content[0].text 展开（工具的实际返回）</span><pre class="code">' + inner + '</pre>';
+  } catch(e){ return ''; }
+}
+
+function buildCurl(f){
+  const h = Object.entries(f.reqHeaders).map(([k,v])=>"-H '" + k + ": " + v + "'").join(' \\\n  ');
+  return "curl -s -X POST '" + endpoint() + "' \\\n  " + h + " \\\n  -d '" + JSON.stringify(f.reqBody).replace(/'/g, "'\\''") + "'";
+}
+
+function copyText(n, kind){
+  const f = frames.find(x=>x.n===n); if (!f) return;
+  const text = kind==='req' ? JSON.stringify(f.reqBody,null,2)
+             : kind==='res' ? JSON.stringify(f.resBody,null,2)
+             : buildCurl(f);
+  navigator.clipboard.writeText(text);
+}
+
+/* ───────────────────────── JSON syntax highlight ───────────────────────── */
+function hl(obj){
+  const json = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  return esc(json).replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(\.\d+)?([eE][+-]?\d+)?)/g,
+    m=>{
+      let cls = 'j-num';
+      if (/^"/.test(m)) cls = /:$/.test(m) ? 'j-key' : 'j-str';
+      else if (/true|false/.test(m)) cls = 'j-bool';
+      else if (/null/.test(m)) cls = 'j-null';
+      return '<span class="' + cls + '">' + m + '</span>';
+    });
+}
+
+render();
+</script>
+
+<!-- Cloudflare Web Analytics --><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "34108fa3d3204951afa585ccb3976c88"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>
