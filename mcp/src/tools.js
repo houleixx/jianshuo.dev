@@ -25,42 +25,54 @@ export const TOOLS = [
     name: "login",
     description:
       "用手机配对登录 VoiceDrop，拿到访问令牌。**要调两次**：\n" +
-      "① 先问用户要手机「设置 → 账户」里的 6 位十六进制代码，用它调一次 → 用户手机上会弹出一个 4 位数字码；\n" +
-      "② 再问用户要那个 4 位数字码，连同上一步返回的 pairing 一起调第二次 → 返回访问令牌。\n" +
+      "① 先问用户要手机「设置 → 账户」里的 6 位十六进制代码，传 `code` 调一次 → 用户手机上会弹出一个 4 位数字码，本次返回 pairing 句柄；\n" +
+      "② 再问用户要那个 4 位数字码，传 `verify_code` + 上一步返回的 `pairing` 调第二次 → 返回访问令牌。\n" +
       "4 位码在第一步之前不存在（服务端现生成后推到手机上），所以省不掉这一次往返。\n" +
       "拿到令牌后要提醒用户：这是账号的完整密钥，不可吊销，别泄漏。",
-    inputSchema: obj(
-      {
-        code: str("第一次调用填 6 位十六进制代码（手机设置里那串）；第二次调用填手机弹出的 4 位数字码。"),
-        pairing: str("第二次调用时填——第一次调用返回的 pairing 句柄，原样复制。"),
-      },
-      ["code"],
-    ),
-    handler: async ({ code, pairing }, ctx) => {
-      const kind = classifyCode(code);
-      if (!kind) throw new Error("代码格式不对：要么是 6 位十六进制（开始配对），要么是 4 位数字（完成配对）。");
+    inputSchema: obj({
+      code: str("第一步用：6 位十六进制代码（手机「设置 → 账户」里那串短 ID）。开始配对；第二步不传。"),
+      verify_code: str("第二步用：手机弹出的 4 位数字码。必须和 pairing 一起传。"),
+      pairing: str("第二步用：第一步返回的 pairing 句柄，原样复制。"),
+    }),
+    handler: async ({ code, verify_code, pairing }, ctx) => {
+      // 兼容 2026-07 之前的调法：4 位码塞在 code 里 + pairing。悄悄搬到新家。
+      if (!verify_code && pairing && classifyCode(code) === "verify") {
+        verify_code = code;
+        code = undefined;
+      }
 
-      if (kind === "prefix") {
-        const { pairing: handle, matchCount } = await startPairing(code, ctx);
+      if (verify_code !== undefined) {
+        if (classifyCode(verify_code) !== "verify") {
+          throw new Error("verify_code 应该是手机上弹出的 4 位数字码。");
+        }
+        if (!pairing) {
+          throw new Error("verify_code 要和 pairing 一起传——pairing 是第一步返回的句柄，原样复制过来。");
+        }
+        const { token, scope } = await finishPairing(verify_code, pairing, ctx);
         return {
-          pairing: handle,
-          matchCount,
+          token,
+          scope,
           next:
-            "现在看你的手机——App 里会弹出一个 4 位数字码。" +
-            "把那个 4 位码连同上面这个 pairing 一起，再调一次 login。（2 分钟内有效）",
+            "登录成功。把这个令牌配进 MCP 客户端就能用了：\n" +
+            `  claude mcp add voicedrop --transport http https://voicedrop.cn/mcp --header "Authorization: Bearer ${token}"\n` +
+            "注意：这是账号的完整密钥，不可吊销、不会过期。谁拿到它就有你账号的全部权限——别贴到任何公开的地方。",
         };
       }
 
-      if (!pairing) throw new Error("要先用 6 位十六进制代码调一次 login 开始配对，拿到 pairing 句柄再来。");
+      if (classifyCode(code) !== "prefix") {
+        throw new Error(
+          "开始配对要传 code（6 位十六进制，手机「设置 → 账户」里那串）；" +
+            "完成配对要传 verify_code（4 位数字）+ pairing。",
+        );
+      }
 
-      const { token, scope } = await finishPairing(code, pairing, ctx);
+      const { pairing: handle, matchCount } = await startPairing(code, ctx);
       return {
-        token,
-        scope,
+        pairing: handle,
+        matchCount,
         next:
-          "登录成功。把这个令牌配进 MCP 客户端就能用了：\n" +
-          `  claude mcp add voicedrop --transport http https://voicedrop.cn/mcp --header "Authorization: Bearer ${token}"\n` +
-          "注意：这是账号的完整密钥，不可吊销、不会过期。谁拿到它就有你账号的全部权限——别贴到任何公开的地方。",
+          "现在看你的手机——App 里会弹出一个 4 位数字码。" +
+          "把那个 4 位码用 verify_code 参数、连同上面这个 pairing 一起，再调一次 login。（2 分钟内有效）",
       };
     },
   },

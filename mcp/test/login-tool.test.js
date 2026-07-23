@@ -18,29 +18,32 @@ describe("工具表里只有一个 login", () => {
     expect(names).not.toContain("login_finish");
   });
 
-  it("只有 code 是必填 —— pairing 是第二次调用才带的", () => {
-    expect(login.inputSchema.required).toEqual(["code"]);
+  it("三个字段各司其职，都不是必填 —— 第一步只用 code，第二步只用 verify_code + pairing", () => {
+    expect(login.inputSchema.required ?? []).toEqual([]);
+    expect(login.inputSchema.properties.code).toBeDefined();
+    expect(login.inputSchema.properties.verify_code).toBeDefined();
     expect(login.inputSchema.properties.pairing).toBeDefined();
   });
 
   it("描述里讲清楚了要调两次，否则模型只会调一次然后卡住", () => {
     expect(login.description).toMatch(/两次|再调|4 位/);
+    expect(login.description).toMatch(/verify_code/);
   });
 });
 
-describe("同一个工具，靠码的形状分辨阶段", () => {
-  it("给 6 位码 → 开始配对，回句柄并叫用户去看手机", async () => {
+describe("靠字段分辨阶段：code 开始，verify_code + pairing 完成", () => {
+  it("给 code（6 位）→ 开始配对，回句柄并叫用户去看手机", async () => {
     const out = await login.handler(
       { code: "a3f2b1" },
       { fetch: async () => jsonResp({ ok: true, pairingId: "p1", matchCount: 1 }), connect: fakeSocket([]) },
     );
 
     expect(out.pairing).toBeTruthy();
-    expect(out.next).toMatch(/手机|4 位/);
+    expect(out.next).toMatch(/verify_code/); // 指路要指到新字段名
     expect(out.token).toBeUndefined(); // 这一步还没有 token
   });
 
-  it("给 4 位码 + 句柄 → 完成配对，把 token 交出来并告诉你怎么配", async () => {
+  it("给 verify_code + pairing → 完成配对，把 token 交出来并告诉你怎么配", async () => {
     // 先真开一次，拿到能解密的句柄
     let ourPub;
     const started = await login.handler(
@@ -58,7 +61,7 @@ describe("同一个工具，靠码的形状分辨阶段", () => {
     const blob = await sealAsPhone(TOKEN, ourPub);
 
     const out = await login.handler(
-      { code: "7391", pairing: started.pairing },
+      { verify_code: "7391", pairing: started.pairing },
       { fetch: async () => jsonResp({ ok: true }), connect: fakeSocket([{ type: "link_ready", blob }]) },
     );
 
@@ -67,16 +70,54 @@ describe("同一个工具，靠码的形状分辨阶段", () => {
     expect(out.next).toMatch(/Authorization|配置|claude mcp/); // 得告诉用户下一步怎么办
   });
 
-  it("给 4 位码却没带句柄 → 提示先用 6 位码开始", async () => {
+  it("给 verify_code 却没带 pairing → 提示两个要一起传", async () => {
     await expect(
-      login.handler({ code: "7391" }, { fetch: async () => jsonResp({}), connect: fakeSocket([]) }),
-    ).rejects.toThrow(/先|6 位/);
+      login.handler({ verify_code: "7391" }, { fetch: async () => jsonResp({}), connect: fakeSocket([]) }),
+    ).rejects.toThrow(/pairing/);
   });
 
-  it("码的形状不对 → 说清楚要 6 位十六进制或 4 位数字", async () => {
+  it("verify_code 形状不对 → 说清楚要 4 位数字", async () => {
+    await expect(
+      login.handler(
+        { verify_code: "abc", pairing: "x" },
+        { fetch: async () => jsonResp({}), connect: fakeSocket([]) },
+      ),
+    ).rejects.toThrow(/4 位/);
+  });
+
+  it("code 形状不对（或把 4 位码错放进 code 又没带 pairing）→ 把两种正确姿势都讲一遍", async () => {
     await expect(
       login.handler({ code: "12345" }, { fetch: async () => jsonResp({}), connect: fakeSocket([]) }),
-    ).rejects.toThrow(/6 位|4 位/);
+    ).rejects.toThrow(/6 位.*verify_code|verify_code.*6 位/s);
+    await expect(
+      login.handler({ code: "7391" }, { fetch: async () => jsonResp({}), connect: fakeSocket([]) }),
+    ).rejects.toThrow(/verify_code/);
+  });
+});
+
+describe("兼容 2026-07 之前的调法：4 位码塞在 code 里 + pairing", () => {
+  it("老客户端照旧能完成配对", async () => {
+    let ourPub;
+    const started = await login.handler(
+      { code: "a3f2b1" },
+      {
+        fetch: async (_u, init) => {
+          ourPub = JSON.parse(init.body).pubkey;
+          return jsonResp({ ok: true, pairingId: "p1", matchCount: 1 });
+        },
+        connect: fakeSocket([]),
+      },
+    );
+
+    const TOKEN = "anon_" + "ef".repeat(32);
+    const blob = await sealAsPhone(TOKEN, ourPub);
+
+    const out = await login.handler(
+      { code: "7391", pairing: started.pairing }, // 旧调法：code 里装 4 位码
+      { fetch: async () => jsonResp({ ok: true }), connect: fakeSocket([{ type: "link_ready", blob }]) },
+    );
+
+    expect(out.token).toBe(TOKEN);
   });
 });
 
