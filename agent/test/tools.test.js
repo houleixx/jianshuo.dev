@@ -14,6 +14,10 @@ describe("runTool dispatcher", () => {
 });
 
 import { runTool as rt } from "../src/tools.js";
+import { resolveArticles } from "../../functions/lib/article-store.js";
+
+// 直写后（2026-07-25）：断言从「抓 HTTP PUT 请求体」改为「读 R2 落盘的版本化 doc」。
+const stored = async (env, key = "users/u/articles/s2.json") => JSON.parse(await (await env.FILES.get(key)).text());
 
 const CTX = (env) => ({ env, scope: "users/u/", articleKey: "users/u/articles/s2.json", token: "t", origin: "https://jianshuo.dev" });
 
@@ -91,30 +95,22 @@ describe("read_article", () => {
 });
 
 describe("write_article", () => {
-  it("POSTs to the article API and preserves wechatMediaId by index", async () => {
+  it("writes the versioned doc directly and preserves wechatMediaId by index", async () => {
     const env = fakeEnv(seedTwoArticles());
-    globalThis.fetch = fakeFetch({
-      "PUT https://jianshuo.dev/files/api/articles/s2": () => ({ ok: true, body: { ok: true, version: 2 } }),
-    });
     const r = await rt("write_article", { articles: [{ title: "A2x", body: "b2x" }] }, CTX(env));
     expect(r).toEqual({ ok: true, count: 1 });
-    const call = globalThis.fetch.calls[0];
-    expect(call.method).toBe("PUT");
-    expect(call.url).toBe("https://jianshuo.dev/files/api/articles/s2");
-    expect(call.headers.Authorization).toBe("Bearer t");
-    const sent = JSON.parse(call.body);
-    expect(sent.articles[0]).toEqual({ title: "A2x", body: "b2x", wechatMediaId: "m2" });
-    expect(sent.transcript).toBe("tx2");
+    const doc = await stored(env);
+    expect(resolveArticles(doc)[0]).toEqual({ title: "A2x", body: "b2x", wechatMediaId: "m2" });
+    expect(doc.transcript).toBe("tx2");
+    expect(Array.isArray(doc.versions) && doc.versions.length >= 1).toBe(true); // 版本链就位
   });
   it("rejects empty articles before calling the API", async () => {
     const env = fakeEnv(seedTwoArticles());
     expect(await rt("write_article", { articles: [] }, CTX(env))).toEqual({ error: "empty_articles" });
   });
-  it("returns upload_failed when the API responds non-ok", async () => {
+  it("returns upload_failed when the R2 write throws", async () => {
     const env = fakeEnv(seedTwoArticles());
-    globalThis.fetch = fakeFetch({
-      "PUT https://jianshuo.dev/files/api/articles/s2": () => ({ ok: false, status: 500, body: {} }),
-    });
+    env.FILES.put = async () => { throw new Error("r2 down"); };
     const r = await rt("write_article", { articles: [{ title: "T", body: "B" }] }, CTX(env));
     expect(r.error).toMatch(/upload_failed/);
   });
@@ -194,38 +190,24 @@ describe("distribution tools", () => {
 });
 
 describe("write_article stamps lastEditId", () => {
-  it("includes lastEditId in the PUT body when ctx.editId is set", async () => {
+  it("stamps lastEditId onto the stored doc when ctx.editId is set", async () => {
     const env = fakeEnv({
       "users/u/articles/s2.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "tx", articles: [{ title: "A", body: "b" }] }),
     });
-    let putBody = null;
-    const fetchFake = fakeFetch({
-      "PUT https://jianshuo.dev/files/api/articles/s2": ({ init }) => { putBody = JSON.parse(init.body); return { ok: true, body: { ok: true, head: 2 } }; },
-    });
-    const orig = globalThis.fetch; globalThis.fetch = fetchFake;
-    try {
-      const ctx = { env, scope: "users/u/", articleKey: "users/u/articles/s2.json", token: "t", origin: "https://jianshuo.dev", editId: "edit-123" };
-      const r = await rt("write_article", { articles: [{ title: "A2", body: "b2" }] }, ctx);
-      expect(r).toMatchObject({ ok: true });
-      expect(putBody.lastEditId).toBe("edit-123");
-    } finally { globalThis.fetch = orig; }
+    const ctx = { env, scope: "users/u/", articleKey: "users/u/articles/s2.json", token: "t", origin: "https://jianshuo.dev", editId: "edit-123" };
+    const r = await rt("write_article", { articles: [{ title: "A2", body: "b2" }] }, ctx);
+    expect(r).toMatchObject({ ok: true });
+    expect((await stored(env)).lastEditId).toBe("edit-123");
   });
 
-  it("omits lastEditId from the PUT body when ctx.editId is absent", async () => {
+  it("omits lastEditId from the stored doc when ctx.editId is absent", async () => {
     const env = fakeEnv({
       "users/u/articles/s2.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "tx", articles: [{ title: "A", body: "b" }] }),
     });
-    let putBody = null;
-    const fetchFake = fakeFetch({
-      "PUT https://jianshuo.dev/files/api/articles/s2": ({ init }) => { putBody = JSON.parse(init.body); return { ok: true, body: { ok: true, head: 2 } }; },
-    });
-    const orig = globalThis.fetch; globalThis.fetch = fetchFake;
-    try {
-      const ctx = { env, scope: "users/u/", articleKey: "users/u/articles/s2.json", token: "t", origin: "https://jianshuo.dev" };
-      const r = await rt("write_article", { articles: [{ title: "A2", body: "b2" }] }, ctx);
-      expect(r).toMatchObject({ ok: true });
-      expect(putBody.lastEditId).toBeUndefined();
-    } finally { globalThis.fetch = orig; }
+    const ctx = { env, scope: "users/u/", articleKey: "users/u/articles/s2.json", token: "t", origin: "https://jianshuo.dev" };
+    const r = await rt("write_article", { articles: [{ title: "A2", body: "b2" }] }, ctx);
+    expect(r).toMatchObject({ ok: true });
+    expect((await stored(env)).lastEditId).toBeUndefined();
   });
 });
 
@@ -234,33 +216,28 @@ describe("edit_current_article", () => {
     const env = fakeEnv({
       "users/u/articles/s2.json": JSON.stringify({ schema: 2, createdAt: 1, transcript: "tx2", articles: [{ title: "T", body: "一\n\n二\n\n三", wechatMediaId: "m2" }] }),
     });
-    globalThis.fetch = fakeFetch({
-      "PUT https://jianshuo.dev/files/api/articles/s2": () => ({ ok: true, body: { ok: true, head: 2 } }),
-    });
     const r = await rt("edit_current_article", { ops: [{ op: "delete_lines", lines: [2] }] }, CTX(env));
     expect(r).toEqual({ ok: true });
-    const sent = JSON.parse(globalThis.fetch.calls[0].body);
-    expect(sent.articles[0]).toEqual({ title: "T", body: "一\n\n三", wechatMediaId: "m2" });
-    expect(sent.transcript).toBe("tx2"); // metadata carried through
+    const doc = await stored(env);
+    expect(resolveArticles(doc)[0]).toEqual({ title: "T", body: "一\n\n三", wechatMediaId: "m2" });
+    expect(doc.transcript).toBe("tx2"); // metadata carried through
   });
 
   it("targets the article at ctx.articleIndex, leaving other articles untouched", async () => {
     const env = fakeEnv({
       "users/u/articles/s2.json": JSON.stringify({ schema: 2, transcript: "t", articles: [{ title: "A", body: "a1\n\na2" }, { title: "B", body: "b1\n\nb2" }] }),
     });
-    globalThis.fetch = fakeFetch({ "PUT https://jianshuo.dev/files/api/articles/s2": () => ({ ok: true, body: {} }) });
     const r = await rt("edit_current_article", { ops: [{ op: "replace_line", line: 1, text: "B1新" }] }, { ...CTX(env), articleIndex: 1 });
     expect(r).toEqual({ ok: true });
-    const sent = JSON.parse(globalThis.fetch.calls[0].body);
-    expect(sent.articles[0].body).toBe("a1\n\na2");   // article 0 untouched
-    expect(sent.articles[1].body).toBe("B1新\n\nb2");  // article 1 patched
+    const arts = resolveArticles(await stored(env));
+    expect(arts[0].body).toBe("a1\n\na2");   // article 0 untouched
+    expect(arts[1].body).toBe("B1新\n\nb2");  // article 1 patched
   });
 
   it("changes the title with set_title", async () => {
     const env = fakeEnv({ "users/u/articles/s2.json": JSON.stringify({ schema: 2, transcript: "t", articles: [{ title: "旧", body: "x" }] }) });
-    globalThis.fetch = fakeFetch({ "PUT https://jianshuo.dev/files/api/articles/s2": () => ({ ok: true, body: {} }) });
     await rt("edit_current_article", { ops: [{ op: "set_title", title: "新标题" }] }, CTX(env));
-    expect(JSON.parse(globalThis.fetch.calls[0].body).articles[0]).toEqual({ title: "新标题", body: "x" });
+    expect(resolveArticles(await stored(env))[0]).toEqual({ title: "新标题", body: "x" });
   });
 
   it("surfaces line_not_found back to the model and PUTs nothing", async () => {
@@ -278,9 +255,7 @@ describe("edit_current_article", () => {
 
   it("stamps lastEditId when ctx.editId is set", async () => {
     const env = fakeEnv({ "users/u/articles/s2.json": JSON.stringify({ schema: 2, transcript: "t", articles: [{ title: "T", body: "一\n\n二" }] }) });
-    let putBody;
-    globalThis.fetch = fakeFetch({ "PUT https://jianshuo.dev/files/api/articles/s2": ({ init }) => { putBody = JSON.parse(init.body); return { ok: true, body: {} }; } });
     await rt("edit_current_article", { ops: [{ op: "delete_lines", lines: [1] }] }, { ...CTX(env), editId: "e9" });
-    expect(putBody.lastEditId).toBe("e9");
+    expect((await stored(env)).lastEditId).toBe("e9");
   });
 });

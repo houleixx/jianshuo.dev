@@ -65,8 +65,8 @@ describe("merge_articles 不丢照片", () => {
     const r = await runTool("merge_articles", { stems: ["A", "B"] },
       { env, scope: SCOPE, token: "tk", origin: "https://jianshuo.dev", callClaude, idemKey: "k9" });
     expect(r.ok).toBe(true);
-    const put = fetchSpy.mock.calls.find(([u, o]) => o?.method === "PUT" && String(u).includes("/files/api/articles/"));
-    const outBody = JSON.parse(put[1].body).articles[0].body;
+    const doc = JSON.parse(env.FILES._store.get(`${SCOPE}articles/${r.newStem}.json`));
+    const outBody = doc.versions[doc.versions.length - 1].articles[0].body;
     expect(outBody).toContain(`[[photo:${K1}]]`);
     expect(outBody).toContain(`[[photo:${K2}]]`);
     vi.unstubAllGlobals();

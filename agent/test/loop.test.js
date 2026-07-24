@@ -42,9 +42,10 @@ describe("runAgentLoop", () => {
     expect(r.calledTools).toEqual(["list_articles", "read_article", "write_article"]);
     expect(r.finalText).toBe("合并好了");
     expect(i).toBe(3); // short-circuited after write_article — no extra confirmation round-trip
-    // write_article now calls the HTTP API; verify the PUT was made with the merged content.
-    const call = globalThis.fetch.calls[0];
-    expect(JSON.parse(call.body).articles[0].title).toBe("Merged");
+    // write_article 直写落盘（2026-07-25 起不再绕 HTTP）；读回验证合并内容。
+    const doc = JSON.parse(await (await env.FILES.get("users/u/articles/cur.json")).text());
+    const head = doc.versions.find((e) => e.v === doc.head);
+    expect(head.articles[0].title).toBe("Merged");
   });
 
   it("short-circuits an action-only turn (publish) without a confirmation call", async () => {

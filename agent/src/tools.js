@@ -1,7 +1,7 @@
 // VoiceDrop agent tools — general primitives the article-editing agent composes.
 // Each handler takes (args, ctx) where ctx = {env, scope, articleKey, token, origin}.
 
-import { TITLE_FALLBACK, resolveArticles, appendQuestions, byNewestFirst } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles, appendQuestions, byNewestFirst, writeArticleDoc } from "../../functions/lib/article-store.js";
 import { readStyleText, readStyleDoc } from "../../functions/lib/style-store.js";
 import { applyArticleEdits } from "./linenum.js";
 import { imageCostUY, IMAGE_SUANLI } from "./usage.js";
@@ -101,30 +101,32 @@ register(
     // exactly-once in the durable queue (queue.js _runRow). writeArticleDoc's
     // {...rest} preserves this top-level field.
     if (editId) doc.lastEditId = editId;
-    // Write through the article API so version control is handled in one place.
-    // articleKey = "users/<sub>/articles/<stem>.json"; stem = last segment without .json
-    const stem = articleKey.split("/articles/").pop().replace(/\.json$/, "");
-    const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(doc),
-    });
-    if (!resp.ok) return { error: `upload_failed_${resp.status}` };
+    // 直写共享库（版本链在 writeArticleDoc 一处管理），不再绕 HTTP —— 见 putArticleDoc 注释。
+    try {
+      await writeArticleDoc(env, articleKey, doc, "agent");
+    } catch (e) {
+      console.log("[tools] writeArticleDoc failed:", e && e.message);
+      return { error: "upload_failed" };
+    }
     return { ok: true, count: doc.articles.length };
   }
 );
 
-// Shared write path for the article tools: stamp the editId, PUT through the
-// versioned article API. Returns null on success or { error } on failure.
-async function putArticleDoc(doc, { articleKey, token, origin, editId }) {
+// Shared write path for the article tools: stamp the editId, write the versioned
+// doc DIRECTLY via the shared article-store lib（与 Pages 路由同一份版本链/索引/D1
+// 代码）。2026-07-25 之前这里绕 HTTP 调自己的 /files/api/articles/——同一个 DO 里
+// binding 读 doc 只要 ~0.1s，这层 HTTP+Pages+鉴权的皮却量到 8–22s（llmlog
+// put_article laps），是 fast path 之后最大的耗时来源。agent worker 与 Pages 绑着
+// 同一个 FILES/CORE，直写语义分毫不差。Returns null on success or { error }.
+async function putArticleDoc(doc, { env, articleKey, editId }) {
   if (editId) doc.lastEditId = editId;
-  const stem = articleKey.split("/articles/").pop().replace(/\.json$/, "");
-  const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(doc),
-  });
-  return resp.ok ? null : { error: `upload_failed_${resp.status}` };
+  try {
+    await writeArticleDoc(env, articleKey, doc, "agent");
+    return null;
+  } catch (e) {
+    console.log("[tools] writeArticleDoc failed:", e && e.message);
+    return { error: "upload_failed" };
+  }
 }
 
 register(
@@ -551,13 +553,15 @@ function mergedStem() {
 
 // 把一篇「无录音的独立文章」写进库并让它出现在「我的录音」：先写 article JSON（版本化
 // Files API），再写 0s 静音 m4a 锚点。返回 { ok, stem } 或 { error }。
-async function writeStandaloneArticle({ env, scope, token, origin }, stem, title, body, styleV) {
+async function writeStandaloneArticle({ env, scope }, stem, title, body, styleV) {
   const article = { title, body, ...(Number.isInteger(styleV) ? { style: styleV } : {}) };
   const doc = { schema: 2, id: stem, sourceAudio: `${stem}.m4a`, createdAt: new Date().toISOString(), transcript: "", srt: "", articles: [article], status: "ready", model: "merge" };
-  const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
-    method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(doc),
-  });
-  if (!resp.ok) return { error: `upload_failed_${resp.status}` };
+  try {
+    await writeArticleDoc(env, `${scope}articles/${stem}.json`, doc, "agent");
+  } catch (e) {
+    console.log("[tools] writeArticleDoc failed:", e && e.message);
+    return { error: "upload_failed" };
+  }
   await env.FILES.put(`${scope}${stem}.m4a`, silentM4aBytes(), { httpMetadata: { contentType: "audio/mp4" } });
   return { ok: true, stem };
 }
@@ -645,7 +649,7 @@ register(
   { name: "tag_article",
     description: "给一篇或多篇文章打标签/归类；remove 为 true 时改为移除该标签。stems 是文章数组，tag 是标签名。",
     input_schema: { type: "object", properties: { stems: { type: "array", items: { type: "string" } }, tag: { type: "string" }, remove: { type: "boolean" } }, required: ["stems", "tag"], additionalProperties: false } },
-  async ({ stems, tag, remove }, { env, scope, token, origin }) => {
+  async ({ stems, tag, remove }, { env, scope }) => {
     if (!Array.isArray(stems) || !stems.length || !tag) return { error: "bad_args" };
     for (const stem of stems) {
       if (badStem(stem)) return { error: "bad_stem" };
@@ -655,15 +659,21 @@ register(
       doc.tags = remove
         ? (doc.tags || []).filter((t) => t !== String(tag))
         : Array.from(new Set([...(doc.tags || []), String(tag)]));
-      if (!doc.tags.length) delete doc.tags;
+      // 删空必须写 undefined 而不是 delete：writeArticleDoc 是「合并到存量 doc」，
+      // delete 掉的键在合并时会被存量的旧 tags 复活（删除最后一个标签永远删不掉，
+      // 老的 HTTP 路径同样中招，只是当年的测试只看请求体没发现）。显式 undefined
+      // 会覆盖存量值，JSON.stringify 落盘时把键丢掉。
+      if (!doc.tags.length) doc.tags = undefined;
       // Schema-3 docs keep content in versions[head], not top-level `articles` —
       // but writeArticleDoc takes newDoc.articles as the new version's content.
       // Carry the current articles or tagging would append an empty version.
       doc.articles = resolveArticles(doc);
-      const resp = await globalThis.fetch(`${origin}/files/api/articles/${stem}`, {
-        method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(doc),
-      });
-      if (!resp.ok) return { error: `upload_failed_${resp.status}` };
+      try {
+        await writeArticleDoc(env, `${scope}articles/${stem}.json`, doc, "agent");
+      } catch (e) {
+        console.log("[tools] writeArticleDoc failed:", e && e.message);
+        return { error: "upload_failed" };
+      }
     }
     return remove ? { ok: true, untagged: stems.length, tag } : { ok: true, tagged: stems.length, tag };
   }

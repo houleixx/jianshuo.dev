@@ -36,6 +36,12 @@ const CTX = (env, extra = {}) => ({
   token: "t", origin: "https://jianshuo.dev", ...extra,
 });
 const PUT_OK = { "PUT https://jianshuo.dev/files/api/articles/s": () => ({ ok: true, body: { ok: true } }) };
+// 直写后（2026-07-25）：读落盘 doc 的 head 版本（形状兼容旧 PUT body 断言）
+const storedHead = async (env) => {
+  const doc = JSON.parse(await (await env.FILES.get("users/u/articles/s.json")).text());
+  const head = (doc.versions || []).find((e) => e.v === doc.head);
+  return { ...doc, articles: head ? head.articles : doc.articles };
+};
 
 describe("per-article unknown fields survive every edit write path", () => {
   const seed = () => fakeEnv({
@@ -50,7 +56,7 @@ describe("per-article unknown fields survive every edit write path", () => {
     globalThis.fetch = fakeFetch(PUT_OK);
     const r = await runTool("edit_current_article", { ops: [{ op: "delete_lines", lines: [2] }] }, CTX(env));
     expect(r).toEqual({ ok: true });
-    const sent = JSON.parse(globalThis.fetch.calls[0].body);
+    const sent = await storedHead(env);
     expect(sent.articles[0]).toEqual({
       title: "T", body: "一", style: 3, wechatMediaId: "m1", futureField: "keep-me",
     });
@@ -61,7 +67,7 @@ describe("per-article unknown fields survive every edit write path", () => {
     globalThis.fetch = fakeFetch(PUT_OK);
     const r = await runTool("write_article", { articles: [{ title: "新T", body: "新正文" }] }, CTX(env));
     expect(r).toEqual({ ok: true, count: 1 });
-    const sent = JSON.parse(globalThis.fetch.calls[0].body);
+    const sent = await storedHead(env);
     expect(sent.articles[0]).toEqual({
       title: "新T", body: "新正文", style: 3, wechatMediaId: "m1", futureField: "keep-me",
     });

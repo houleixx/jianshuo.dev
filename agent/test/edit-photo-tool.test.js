@@ -1,5 +1,9 @@
 import { vi, describe, it, expect, afterEach } from "vitest";
 import { makeEditedKey, makeGeneratedKey, runTool } from "../src/tools.js";
+import { resolveArticles } from "../../functions/lib/article-store.js";
+
+// 直写后（2026-07-25）：文章落盘不再走 HTTP PUT，断言改读 R2 里的版本化 doc。
+const storedBody = async (env) => resolveArticles(JSON.parse(await (await env.FILES.get(ARTICLE_KEY)).text()))[0].body;
 import { fakeEnv, fakeD1, usageSql } from "./fakes.js";
 
 describe("makeEditedKey", () => {
@@ -83,8 +87,8 @@ describe("edit_photo tool", () => {
     const r = await runTool("edit_photo", { key: OLD, prompt: "make it an ad" }, ctx);
     expect(r.ok).toBe(true);
     expect(r.message).toContain("约 1 分钟完成");
-    // article PUT body swapped old→new marker
-    const body = calls.put.body.articles[0].body;
+    // stored article body swapped old→new marker
+    const body = await storedBody(ctx.env);
     expect(body).not.toContain(`[[photo:${OLD}]]`);
     expect(body).toMatch(/\[\[photo:photos\/171\/\d+-[a-z0-9]+\.jpg\]\]/);
     // paint POST body
@@ -147,8 +151,8 @@ describe("edit_photo tool", () => {
     const calls = stubFetch({ paintStatus: 500 });
     const r = await runTool("edit_photo", { key: OLD, prompt: "x" }, ctx);
     expect(r.error).toBe("图片服务提交失败");
-    // last article PUT reverts to old marker (revert write happened)
-    expect(calls.put.body.articles[0].body).toContain(`[[photo:${OLD}]]`);
+    // stored article body reverts to old marker (revert write happened)
+    expect(await storedBody(ctx.env)).toContain(`[[photo:${OLD}]]`);
   });
 });
 
@@ -162,7 +166,7 @@ describe("new_photo tool", () => {
     expect(r.ok).toBe(true);
     expect(r.message).toContain("约 1 分钟出现");
 
-    const body = calls.put.body.articles[0].body;
+    const body = await storedBody(ctx.env);
     expect(body).toMatch(/\[\[photo:photos\/.+\.jpg\]\]/);
     // the original marker is untouched, still present
     expect(body).toContain(`[[photo:${OLD}]]`);
@@ -205,9 +209,10 @@ describe("new_photo tool", () => {
     const calls = stubFetch({ paintStatus: 500 });
     const r = await runTool("new_photo", { prompt: "x", after_line: 0 }, ctx);
     expect(r.error).toBe("图片服务提交失败");
-    // final PUT'd body no longer contains the new marker — reverted to the original
-    expect(calls.put.body.articles[0].body).not.toMatch(/\[\[photo:photos\/(?!171\/171\.jpg).+\.jpg\]\]/);
-    expect(calls.put.body.articles[0].body).toBe(`第一段。\n[[photo:${OLD}]]\n第二段。`);
+    // stored body no longer contains the new marker — reverted to the original
+    const body = await storedBody(ctx.env);
+    expect(body).not.toMatch(/\[\[photo:photos\/(?!171\/171\.jpg).+\.jpg\]\]/);
+    expect(body).toBe(`第一段。\n[[photo:${OLD}]]\n第二段。`);
   });
 });
 

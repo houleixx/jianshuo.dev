@@ -34,10 +34,9 @@ describe("merge_articles", () => {
 
     expect(r.ok).toBe(true);
     expect(r.newStem).toMatch(/^VoiceDrop-merged-/);
-    // 新文章通过 Files API PUT 写出，标题「合璧」
-    const put = fetchSpy.mock.calls.find(([u, o]) => o?.method === "PUT" && String(u).includes(`/files/api/articles/${r.newStem}`));
-    expect(put).toBeTruthy();
-    expect(JSON.parse(put[1].body).articles[0].title).toBe("合璧");
+    // 新文章直写落盘（2026-07-25 起不再绕 HTTP），标题「合璧」
+    const doc = JSON.parse(env.FILES._store.get(`${SCOPE}articles/${r.newStem}.json`));
+    expect(doc.versions[doc.versions.length - 1].articles[0].title).toBe("合璧");
     // 静音 m4a 锚点写了
     expect(env.FILES._store.has(`${SCOPE}${r.newStem}.m4a`)).toBe(true);
     // 原文保留
@@ -60,8 +59,8 @@ describe("merge_articles", () => {
     const r = await runTool("merge_articles", { stems: ["A", "B"] },
       { env, scope: SCOPE, token: "tk", origin: "https://jianshuo.dev", callClaude });
     expect(r.ok).toBe(true);
-    const put = fetchSpy.mock.calls.find(([u, o]) => o?.method === "PUT" && String(u).includes("/files/api/articles/"));
-    expect(JSON.parse(put[1].body).articles[0].style).toBe(7);
+    const doc7 = JSON.parse(env.FILES._store.get(`${SCOPE}articles/${r.newStem}.json`));
+    expect(doc7.versions[doc7.versions.length - 1].articles[0].style).toBe(7);
 
     // 无 CLAUDE.json → style 字段不出现（而不是 null/NaN）
     const env2 = { FILES: memFiles({
@@ -72,8 +71,8 @@ describe("merge_articles", () => {
     const r2 = await runTool("merge_articles", { stems: ["A", "B"] },
       { env: env2, scope: SCOPE, token: "tk", origin: "https://jianshuo.dev", callClaude, idemKey: "k2" });
     expect(r2.ok).toBe(true);
-    const put2 = fetchSpy.mock.calls.find(([u, o]) => o?.method === "PUT" && String(u).includes("/files/api/articles/"));
-    expect("style" in JSON.parse(put2[1].body).articles[0]).toBe(false);
+    const doc2 = JSON.parse(env2.FILES._store.get(`${SCOPE}articles/${r2.newStem}.json`));
+    expect("style" in doc2.versions[doc2.versions.length - 1].articles[0]).toBe(false);
     vi.unstubAllGlobals();
   });
 });
@@ -117,9 +116,13 @@ describe("tool defs are valid Anthropic tool schemas (no extra keys)", () => {
 
 describe("tag_article", () => {
   const ORIGIN = "https://jianshuo.dev";
-  function putBody(fetchSpy, stem) {
-    const call = fetchSpy.mock.calls.find(([u, o]) => o?.method === "PUT" && String(u).includes(`/files/api/articles/${stem}`));
-    return call ? JSON.parse(call[1].body) : null;
+  // 直写后（2026-07-25）：读落盘 doc，把 head 版本的 articles 提到顶层，形状与旧 PUT body 兼容
+  function putBody(env, stem) {
+    const raw = env.FILES._store.get(`${SCOPE}articles/${stem}.json`);
+    if (!raw) return null;
+    const doc = JSON.parse(raw);
+    const head = (doc.versions || []).find((e) => e.v === doc.head);
+    return { ...doc, articles: head ? head.articles : doc.articles };
   }
 
   it("打标签：去重追加到 doc.tags，经 Files API PUT 写回", async () => {
@@ -128,11 +131,10 @@ describe("tag_article", () => {
     vi.stubGlobal("fetch", fetchSpy);
     const r = await runTool("tag_article", { stems: ["A"], tag: "创业" }, { env, scope: SCOPE, token: "tk", origin: ORIGIN });
     expect(r).toEqual({ ok: true, tagged: 1, tag: "创业" });
-    expect(putBody(fetchSpy, "A").tags).toEqual(["旧类", "创业"]);
-    // 重复打同一标签不产生重复项
-    fetchSpy.mockClear();
+    expect(putBody(env, "A").tags).toEqual(["旧类", "创业"]);
+    // 重复打同一标签不产生重复项（直写落盘后第二次调用读到的是已更新的 doc）
     await runTool("tag_article", { stems: ["A"], tag: "旧类" }, { env, scope: SCOPE, token: "tk", origin: ORIGIN });
-    expect(putBody(fetchSpy, "A").tags).toEqual(["旧类"]);
+    expect(putBody(env, "A").tags).toEqual(["旧类", "创业"]);
     vi.unstubAllGlobals();
   });
 
@@ -146,8 +148,8 @@ describe("tag_article", () => {
     vi.stubGlobal("fetch", fetchSpy);
     const r = await runTool("tag_article", { stems: ["C"], tag: "创业" }, { env, scope: SCOPE, token: "tk", origin: ORIGIN });
     expect(r.ok).toBe(true);
-    expect(putBody(fetchSpy, "C").tags).toEqual(["创业"]);
-    expect(putBody(fetchSpy, "C").articles).toEqual([{ title: "新", body: "新文" }]);
+    expect(putBody(env, "C").tags).toEqual(["创业"]);
+    expect(putBody(env, "C").articles).toEqual([{ title: "新", body: "新文" }]);
     vi.unstubAllGlobals();
   });
 
@@ -161,8 +163,8 @@ describe("tag_article", () => {
     const r = await runTool("tag_article", { stems: ["A", "B"], tag: "甲类", remove: true },
       { env, scope: SCOPE, token: "tk", origin: ORIGIN });
     expect(r).toEqual({ ok: true, untagged: 2, tag: "甲类" });
-    expect(putBody(fetchSpy, "A").tags).toEqual(["乙类"]);
-    expect("tags" in putBody(fetchSpy, "B")).toBe(false);   // 删空 → 字段消失
+    expect(putBody(env, "A").tags).toEqual(["乙类"]);
+    expect("tags" in putBody(env, "B")).toBe(false);   // 删空 → 字段消失
     vi.unstubAllGlobals();
   });
 });
