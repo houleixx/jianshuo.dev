@@ -53,6 +53,10 @@ export { AnthropicRelay, RealtimeRelay } from "./relay.js";
 // via resolveEditModel — honoring a Claude model choice, ignoring non-Anthropic.
 const MODEL = "claude-sonnet-4-6";
 
+// 写后校验（编辑质检员）用的便宜模型：终结编辑工具落盘后，对照「指令 + 正文 diff」
+// 复查一遍，不合格让编辑模型再修一轮（runEditTurn 的 callVerify，best-effort）。
+const VERIFY_MODEL = "claude-haiku-4-5-20251001";
+
 // writeLlmLog is imported from ./llmlog.js (shared with miner.js).
 // rand6 stays here — also used to build per-turn ids below.
 function rand6() {
@@ -194,6 +198,10 @@ export class ArticleEditor extends Agent {
     // 已连接的详情页。DO 内直连 broadcast，best-effort。
     const editPreview = makeEditPreview((obj) => this.broadcast(JSON.stringify(obj)));
     const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction: row.text, model: editModel, onEvent: editPreview.onEvent });
+    // 独立的 haiku 通道给写后校验用：同 turnId 进 llmlog（model 字段区分）、同一套
+    // 算力计费。与 callClaude 各有自己的 step 计数器，step 序号可能重叠——只影响
+    // 日志排序观感，不影响任何逻辑。
+    const callVerify = this._makeLoggedCall({ turnId, scope, stem, instruction: row.text, model: VERIFY_MODEL });
 
     let history = [];
     try {
@@ -212,7 +220,7 @@ export class ArticleEditor extends Agent {
     try { anchor = row.anchor ? JSON.parse(row.anchor) : null; } catch (_) { anchor = null; }
     const res = await runEditTurn({
       env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev",
-      editId: row.id, instruction: row.text, images, articleIndex, anchor, itemId: row.item_id || null, system: SYSTEM, history, callClaude,
+      editId: row.id, instruction: row.text, images, articleIndex, anchor, itemId: row.item_id || null, system: SYSTEM, history, callClaude, callVerify,
     });
     editPreview.finish();   // 幽灵稿收尾（updated 紧随其后广播）
 

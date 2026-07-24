@@ -8,6 +8,10 @@ import { runAgentLoop } from "./loop.js";
 import { TITLE_FALLBACK, resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { inlineNumberedBody, numberBodyRows } from "./linenum.js";
 import { resolveSharedPromptBlock } from "./prompt-share.js";
+import { loadPromptTemplate } from "./prompt-template.js";
+import { resolveList } from "./prompts.js";
+import { loadUserPrompts } from "./prompt-store.js";
+import { VERIFY_SYSTEM } from "./prompts/edit.js";
 
 const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo", "new_photo"];
 
@@ -43,6 +47,42 @@ export function resolveAnchorLine(anchor, { rows, photoKeys }) {
     return `用户长按的是第 ${n} 行（"${text}"）（指令里说的「这段/这行」就是它）`;
   }
   return null;
+}
+
+// 写后校验用的正文 diff：多重集合逐行比对（不做 LCS——校验只要「哪些行没了 /
+// 多了」，移动顺序这种极端场景漏报就漏报，宁可放行）。返回 "" = 无可见改动。
+export function diffBodyLines(before, after, { maxLines = 80, maxChars = 8000 } = {}) {
+  const split = (s) => String(s || "").split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const A = split(before), B = split(after);
+  const count = (list) => { const m = new Map(); for (const l of list) m.set(l, (m.get(l) || 0) + 1); return m; };
+  const out = [];
+  const bLeft = count(B);
+  for (const l of A) { const n = bLeft.get(l) || 0; if (n > 0) bLeft.set(l, n - 1); else out.push("- " + l); }
+  const aLeft = count(A);
+  for (const l of B) { const n = aLeft.get(l) || 0; if (n > 0) aLeft.set(l, n - 1); else out.push("+ " + l); }
+  if (!out.length) return "";
+  let lines = out;
+  if (lines.length > maxLines) lines = [...lines.slice(0, maxLines), `…（改动过大，还有 ${out.length - maxLines} 行未列出）`];
+  const text = lines.join("\n");
+  return text.length > maxChars ? text.slice(0, maxChars) + "\n…（截断）" : text;
+}
+
+// 【我的提示词菜单】目录行：只注标签不注全文（全文由 use_my_prompt 按需取），几十个
+// 字的成本换「用户口头点名菜单项」可被识别。读不到 / 空树 → 返回 ""（不注入，现状照旧）。
+export async function promptCatalogLine(env, scope) {
+  try {
+    const [tpl, userDoc] = await Promise.all([loadPromptTemplate(env), loadUserPrompts(env, scope)]);
+    const tree = resolveList(tpl, userDoc);
+    const parts = [];
+    for (const it of tree || []) {
+      if (it.type === "group") {
+        const labels = (it.children || []).filter((c) => c && c.type === "action").map((c) => c.label).filter(Boolean);
+        if (labels.length) parts.push(`${it.label}：${labels.join("/")}`);
+      } else if (it.type === "action" && it.label) parts.push(it.label);
+    }
+    if (!parts.length) return "";
+    return `【我的提示词菜单】（长按菜单同款；用户口头点名其中某条时，先调 use_my_prompt 取全文再照它执行）：${parts.join("；")}`;
+  } catch (e) { console.log("[edit-turn] prompt catalog load failed:", e && e.message); return ""; }
 }
 
 function bufToB64(buf) {
@@ -81,7 +121,7 @@ async function imageBlocks(images, { env, scope, origin }) {
   return out;
 }
 
-export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, anchor = null, itemId = null, system, history = [], callClaude }) {
+export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, anchor = null, itemId = null, system, history = [], callClaude, callVerify = null }) {
   const obj = await env.FILES.get(articleKey);
   if (!obj) return { ok: false, reply: "", article: null, hadError: true };
   const doc = JSON.parse(await obj.text());
@@ -160,12 +200,17 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
     .filter(Boolean);
   const anchorLine = resolveAnchorLine(anchor, { rows: anchorRows, photoKeys });
   if (anchorLine) varLines.push("", anchorLine);
-  varLines.push("", "这次的语音指令：", instruction);
 
-  // 指令里报了干净的分享码（4–9 位）→ 零延迟 fast path，预注入共享指令块（一次性参考；
-  // 查无则软备注）。被 ASR 打歪的码（汉字数字/怪断句）这里不命中，
-  // 由模型在 loop 里调 use_shared_prompt 工具推断解析（见 tools.js / EDIT_SYSTEM）。
-  const shared = await resolveSharedPromptBlock(env, instruction);
+  // 分享码 fast path 与提示词菜单目录互不依赖，并行拉（各一两次 R2 往返，别串行积垢）。
+  const [shared, catalogLine] = await Promise.all([
+    // 指令里报了干净的分享码（4–9 位）→ 零延迟 fast path，预注入共享指令块（一次性参考；
+    // 查无则软备注）。被 ASR 打歪的码（汉字数字/怪断句）这里不命中，
+    // 由模型在 loop 里调 use_shared_prompt 工具推断解析（见 tools.js / EDIT_SYSTEM）。
+    resolveSharedPromptBlock(env, instruction),
+    promptCatalogLine(env, scope),
+  ]);
+  if (catalogLine) varLines.push("", catalogLine);
+  varLines.push("", "这次的语音指令：", instruction);
   if (shared) varLines.push("", shared.block);
 
   const userContent = [
@@ -190,7 +235,37 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   // 图片 XMP（paint:Magic）——图走到哪，同款指令的兑换码跟到哪。itemId：客户端
   // 长按菜单调指令时随 payload 带上的指令 id，出图时精确解析成码（magicForItem）
   const ctx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: shared?.magic || null, itemId: itemId || null };
-  const result = await runAgentLoop({ callClaude, ctx, system: systemBlocks, userContent, history });
+
+  // 写后校验（callVerify 缺省 = 不校验，现状照旧）：只对改正文的终结工具
+  // （edit_current_article / write_article）跑——出图是异步的、发公众号等动作没有
+  // 正文 diff 可查。用便宜模型对照「指令 + 锚点 + 正文 diff」判一次；任何一步失败
+  // （读不到 doc / 模型没返回合法 JSON）都放行，绝不把成功的编辑拖成失败。
+  const beforeBody = target?.body || "";
+  const verify = callVerify ? async ({ terminalNames }) => {
+    if (!terminalNames.some((n) => n === "edit_current_article" || n === "write_article")) return null;
+    const afterObj = await env.FILES.get(articleKey);
+    if (!afterObj) return null;
+    const afterDoc = JSON.parse(await afterObj.text());
+    const afterArticles = resolveArticles(afterDoc);
+    const afterBody = (afterArticles[idx < afterArticles.length ? idx : 0]?.body) || "";
+    const diff = diffBodyLines(beforeBody, afterBody);
+    if (!diff) return null; // 正文无可见改动（如只改标题）→ 没有可校验的对象
+    const userMsg = [
+      anchorLine ? `长按定位：${anchorLine}` : null,
+      `语音指令：${instruction}`,
+      "",
+      "这次编辑造成的正文改动：",
+      diff,
+    ].filter((l) => l !== null).join("\n");
+    const resp = await callVerify({ system: VERIFY_SYSTEM, messages: [{ role: "user", content: userMsg }] });
+    const textOut = ((resp && resp.content) || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+    const m = textOut.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const v = JSON.parse(m[0]);
+    return v && v.ok === false && v.issue ? String(v.issue).slice(0, 500) : null;
+  } : null;
+
+  const result = await runAgentLoop({ callClaude, ctx, system: systemBlocks, userContent, history, verify });
 
   const after = await env.FILES.get(articleKey);
   const finalDoc = after ? JSON.parse(await after.text()) : doc;

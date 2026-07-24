@@ -320,9 +320,11 @@ describe("runEditTurn — anchor 注入（varLines）", () => {
     const withNull = await runWith(null);
     expect(withNone).toBe(withNull);
     expect(withNone).not.toContain("用户长按");
-    // 逐字节对齐现状结构：正文照常内联编号出现，指令紧随其后，两者之间没有
-    // 被 anchor 行插进来。
-    expect(withNone).toContain("第1行：第一段\n第2行 = 图1：[[photo:photos/2026-07-01/1.jpg]]\n第3行：第三段\n\n\n这次的语音指令：\n把这张图重画成水彩");
+    // 对齐现状结构：正文照常内联编号出现，没有 anchor 行插进来；正文和指令之间
+    // 只隔一行【我的提示词菜单】目录（2026-07-24 起长按菜单开放给语音用）。
+    expect(withNone).toContain("第1行：第一段\n第2行 = 图1：[[photo:photos/2026-07-01/1.jpg]]\n第3行：第三段\n\n\n【我的提示词菜单】");
+    expect(withNone).toContain("【我的提示词菜单】（长按菜单同款；用户口头点名其中某条时，先调 use_my_prompt 取全文再照它执行）：图片风格：卡通/广告/水彩/素描/油画/胶片");
+    expect(withNone).toMatch(/【我的提示词菜单】[^\n]*\n\n这次的语音指令：\n把这张图重画成水彩/);
   });
 });
 

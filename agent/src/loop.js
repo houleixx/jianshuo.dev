@@ -17,7 +17,11 @@ export function parseAssistant(resp) {
 
 // Drive Claude with tools until it stops calling them (or maxSteps).
 // userContent: string (text-only) or content-block array (e.g. with image blocks).
-export async function runAgentLoop({ callClaude, ctx, system, userContent, history = [], maxSteps = 8, tools = TOOL_DEFS, terminalTools = TERMINAL_TOOLS }) {
+// verify: optional async ({ ctx, terminalNames, toolRuns }) => null | "issue 描述"。
+// 终结工具成功后、短路收尾前跑一次（每回合至多一次）：返回 issue 就取消短路，把
+// issue 作为额外文本块塞进同一条 tool_result 消息，让模型在剩余轮数里自行修正；
+// 返回 null / 抛错 = 放行——校验是 best-effort，绝不能把一次成功的编辑变成失败。
+export async function runAgentLoop({ callClaude, ctx, system, userContent, history = [], maxSteps = 8, tools = TOOL_DEFS, terminalTools = TERMINAL_TOOLS, verify = null }) {
   // `history` = prior conversation turns (alternating user/assistant text messages)
   // prepended so the model has cross-turn context; the current turn follows.
   const messages = [...history, { role: "user", content: userContent }];
@@ -28,6 +32,8 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
   // place it's captured, so the admin can show what each instruction actually did.
   const toolRuns = [];
   const pending = []; // 工具暂存、待客户端确认的破坏性动作
+  const verifyIssues = []; // 写后校验抓到的问题（观测用；空 = 没验或验过了）
+  let verified = false;
   let finalText = "";
   let hadError = false;
   let steps = 0;
@@ -39,14 +45,28 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
     if (!toolUses.length) { finalText = text; break; }
     const results = [];
     let terminalDone = false;
+    const terminalNames = [];
     for (const tu of toolUses) {
       calledTools.push(tu.name);
       const result = await runTool(tu.name, tu.input, ctx);
       toolRuns.push({ step: steps - 1, name: tu.name, input: tu.input, result, ok: !(result && result.error) });
       if (result && result.error) hadError = true;
       if (result && result.pending) pending.push(result.pending);
-      if (result && result.ok === true && terminalTools.has(tu.name)) terminalDone = true;
+      if (result && result.ok === true && terminalTools.has(tu.name)) { terminalDone = true; terminalNames.push(tu.name); }
       results.push({ type: "tool_result", tool_use_id: tu.id, content: JSON.stringify(result) });
+    }
+    // 写后校验：改动已经落盘（工具跑完了），在决定短路之前复查一遍。发现问题就把
+    // issue 追加为同一条 user 消息里 tool_result 之后的文本块（不另起消息，保持
+    // user/assistant 交替），并取消本次短路。maxSteps 已到时 issue 只能记录不修。
+    if (terminalDone && !hadError && verify && !verified) {
+      verified = true;
+      let issue = null;
+      try { issue = await verify({ ctx, terminalNames, toolRuns }); } catch (e) { console.log("[loop] verify failed (pass-through):", e && e.message); }
+      if (issue) {
+        verifyIssues.push(issue);
+        results.push({ type: "text", text: `【自动校验】刚才的改动可能没有正确完成用户指令：${issue}\n请对照指令重新检查并用工具修正；如果你确认现状其实已经正确、无需再改，就直接简短说明。` });
+        terminalDone = false;
+      }
     }
     messages.push({ role: "user", content: results });
     // Fast path: a terminal action succeeded → the turn is done. Reply with the
@@ -55,5 +75,5 @@ export async function runAgentLoop({ callClaude, ctx, system, userContent, histo
     // the failure back and can react.
     if (terminalDone && !hadError) { finalText = text; break; }
   }
-  return { calledTools, toolRuns, finalText, steps, hadError, pending };
+  return { calledTools, toolRuns, finalText, steps, hadError, pending, verifyIssues };
 }

@@ -11,6 +11,9 @@ import { silentM4aBytes } from "../../functions/lib/silent-m4a.js";
 import { snapSize, jpegDims, fitSize } from "./paint-size.js";
 import { magicForItem, resolvePromptShare, sanitizeMagicCode, sharedPromptUsageNote } from "./prompt-share.js";
 import { MERGE_ARTICLES_DESC, ADD_FOLLOWUPS_DESC, EDIT_PHOTO_DESC, NEW_PHOTO_DESC } from "./prompts/tool-desc.js";
+import { loadPromptTemplate } from "./prompt-template.js";
+import { resolveList } from "./prompts.js";
+import { loadUserPrompts } from "./prompt-store.js";
 
 export const TOOL_DEFS = []; // populated in Tasks 2–4
 
@@ -313,6 +316,55 @@ register(
     if (!hit) return { error: "not_found", code: c, hint: "码无效或分享已关闭，如实告诉用户，不要另猜一个码" };
     ctx.sharedMagic = c;
     return { code: c, label: hit.label, instruction: hit.instruction, note: `仅供完成本次任务一次性参考使用，不改变任何设置。${sharedPromptUsageNote(hit)}` };
+  }
+);
+
+// 用户自己的提示词库（长按菜单同款）按名字取全文——语音版的长按菜单。目录（只有
+// 标签）由 edit-turn 注入上下文（【我的提示词菜单】），全文按需从这里取，树再大
+// 也不炸 prompt。匹配宁缺勿滥：多条近名 → 返回候选让模型和用户确认，绝不瞎选。
+const normPromptLabel = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
+
+register(
+  {
+    name: "use_my_prompt",
+    description:
+      "按名字取出用户自己提示词库（长按菜单同款）里某一条的全文。当语音指令口头点名【我的提示词菜单】目录里的某条（如「用水彩那个」「白边贴纸」「来张公众号题图」）时调用；取到后照返回的提示词执行：kind=image 的用 edit_photo（提示词里的 {{KEY}} 换成目标图的 KEY）或 new_photo，文字类的把 {{LINE}}/{{QUOTE}} 换成目标行号和该行开头原文后用 edit_current_article 定点改。名字按用户口头说的传入即可（允许简称）；返回 ambiguous 时向用户确认是哪一条再调。",
+    input_schema: {
+      type: "object",
+      properties: { name: { type: "string", description: "用户口头点名的提示词名字（菜单标签），如「水彩」「白边贴纸」「公众号题图」" } },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  async ({ name }, ctx) => {
+    const q = normPromptLabel(name);
+    if (!q) return { error: "bad_name", hint: "传入用户口头说的菜单名字" };
+    let tree;
+    try {
+      const [tpl, userDoc] = await Promise.all([loadPromptTemplate(ctx.env), loadUserPrompts(ctx.env, ctx.scope)]);
+      tree = resolveList(tpl, userDoc);
+    } catch (e) { return { error: "load_failed" }; }
+    const flat = [];
+    for (const it of tree || []) {
+      if (it.type === "group") {
+        for (const c of it.children || []) if (c && c.type === "action") flat.push({ ...c, group: it.label || "" });
+      } else if (it.type === "action") flat.push({ ...it, group: "" });
+    }
+    const full = (a) => (a.group ? `${a.group}｜${a.label}` : a.label);
+    const exact = flat.filter((a) => normPromptLabel(a.label) === q || normPromptLabel(full(a)) === q);
+    let hits = exact.length ? exact : flat.filter((a) => {
+      const l = normPromptLabel(a.label);
+      return (l && (l.includes(q) || q.includes(l))) || normPromptLabel(full(a)).includes(q);
+    });
+    if (!hits.length) return { error: "not_found", name, available: flat.map(full), hint: "菜单里没有这条；如实告诉用户，不要硬造提示词" };
+    // 完全同名的多条（历史重复导入）内容多半一致——取第一条即可，不算歧义。
+    if (hits.length > 1 && new Set(hits.map((a) => normPromptLabel(full(a)))).size === 1) hits = [hits[0]];
+    if (hits.length > 1) return { error: "ambiguous", candidates: hits.map(full), hint: "多条近名，向用户确认是哪一条后用完整标签再调一次" };
+    const hit = hits[0];
+    return {
+      label: hit.label, ...(hit.group ? { group: hit.group } : {}), kind: hit.kind || "text", prompt: hit.prompt,
+      note: "照这条提示词执行本次指令：kind=image → 目标是已有图就把 {{KEY}} 换成那张图的 KEY 后调 edit_photo，凭空生成/插入新图就把替换好占位符的提示词当 new_photo 的 prompt；文字类 → {{LINE}}/{{QUOTE}} 换成目标行号与该行开头原文，用 edit_current_article 定点改。",
+    };
   }
 );
 
