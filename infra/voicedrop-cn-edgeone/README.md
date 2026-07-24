@@ -91,6 +91,16 @@ voicedrop-agent worker 的 */5 cron 探活 `https://voicedrop.cn/`,与接入层�
 | EO CNAME | `voicedrop.cn.eo.dnse0.com` / `www.voicedrop.cn.eo.dnse0.com` |
 | 边缘函数 | `ef-twt1wxxe`(内容=本目录 edge-function.js),触发规则 rule-t54qd0ec(两 host 全路径) |
 | 缓存规则 | `rule-3sqtstkogxd7`(创建 payload=本目录 cache-rules.json,四分支 if/elif) |
+
+**2026-07-24 追加(App API 入口收敛):** `/agent/*`、`/reco/*` 也从 voicedrop.cn 进——
+边缘函数同源透传(与 /files 同款),`rule-3sqtstkogxd7` 前插 origin-rewrite SubRule
+(`ModifyOrigin` → `jianshuo.dev` HTTPS + `HostHeader` custom jianshuo.dev,打到 zone 级
+worker 路由),no-cache 分支扩为 `['/files/*','/agent/*','/reco/*']`。
+**两个死胡同(实测):** 边缘函数里直接 fetch 外部 URL 走节点裸公网出境——
+`*.workers.dev` 被墙 545,`jianshuo.dev` 也 `net_exception_timeout`;只有「配置的
+源站/规则改写的源站」走 EO 跨境回源通道。WebSocket 不经 EO(App wss 仍直连
+jianshuo.dev,EO 边缘函数 WS 透传未验证)。iOS 侧 `API.host` 已切 voicedrop.cn
+(Networking.swift,cdn-cgi 缩略图与 wss 留 cfHost=jianshuo.dev)。
 | 强制 HTTPS | 301,全局 ModifyL7AccSetting;HTTP/2 默认已开 |
 | 证书 | `eofreecert`(TrustAsia,EO 自动续期)。切换过程用过渡证书:腾讯云 SSL `ZKx0XVNA`(LE RSA2048,lego 经 CF DNS-01 签,2026-10-18 到期,已不在线上,可留作应急) |
 | DNS | Cloudflare 两条 CNAME → 上面 EO CNAME,proxied=false,TTL 300(2026-07-20 切换) |

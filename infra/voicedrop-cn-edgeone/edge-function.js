@@ -19,6 +19,19 @@
 
 const FALLBACK_REDIRECT_PHOTOS = false;
 
+// App 的 API 入口收敛(2026-07-24):/agent/* 与 /reco/* 也从 voicedrop.cn 进,
+// 让国内 App 用户走 EO 回源通道,不再直连 CF anycast。
+// 实现方式:这里只做同源透传(与 /files/* 同款),真正把这两个前缀送到
+// jianshuo.dev(zone 级 worker 路由)的是 EO 规则引擎的「源站改写」分支
+// (cache-rules.json 里 path in ['/agent/*','/reco/*'] → ModifyOrigin jianshuo.dev)。
+// 两个死胡同,都别再走(2026-07-24 实测):
+//   - 函数里直接 fetch('https://…workers.dev') → workers.dev 境内被墙,545;
+//   - 函数里直接 fetch('https://jianshuo.dev') → 临时外部子请求走节点裸公网
+//     出境,net_exception_timeout。只有「配置的源站」才走 EO 跨境回源专线。
+// WebSocket(/agent/edit、/status、/asr)不走这里:App 的 wss 仍直连 jianshuo.dev,
+// EO 边缘函数的 WS 透传未验证,不赌。
+const WORKER_PASSTHROUGH = ['/agent', '/reco'];
+
 addEventListener('fetch', (event) => {
   event.respondWith(handle(event.request));
 });
@@ -44,10 +57,13 @@ async function handle(request) {
     return Response.redirect('https://jianshuo.dev' + path + url.search, 302);
   }
 
-  // 路径映射:/files/* 原样透传;其余补 /voicedrop 前缀(/ → /voicedrop/)。
+  // 路径映射:/files/*、/agent/*、/reco/* 原样透传;其余补 /voicedrop 前缀(/ → /voicedrop/)。
   // /favicon.ico、/.well-known/*、/<分享id> 都靠这条落到 Pages 的正确位置,
   // 与 Caddy 时代行为一致。
-  const upstreamPath = path.startsWith('/files/') ? path : '/voicedrop' + path;
+  const passthrough =
+    path.startsWith('/files/') ||
+    WORKER_PASSTHROUGH.some((p) => path === p || path.startsWith(p + '/'));
+  const upstreamPath = passthrough ? path : '/voicedrop' + path;
 
   // 同域名 fetch → 走 EO 缓存 + 回源流程(源站在 EO 控制台配成
   // jianshuo-dev.pages.dev,回源 HOST 同名)。EO 缓存键按客户端 URL 计算,

@@ -5,7 +5,7 @@
       "RuleName": "voicedrop-cn-cache",
       "Status": "enable",
       "Description": [
-        "分支按序: 1照片/封面缓存遵循源站; 2其余/files/*不缓存(鉴权接口); 3静态后缀缓存1天; 4默认不缓存"
+        "分支按序: 1照片/封面缓存遵循源站; 2其余/files/*与/agent/*、/reco/*不缓存(鉴权接口); 3静态后缀缓存1天; 4默认不缓存"
       ],
       "Branches": [
         {
@@ -32,7 +32,7 @@
                   ]
                 },
                 {
-                  "Condition": "${http.request.uri.path} in ['/files/*']",
+                  "Condition": "${http.request.uri.path} in ['/files/*', '/agent/*', '/reco/*']",
                   "Actions": [
                     {
                       "Name": "Cache",
