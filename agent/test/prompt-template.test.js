@@ -4,11 +4,11 @@ import { DEFAULT_PROMPT_TEMPLATE, loadPromptTemplate, templateIndex } from "../s
 describe("DEFAULT_PROMPT_TEMPLATE（spec 2026-07-13-prompt-manager-redesign.md §3）", () => {
   const idx = templateIndex(DEFAULT_PROMPT_TEMPLATE);
 
-  it("schema 1；12 个 action + 3 个 group", () => {
+  it("schema 1；18 个 action + 4 个 group", () => {
     expect(DEFAULT_PROMPT_TEMPLATE.schema).toBe(1);
     const all = [...idx.values()];
-    expect(all.filter((n) => n.type === "action").length).toBe(12);
-    expect(all.filter((n) => n.type === "group").length).toBe(3);
+    expect(all.filter((n) => n.type === "action").length).toBe(18);
+    expect(all.filter((n) => n.type === "group").length).toBe(4);
   });
 
   it("id 全部 sys_ 前缀，且不编码菜单归属（不含 image./text. 路径段）", () => {
