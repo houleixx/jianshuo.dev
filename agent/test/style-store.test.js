@@ -101,14 +101,15 @@ describe("writeStyleDoc — versioned write", () => {
     expect(doc.versions[0].style).toBe("新的");
   });
 
-  it("writing after an undo truncates future versions before appending", async () => {
+  it("writing after an undo KEEPS future versions and appends at the tail", async () => {
     const env = fakeEnv({});
     await writeStyleDoc(env, SCOPE, "v1", "app");   // head 1
     await writeStyleDoc(env, SCOPE, "v2", "app");   // head 2
     await setStyleHead(env, SCOPE, 1);              // undo to v1
-    const doc = await writeStyleDoc(env, SCOPE, "v1b", "app"); // branch off v1
-    expect(doc.head).toBe(2);
-    expect(doc.versions.map((e) => e.style)).toEqual(["v1", "v1b"]); // v2 dropped
+    const doc = await writeStyleDoc(env, SCOPE, "v1b", "app"); // write on top of v1
+    expect(doc.head).toBe(3);                       // max v (2) + 1, not head+1
+    expect(doc.versions.map((e) => e.style)).toEqual(["v1", "v2", "v1b"]); // v2 survives
+    expect(resolveStyle(doc)).toBe("v1b");
   });
 
   it("prunes to STYLE_MAX_VERSIONS oldest-first", async () => {

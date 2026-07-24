@@ -160,10 +160,13 @@ export async function writeStyleDoc(env, scope, style, source = "unknown") {
 
   let versions, head, createdAt;
   if (current && Array.isArray(current.versions) && current.head) {
-    // Truncate any "future" versions (after head, left from an undo), then append.
-    const base = current.versions.filter((e) => e.v <= current.head);
-    const newV = current.head + 1;
-    versions = [...base, { v: newV, savedAt: Date.now(), source, style }].slice(-STYLE_MAX_VERSIONS);
+    // Writing after an undo does NOT truncate the "future" versions — 文风是
+    // 试来试去的东西，用户退回旧版再改一笔，不该把后面的版本全灭掉（2026-07-24
+    // 用户 CZ 的 7 个版本就是这么没的，从夜间备份捞回来的）。新版本接在链尾
+    // （max v + 1，head 可能落后于链尾所以不能用 head+1），head 指向它；
+    // 只有 STYLE_MAX_VERSIONS 上限还会挤掉最老的。
+    const newV = Math.max(...current.versions.map((e) => e.v), current.head) + 1;
+    versions = [...current.versions, { v: newV, savedAt: Date.now(), source, style }].slice(-STYLE_MAX_VERSIONS);
     head = newV;
     createdAt = current.createdAt || Date.now();
   } else {
