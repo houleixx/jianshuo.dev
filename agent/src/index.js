@@ -163,9 +163,19 @@ export class ArticleEditor extends Agent {
     set("token", token);
     // Connect-time snapshot: current doc + queue states, so a reconnecting /
     // relaunching app reconciles. Best-effort; never blocks the connection.
+    // ⚠️ article 为 null 的快照仍会把队列里已完成的任务从 App 上消掉，但正文
+    // 不会更新——占位图/新版本就此丢失（2026-07-25 疑似复现：R2 偶发 internal
+    // error 时 loadDoc 吞错返回 null）。所以读失败重试一次并打日志，别静默。
     (async () => {
       try {
-        const doc = await this._queue.loadDoc();
+        let doc = null;
+        try { doc = await this._queue.loadDoc(); } catch (_) {}
+        if (!doc) {
+          console.log("[edit] snapshot loadDoc null/failed, retrying once");
+          await new Promise((r) => setTimeout(r, 300));
+          try { doc = await this._queue.loadDoc(); } catch (_) {}
+          if (!doc) console.log("[edit] snapshot loadDoc failed twice — sending null article");
+        }
         connection.send(JSON.stringify({ type: "snapshot", article: doc, queue: this._queue.snapshot() }));
       } catch (_) {}
     })().catch(() => {});
