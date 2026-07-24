@@ -4,7 +4,10 @@ import { runTool, TOOL_DEFS } from "./tools.js";
 // reason to spend another full Claude round-trip just to fetch a one-line
 // confirmation. Read tools (list/read_article/read_style) are NOT here; they
 // gather context and the loop must continue after them.
-const TERMINAL_TOOLS = new Set(["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community"]);
+// edit_photo/new_photo 也短路：出图是异步的，工具已返回现成的「🎨 正在生成…」
+// 文案（edit-turn 会把它当回复），再跑一轮模型只为一句确认白花 1.5–4s
+// （2026-07-24 llmlog 实测）。
+const TERMINAL_TOOLS = new Set(["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo", "new_photo"]);
 
 export function parseAssistant(resp) {
   const content = (resp && resp.content) || [];

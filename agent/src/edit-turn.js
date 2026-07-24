@@ -5,6 +5,7 @@
 // the injected callClaude.
 
 import { runAgentLoop } from "./loop.js";
+import { runTool } from "./tools.js";
 import { TITLE_FALLBACK, resolveArticles, withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { inlineNumberedBody, numberBodyRows } from "./linenum.js";
 import { resolveSharedPromptBlock } from "./prompt-share.js";
@@ -85,6 +86,19 @@ export async function promptCatalogLine(env, scope) {
   } catch (e) { console.log("[edit-turn] prompt catalog load failed:", e && e.message); return ""; }
 }
 
+// 按 id 找菜单树（模板 ∪ 用户树）里的一条 action。找不到 / 读不到 → null。
+async function findPromptItem(env, scope, id) {
+  try {
+    const [tpl, userDoc] = await Promise.all([loadPromptTemplate(env), loadUserPrompts(env, scope)]);
+    const flat = [];
+    for (const it of resolveList(tpl, userDoc) || []) {
+      if (it.type === "group") flat.push(...(it.children || []));
+      else flat.push(it);
+    }
+    return flat.find((a) => a && a.type === "action" && a.id === id) || null;
+  } catch { return null; }
+}
+
 function bufToB64(buf) {
   const bytes = new Uint8Array(buf);
   let bin = "";
@@ -155,6 +169,48 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
   const target = articles[idx];
 
+  // 锚点（长按图片/文字菜单动作随手势带上的结构化定位）：校验 + 漂移自愈后，紧挨
+  // 指令之前注入一条独立上下文行。rows 用 target（本次编辑这一篇）的 body 算，与
+  // 下面 inlineNumberedBody 给模型看的号同一份 numberBodyRows 调用、同口径。
+  // photoKeys 做两代标记格式归一：老格式正文的标记是 [[photo:5]]（裸数字 token，
+  // 1-based 指向 doc.photos 数组），而 iOS 的 ArticleBody.resolvePhotoKey 在长按时
+  // 已把数字解析成完整相对 key 放进 anchor.key —— 不归一的话老文章上 includes()
+  // 恒 false，anchor 会被静默丢弃。数字 token → doc.photos[n-1]（与 iOS
+  // resolvePhotoKey / functions/voicedrop/[token].js 的 photoRefsInBodies 同口径，
+  // 越界丢弃）；非数字 token（新格式）本身就是相对 key，原样保留。
+  const anchorRows = numberBodyRows(target?.body || "");
+  const legacyPhotos = Array.isArray(doc.photos) ? doc.photos : [];
+  const photoKeys = anchorRows
+    .filter((r) => r.kind === "photo")
+    .map((r) => (/^\d+$/.test(r.token) ? legacyPhotos[Number(r.token) - 1] : r.token))
+    .filter(Boolean);
+  const anchorLine = resolveAnchorLine(anchor, { rows: anchorRows, photoKeys });
+
+  // 长按菜单图片 prompt 的确定性直通（不过 LLM）：iOS 发送前已把 {{KEY}} 换成目标图
+  // key（RecordingDetailView 长按图片菜单），instruction 就是最终出图 prompt——模型在
+  // 这条路上唯一的工作是把 prompt 原样抄进 edit_photo（2026-07-24 llmlog 实测：5–8s
+  // 纯复读 + 1.5–4s 确认轮）。条件全部满足才直通：itemId 对应菜单里 kind=image 的条目、
+  // 锚点是本篇里真实存在的图、prompt 无残留占位符、本次没有随手拍新图。best-effort：
+  // 任何一步不满足或工具失败都落回原 LLM 路径，行为照旧。
+  if (itemId && anchor && anchor.type === "image" && !images.length
+      && typeof anchor.key === "string" && photoKeys.includes(anchor.key)
+      && !/\{\{[A-Z_]+\}\}/.test(instruction)) {
+    const item = await findPromptItem(env, scope, itemId);
+    if (item && item.kind === "image") {
+      const fastCtx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: null, itemId };
+      const run = await runTool("edit_photo", { key: anchor.key, prompt: instruction }, fastCtx);
+      if (run && run.ok === true) {
+        const after = await env.FILES.get(articleKey);
+        const finalDoc = after ? JSON.parse(await after.text()) : doc;
+        return {
+          ok: true, reply: run.message || "🎨 正在处理图片", article: withTopLevelArticles(finalDoc), hadError: false,
+          toolRuns: [{ step: 0, name: "edit_photo", input: { key: anchor.key, prompt: instruction }, result: run, ok: true, fast: true }],
+        };
+      }
+      console.log("[edit-turn] fast path fell through:", (run && run.error) || "no result");
+    }
+  }
+
   const varLines = [];
   if (articles.length <= 1) {
     varLines.push(
@@ -183,22 +239,6 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
       "",
     );
   }
-  // 锚点（长按图片/文字菜单动作随手势带上的结构化定位）：校验 + 漂移自愈后，紧挨
-  // 指令之前注入一条独立上下文行。rows 用 target（本次编辑这一篇）的 body 算，与
-  // 上面 inlineNumberedBody 给模型看的号同一份 numberBodyRows 调用、同口径。
-  // photoKeys 做两代标记格式归一：老格式正文的标记是 [[photo:5]]（裸数字 token，
-  // 1-based 指向 doc.photos 数组），而 iOS 的 ArticleBody.resolvePhotoKey 在长按时
-  // 已把数字解析成完整相对 key 放进 anchor.key —— 不归一的话老文章上 includes()
-  // 恒 false，anchor 会被静默丢弃。数字 token → doc.photos[n-1]（与 iOS
-  // resolvePhotoKey / functions/voicedrop/[token].js 的 photoRefsInBodies 同口径，
-  // 越界丢弃）；非数字 token（新格式）本身就是相对 key，原样保留。
-  const anchorRows = numberBodyRows(target?.body || "");
-  const legacyPhotos = Array.isArray(doc.photos) ? doc.photos : [];
-  const photoKeys = anchorRows
-    .filter((r) => r.kind === "photo")
-    .map((r) => (/^\d+$/.test(r.token) ? legacyPhotos[Number(r.token) - 1] : r.token))
-    .filter(Boolean);
-  const anchorLine = resolveAnchorLine(anchor, { rows: anchorRows, photoKeys });
   if (anchorLine) varLines.push("", anchorLine);
 
   // 分享码 fast path 与提示词菜单目录互不依赖，并行拉（各一两次 R2 往返，别串行积垢）。
@@ -241,8 +281,14 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   // 正文 diff 可查。用便宜模型对照「指令 + 锚点 + 正文 diff」判一次；任何一步失败
   // （读不到 doc / 模型没返回合法 JSON）都放行，绝不把成功的编辑拖成失败。
   const beforeBody = target?.body || "";
-  const verify = callVerify ? async ({ terminalNames }) => {
+  const verify = callVerify ? async ({ terminalNames, toolRuns }) => {
     if (!terminalNames.some((n) => n === "edit_current_article" || n === "write_article")) return null;
+    // 校验只花在高风险编辑上：整篇重写（write_article）、带锚点定位、或一次多 op 的
+    // 批量改。单 op 且无锚点的小改（加粗一行/删一行）跳过——haiku 往返实测 1.9–3.5s
+    // （2026-07-24 llmlog），接近小编辑本身的耗时，性价比不划算。
+    const multiOp = (toolRuns || []).some((t) => t.name === "edit_current_article" && t.ok
+      && Array.isArray(t.input && t.input.ops) && t.input.ops.length >= 2);
+    if (!terminalNames.includes("write_article") && !anchorLine && !multiOp) return null;
     const afterObj = await env.FILES.get(articleKey);
     if (!afterObj) return null;
     const afterDoc = JSON.parse(await afterObj.text());
@@ -272,7 +318,10 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
 
   const summary = (result.finalText || "").trim();
   const didAct = (result.calledTools || []).some((n) => TERMINAL.includes(n));
-  const reply = summary || (result.hadError ? "操作没完成" : (didAct ? "改好了" : ""));
+  // 出图短路后模型没有第二轮说话的机会：没有 summary 时用工具自带的「🎨 正在生成…」
+  // 文案兜底，比笼统的「改好了」诚实（图还没出来）。
+  const photoMsg = (result.toolRuns || []).filter((t) => (t.name === "edit_photo" || t.name === "new_photo") && t.ok && t.result && t.result.message).map((t) => t.result.message).pop();
+  const reply = summary || (result.hadError ? "操作没完成" : (photoMsg || (didAct ? "改好了" : "")));
 
   return { ok: !result.hadError, reply, article: withTopLevelArticles(finalDoc), hadError: !!result.hadError, toolRuns: result.toolRuns || [] };
 }
