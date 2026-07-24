@@ -23,12 +23,26 @@ const TERMINAL = ["edit_current_article", "write_article", "write_style", "publi
 // rows 必须来自 linenum.js 的 numberBodyRows（与喂给模型的 inlineNumberedBody 同一份
 // 调用、同口径）：图文共用一个连续 1-based 计数器，「第 N 行」与模型在 edit_current_article
 // 工具里认的行号严格一致，否则用户长按第 2 张图，模型会改到别的地方。
+// 图片锚点的漂移自愈：AI 改图会换 key，但 makeEditedKey 刻意保留「目录/偏移-」前缀、
+// 只换随机尾。App 界面若停在旧正文（更新没应用/断线错过广播），长按带上的就是上一代
+// key——按「去掉扩展名和随机尾」的 base 在当前 photoKeys 里找唯一同源 key，找到即修正；
+// 0 个或多个匹配 → null（宁缺勿错，和文字锚点的行漂移自愈同一哲学）。
+export function healPhotoAnchorKey(key, photoKeys) {
+  if (photoKeys.includes(key)) return key;
+  const base = (k) => String(k).replace(/\.\w+$/, "").replace(/-[a-z0-9]+$/i, "");
+  const hits = photoKeys.filter((k) => base(k) === base(key));
+  if (hits.length === 1) { console.log("[anchor] image drift healed"); return hits[0]; }
+  console.log("[anchor] image drift unresolved, dropped");
+  return null;
+}
+
 export function resolveAnchorLine(anchor, { rows, photoKeys }) {
   if (!anchor || typeof anchor !== "object") return null;
   if (anchor.type === "image") {
     const key = typeof anchor.key === "string" ? anchor.key : "";
-    if (!key || !photoKeys.includes(key)) return null;
-    return `用户长按的图片：[[photo:${key}]]（指令里说的「这张图/这张照片」就是它）`;
+    const healed = key ? healPhotoAnchorKey(key, photoKeys) : null;
+    if (!healed) return null;
+    return `用户长按的图片：[[photo:${healed}]]（指令里说的「这张图/这张照片」就是它）`;
   }
   if (anchor.type === "line") {
     // anchor.text 防御性上限 2000 UTF-16 units（spec §3）；下面的行比对两侧都按
@@ -190,24 +204,24 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   // key（RecordingDetailView 长按图片菜单），instruction 就是最终出图 prompt——模型在
   // 这条路上唯一的工作是把 prompt 原样抄进 edit_photo（2026-07-24 llmlog 实测：5–8s
   // 纯复读 + 1.5–4s 确认轮）。条件全部满足才直通：itemId 对应菜单里 kind=image 的条目、
-  // 锚点是本篇里真实存在的图、prompt 无残留占位符、本次没有随手拍新图。best-effort：
-  // 任何一步不满足或工具失败都落回原 LLM 路径，行为照旧。
-  if (itemId && anchor && anchor.type === "image" && !images.length
-      && typeof anchor.key === "string" && photoKeys.includes(anchor.key)
-      && !/\{\{[A-Z_]+\}\}/.test(instruction)) {
+  // 锚点经漂移自愈（healPhotoAnchorKey）后指向本篇真实存在的图、prompt 无残留占位符、
+  // 本次没有随手拍新图。best-effort：任何一步不满足或工具失败都落回原 LLM 路径，行为照旧。
+  const fastAnchorKey = (anchor && anchor.type === "image" && typeof anchor.key === "string" && anchor.key)
+    ? healPhotoAnchorKey(anchor.key, photoKeys) : null;
+  if (itemId && fastAnchorKey && !images.length && !/\{\{[A-Z_]+\}\}/.test(instruction)) {
     const tFast = Date.now();
     const item = await findPromptItem(env, scope, itemId);
     if (item && item.kind === "image") {
       const tItem = Date.now();
       const fastCtx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: null, itemId };
-      const run = await runTool("edit_photo", { key: anchor.key, prompt: instruction }, fastCtx);
+      const run = await runTool("edit_photo", { key: fastAnchorKey, prompt: instruction }, fastCtx);
       console.log(`[edit-turn] fast path: find_item=${tItem - tFast}ms tool=${Date.now() - tItem}ms`);
       if (run && run.ok === true) {
         const after = await env.FILES.get(articleKey);
         const finalDoc = after ? JSON.parse(await after.text()) : doc;
         return {
           ok: true, reply: run.message || "🎨 正在处理图片", article: withTopLevelArticles(finalDoc), hadError: false,
-          toolRuns: [{ step: 0, name: "edit_photo", input: { key: anchor.key, prompt: instruction }, result: run, ok: true, fast: true }],
+          toolRuns: [{ step: 0, name: "edit_photo", input: { key: fastAnchorKey, prompt: instruction }, result: run, ok: true, fast: true }],
         };
       }
       console.log("[edit-turn] fast path fell through:", (run && run.error) || "no result");

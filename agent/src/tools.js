@@ -483,7 +483,7 @@ register(
       await putArticleDoc({ ...doc, articles: revert }, ctx);
       return { error: "图片服务提交失败" };
     }
-    return { ok: true, message: "🎨 正在把图片改成…，约 1 分钟完成" };
+    return { ok: true, message: "🎨 正在生成图片，约 1 分钟完成" };
   }
 );
 

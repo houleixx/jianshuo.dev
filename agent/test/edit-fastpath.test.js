@@ -171,3 +171,47 @@ describe("verify gating (fix 3)", () => {
     expect(verifies).toBe(1);
   });
 });
+
+// ── 图片锚点漂移自愈（2026-07-25）──────────────────────────────────────────
+import { healPhotoAnchorKey } from "../src/edit-turn.js";
+
+describe("healPhotoAnchorKey", () => {
+  it("key 还在 → 原样返回", () => {
+    expect(healPhotoAnchorKey("photos/s/12-abc.jpg", ["photos/s/12-abc.jpg"])).toBe("photos/s/12-abc.jpg");
+  });
+  it("AI 改图换了随机尾 → 按「目录/偏移-」base 唯一匹配自愈", () => {
+    expect(healPhotoAnchorKey("photos/1783430505858/1783430505858-941owf.jpg",
+      ["photos/1783430505858/1783430505858-7yvucu.jpg", "photos/x/1-aa.jpg"]))
+      .toBe("photos/1783430505858/1783430505858-7yvucu.jpg");
+  });
+  it("偏移相近不误配：12- 不匹配 120-", () => {
+    expect(healPhotoAnchorKey("photos/s/12-abc.jpg", ["photos/s/120-def.jpg"])).toBeNull();
+  });
+  it("多个同源候选 → 丢弃（宁缺勿错）", () => {
+    expect(healPhotoAnchorKey("photos/s/12-abc.jpg", ["photos/s/12-x1.jpg", "photos/s/12-x2.jpg"])).toBeNull();
+  });
+  it("图被删了（无同源）→ null", () => {
+    expect(healPhotoAnchorKey("photos/s/12-abc.jpg", ["photos/t/9-zz.jpg"])).toBeNull();
+  });
+  it("legacy 无随机尾的原图 → 与它的 AI 改版同源", () => {
+    expect(healPhotoAnchorKey("photos/171/171.jpg", ["photos/171/171-abc.jpg"])).toBe("photos/171/171-abc.jpg");
+  });
+});
+
+describe("fast path anchor drift heal", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("长按的是上一代 key（已被 AI 改图换尾）→ 自愈后仍走直通", async () => {
+    // 文中现存 key 是 171-zz9.jpg（同目录同偏移，仅随机尾不同）
+    const args = await makeArgs({ itemId: "p9", anchor: { type: "image", key: OLD } });
+    const CUR = "photos/171/171-zz9.jpg";
+    await args.env.FILES.put(ARTICLE_KEY, JSON.stringify({
+      transcript: "t", articles: [{ title: "标题", body: `第一段。\n[[photo:${CUR}]]\n第二段。` }],
+    }));
+    await args.env.FILES.put(SCOPE + "prompts.json", JSON.stringify({ schema: 1, items: [IMAGE_ITEM] }));
+    const calls = stubFetch(args.env);
+    const res = await runEditTurn(args);
+    expect(res.ok).toBe(true);
+    expect(calls.paint.body.callback_meta.oldKey).toBe(CUR); // 自愈到现存 key
+  });
+});
