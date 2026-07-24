@@ -215,3 +215,35 @@ describe("fast path anchor drift heal", () => {
     expect(calls.paint.body.callback_meta.oldKey).toBe(CUR); // 自愈到现存 key
   });
 });
+
+describe("optimistic notify (乐观回执)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("fast path 校验一过就 notify「正在生成」，先于写盘和 paint 提交", async () => {
+    const events = [];
+    const args = await makeArgs({ itemId: "p9", anchor: { type: "image", key: OLD } });
+    args.notify = (text) => events.push(`notify:${text.slice(0, 6)}`);
+    await args.env.FILES.put(SCOPE + "prompts.json", JSON.stringify({ schema: 1, items: [IMAGE_ITEM] }));
+    const fn = vi.fn(async (url, init) => {
+      const u = String(url);
+      if (u.includes("/api/jobs")) { events.push("paint"); return { ok: true, status: 202, json: async () => ({ job_id: "j1" }) }; }
+      return { ok: false, status: 404, json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fn);
+    const res = await runEditTurn(args);
+    expect(res.ok).toBe(true);
+    expect(events[0]).toMatch(/^notify:/);        // 回执最先发
+    expect(events).toContain("paint");            // 出图随后照常提交
+  });
+
+  it("LLM 路径不发乐观回执（notify 只属于确定性直通）", async () => {
+    const events = [];
+    const args = await makeArgs({ anchor: null, itemId: null, instruction: "把图1改成贴纸" });
+    args.notify = (t) => events.push(t);
+    stubFetch(args.env);
+    args.callClaude = async () => ({ content: [{ type: "tool_use", id: "t1", name: "edit_photo", input: { key: OLD, prompt: "贴纸" } }] });
+    const res = await runEditTurn(args);
+    expect(res.ok).toBe(true);
+    expect(events).toEqual([]);
+  });
+});

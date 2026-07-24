@@ -103,7 +103,7 @@ register(
     if (editId) doc.lastEditId = editId;
     // 直写共享库（版本链在 writeArticleDoc 一处管理），不再绕 HTTP —— 见 putArticleDoc 注释。
     try {
-      await writeArticleDoc(env, articleKey, doc, "agent");
+      await writeArticleDoc(env, articleKey, doc, "agent", { current: doc, deferIndex });
     } catch (e) {
       console.log("[tools] writeArticleDoc failed:", e && e.message);
       return { error: "upload_failed" };
@@ -112,16 +112,25 @@ register(
   }
 );
 
+// 索引/D1 维护转后台（fire-and-forget）：upsertIndexEntry 自身就是 best-effort
+// （内部吞错），且 list/recordings 的后台对账会按 listing 权威重建漂移的索引——
+// 交互路径不为它多等两次 R2 + 一次 D1。DO 存活期间 promise 正常跑完；极端情况
+// （写后瞬间被回收）丢的也只是加速层，对账自愈。
+const deferIndex = (fn) => { Promise.resolve().then(fn).catch(() => {}); };
+
 // Shared write path for the article tools: stamp the editId, write the versioned
 // doc DIRECTLY via the shared article-store lib（与 Pages 路由同一份版本链/索引/D1
 // 代码）。2026-07-25 之前这里绕 HTTP 调自己的 /files/api/articles/——同一个 DO 里
 // binding 读 doc 只要 ~0.1s，这层 HTTP+Pages+鉴权的皮却量到 8–22s（llmlog
 // put_article laps），是 fast path 之后最大的耗时来源。agent worker 与 Pages 绑着
-// 同一个 FILES/CORE，直写语义分毫不差。Returns null on success or { error }.
+// 同一个 FILES/CORE，直写语义分毫不差。
+// current: doc —— 调用方手里的 doc 就是刚从 R2 读出的存量（versions/head 原封不动），
+// 传入免一次重读；读写之间本来就没有 CAS，编辑队列按文章串行，这不是并发保护的退让。
+// Returns null on success or { error }.
 async function putArticleDoc(doc, { env, articleKey, editId }) {
   if (editId) doc.lastEditId = editId;
   try {
-    await writeArticleDoc(env, articleKey, doc, "agent");
+    await writeArticleDoc(env, articleKey, doc, "agent", { current: doc, deferIndex });
     return null;
   } catch (e) {
     console.log("[tools] writeArticleDoc failed:", e && e.message);
@@ -433,14 +442,12 @@ register(
     const lap = (label) => { const n = Date.now(); laps.push(`${label}=${n - tPrev}ms`); tPrev = n; };
 
     const now = Date.now();
-    const bal = await ensureAccount(env.USAGE, scope, now);
+    // 余额检查（D1）与读文章（R2）互不依赖，并行省一次串行往返。
+    const [bal, obj] = await Promise.all([ensureAccount(env.USAGE, scope, now), env.FILES.get(articleKey)]);
     if (bal < imageCostUY()) return { error: `算力不足，生成一张图 ${IMAGE_SUANLI} 算力，请充值` };
-    lap("account");
-
-    const obj = await env.FILES.get(articleKey);
     if (!obj) return { error: "not_found" };
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
-    lap("doc");
+    lap("account+doc");
     const articles = resolveArticles(doc);
     if (!articles.length) return { error: "no_article" };
     const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
@@ -456,20 +463,19 @@ register(
       ...a, title: String(a.title || TITLE_FALLBACK), body: i === idx ? swap(a.body) : String(a.body || ""),
     }));
     delete doc.title; delete doc.body;
-    const werr = await putArticleDoc(doc, ctx);
+    // 写占位指针与读原图探尺寸互不依赖，并行。尺寸探测：输出对齐原图比例（相册
+    // 导入的图不是方的，App b07ad15 起），读 R2 原图 JPEG 头拿宽高；读不到回退方图。
+    const dimsProbe = (async () => {
+      try {
+        const photo = await env.FILES.get(`${scope}${key}`);
+        const dims = photo ? jpegDims(await photo.arrayBuffer()) : null;
+        if (dims) return fitSize(dims.w, dims.h) || undefined;
+      } catch { /* 尺寸探测失败不阻塞编辑 */ }
+      return undefined;
+    })();
+    const [werr, size] = await Promise.all([putArticleDoc(doc, ctx), dimsProbe]);
     if (werr) return werr;
-    lap("put_article");
-
-    // 输出尺寸对齐原图比例：相册导入的图不是方的（App b07ad15 起），写死
-    // 1024x1024 会把横竖图重画成方形。读 R2 原图的 JPEG 头拿宽高；读不到
-    // （缺图/非 JPEG）回退方图，即老行为。
-    let size;
-    try {
-      const photo = await env.FILES.get(`${scope}${key}`);
-      const dims = photo ? jpegDims(await photo.arrayBuffer()) : null;
-      if (dims) size = fitSize(dims.w, dims.h) || undefined;
-    } catch { /* 尺寸探测失败不阻塞编辑 */ }
-    lap("dims");
+    lap("put+dims");
 
     const resp = await postPaintJob(ctx, { prompt, newKey, oldKey: key, size });
     lap("paint_post");
@@ -557,7 +563,7 @@ async function writeStandaloneArticle({ env, scope }, stem, title, body, styleV)
   const article = { title, body, ...(Number.isInteger(styleV) ? { style: styleV } : {}) };
   const doc = { schema: 2, id: stem, sourceAudio: `${stem}.m4a`, createdAt: new Date().toISOString(), transcript: "", srt: "", articles: [article], status: "ready", model: "merge" };
   try {
-    await writeArticleDoc(env, `${scope}articles/${stem}.json`, doc, "agent");
+    await writeArticleDoc(env, `${scope}articles/${stem}.json`, doc, "agent", { current: null, deferIndex });
   } catch (e) {
     console.log("[tools] writeArticleDoc failed:", e && e.message);
     return { error: "upload_failed" };
@@ -669,7 +675,7 @@ register(
       // Carry the current articles or tagging would append an empty version.
       doc.articles = resolveArticles(doc);
       try {
-        await writeArticleDoc(env, `${scope}articles/${stem}.json`, doc, "agent");
+        await writeArticleDoc(env, `${scope}articles/${stem}.json`, doc, "agent", { current: doc, deferIndex });
       } catch (e) {
         console.log("[tools] writeArticleDoc failed:", e && e.message);
         return { error: "upload_failed" };

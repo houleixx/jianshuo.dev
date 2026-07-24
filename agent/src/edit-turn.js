@@ -149,7 +149,7 @@ async function imageBlocks(images, { env, scope, origin }) {
   return out;
 }
 
-export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, anchor = null, itemId = null, system, history = [], callClaude, callVerify = null }) {
+export async function runEditTurn({ env, scope, articleKey, token, origin, editId, instruction, images = [], articleIndex = 0, anchor = null, itemId = null, system, history = [], callClaude, callVerify = null, notify = null }) {
   const obj = await env.FILES.get(articleKey);
   if (!obj) return { ok: false, reply: "", article: null, hadError: true };
   const doc = JSON.parse(await obj.text());
@@ -212,6 +212,11 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
     const tFast = Date.now();
     const item = await findPromptItem(env, scope, itemId);
     if (item && item.kind === "image") {
+      // 乐观回执：校验全部通过，剩下的写盘+提交出图结果几乎确定。先把「正在生成」
+      // 发回手机（与 edit_photo 成功文案同句），把后面 1~2s 的存储链挪到用户感知
+      // 之后。极小概率后续失败（余额不足/图片服务拒收）→ 落回 LLM 路径，终广播的
+      // reply/error 会顶掉这句（iOS 的回复气泡按最新一条展示）。
+      if (notify) { try { notify("🎨 正在生成图片，约 1 分钟完成"); } catch (_) {} }
       const tItem = Date.now();
       const fastCtx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: null, itemId };
       const run = await runTool("edit_photo", { key: fastAnchorKey, prompt: instruction }, fastCtx);

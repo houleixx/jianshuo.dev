@@ -257,6 +257,9 @@ export class ArticleEditor extends Agent {
     const res = await runEditTurn({
       env: this.env, scope, articleKey, token, origin: "https://jianshuo.dev",
       editId: row.id, instruction: row.text, images, articleIndex, anchor, itemId: row.item_id || null, system: SYSTEM, history, callClaude, callVerify,
+      // 乐观回执通道：fast path 校验一过就把「正在生成」推回手机（reply 气泡），
+      // 不等写盘和出图提交。任务芯片仍等终态 updated 才消。
+      notify: (text) => { try { this.broadcast(JSON.stringify({ type: "reply", id: row.id, text, ok: true })); } catch (_) {} },
     });
     editPreview.finish();   // 幽灵稿收尾（updated 紧随其后广播）
 

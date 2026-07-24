@@ -181,18 +181,27 @@ export async function removeIndexEntry(env, key) {
   } catch {}
 }
 
-// 文章 doc 的唯一落盘出口：写 doc + 同步维护摘要索引。
-async function putArticleDoc(env, key, doc) {
+// 文章 doc 的唯一落盘出口：写 doc + 维护摘要索引。opts.deferIndex（可选）：把索引
+// 维护交给调用方后台执行（(fn)=>void，fn 返回 promise）——语音编辑的交互路径上索引
+// 是纯加速层且有 list/recordings 后台对账兜底（fp 不符即按 listing 权威重建），丢了
+// 自愈，不值得让用户为它等两次 R2 往返 + 一次 D1。不传照旧同步。
+async function putArticleDoc(env, key, doc, opts = {}) {
   const put = await env.FILES.put(key, JSON.stringify(doc), { httpMetadata: { contentType: "application/json" } });
-  await upsertIndexEntry(env, key, doc, put);
+  const idx = () => upsertIndexEntry(env, key, doc, put);
+  if (opts.deferIndex) opts.deferIndex(idx);
+  else await idx();
   return put;
 }
 
 // newDoc – the new version's content in `articles`, plus any metadata fields to set.
 //          A PARTIAL doc is fine: anything it omits is carried over from the stored doc.
 // source – "mine" | "agent" | "wechat"
-export async function writeArticleDoc(env, key, newDoc, source = "unknown") {
-  const current = await readArticleDoc(env, key);
+// opts.current – 调用方手里已有的存量 doc（含 versions/head），传入即免一次 R2 重读。
+//          语义与重读等价减一个竞态窗口的宽度——本来读写之间就没有 CAS，编辑队列
+//          按文章串行，这里的重读从来不是并发保护。显式传 null = 确认是首写。
+// opts.deferIndex – 透传给 putArticleDoc（索引维护转后台，见其注释）。
+export async function writeArticleDoc(env, key, newDoc, source = "unknown", opts = {}) {
+  const current = opts.current !== undefined ? opts.current : await readArticleDoc(env, key);
 
   let versions, head;
   if (current && Array.isArray(current.versions) && current.head) {
@@ -222,7 +231,7 @@ export async function writeArticleDoc(env, key, newDoc, source = "unknown") {
   // An article minted by a partial writer has no createdAt at all, and the list
   // sorts it to 1970. Stamp it once, on the write that creates the doc.
   if (!doc.createdAt) doc.createdAt = new Date().toISOString();
-  await putArticleDoc(env, key, doc);
+  await putArticleDoc(env, key, doc, { deferIndex: opts.deferIndex });
   return doc;
 }
 
