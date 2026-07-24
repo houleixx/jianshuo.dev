@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>VoiceDrop 社区文章阅读数据 · 最近一个月</title>
+<style>
+  :root { --ink:#1a1a1a; --sub:#8a8a8a; --line:#ececec; --accent:#0b6e4f; --bg:#fff; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,"PingFang SC","Hiragino Sans GB",sans-serif; color:var(--ink); background:var(--bg); max-width:860px; margin:0 auto; padding:40px 20px 80px; }
+  h1 { font-size:24px; font-weight:600; margin-bottom:6px; }
+  .meta { color:var(--sub); font-size:13px; margin-bottom:24px; line-height:1.7; }
+  .stats { display:flex; gap:32px; flex-wrap:wrap; margin-bottom:28px; }
+  .stat b { display:block; font-size:26px; font-weight:600; }
+  .stat span { font-size:13px; color:var(--sub); }
+  .note { font-size:13px; color:var(--sub); line-height:1.8; border-left:3px solid var(--line); padding-left:12px; margin-bottom:28px; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td.title { white-space:normal; min-width:220px; }
+  th { font-size:12px; color:var(--sub); font-weight:500; cursor:pointer; user-select:none; position:sticky; top:0; background:var(--bg); }
+  th.active { color:var(--accent); }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .author { color:var(--sub); font-size:12px; }
+  .bar { display:inline-block; height:6px; background:var(--accent); border-radius:3px; vertical-align:middle; margin-right:6px; opacity:.75; }
+  .dead { color:var(--sub); font-style:italic; }
+  .mine td.title .t { font-weight:600; }
+</style>
+</head>
+<body>
+<h1>VoiceDrop 社区文章阅读数据</h1>
+<div class="meta">统计区间 2026-06-26 ～ 2026-07-24（reco 上线至今）· 数据源 voicedrop-reco D1 <code>engagement</code> 表 · 每用户去重 · 生成于 2026-07-24</div>
+
+<div class="stats">
+  <div class="stat"><b id="s-n">–</b><span>文章数</span></div>
+  <div class="stat"><b id="s-v">–</b><span>阅读人数（合计）</span></div>
+  <div class="stat"><b id="s-f">–</b><span>读完人数（合计）</span></div>
+  <div class="stat"><b id="s-rate">–</b><span>整体完读率</span></div>
+  <div class="stat"><b id="s-l">–</b><span>点赞</span></div>
+</div>
+
+<div class="note">
+  「阅读」= App 内打开文章详情的独立用户数；「读完」= 滚动到文末的独立用户数；完读率 = 读完 ÷ 阅读。
+  这是 App 社区内的数据，不含网页分享链接的访问（网页端只有 Cloudflare 抽样 PV，无读完信号）。点表头可排序。
+</div>
+
+<div class="tablewrap">
+<table id="tbl">
+  <thead><tr>
+    <th data-k="t">标题 / 作者</th>
+    <th class="num" data-k="v">阅读</th>
+    <th class="num" data-k="f">读完</th>
+    <th class="num" data-k="rate">完读率</th>
+    <th class="num" data-k="l">赞</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+
+<script>
+fetch('data.json').then(r=>r.json()).then(rows=>{
+  rows.forEach(r=>{ r.rate = r.v ? r.f/r.v : 0; });
+  const tv=rows.reduce((s,r)=>s+r.v,0), tf=rows.reduce((s,r)=>s+r.f,0), tl=rows.reduce((s,r)=>s+r.l,0);
+  document.getElementById('s-n').textContent=rows.length;
+  document.getElementById('s-v').textContent=tv;
+  document.getElementById('s-f').textContent=tf;
+  document.getElementById('s-rate').textContent=(tf/tv*100).toFixed(1)+'%';
+  document.getElementById('s-l').textContent=tl;
+
+  let key='v', dir=-1;
+  const tbody=document.querySelector('#tbl tbody');
+  function render(){
+    const sorted=[...rows].sort((a,b)=>{
+      const x=a[key],y=b[key];
+      return (typeof x==='string' ? x.localeCompare(y,'zh') : x-y)*dir;
+    });
+    tbody.innerHTML=sorted.map(r=>{
+      const dead = r.t==='(无标题/已删)';
+      const mine = r.a==='王建硕'||r.a==='建硕';
+      const pct=(r.rate*100).toFixed(0);
+      return `<tr class="${mine?'mine':''}">
+        <td class="title"><span class="t ${dead?'dead':''}">${esc(r.t)}</span><br/><span class="author">${esc(r.a)}</span></td>
+        <td class="num">${r.v}</td>
+        <td class="num">${r.f}</td>
+        <td class="num"><span class="bar" style="width:${Math.round(r.rate*40)}px"></span>${pct}%</td>
+        <td class="num">${r.l||''}</td>
+      </tr>`;
+    }).join('');
+    document.querySelectorAll('th').forEach(th=>th.classList.toggle('active',th.dataset.k===key));
+  }
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+  document.querySelectorAll('th').forEach(th=>th.addEventListener('click',()=>{
+    const k=th.dataset.k;
+    if(key===k) dir=-dir; else { key=k; dir = k==='t'?1:-1; }
+    render();
+  }));
+  render();
+});
+</script>
+</body>
+</html>
