@@ -208,6 +208,7 @@ async function submitJob(body: any, cfg: Config, store: JobStore, worker: Worker
   const id = randomUUID();
   let mode: "generate" | "edit" = "generate";
   let inputPath: string | undefined;
+  let inputUrl: string | undefined;
 
   const hasImage = typeof body.image_url === "string" || typeof body.image_b64 === "string";
   if (hasImage) {
@@ -217,25 +218,16 @@ async function submitJob(body: any, cfg: Config, store: JobStore, worker: Worker
     inputPath = join(cfg.inputsDir, `${id}.img`);
     try {
       if (typeof body.image_url === "string") {
+        // 只做同步校验，下载挪到 worker（2026-07-25）：原图常是几 MB 的跨洋拉取
+        //（VoiceDrop 的 image_url 指向 CF/R2），同步下载让提交方干等 5–8s 才拿到
+        // 202。校验（协议/内网 IP 黑名单）保持在提交时同步做，坏 URL 依旧当场 400；
+        // 下载失败改走 job 失败 + 回调（提交方 VoiceDrop 的失败回调会把原图写回，
+        // 文章不烂）。真正的 fetch 在 worker.downloadInput，同样 redirect:"manual"。
         let target: URL;
         try { target = new URL(body.image_url); } catch { return sendJson(res, 400, { error: "image_url invalid" }); }
         if (target.protocol !== "http:" && target.protocol !== "https:") return sendJson(res, 400, { error: "image_url must be http(s)" });
         if (isBlockedHost(target.hostname)) return sendJson(res, 400, { error: "image_url host not allowed" });
-        // redirect: "manual" — fetch follows redirects by default, so a 3xx from an
-        // allowed host could redirect to a blocked target (e.g. cloud metadata) and
-        // bypass isBlockedHost, which only checks the initial hostname. With "manual",
-        // undici returns an opaqueredirect response (ok===false) for any 3xx, so it's
-        // rejected below before we ever connect to the redirect target.
-        const r = await fetch(target, { signal: AbortSignal.timeout(30000), redirect: "manual" });
-        if (!r.ok || !r.body) return sendJson(res, 400, { error: `image_url fetch failed: ${r.status}` });
-        const chunks: Buffer[] = [];
-        let total = 0;
-        for await (const c of r.body as any) {
-          total += (c as Uint8Array).length;
-          if (total > cfg.maxInputBytes) return sendJson(res, 400, { error: "input image too large" });
-          chunks.push(Buffer.from(c));
-        }
-        await writeFile(inputPath, Buffer.concat(chunks));
+        inputUrl = target.toString();
       } else {
         const buf = Buffer.from(body.image_b64, "base64");
         if (buf.length > cfg.maxInputBytes) return sendJson(res, 400, { error: "input image too large" });
@@ -249,7 +241,7 @@ async function submitJob(body: any, cfg: Config, store: JobStore, worker: Worker
   const job: Job = {
     id, status: "queued", mode, prompt,
     params: { size: body.size ?? "2K", format, quality, compression: body.compression, transparent },
-    inputPath, percent: 0, error: null,
+    inputPath, inputUrl, percent: 0, error: null,
     callbackUrl: typeof body.callback_url === "string" ? body.callback_url : undefined,
     callbackToken: typeof body.callback_token === "string" ? body.callback_token : undefined,
     callbackMeta: body.callback_meta,

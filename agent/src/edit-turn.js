@@ -195,10 +195,13 @@ export async function runEditTurn({ env, scope, articleKey, token, origin, editI
   if (itemId && anchor && anchor.type === "image" && !images.length
       && typeof anchor.key === "string" && photoKeys.includes(anchor.key)
       && !/\{\{[A-Z_]+\}\}/.test(instruction)) {
+    const tFast = Date.now();
     const item = await findPromptItem(env, scope, itemId);
     if (item && item.kind === "image") {
+      const tItem = Date.now();
       const fastCtx = { env, scope, articleKey, token, origin, editId, articleIndex: idx, sharedMagic: null, itemId };
       const run = await runTool("edit_photo", { key: anchor.key, prompt: instruction }, fastCtx);
+      console.log(`[edit-turn] fast path: find_item=${tItem - tFast}ms tool=${Date.now() - tItem}ms`);
       if (run && run.ok === true) {
         const after = await env.FILES.get(articleKey);
         const finalDoc = after ? JSON.parse(await after.text()) : doc;

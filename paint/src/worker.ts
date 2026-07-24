@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, stat, unlink } from "node:fs/promises";
+import { mkdir, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { Config } from "./config.js";
@@ -15,6 +15,22 @@ const EXT: Record<string, string> = { png: "png", jpeg: "jpg", webp: "webp" };
 // 同一 prompt 重跑大概率就过）——这类错误自动重试一次。
 const RETRYABLE = new Set(["missing_image_result"]);
 const MAX_ATTEMPTS = 2;
+
+// image_url 输入的异步下载（2026-07-25 从 submitJob 挪来）：提交方不再为跨洋原图
+// 干等 5–8s 才拿 202。URL 的协议/内网黑名单校验在提交时已做过；redirect:"manual"
+// 与原实现一致——3xx 直接拒，防止已过校验的 host 重定向到内网目标。
+export async function downloadInput(url: string, inputPath: string, maxBytes: number): Promise<void> {
+  const r = await fetch(url, { signal: AbortSignal.timeout(30000), redirect: "manual" });
+  if (!r.ok || !r.body) throw new Error(`image_url fetch failed: ${r.status}`);
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const c of r.body as any) {
+    total += (c as Uint8Array).length;
+    if (total > maxBytes) throw new Error("input image too large");
+    chunks.push(Buffer.from(c));
+  }
+  await writeFile(inputPath, Buffer.concat(chunks));
+}
 
 export class Worker {
   private queue: string[] = [];
@@ -43,6 +59,17 @@ export class Worker {
   private async run(id: string): Promise<void> {
     const job = await this.store.get(id);
     if (!job || job.status === "done" || job.status === "failed") return;
+
+    // image_url 输入在这里才真正落地（提交时只校验了 URL）。失败 = job 失败走回调，
+    // 提交方（VoiceDrop）的失败分支会把原图写回占位 key，文章不烂。
+    if (job.inputUrl && job.inputPath) {
+      try {
+        await downloadInput(job.inputUrl, job.inputPath, this.cfg.maxInputBytes);
+      } catch (e: any) {
+        await this.fail(job, { code: "input_download_failed", message: e?.message ?? "input download failed" }, 0);
+        return;
+      }
+    }
 
     await mkdir(this.cfg.resultsDir, { recursive: true });
     const ext = job.params.transparent ? "png" : (EXT[job.params.format] ?? "png");

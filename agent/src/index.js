@@ -57,6 +57,28 @@ const MODEL = "claude-sonnet-4-6";
 // 复查一遍，不合格让编辑模型再修一轮（runEditTurn 的 callVerify，best-effort）。
 const VERIFY_MODEL = "claude-haiku-4-5-20251001";
 
+// 编辑/指令 DO 钉到 wnam——数据在哪，计算就在哪。R2 桶（jianshuo-dev-files）在
+// WNAM，Anthropic 也在美国；而 DO 默认建在用户首连 colo，国内用户 → HKG，每次
+// R2/D1/LLM 往返都跨太平洋，晚高峰单次 1.5~20s（2026-07-25 打点：一次 fast path
+// 出图 42s，其中 put_article 19.8s）。钉到 wnam 后只剩用户↔DO 的 WS 一条长腿
+//（消息小，~200ms），所有 I/O 变同区。locationHint 只在 DO 首次创建时生效，
+// 所以名字加代号 w1: 强制全量重建（旧 DO 里的编辑对话 history 丢弃，可接受；
+// 队列静止时为空，无在途损失）。
+const EDITOR_GEN = "w1:";
+const EDITOR_PLACEMENT = { locationHint: "wnam" };
+
+// config/model.json 的短 TTL 内存缓存：每个编辑 turn 都要读一次模型配置，内容
+// 几乎不变；从 HKG 时代量到过单次 R2 读 5.3s。60s 内直接用上次结果，管理端改
+// 配置最多迟一分钟生效。按 isolate 缓存（模块级），无跨用户数据，无泄露面。
+let _modelCfgCache = null, _modelCfgAt = 0;
+async function cachedModelConfig(env) {
+  if (!_modelCfgCache || Date.now() - _modelCfgAt > 60_000) {
+    _modelCfgCache = await loadModelConfig(env);
+    _modelCfgAt = Date.now();
+  }
+  return _modelCfgCache;
+}
+
 // writeLlmLog is imported from ./llmlog.js (shared with miner.js).
 // rand6 stays here — also used to build per-turn ids below.
 function rand6() {
@@ -192,7 +214,11 @@ export class ArticleEditor extends Agent {
     if (decision === "limit") return { ok: false, error: "这篇已达编辑上限（100 次）" };
 
     const turnId = `${Date.now()}-${rand6()}`;
-    const editModel = resolveEditModel(await loadModelConfig(this.env));
+    const tTurn = Date.now();
+    // 排队多久才轮到（WS 收到指令 → drain 到这一行）：排查「点了半天没动静」时先看这个
+    if (row.created_at) console.log(`[edit] turn ${turnId} queue_wait=${tTurn - row.created_at}ms`);
+    const editModel = resolveEditModel(await cachedModelConfig(this.env));
+    console.log(`[edit] turn ${turnId} setup=${Date.now() - tTurn}ms`);
     // 实时预览（Phase 2）：模型流式产出工具参数时，把 write_article 的整篇正文
     // （幽灵稿）和 edit_current_article 的行级新文本（打字机）边生成边广播给
     // 已连接的详情页。DO 内直连 broadcast，best-effort。
@@ -415,7 +441,7 @@ export class LibraryAgent extends Agent {
     if (decision === "no-credit") return { ok: false, error: "算力不足" };
 
     const turnId = `${Date.now()}-${rand6()}`;
-    const model = resolveEditModel(await loadModelConfig(this.env));
+    const model = resolveEditModel(await cachedModelConfig(this.env));
     const callClaude = this._makeLoggedCall({ turnId, scope, stem: "", instruction: row.text, model });
     // refs 走 queue 的 images 列（客户端发来的编号清单 [{n,stem,title}]，见 onMessage）。
     const refs = row.images ? (() => { try { return JSON.parse(row.images); } catch { return []; } })() : [];
@@ -1011,9 +1037,9 @@ export default {
         return new Response("bad stem", { status: 400 });
       }
       const articleKey = `${scope}articles/${stem}.json`;
-      const name = sanitizeName(scope + stem);
+      const name = sanitizeName(EDITOR_GEN + scope + stem);
 
-      const agent = await getAgentByName(env.ArticleEditor, name);
+      const agent = await getAgentByName(env.ArticleEditor, name, EDITOR_PLACEMENT);
       const fwd = new Request(request);
       fwd.headers.set("x-vd-article-key", articleKey);
       fwd.headers.set("x-vd-scope", scope);
@@ -1026,7 +1052,7 @@ export default {
       const token = bearerToken(request);
       const scope = await resolveScope(token, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
-      const agent = await getAgentByName(env.LibraryAgent, sanitizeName(scope + ":command"));
+      const agent = await getAgentByName(env.LibraryAgent, sanitizeName(EDITOR_GEN + scope + ":command"), EDITOR_PLACEMENT);
       const fwd = new Request(request);
       fwd.headers.set("x-vd-scope", scope);
       return agent.fetch(fwd);
@@ -1157,7 +1183,7 @@ export default {
       // 结果也已落库、预览通道也宣告了完成。
       let pusher = null;
       try {
-        const agent = await getAgentByName(env.ArticleEditor, sanitizeName(scope + stem));
+        const agent = await getAgentByName(env.ArticleEditor, sanitizeName(EDITOR_GEN + scope + stem), EDITOR_PLACEMENT);
         pusher = makePreviewPusher((obj) => agent.fetch(new Request("https://agent/preview", {
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(obj),
         })));

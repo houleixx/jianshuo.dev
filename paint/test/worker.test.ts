@@ -182,3 +182,32 @@ test("pool drains all queued jobs", async () => {
   for (const id of ids) await waitFor(async () => (await store.get(id))?.status === "done");
   for (const id of ids) assert.equal((await store.get(id))?.status, "done");
 });
+
+test("inputUrl 的下载挪到 worker：起跑时拉取成功 → 正常出图", async (t) => {
+  const { store, worker, cfg } = await setup();
+  // 本地 HTTP 服务当"远端原图"
+  const { createServer } = await import("node:http");
+  const srv = createServer((_req, res) => { res.writeHead(200); res.end("IMGBYTES"); });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+  t.after(() => srv.close());
+  const port = (srv.address() as any).port;
+  await mkdir(cfg.inputsDir, { recursive: true });
+  const inputPath = join(cfg.inputsDir, "d1.img");
+  await store.create(job("d1", { mode: "edit", inputPath, inputUrl: `http://127.0.0.1:${port}/x.png` }));
+  worker.enqueue("d1");
+  await waitFor(async () => (await store.get("d1"))?.status === "done");
+  const j = await store.get("d1");
+  assert.equal(j?.percent, 100); // 下载成功且引擎拿到了输入文件
+});
+
+test("inputUrl 下载失败 → job 直接 failed（input_download_failed），不进引擎", async () => {
+  const { store, worker, cfg } = await setup();
+  await mkdir(cfg.inputsDir, { recursive: true });
+  const inputPath = join(cfg.inputsDir, "d2.img");
+  // 无人监听的端口：连接拒绝
+  await store.create(job("d2", { mode: "edit", inputPath, inputUrl: "http://127.0.0.1:1/x.png" }));
+  worker.enqueue("d2");
+  await waitFor(async () => (await store.get("d2"))?.status === "failed");
+  const j = await store.get("d2");
+  assert.equal(j?.error?.code, "input_download_failed");
+});

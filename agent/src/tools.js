@@ -425,14 +425,20 @@ register(
   async ({ key, prompt }, ctx) => {
     const { env, scope, articleKey, articleIndex } = ctx;
     if (!key || !prompt) return { error: "missing_key_or_prompt" };
+    // 分段计时（2026-07-25 排查「出图前还有十几秒」）：哪一段慢一眼可见，常开无害。
+    const tStart = Date.now(); let tPrev = tStart;
+    const laps = [];
+    const lap = (label) => { const n = Date.now(); laps.push(`${label}=${n - tPrev}ms`); tPrev = n; };
 
     const now = Date.now();
     const bal = await ensureAccount(env.USAGE, scope, now);
     if (bal < imageCostUY()) return { error: `算力不足，生成一张图 ${IMAGE_SUANLI} 算力，请充值` };
+    lap("account");
 
     const obj = await env.FILES.get(articleKey);
     if (!obj) return { error: "not_found" };
     let doc; try { doc = JSON.parse(await obj.text()); } catch { return { error: "bad_article" }; }
+    lap("doc");
     const articles = resolveArticles(doc);
     if (!articles.length) return { error: "no_article" };
     const idx = (Number.isInteger(articleIndex) && articleIndex >= 0 && articleIndex < articles.length) ? articleIndex : 0;
@@ -450,6 +456,7 @@ register(
     delete doc.title; delete doc.body;
     const werr = await putArticleDoc(doc, ctx);
     if (werr) return werr;
+    lap("put_article");
 
     // 输出尺寸对齐原图比例：相册导入的图不是方的（App b07ad15 起），写死
     // 1024x1024 会把横竖图重画成方形。读 R2 原图的 JPEG 头拿宽高；读不到
@@ -460,8 +467,11 @@ register(
       const dims = photo ? jpegDims(await photo.arrayBuffer()) : null;
       if (dims) size = fitSize(dims.w, dims.h) || undefined;
     } catch { /* 尺寸探测失败不阻塞编辑 */ }
+    lap("dims");
 
     const resp = await postPaintJob(ctx, { prompt, newKey, oldKey: key, size });
+    lap("paint_post");
+    console.log(`[edit_photo] total=${Date.now() - tStart}ms ${laps.join(" ")}`);
 
     if (!resp || resp.status !== 202) {
       // 回退指针：把 newKey 换回 oldKey，保持文档与"没有在跑的任务"一致

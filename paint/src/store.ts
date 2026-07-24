@@ -16,6 +16,8 @@ export interface Job {
     transparent: boolean;
   };
   inputPath?: string;
+  /** edit 模式且输入是 image_url 时：worker 起跑前才下载（提交时只校验，2026-07-25） */
+  inputUrl?: string;
   resultPath?: string;
   format?: string;
   bytes?: number;
