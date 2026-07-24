@@ -675,15 +675,26 @@ async function handleRequest(context) {
   // `dates` lists the day-folders (newest first); `list?date=YYYY-MM-DD` lists
   // that day's entries (reversed → newest first within the page, ?cursor= pages
   // a very busy day). Reading a single record reuses GET /download/<key>.
+  // Day-folder listing must page with the cursor: R2's delimited list truncates
+  // by keys *scanned*, not prefixes returned — one un-paged call stops rolling
+  // up new day folders once the older days hold enough objects (this is how the
+  // llm admin page froze at 2026-07-13 while logs kept writing).
+  const listDateFolders = async (prefix) => {
+    const dates = [];
+    let cursor;
+    do {
+      const listed = await env.FILES.list({ prefix, delimiter: '/', limit: 1000, ...(cursor ? { cursor } : {}) });
+      dates.push(...(listed.delimitedPrefixes || [])
+        .map((p) => p.slice(prefix.length).replace(/\/$/, ''))
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)));
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+    return dates.sort().reverse();
+  };
   if (request.method === 'GET' && action === 'llmlog') {
     if (scope !== '') return json({ error: 'admin only' }, 403);
     if (sub2 === 'dates') {
-      const listed = await env.FILES.list({ prefix: 'llmlogs/', delimiter: '/', limit: 1000 });
-      const dates = (listed.delimitedPrefixes || [])
-        .map((p) => p.slice('llmlogs/'.length).replace(/\/$/, ''))
-        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-        .sort().reverse();
-      return json({ dates });
+      return json({ dates: await listDateFolders('llmlogs/') });
     }
     if (sub2 === 'list') {
       const date = url.searchParams.get('date') || '';
@@ -703,12 +714,7 @@ async function handleRequest(context) {
   if (request.method === 'GET' && action === 'minelog') {
     if (scope !== '') return json({ error: 'admin only' }, 403);
     if (sub2 === 'dates') {
-      const listed = await env.FILES.list({ prefix: 'minelogs/', delimiter: '/', limit: 1000 });
-      const dates = (listed.delimitedPrefixes || [])
-        .map((p) => p.slice('minelogs/'.length).replace(/\/$/, ''))
-        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-        .sort().reverse();
-      return json({ dates });
+      return json({ dates: await listDateFolders('minelogs/') });
     }
     if (sub2 === 'list') {
       const date = url.searchParams.get('date') || '';
