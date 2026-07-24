@@ -8,8 +8,8 @@ import { fakeEnv } from "./fakes.js";
 describe("flattenTemplate — 对外形状不变 {id,label,instruction}", () => {
   const flat = flattenTemplate(DEFAULT_PROMPT_TEMPLATE);
 
-  it("只收 action（18 条），group 不收（无 instruction）", () => {
-    expect(flat.length).toBe(18);
+  it("只收 action（16 条），group 不收（无 instruction）", () => {
+    expect(flat.length).toBe(16);
     for (const p of flat) {
       expect(typeof p.id).toBe("string");
       expect(typeof p.label).toBe("string");
@@ -55,12 +55,12 @@ describe("/agent/prompt-registry 路由（管理 token）", () => {
   const ADMIN = { FILES_TOKEN: "admintok" };
   const H = { Authorization: "Bearer admintok" };
 
-  it("GET → {prompts:[…]}：18 条模板叶子 + 6 条核心 global 提示词 = 24", async () => {
+  it("GET → {prompts:[…]}：16 条模板叶子 + 6 条核心 global 提示词 = 22", async () => {
     const env = { ...fakeEnv(), ...ADMIN };
     const res = await worker.fetch(new Request("https://jianshuo.dev/agent/prompt-registry", { headers: H }), env);
     expect(res.status).toBe(200);
     const { prompts } = await res.json();
-    expect(prompts.length).toBe(24);
+    expect(prompts.length).toBe(22);
     const cartoon = prompts.find((p) => p.id === "sys_cartoon");
     expect(cartoon.label).toBe("图片风格 · 卡通");
     expect(cartoon.instruction).toContain("宫崎骏");
