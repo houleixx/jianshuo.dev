@@ -1635,7 +1635,7 @@ async function handleRequest(context) {
       const doc = scope
         ? await ensureStyleSeeded(env, styleScope)
         : await readStyleDoc(env, styleScope);
-      if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', styles: (doc.profile && doc.profile.styles) || [], head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0, default: isDefaultSeed(doc) });
+      if (doc) return json({ style: resolveStyle(doc), name: (doc.profile && doc.profile.name) || '', head: doc.head, createdAt: doc.createdAt || 0, updatedAt: doc.updatedAt || 0, default: isDefaultSeed(doc) });
       const md = await readLegacyStyleMd(env, styleScope);
       if (md) {
         const m = md.match(/#\s*我的名字\s*\n+([^\n#]+)/);
@@ -1653,12 +1653,10 @@ async function handleRequest(context) {
     if (request.method === 'PUT' && !subaction) {
       let body; try { body = await request.json(); } catch { return json({ error: 'bad json' }, 400); }
       const style = typeof body.style === 'string' ? body.style : '';
-      // Non-versioned profile fields, merged in one patch (extensible: name, styles, …).
+      // Non-versioned profile fields, merged in one patch (extensible: name, …).
+      // 旧客户端还会 PUT {styles}（已下线的多风格对比）——直接忽略该字段。
       const profilePatch = {};
       if (typeof body.name === 'string') profilePatch.name = body.name.trim();
-      if (Array.isArray(body.styles)) {
-        profilePatch.styles = body.styles.filter((n) => Number.isInteger(n)).slice(0, 3);  // 多风格对比：选中的文风版本号
-      }
       const hasProfile = Object.keys(profilePatch).length > 0;
       if (!style.trim() && !hasProfile) return json({ error: 'empty_content' }, 400);
       const source = body.source === 'agent' ? 'agent' : (scope ? 'app' : 'mine');

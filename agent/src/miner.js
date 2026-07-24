@@ -1336,11 +1336,9 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
 
     await notifyStatus(scope, stem, "mining", env);
 
-    // ── Style(s) + photos ───────────────────────────────────────────────────────
-    // 文风走 CLAUDE.json（schema-3），回退老 CLAUDE.md 的「# 我的文风」段。
-    // profile.styles 非空就覆盖 head（含单选）：1 个=单篇用那个风格；≥2 个=每个风格各挖
-    // 一篇；空=用 head 默认文风。每篇都作为一个标准 article version 写入（head=最后一个），
-    // 且只要风格版本号已知就写 per-article `style: N` 字段（阅读页 chip 显示；不进 body——隐形注释行会让第N行编号错位）。
+    // ── Style + photos ──────────────────────────────────────────────────────────
+    // 文风走 CLAUDE.json（schema-3）的 head 版本，回退老 CLAUDE.md 的「# 我的文风」段。
+    // 风格版本号已知就写 per-article `style: N` 字段（阅读页 chip 显示；不进 body——隐形注释行会让第N行编号错位）。
     // Lazy-seed the default 王建硕 style as v1 on first mine (no-op if the user
     // already has a style; skips legacy CLAUDE.md users). After this the first
     // article is tagged 风格 v1 and the user owns an editable baseline.
@@ -1348,37 +1346,22 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     const styleDoc = await readStyleDoc(env, scope);
     const claudeMd  = (styleDoc ? resolveStyle(styleDoc) : await readStyleText(env, scope)).trim();
     const headV     = (styleDoc && styleDoc.head) ? styleDoc.head : null;
-    const picks = (styleDoc && styleDoc.profile && Array.isArray(styleDoc.profile.styles) ? styleDoc.profile.styles : [])
-      .map((v) => ({ v, style: ((styleDoc.versions || []).find((e) => e.v === v) || {}).style }))
-      .filter((p) => typeof p.style === "string" && p.style.trim());
-    // The style(s) to mine: picks if any (1 overrides head too), else the head style
-    // (tagged with headV). No CLAUDE.json → one untagged mine with empty style.
-    const toMine = picks.length ? picks : [{ v: headV, style: claudeMd }];
-    // ≥2 styles mine the SAME recording (same transcript+photos) → cache those across the
-    // 文风 variants (transcript mode). A single style varies the transcript across different
-    // recordings, so keep 文风 in the cached system block (system mode) for cross-recording hits.
-    const cacheMode = toMine.length >= 2 ? "transcript" : "system";
-    if (claudeMd || picks.length) log("文风", { chars: claudeMd.length, use: picks.length ? picks.map((p) => `v${p.v}`).join(",") : (headV ? `v${headV}(head)` : "none") });
+    if (claudeMd) log("文风", { chars: claudeMd.length, use: headV ? `v${headV}(head)` : "none" });
 
     const photos = await gatherPhotos(audioKey, allKeys, env, log);
     if (photos.length) log("照片", { count: photos.length });
 
     const turnId = `${Date.now()}-${stem.slice(-8)}`;
 
-    // Mine once for one style text → articles ([] if none). Shared core with text-mine
+    // Mine once with the head style → articles ([] if none). Shared core with text-mine
     // and restyle (force retry + log + debit live in mineVariant; no per-path copies).
-    const mineOnce = (styleText, tag) => mineVariant(env, {
-      transcript, styleText, photos, cacheMode, modelCfg, scope, stem, turnId, label: tag, log,
+    const arts = await mineVariant(env, {
+      transcript, styleText: claudeMd, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
+      label: headV ? `风格v${headV}` : "", log,
     });
+    const articles = headV ? arts.map((a) => ({ ...a, style: headV })) : arts;
 
-    // Build the variant(s): one per style to mine, each tagged when its version is known.
-    const variants = [];
-    for (const p of toMine) {
-      const arts = await mineOnce(p.style, p.v ? `风格v${p.v}` : "");
-      if (arts.length) variants.push(p.v ? arts.map((a) => ({ ...a, style: p.v })) : arts);
-    }
-
-    if (!variants.length) {
+    if (!articles.length) {
       await writeEmpty(audioKey, "no-article", env);
       await notifyStatus(scope, stem, "empty", env);
       log("无文章");
@@ -1386,29 +1369,24 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       return "empty";
     }
 
-    // ── Write article(s) ─────────────────────────────────────────────────────────
-    // Each variant is PUT separately → the Files API article store appends it as a new
-    // version and moves head, so after the loop head = the LAST variant (newest), and
-    // undo/redo walks the others. No photos array — [[photo:<key>]] markers in the body
-    // are the sole source of truth for which photos appear and where.
+    // ── Write article ────────────────────────────────────────────────────────────
+    // No photos array — [[photo:<key>]] markers in the body are the sole source of
+    // truth for which photos appear and where.
     const pendingTags = await consumePendingTags(audioKey, env);
-    const baseDoc = {
+    const { articles: cleaned, questions } = extractFollowups(articles);
+    await writeArticle(audioKey, {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
       transcript, srt, status: "ready", model: modelCfg.model,
       ...(pendingTags.length ? { tags: pendingTags } : {}),
-    };
-    // 每次 PUT 整体替换 doc 元数据，最后一个 variant（= head）的 questions 生效。
-    for (const arts of variants) {
-      const { articles: cleaned, questions } = extractFollowups(arts);
-      await writeArticle(audioKey, { ...baseDoc, articles: cleaned, ...(questions.length ? { questions } : {}) }, env);
-    }
+      articles: cleaned, ...(questions.length ? { questions } : {}),
+    }, env);
     if (srt) await writeSrt(audioKey, srt, env);
     await notifyStatus(scope, stem, "ready", env);
     // APNs：成文是异步的（用户多半已离开 app），推一条让他知道回来看。
-    { const t = variants.at(-1)?.[0]?.title; await sendPush(env, scope, { title: "文章已生成", body: t ? `《${t}》挖好了，点开看看` : "你的录音已成文", link: `voicedrop://article/${stem}` }); }
+    { const t = cleaned[0]?.title; await sendPush(env, scope, { title: "文章已生成", body: t ? `《${t}》挖好了，点开看看` : "你的录音已成文", link: `voicedrop://article/${stem}` }); }
     try { await maybeAutoShareCommunity(audioKey, env, log); } catch (e) { log("自动分享失败", { error: String(e) }); }
-    log("写入完成", { variants: variants.length });
+    log("写入完成", { articles: cleaned.length });
     result = "mined";
     return "mined";
 

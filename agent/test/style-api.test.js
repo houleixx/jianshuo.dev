@@ -205,17 +205,15 @@ describe("profile name via /style — additive, name change mints NO version", (
     expect(stored.profile).toBeUndefined();
   });
 
-  it("PUT /style {styles} writes profile.styles (ints only, capped 3), no version", async () => {
+  it("PUT /style {styles} (retired 多风格对比, old client) is ignored — no profile write, no version", async () => {
     const scope = await anonScope(TOKEN);
-    const ctx = reqCtx("PUT", ["style"], { body: { styles: [7, 3, 9, 5, "x"] } });
-    const body = await (await onRequest(ctx)).json();
-    expect(body.ok).toBe(true);
-    const stored = JSON.parse(ctx.env.FILES._store.get(`${scope}CLAUDE.json`));
-    expect(stored.profile.styles).toEqual([7, 3, 9]);
-    expect(stored.versions || []).toHaveLength(0);   // selection is not a文风 version
+    const ctx = reqCtx("PUT", ["style"], { body: { styles: [7, 3, 9] } });
+    const res = await onRequest(ctx);
+    expect(res.status).toBe(400);   // nothing recognized in the body
+    expect(ctx.env.FILES._store.has(`${scope}CLAUDE.json`)).toBe(false);
   });
 
-  it("GET /style additively returns profile.styles", async () => {
+  it("GET /style no longer returns profile.styles (retired 多风格对比)", async () => {
     const ctx = reqCtx("GET", ["style"]);
     const scope = await anonScope(TOKEN);
     ctx.env.FILES._store.set(`${scope}CLAUDE.json`, JSON.stringify({
@@ -224,6 +222,6 @@ describe("profile name via /style — additive, name change mints NO version", (
       profile: { styles: [7, 3] },
     }));
     const body = await (await onRequest(ctx)).json();
-    expect(body.styles).toEqual([7, 3]);
+    expect(body.styles).toBeUndefined();
   });
 });
