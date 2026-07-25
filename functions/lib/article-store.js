@@ -201,7 +201,12 @@ async function putArticleDoc(env, key, doc, opts = {}) {
 //          按文章串行，这里的重读从来不是并发保护。显式传 null = 确认是首写。
 // opts.deferIndex – 透传给 putArticleDoc（索引维护转后台，见其注释）。
 export async function writeArticleDoc(env, key, newDoc, source = "unknown", opts = {}) {
-  const current = opts.current !== undefined ? opts.current : await readArticleDoc(env, key);
+  // opts.current 是调用方从 R2 直读的 RAW doc（没过 readArticleDoc 的 migrateToV3）
+  // ——老 schema-2 doc 不迁移的话下面会走「首写」分支把版本链重置成 v1。这里补迁移，
+  // 已是 v3 的原样返回，零开销。
+  const current = opts.current !== undefined
+    ? (opts.current ? migrateToV3(opts.current) : null)
+    : await readArticleDoc(env, key);
 
   let versions, head;
   if (current && Array.isArray(current.versions) && current.head) {
@@ -227,7 +232,13 @@ export async function writeArticleDoc(env, key, newDoc, source = "unknown", opts
   // their fields still win — this only stops a partial write from deleting the
   // fields it never mentioned.
   const { articles: _a, history: _h, version: _v, _source: _s, ...rest } = newDoc;
-  const doc = { ...(current || {}), ...rest, head, versions, updatedAt: Date.now() };
+  // current 一侧做同样的字段清洗：opts.current 可能与 newDoc 是同一个对象（agent
+  // 直写路径），只清 rest 不清 current 的话，顶层 articles/history 会经 current
+  // 展开泄漏进存量 doc——schema-3 的正文只活在 versions[head]；泄漏的顶层 articles
+  // 在 undo（head 后移）之后就是一份过期正文，raw /download 和 DO 连接快照的
+  // withTopLevelArticles 见顶层字段直接原样返回，会把它当权威内容发给客户端。
+  const { articles: _ca, history: _ch, version: _cv, _source: _cs, ...curRest } = current || {};
+  const doc = { ...curRest, ...rest, head, versions, updatedAt: Date.now() };
   // An article minted by a partial writer has no createdAt at all, and the list
   // sorts it to 1970. Stamp it once, on the write that creates the doc.
   if (!doc.createdAt) doc.createdAt = new Date().toISOString();

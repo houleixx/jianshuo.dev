@@ -247,3 +247,28 @@ describe("optimistic notify (乐观回执)", () => {
     expect(events).toEqual([]);
   });
 });
+
+// ── 直写不泄漏顶层字段（undo 场景的权威性，2026-07-25 自查发现）────────────────
+import { runTool } from "../src/tools.js";
+import { withTopLevelArticles, setHead } from "../../functions/lib/article-store.js";
+
+describe("direct write keeps schema-3 clean", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("编辑后存量 doc 无顶层 articles/history；undo 后 withTopLevelArticles 跟随 head", async () => {
+    const args = await makeArgs({});
+    stubFetch(args.env);
+    const ctx = { env: args.env, scope: SCOPE, articleKey: ARTICLE_KEY, token: "t", origin: "https://vd.test" };
+    // 种子是 schema-2（无 versions）：第一次直写必须先迁移再追加，不能重置成 v1
+    await runTool("edit_current_article", { ops: [{ op: "replace_line", line: 1, text: "V2版第一段。" }] }, ctx);
+    await runTool("edit_current_article", { ops: [{ op: "replace_line", line: 1, text: "V3版第一段。" }] }, ctx);
+    const stored = JSON.parse(await (await args.env.FILES.get(ARTICLE_KEY)).text());
+    expect("articles" in stored).toBe(false);   // 顶层正文不落盘（只活在 versions[head]）
+    expect("history" in stored).toBe(false);
+    expect(stored.versions.map((v) => v.v)).toEqual([1, 2, 3]); // 原文=v1，两次编辑=v2/v3
+    // undo 回 v2 → 快照/raw download 用的 withTopLevelArticles 必须给 v2 内容
+    await setHead(args.env, ARTICLE_KEY, 2);
+    const after = JSON.parse(await (await args.env.FILES.get(ARTICLE_KEY)).text());
+    expect(withTopLevelArticles(after).articles[0].body).toContain("V2版");
+  });
+});
