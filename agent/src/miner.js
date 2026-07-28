@@ -1221,7 +1221,8 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
           return "pending";
         }
         ({ transcript, srt, asrDurMs } = r);
-        log("ASR 完成", { chars: transcript.length, duration_ms: Date.now() - tAsr });
+        // asr_dur_ms = 火山检测到的音频实际时长——区分「几分钟的静音」和「文件被截断」
+        log("ASR 完成", { chars: transcript.length, duration_ms: Date.now() - tAsr, asr_dur_ms: asrDurMs });
       } catch (e) {
         if (e instanceof AsrError) {
           await env.FILES.delete(asrTaskKeyFor(audioKey)).catch(() => {});
