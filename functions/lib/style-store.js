@@ -25,10 +25,23 @@ export const STYLE_MAX_VERSIONS = 20;
 const styleKeyFor  = (scope) => scope + "CLAUDE.json";
 const legacyKeyFor = (scope) => scope + "CLAUDE.md";
 
-// The default 王建硕 writing style — canonical single source. Seeded as v1 of the
-// 3-preset chain by ensureStyleSeeded() on first use, and re-exported by
-// agent/src/prompts/mine.js as MINE_DEFAULT_STYLE (the generation-time fallback),
-// so the seed text and the fallback text can never drift.
+// 「商业十条」写作原则（源自 ~/code/liurun.txt）—— 新用户的缺省文风。
+// Seeded as v1 (head) of the preset chain by ensureStyleSeeded() on first use, and
+// re-exported by agent/src/prompts/mine.js as MINE_DEFAULT_STYLE (the generation-time
+// fallback for style-less users), so the seed text and the fallback text can never drift.
+export const BUSINESS_STYLE = `目标不是展示文采，而是让读者真正理解、记住，并获得新的认知。
+先想清楚再写：动笔前用不超过 100 字总结核心观点，总结不出来就继续想，不要开始写。
+追求本质而不是现象：不罗列现象，追问真正的原因、找到能解释所有现象的底层规律。
+输出知识而不是感叹：每段至少给一种价值——新的事实或概念（What）、背后的原因（Why）、可执行的方法（How），避免整段只让人觉得「真厉害」。
+用常识检验逻辑：警惕因果倒置、偷换概念、正确的废话；五岁小孩都觉得不对的地方，大概率逻辑出了问题。
+永远站在读者这一边：默认读者不知道背景，主动回答「什么意思、为什么、举个例子、然后呢」，不让读者自己补上下文。
+保持清晰的逻辑结构：一个中心观点（大逻辑）、清晰的章节推进（中逻辑）、自然顺畅的段落衔接（小逻辑），所有内容都服务于中心观点。
+多讲故事少讲概念：抽象观点落到真实案例、具体人物、场景、对话，让读者「看见」而不是「听见」。
+用刻画而不是形容：不写「很厉害、很优秀、很伟大」，写他做了什么、别人怎么反应、结果发生了什么。Show, don't tell.
+每一句都值得保留：删掉重复、空话、套话、无意义修辞，宁可短也不要松散。
+幽默来自理解而不是技巧：不刻意制造段子，真正理解事物之后，荒谬、自相矛盾、反差本身就会产生幽默。`;
+
+// 王建硕个人语气预设（seedPresetDoc 的 v2）。
 export const DEFAULT_STYLE = `胸有成竹地下断言，不绕弯、不加「我觉得可能也许」的缓冲。
 不讲故事、不铺垫，直接给结论再给理由；开头一句就立住，绝不用小白式提问钩子。
 第一人称用「我」，绝不用「笔者」。称呼 AI / Claude 一律用「他」，不用「它」。
@@ -37,7 +50,7 @@ export const DEFAULT_STYLE = `胸有成竹地下断言，不绕弯、不加「�
 保留口语词（吧 / 呢 / 啊 / 了）、自造词、家常比喻——这是你的声音，别改成书面语。
 不加 AI 味连接词（首先 / 其次 / 综上所述 / 值得注意的是），不加 emoji。`;
 
-// 小红书笔记体预设（seedPresetDoc 的 v2）。
+// 小红书笔记体预设（seedPresetDoc 的 v3）。
 export const XHS_STYLE = `小红书笔记体：短句、口语、有网感，一段最多两三行，读着像跟朋友唠。
 开头第一句就抛钩子——痛点、反差或一个具体数字，别铺垫。
 每张卡 / 每段只讲一个点，多用「你」，像当面说话。
@@ -46,7 +59,7 @@ export const XHS_STYLE = `小红书笔记体：短句、口语、有网感，一
 结尾带三到五个话题标签（#xxx），挑跟内容真相关的。
 不写「首先/其次/综上」，不写书面腔。`;
 
-// 微信公众号文章体预设（seedPresetDoc 的 v3）。
+// 微信公众号文章体预设（seedPresetDoc 的 v4）。
 export const WECHAT_STYLE = `微信公众号文章体：比口语更完整、比论文更亲切，面向广泛读者，不特指某一个人的嗓音。
 开头直接进入话题、给出这篇要解决的问题，第一段就立住价值，不用小白式提问钩子。
 用清晰的小标题分段，每段有节奏，长短句交替，读着不累。
@@ -54,14 +67,15 @@ export const WECHAT_STYLE = `微信公众号文章体：比口语更完整、比
 结尾留一句有回味的话或一个可带走的要点，不强行升华、不喊口号。
 不堆 AI 味连接词（首先/其次/综上所述/值得注意的是），emoji 克制或不用。`;
 
-// 三预设有序表（新用户种子来源）。王建硕复用 DEFAULT_STYLE 单一真源。
+// 预设有序表（新用户种子来源）。首位是缺省生效的「商业十条」。
 export const PRESET_STYLES = [
+  { name: "商业十条", style: BUSINESS_STYLE },
   { name: "王建硕", style: DEFAULT_STYLE },
   { name: "小红书", style: XHS_STYLE },
   { name: "公众号", style: WECHAT_STYLE },
 ];
 
-// 构造未编辑的三预设种子信封（纯函数，便于单测，不碰 IO）。head=1（开局王建硕）。
+// 构造未编辑的预设种子信封（纯函数，便于单测，不碰 IO）。head=1（开局商业十条）。
 export function seedPresetDoc(now) {
   return {
     schema: 3,
@@ -72,7 +86,7 @@ export function seedPresetDoc(now) {
   };
 }
 
-// Lazy-seed the default 王建硕 style as the user's own v1 the first time anyone
+// Lazy-seed the preset chain (v1 = 商业十条缺省) the first time anyone
 // touches their style (settings read or first mine). Idempotent: returns the
 // existing doc untouched if a CLAUDE.json is already there. Returns null WITHOUT
 // seeding when a legacy CLAUDE.md already holds 文风 (don't clobber an old user —
@@ -88,8 +102,8 @@ export async function ensureStyleSeeded(env, scope) {
   return seeded;
 }
 
-// True iff the doc is still the un-edited 3-preset seed: head=1 and exactly the three
-// preset versions (v1/v2/v3, source "preset"). Any edit (a v4, a non-preset source, or
+// True iff the doc is still the un-edited preset seed: head=1 and exactly the
+// preset versions (source "preset"). Any edit (a new version, a non-preset source, or
 // a moved head) makes it false. SINGLE SOURCE for the GET /style `default` flag.
 export function isDefaultSeed(doc) {
   if (!doc || doc.head !== 1 || !Array.isArray(doc.versions)) return false;

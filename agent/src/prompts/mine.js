@@ -33,10 +33,10 @@ export const MINE_SYSTEM = `你是这段录音的录制者，在写自己的公�
 
 只输出一个 JSON 对象：{"articles": [{"title": "标题", "body": "正文 markdown", "questions": ["问题", …]}, ...]}（questions 可省略），不要输出任何其它文字。只要转写里有哪怕一两句有意义的话，就要成文（可以很短）；只有完全没有可写内容时（纯噪音、半句没说完、纯口误）才输出 {"articles": []}。`;
 
-// 默认王建硕风格的 canonical 文本住在共享的 style-store.js（既是种子又是生成回退），
+// 缺省文风（商业十条）的 canonical 文本住在共享的 style-store.js（既是种子又是生成回退），
 // 这里 re-export 保持 mine.js 的对外接口不变、字节一致。
-import { DEFAULT_STYLE } from "../../../functions/lib/style-store.js";
-export const MINE_DEFAULT_STYLE = DEFAULT_STYLE;
+import { BUSINESS_STYLE } from "../../../functions/lib/style-store.js";
+export const MINE_DEFAULT_STYLE = BUSINESS_STYLE;
 
 export const MINE_SYSTEM_FORCE = `把下面的口述转写整理成一篇短文，保留说话人的意思和语气。直接输出 JSON：{"articles": [{"title": "标题", "body": "正文"}]}。只要有人在说话就必须成文，不能返回空数组。`;
 

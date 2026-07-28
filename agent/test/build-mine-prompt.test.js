@@ -12,7 +12,7 @@ describe("buildMinePrompt — anthropic 默认 (system cache)", () => {
   it("system 文本含 SYSTEM + style 尾巴（无个人文风时用默认 DNA）", () => {
     expect(p.system[0].text).toContain("你是这段录音的录制者");
     expect(p.system[0].text).toContain("<style>");
-    expect(p.system[0].text).toContain("胸有成竹"); // DEFAULT_STYLE
+    expect(p.system[0].text).toContain("先想清楚再写"); // 缺省文风（商业十条）
   });
   it("user content 是 transcript", () => {
     expect(p.messages[0].role).toBe("user");
@@ -28,7 +28,7 @@ describe("buildMinePrompt — 个人文风顶替默认", () => {
   const p = buildMinePrompt({ transcript: T, styleText: "我的专属文风XYZ", photos: [], force: false, provider: "anthropic", model: "m" });
   it("style 槽用传入文风、不再含默认 DNA", () => {
     expect(p.system[0].text).toContain("我的专属文风XYZ");
-    expect(p.system[0].text).not.toContain("胸有成竹");
+    expect(p.system[0].text).not.toContain("先想清楚再写");
   });
 });
 

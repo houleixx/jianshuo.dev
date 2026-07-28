@@ -15,8 +15,8 @@ describe("prompts/mine.js 文本外置", () => {
   it("PHOTO_INSTR 含照片标记说明", () => {
     expect(PHOTO_INSTR).toContain("[[photo:<key>]]");
   });
-  it("MINE_DEFAULT_STYLE 含王建硕语气 DNA", () => {
-    expect(MINE_DEFAULT_STYLE).toContain("胸有成竹");
-    expect(MINE_DEFAULT_STYLE).toContain("绝不用「笔者」");
+  it("MINE_DEFAULT_STYLE 含商业十条 DNA", () => {
+    expect(MINE_DEFAULT_STYLE).toContain("先想清楚再写");
+    expect(MINE_DEFAULT_STYLE).toContain("Show, don't tell");
   });
 });

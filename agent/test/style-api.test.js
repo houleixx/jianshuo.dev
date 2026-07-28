@@ -19,14 +19,14 @@ function reqCtx(method, segments, { token = TOKEN, body, contentType } = {}) {
 }
 
 describe("GET /style", () => {
-  it("seeds the default 王建硕 style as v1 when neither exists (default:true)", async () => {
-    const { DEFAULT_STYLE } = await import("../../functions/lib/style-store.js");
+  it("seeds the default 商业十条 style as v1 when neither exists (default:true)", async () => {
+    const { BUSINESS_STYLE } = await import("../../functions/lib/style-store.js");
     const ctx = reqCtx("GET", ["style"]);
     const scope = await anonScope(TOKEN);
     const res = await onRequest(ctx);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.style).toBe(DEFAULT_STYLE);
+    expect(body.style).toBe(BUSINESS_STYLE);
     expect(body.head).toBe(1);
     expect(body.default).toBe(true);
     // 已落库为该用户自己的 CLAUDE.json
