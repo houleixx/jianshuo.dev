@@ -239,10 +239,11 @@ describe("invite landing page", () => {
     // 分享卡片有图：og:image / image_src 指向 logo（微信卡片不再是空图标）
     expect(h).toContain('<meta property="og:image" content="https://voicedrop.cn/icon-512.png"/>');
     expect(h).toContain('<link rel="image_src" href="https://voicedrop.cn/icon-512.png"/>');
-    // 归因三件套都在页面里：第一方 beacon / execCommand 剪贴板兜底 / 微信引导蒙层
+    // 归因在页面里：第一方 beacon / execCommand 剪贴板兜底；微信内不再有引导蒙层
+    // （iOS apps.apple.com 是微信白名单可直跳 App Store，Android 走应用宝原生可装）
     expect(h).toContain("/agent/referral/hit");
     expect(h).toContain("execCommand");
-    expect(h).toContain("wx-mask");
+    expect(h).not.toContain("wx-mask");
     // ⚠️ 反代访问（带 x-forwarded-host）：服务端不写 IP 指纹——CF-Connecting-IP
     // 是代理出口 IP（垃圾），真实 IP 由页面 beacon 直连 /agent/referral/hit 补。
     await Promise.all(c._tasks);

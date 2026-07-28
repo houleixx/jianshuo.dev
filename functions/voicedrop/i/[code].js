@@ -172,11 +172,6 @@ body{background:#211F1B;color:#fff;min-height:100dvh;display:flex;flex-direction
   </div>
   <div class="note">${note}</div>
 </div>
-<div id="wx-mask" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9;padding:26px 22px;text-align:right">
-  <svg width="44" height="60" viewBox="0 0 44 60" fill="none" stroke="#E2B871" stroke-width="3" stroke-linecap="round" style="margin-right:8px"><path d="M22 54V10M22 10l-12 13M22 10l12 13"/></svg>
-  <p style="font:600 19px/1.7 -apple-system,'PingFang SC';color:#fff;margin:14px 0 6px">微信里装不了 App</p>
-  <p style="font:15px/1.7 -apple-system,'PingFang SC';color:#C9BFAE;margin:0">点右上角「···」，选「在浏览器打开」<br>再点下载就行。邀请已经记住了。</p>
-</div>
 <script>
 // 归因三件套（都不挡渲染）：
 // ① 第一方 beacon —— 浏览器直连 jianshuo.dev 报到（voicedrop.cn 反代会吃掉真实
@@ -184,7 +179,8 @@ body{background:#211F1B;color:#fff;min-height:100dvh;display:flex;flex-direction
 //    直连页服务端已写过指纹，再发 beacon 同一次访问记两条（2026-07-17 用户发现）；
 // ② 下载点击写剪贴板（execCommand 先行——微信 webview 里 navigator.clipboard
 //    常年不可用；再叠 clipboard API 双保险）；
-// ③ 微信内点下载 → 不跳转，弹「去浏览器打开」蒙层（剪贴板照写）。
+// ③ 微信内也不拦蒙层直接跳：iOS 的 apps.apple.com 是微信白名单可直拉 App Store，
+//    Android 走应用宝原生可装（2026-07-28 去掉 iOS 蒙层）。
 (function(){
   ${proxied ? `var HIT='https://jianshuo.dev/agent/referral/hit',CODE='${esc(code)}';
   try{(navigator.sendBeacon&&navigator.sendBeacon(HIT,CODE))||fetch(HIT,{method:'POST',body:CODE,mode:'no-cors',keepalive:true})}catch(e){}` : ''}
@@ -194,14 +190,10 @@ body{background:#211F1B;color:#fff;min-height:100dvh;display:flex;flex-direction
     try{navigator.clipboard&&navigator.clipboard.writeText(location.href)}catch(e){}
     try{fetch(location.pathname+"?c=1",{keepalive:true})}catch(e){}
   }
-  var ua=navigator.userAgent||'',wx=/MicroMessenger/i.test(ua);
-  var mask=document.getElementById('wx-mask');
-  function tap(e){keep();if(wx){e.preventDefault();mask.style.display='block';}}
+  var ua=navigator.userAgent||'';
   var i=document.getElementById('dl-ios'),a=document.getElementById('dl-android');
-  i.addEventListener('click',tap);
-  // Android 走应用宝：微信里原生可装，不拦蒙层，只写剪贴板保归因。
+  i.addEventListener('click',function(){keep();});
   a.addEventListener('click',function(){keep();});
-  mask.addEventListener('click',function(){mask.style.display='none';});
   if(/Android/i.test(ua))i.classList.add('dim');
   else if(/iPhone|iPad|iPod|Macintosh/i.test(ua))a.classList.add('dim');
 })();
