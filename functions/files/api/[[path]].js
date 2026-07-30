@@ -36,6 +36,186 @@ import { coreLoadPromptShares, coreDeleteUserData, coreListArticles, coreReplace
 // readArticleDoc/migrateToV3.
 const isAsrSidecar = (key) => key.endsWith('.asr.json') || key.endsWith('.asrdone.json');
 
+const WECHAT_COMPONENT_KEY = 'config/wechat-component.json';
+const WECHAT_AUTH_STATE_CONTEXT = 'wechat-auth-state:';
+const WECHAT_AUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+async function createWechatAuthState(scope, secret) {
+  if (!secret || !/^users\/[^/]+\/$/.test(scope)) return '';
+  const payload = b64url(JSON.stringify({ s: scope, e: Date.now() + WECHAT_AUTH_STATE_TTL_MS }));
+  return payload + '.' + await hmacSign(WECHAT_AUTH_STATE_CONTEXT + payload, secret);
+}
+
+async function verifyWechatAuthState(state, secret) {
+  if (!state || !secret) return null;
+  const parts = state.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  const expected = await hmacSign(WECHAT_AUTH_STATE_CONTEXT + parts[0], secret);
+  if (!timingSafeEqual(parts[1], expected)) return null;
+  let payload;
+  try { payload = JSON.parse(b64urlToString(parts[0])); } catch { return null; }
+  if (!payload || !/^users\/[^/]+\/$/.test(payload.s)
+      || !Number.isFinite(payload.e) || payload.e <= Date.now()) return null;
+  return { scope: payload.s, expiresAt: payload.e };
+}
+
+async function loadWechatComponent(env) {
+  try {
+    const obj = await env.FILES.get(WECHAT_COMPONENT_KEY);
+    return obj ? JSON.parse(await obj.text()) : {};
+  } catch { return {}; }
+}
+
+function wechatRelayBaseURL(env) {
+  const configured = String(env.WECHAT_RELAY_URL || '').trim();
+  if (!configured) return '';
+  return configured
+    .replace(/\/(?:publish|validate)\/?$/, '')
+    .replace(/\/+$/, '');
+}
+
+async function callWechatRelay(env, operation, payload) {
+  const base = wechatRelayBaseURL(env);
+  if (!base || !env.WECHAT_RELAY_SECRET) throw new Error('relay_not_configured');
+  const response = await fetch(base + '/' + operation, {
+    method: 'POST',
+    headers: {
+      'X-Relay-Secret': env.WECHAT_RELAY_SECRET,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error('relay_http_' + response.status);
+  const data = await response.json();
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('relay_invalid_response');
+  }
+  return data;
+}
+
+async function getWechatComponentAccessToken(env) {
+  const component = await loadWechatComponent(env);
+  if (component.component_access_token
+      && Number(component.component_access_token_expires_at) > Date.now() + 60_000) {
+    return { token: component.component_access_token, component };
+  }
+  if (!component.component_verify_ticket || !env.WECHAT_COMPONENT_APP_ID || !env.WECHAT_COMPONENT_APP_SECRET) {
+    return { token: '', component };
+  }
+  let data;
+  try {
+    data = await callWechatRelay(env, 'component-token', {
+      component_appid: env.WECHAT_COMPONENT_APP_ID,
+      component_appsecret: env.WECHAT_COMPONENT_APP_SECRET,
+      component_verify_ticket: component.component_verify_ticket,
+    });
+  } catch { return { token: '', component }; }
+  if (!data || !data.component_access_token) return { token: '', component };
+  const next = {
+    ...component,
+    component_access_token: data.component_access_token,
+    component_access_token_expires_at: Date.now() + Math.max(0, Number(data.expires_in || 7200) - 60) * 1000,
+  };
+  await env.FILES.put(WECHAT_COMPONENT_KEY, JSON.stringify(next), {
+    httpMetadata: { contentType: 'application/json' },
+  });
+  return { token: next.component_access_token, component: next };
+}
+
+async function refreshWechatAuthorizerAccessToken(env, wc) {
+  const storedAccessToken = typeof wc.access_token === 'string' ? wc.access_token.trim() : '';
+  if (!wc.authorizer_appid) {
+    return { token: '', refreshed: false, error: 'wechat_authorization_incomplete' };
+  }
+  if (storedAccessToken && Number(wc.access_token_expires_at) > Date.now() + 60_000) {
+    return { token: storedAccessToken, refreshed: false };
+  }
+  if (!wc.refresh_token || !env.WECHAT_COMPONENT_APP_ID) {
+    return { token: '', refreshed: false, error: 'wechat_authorization_incomplete' };
+  }
+  const component = await getWechatComponentAccessToken(env);
+  if (!component.token) {
+    return { token: '', refreshed: false, error: 'wechat_component_token_unavailable' };
+  }
+  let data;
+  try {
+    data = await callWechatRelay(env, 'authorizer-token', {
+      component_access_token: component.token,
+      component_appid: env.WECHAT_COMPONENT_APP_ID,
+      authorizer_appid: wc.authorizer_appid,
+      authorizer_refresh_token: wc.refresh_token,
+    });
+  } catch {
+    return { token: '', refreshed: false, error: 'wechat_authorizer_token_unavailable' };
+  }
+  if (!data || !data.authorizer_access_token) {
+    return {
+      token: '',
+      refreshed: false,
+      error: 'wechat_authorizer_token_refresh_failed',
+      errcode: data && data.errcode,
+      errmsg: data && data.errmsg,
+    };
+  }
+  wc.access_token = data.authorizer_access_token;
+  wc.access_token_expires_at = Date.now() + Math.max(0, Number(data.expires_in || 7200) - 60) * 1000;
+  if (data.authorizer_refresh_token) wc.refresh_token = data.authorizer_refresh_token;
+  return { token: wc.access_token, refreshed: true };
+}
+
+async function isWechatComponentCallbackSignatureValid(url, token, encrypted = '') {
+  const signature = url.searchParams.get(encrypted ? 'msg_signature' : 'signature') || '';
+  const timestamp = url.searchParams.get('timestamp') || '';
+  const nonce = url.searchParams.get('nonce') || '';
+  if (!token || !signature || !timestamp || !nonce) return false;
+  const data = new TextEncoder().encode([token, timestamp, nonce, ...(encrypted ? [encrypted] : [])].sort().join(''));
+  const digest = await crypto.subtle.digest('SHA-1', data);
+  const expected = [...new Uint8Array(digest)].map((n) => n.toString(16).padStart(2, '0')).join('');
+  return timingSafeEqual(expected, signature);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+}
+
+async function decryptWechatComponentMessage(encrypted, encodingAesKey, componentAppId) {
+  if (!encrypted || !encodingAesKey || !componentAppId) return '';
+  try {
+    // 微信 EncodingAESKey 是 43 位 base64（末尾的 '=' 在平台界面省略）。
+    const keyBytes = base64ToBytes(encodingAesKey + '=');
+    const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+    const cipher = base64ToBytes(encrypted);
+    if (!cipher.length || cipher.length % 16 !== 0) return '';
+    // Web Crypto always validates/removes AES's 16-byte padding, while WeChat
+    // uses PKCS#7 with a 32-byte block size. Append one valid AES padding block
+    // so Web Crypto removes only that block and gives us WeChat's raw padded
+    // plaintext; the 32-byte padding is validated and removed below.
+    const tailIv = cipher.slice(cipher.length - 16);
+    const paddingBlock = new Uint8Array(await crypto.subtle.encrypt(
+      { name: 'AES-CBC', iv: tailIv }, key, new Uint8Array()));
+    const extendedCipher = new Uint8Array(cipher.length + paddingBlock.length);
+    extendedCipher.set(cipher);
+    extendedCipher.set(paddingBlock, cipher.length);
+    const plain = new Uint8Array(await crypto.subtle.decrypt(
+      { name: 'AES-CBC', iv: keyBytes.slice(0, 16) }, key, extendedCipher));
+    let end = plain.length;
+    const pad = plain[end - 1];
+    if (pad >= 1 && pad <= 32 && plain.slice(end - pad).every((b) => b === pad)) end -= pad;
+    if (end < 20) return '';
+    const size = ((plain[16] << 24) >>> 0) + (plain[17] << 16) + (plain[18] << 8) + plain[19];
+    if (size < 0 || 20 + size > end) return '';
+    const receivedAppId = new TextDecoder().decode(plain.slice(20 + size, end));
+    if (receivedAppId !== componentAppId) return '';
+    return new TextDecoder().decode(plain.slice(20, 20 + size));
+  } catch { return ''; }
+}
+
+function xmlText(xml, name) {
+  const match = new RegExp('<' + name + '><!\\[CDATA\\[(.*?)\\]\\]><\\/' + name + '>|<' + name + '>(.*?)<\\/' + name + '>', 's').exec(xml);
+  return match ? (match[1] ?? match[2] ?? '').trim() : '';
+}
+
 // 文章摘要索引全量对账（GET /articles 与 GET /recordings 的后台自愈共用）。
 // R2 listing 是权威：扫 articles/ 前缀全部对象，与索引比 etag 指纹只重读新/变
 // 的 doc，删掉已不存在的条目；同一次 listing 顺手重建 empty/blocked/tags 三种
@@ -232,6 +412,170 @@ async function handleRequest(context) {
   const sub2 = segments[1] || '';
   const name = decodeURIComponent(segments.slice(1).join('/'));
   const url = new URL(request.url);
+
+  // 微信第三方平台每十分钟推送 component_verify_ticket。回调令牌属于
+  // Pages secret，票据与运行时 component_access_token 只放 R2 config。
+  if (action === 'wechat' && sub2 === 'component-callback') {
+    const raw = request.method === 'POST' ? await request.text() : '';
+    const encrypted = request.method === 'GET'
+      ? (url.searchParams.get('encrypt_type') === 'aes' ? (url.searchParams.get('echostr') || '') : '')
+      : xmlText(raw, 'Encrypt');
+    if (!await isWechatComponentCallbackSignatureValid(url, env.WECHAT_COMPONENT_CALLBACK_TOKEN, encrypted)) {
+      return new Response('forbidden', { status: 403 });
+    }
+    if (request.method === 'GET') {
+      const challenge = encrypted
+        ? await decryptWechatComponentMessage(encrypted, env.WECHAT_COMPONENT_AES_KEY, env.WECHAT_COMPONENT_APP_ID)
+        : url.searchParams.get('echostr') || '';
+      return challenge ? new Response(challenge, { headers: { 'content-type': 'text/plain; charset=utf-8' } }) : new Response('forbidden', { status: 403 });
+    }
+    if (request.method === 'POST') {
+      const body = encrypted
+        ? await decryptWechatComponentMessage(encrypted, env.WECHAT_COMPONENT_AES_KEY, env.WECHAT_COMPONENT_APP_ID)
+        : raw;
+      if (!body) return new Response('forbidden', { status: 403 });
+      if (xmlText(body, 'InfoType') === 'component_verify_ticket') {
+        const ticket = xmlText(body, 'ComponentVerifyTicket');
+        if (ticket) {
+          const current = await loadWechatComponent(env);
+          await env.FILES.put(WECHAT_COMPONENT_KEY, JSON.stringify({ ...current, component_verify_ticket: ticket, component_verify_ticket_at: Date.now() }), {
+            httpMetadata: { contentType: 'application/json' },
+          });
+        }
+      }
+      return new Response('success', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
+    return new Response('method not allowed', { status: 405 });
+  }
+
+  // This page is opened in Android's WebView without a VoiceDrop bearer token.
+  // A short-lived HMAC state carries only the server-resolved user scope and
+  // expiry. The pre-auth code is created here so it never needs R2 persistence.
+  if (request.method === 'GET' && action === 'wechat' && sub2 === 'scan') {
+    const state = url.searchParams.get('state') || '';
+    const authState = await verifyWechatAuthState(state, env.SESSION_SECRET);
+    if (!authState) {
+      return new Response('授权链接已失效，请返回 VoiceDrop 后重新连接。', {
+        status: 410,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'no-store',
+          'referrer-policy': 'no-referrer',
+        },
+      });
+    }
+    if (!env.WECHAT_COMPONENT_APP_ID) {
+      return new Response('微信公众号授权服务尚未配置。', {
+        status: 503,
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+      });
+    }
+    const componentAccess = await getWechatComponentAccessToken(env);
+    if (!componentAccess.token) {
+      return new Response('服务端暂时无法打开微信授权，请稍后重试。', {
+        status: 503,
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+      });
+    }
+    let preAuth;
+    try {
+      preAuth = await callWechatRelay(env, 'pre-auth-code', {
+        component_access_token: componentAccess.token,
+        component_appid: env.WECHAT_COMPONENT_APP_ID,
+      });
+    } catch { preAuth = null; }
+    if (!preAuth || !preAuth.pre_auth_code) {
+      return new Response('微信授权页面暂时无法打开，请稍后重试。', {
+        status: 502,
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+      });
+    }
+    const base = (env.WECHAT_AUTH_BASE_URL || (url.origin + '/files/api')).replace(/\/$/, '');
+    const callback = base + '/wechat/auth-callback?state=' + encodeURIComponent(state);
+    const authUrl = 'https://mp.weixin.qq.com/cgi-bin/componentloginpage?component_appid='
+      + encodeURIComponent(env.WECHAT_COMPONENT_APP_ID) + '&pre_auth_code=' + encodeURIComponent(preAuth.pre_auth_code)
+      + '&redirect_uri=' + encodeURIComponent(callback) + '&auth_type=1';
+    const html = '<!doctype html><meta charset="utf-8"><title>正在打开微信授权</title>'
+      + '<p>正在打开微信授权二维码页…</p><script>window.location.replace('
+      + JSON.stringify(authUrl) + ');</script>';
+    return new Response(html, {
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer',
+      },
+    });
+  }
+
+  if (request.method === 'GET' && action === 'wechat' && sub2 === 'auth-callback') {
+    const state = url.searchParams.get('state') || '';
+    const authCode = url.searchParams.get('auth_code') || '';
+    const authState = await verifyWechatAuthState(state, env.SESSION_SECRET);
+    if (!authCode || !authState) {
+      return new Response('授权链接已失效，请返回 VoiceDrop 后重新连接。', { status: 410, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
+    const component = await getWechatComponentAccessToken(env);
+    if (!component.token || !env.WECHAT_COMPONENT_APP_ID) {
+      return new Response('服务端暂时无法完成授权，请稍后重试。', { status: 503, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
+    let authInfo;
+    try {
+      authInfo = await callWechatRelay(env, 'query-auth', {
+        component_access_token: component.token,
+        component_appid: env.WECHAT_COMPONENT_APP_ID,
+        authorization_code: authCode,
+      });
+    } catch { authInfo = null; }
+    const authorization = authInfo && authInfo.authorization_info;
+    if (!authorization || !authorization.authorizer_appid || !authorization.authorizer_access_token || !authorization.authorizer_refresh_token) {
+      return new Response('微信授权信息获取失败，请返回 VoiceDrop 后重试。', { status: 502, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
+    let accountName = '';
+    try {
+      const detail = await callWechatRelay(env, 'authorizer-info', {
+        component_access_token: component.token,
+        component_appid: env.WECHAT_COMPONENT_APP_ID,
+        authorizer_appid: authorization.authorizer_appid,
+      });
+      accountName = detail && detail.authorizer_info && detail.authorizer_info.nick_name || '';
+    } catch {}
+    const wechatKey = authState.scope + 'WECHAT.json';
+    let current = {};
+    try {
+      const obj = await env.FILES.get(wechatKey);
+      if (obj) current = JSON.parse(await obj.text());
+    } catch {}
+    // Existing cover/media ids belong to the account that created them. Keep an
+    // owner hint for legacy article entries that predate per-article ownership.
+    const mediaOwner = current.media_authorizer_appid
+      || current.authorizer_appid
+      || current.appid
+      || '';
+    const next = {
+      ...current,
+      provider: 'wechat_third_party',
+      authorizer_appid: authorization.authorizer_appid,
+      account_name: accountName,
+      access_token: authorization.authorizer_access_token,
+      refresh_token: authorization.authorizer_refresh_token,
+      access_token_expires_at: Date.now() + Math.max(0, Number(authorization.expires_in || 7200) - 60) * 1000,
+    };
+    if (mediaOwner) next.media_authorizer_appid = mediaOwner;
+    if (mediaOwner && mediaOwner !== authorization.authorizer_appid) delete next.coverMediaIds;
+    await env.FILES.put(wechatKey, JSON.stringify(next), { httpMetadata: { contentType: 'application/json' } });
+    return new Response(null, {
+      status: 302,
+      headers: {
+        location: '/files/api/wechat/auth-success',
+        'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer',
+      },
+    });
+  }
+
+  if (request.method === 'GET' && action === 'wechat' && sub2 === 'auth-success') {
+    return new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>授权成功</title><body style="margin:0;background:#fbf7f1;font-family:sans-serif;display:grid;place-items:center;min-height:100vh;color:#2f2925"><main style="text-align:center"><div style="margin:auto;width:64px;height:64px;border-radius:50%;background:#5e8a6a;color:#fff;line-height:64px"><svg width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="授权成功"><path d="M18.5 32.5 27.5 41.5 46 23" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><h1>微信公众号授权成功</h1><p>请返回 VoiceDrop，系统会自动更新连接状态。</p></main></body>', { headers: { 'content-type': 'text/html; charset=utf-8' } });
+  }
 
   // ---- Unauthenticated: exchange an Apple identity token for a session ----
   if (request.method === 'POST' && action === 'auth' && sub2 === 'apple') {
@@ -532,6 +876,55 @@ async function handleRequest(context) {
   // share pages use — one photo logic everywhere. (Admin scope is "".)
   if (request.method === 'GET' && action === 'whoami') {
     return json({ scope });
+  }
+
+  // Third-party Official Account connection state. The authoritative per-user
+  // record stays in the existing R2 configuration object so legacy clients can
+  // continue using the same WECHAT.json path.
+  if (request.method === 'GET' && action === 'wechat' && sub2 === 'bind-status') {
+    const key = scope + 'WECHAT.json';
+    let wc = {};
+    try {
+      const obj = await env.FILES.get(key);
+      if (obj) wc = JSON.parse(await obj.text());
+    } catch {}
+    const connected = wc.provider === 'wechat_third_party'
+      && !!wc.authorizer_appid
+      && !!wc.refresh_token;
+    return json(connected ? {
+      connected: true,
+      authorizer_appid: wc.authorizer_appid,
+      account_name: wc.account_name || '',
+      enabled: wc.enabled !== false,
+    } : { connected: false });
+  }
+
+  if (request.method === 'POST' && action === 'wechat' && sub2 === 'unbind') {
+    const key = scope + 'WECHAT.json';
+    let wc = {};
+    try {
+      const obj = await env.FILES.get(key);
+      if (obj) wc = JSON.parse(await obj.text());
+    } catch {}
+    for (const field of [
+      'provider', 'authorizer_appid', 'account_name',
+      'access_token', 'refresh_token', 'access_token_expires_at',
+      'media_authorizer_appid',
+    ]) delete wc[field];
+    await env.FILES.put(key, JSON.stringify(wc), {
+      httpMetadata: { contentType: 'application/json' },
+    });
+    return json({ connected: false });
+  }
+
+  if (request.method === 'POST' && action === 'wechat' && sub2 === 'authorization') {
+    if (!env.WECHAT_COMPONENT_APP_ID) {
+      return json({ error: 'wechat_component_not_configured' }, 500);
+    }
+    const state = await createWechatAuthState(scope, env.SESSION_SECRET);
+    if (!state) return json({ error: 'wechat_authorization_user_required' }, 400);
+    const base = (env.WECHAT_AUTH_BASE_URL || (url.origin + '/files/api')).replace(/\/$/, '');
+    return json({ scan_url: base + '/wechat/scan?state=' + encodeURIComponent(state) });
   }
 
   // ── Delete account (Apple 5.1.1(v)) ──────────────────────────────────────
@@ -840,6 +1233,34 @@ async function handleRequest(context) {
     }
     const key = keyFor(name);
     if (!key) return json({ error: 'bad name' }, 400);
+    // WECHAT.json is shared by legacy credential clients and the third-party
+    // authorization flow. Legacy builds upload a whole JSON document, so keep
+    // server-owned authorization fields when such a client saves its settings.
+    if (name === 'WECHAT.json') {
+      let incoming;
+      try { incoming = await request.json(); } catch { return json({ error: 'invalid wechat config' }, 400); }
+      if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+        return json({ error: 'invalid wechat config' }, 400);
+      }
+      let current = {};
+      try {
+        const obj = await env.FILES.get(key);
+        if (obj) current = JSON.parse(await obj.text());
+      } catch {}
+      const thirdPartyFields = [
+        'provider', 'authorizer_appid', 'account_name',
+        'access_token', 'refresh_token', 'access_token_expires_at',
+        'media_authorizer_appid',
+      ];
+      const merged = { ...current, ...incoming };
+      if (current.provider === 'wechat_third_party') {
+        for (const field of thirdPartyFields) merged[field] = current[field];
+      }
+      await env.FILES.put(key, JSON.stringify(merged), {
+        httpMetadata: { contentType: 'application/json' },
+      });
+      return json({ ok: true, name });
+    }
     const putRes = await env.FILES.put(key, request.body, {
       httpMetadata: { contentType: request.headers.get('Content-Type') || 'application/octet-stream' },
     });
@@ -966,28 +1387,63 @@ async function handleRequest(context) {
   }
 
   // On-demand WeChat draft push for ONE mined article. The app calls this when
-  // the user taps 发布微信公众号草稿. WeChat's API only works from the whitelisted
-  // Tokyo proxy (in GitHub Actions), so we can't push from here — instead dispatch
-  // publish-wechat.yml with the full article key. It creates the draft, or updates
-  // the existing one in place if this article was published before. Async (~1 min).
+  // the user taps 发布微信公众号草稿. The Function refreshes third-party credentials
+  // when needed, then synchronously calls the IP-whitelisted Tokyo relay. The relay
+  // creates a draft or updates the existing media id and returns the real result.
   if (request.method === 'POST' && action === 'wechat' && name) {
     const key = keyFor(name);
     if (!key || !/^users\/[^/]+\/articles\/[^/]+\.json$/.test(key)) {
       return json({ error: 'not publishable' }, 400);
     }
     const prefix = key.slice(0, key.indexOf('/articles/') + 1);   // users/<sub>/
-    // WeChat creds. Missing appid/secret → 409 so the app reopens the config sheet.
+    // Legacy direct credentials and third-party authorization share WECHAT.json.
     let wc = null;
     const wcObj = await env.FILES.get(prefix + 'WECHAT.json');
     if (wcObj) { try { wc = JSON.parse(await wcObj.text()); } catch {} }
-    if (!wc || !wc.appid || !wc.secret) return json({ error: 'wechat_not_configured' }, 409);
+    if (!wc) return json({ error: 'wechat_not_configured' }, 409);
+    // A stored authorizer access_token always wins over legacy appid/secret,
+    // even for records created before the provider marker was introduced.
+    const hasAuthorizerAccessToken = typeof wc.access_token === 'string' && !!wc.access_token.trim();
+    const thirdParty = hasAuthorizerAccessToken || wc.provider === 'wechat_third_party';
+    let authorizerAccessToken = '';
+    if (thirdParty) {
+      const access = await refreshWechatAuthorizerAccessToken(env, wc);
+      authorizerAccessToken = access.token;
+      if (access.refreshed) {
+        // Persist immediately: a relay timeout must not discard a newly rotated
+        // access/refresh token and make the next attempt retry stale credentials.
+        await env.FILES.put(prefix + 'WECHAT.json', JSON.stringify(wc), {
+          httpMetadata: { contentType: 'application/json' },
+        });
+      }
+      if (!authorizerAccessToken) {
+        const transient = access.error === 'wechat_component_token_unavailable'
+          || access.error === 'wechat_authorizer_token_unavailable';
+        return json({
+          error: access.error || 'wechat_authorization_expired',
+          ...(access.errcode != null ? { errcode: access.errcode } : {}),
+          ...(access.errmsg ? { errmsg: access.errmsg } : {}),
+        }, transient ? 503 : 409);
+      }
+    } else if (!wc.appid || !wc.secret) {
+      return json({ error: 'wechat_not_configured' }, 409);
+    }
 
     // Load the article doc (schema-3; current content = versions[head]).
     const doc = await readArticleDoc(env, key);
     if (!doc) return json({ error: 'not found' }, 404);
     const currentArticles = resolveArticles(doc);
+    const publishArticles = thirdParty ? currentArticles.map((article) => {
+      if (!article || !article.wechatMediaId) return article;
+      const mediaOwner = article.wechatAuthorizerAppid || wc.media_authorizer_appid || '';
+      if (mediaOwner === wc.authorizer_appid) return article;
+      const clean = { ...article };
+      delete clean.wechatMediaId;
+      delete clean.wechatAuthorizerAppid;
+      return clean;
+    }) : currentArticles;
     // Relay expects a flat article object with top-level `articles`.
-    const relayDoc = { ...doc, articles: currentArticles };
+    const relayDoc = { ...doc, articles: publishArticles };
     delete relayDoc.versions; delete relayDoc.head;
 
     // Publish SYNCHRONOUSLY via the Tokyo VPS relay — its IP is WeChat-whitelisted,
@@ -1003,7 +1459,9 @@ async function handleRequest(context) {
         headers: { 'X-Relay-Secret': env.WECHAT_RELAY_SECRET, 'Content-Type': 'application/json' },
         // `owner` (= users/<sub>/) lets the relay resolve the body's [[photo:<relkey>]]
         // markers to full keys and embed those session photos into the draft.
-        body: JSON.stringify({ appid: wc.appid, secret: wc.secret, owner: prefix, cover_media_ids: wc.coverMediaIds || {}, article: relayDoc }),
+        body: JSON.stringify(thirdParty
+          ? { access_token: authorizerAccessToken, authorizer_appid: wc.authorizer_appid, owner: prefix, cover_media_ids: wc.coverMediaIds || {}, article: relayDoc }
+          : { appid: wc.appid, secret: wc.secret, owner: prefix, cover_media_ids: wc.coverMediaIds || {}, article: relayDoc }),
       });
       relay = await rr.json().catch(() => null);
       if (!rr.ok) return json({ error: 'relay_error', detail: relay }, 502);
@@ -1017,9 +1475,15 @@ async function handleRequest(context) {
 
     // Persist: the relay returns the article with wechatMediaId(s) added.
     // Merge updated articles back into the current doc and write as a new version.
-    await writeArticleDoc(env, key, { ...doc, articles: relay.article.articles ?? currentArticles }, 'wechat');
-    if (relay.cover_media_ids && JSON.stringify(relay.cover_media_ids) !== JSON.stringify(wc.coverMediaIds || {})) {
-      wc.coverMediaIds = relay.cover_media_ids;
+    const returnedArticles = (relay.article.articles ?? currentArticles).map((article) =>
+      thirdParty && article && article.wechatMediaId
+        ? { ...article, wechatAuthorizerAppid: wc.authorizer_appid }
+        : article);
+    await writeArticleDoc(env, key, { ...doc, articles: returnedArticles }, 'wechat');
+    if (thirdParty || (relay.cover_media_ids && JSON.stringify(relay.cover_media_ids) !== JSON.stringify(wc.coverMediaIds || {}))) {
+      // A token refresh is just as important to persist as a new cover id.
+      // This merge write preserves legacy fields for clients that still use them.
+      if (relay.cover_media_ids) wc.coverMediaIds = relay.cover_media_ids;
       await env.FILES.put(prefix + 'WECHAT.json', JSON.stringify(wc), { httpMetadata: { contentType: 'application/json' } });
     }
     return json({ ok: true, created: relay.created || 0, updated: relay.updated || 0 });
