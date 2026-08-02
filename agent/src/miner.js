@@ -919,15 +919,38 @@ export function photoKeysIn(articles) {
   return keys;
 }
 
-export function ensurePhotoMarkers(sourceArticles, newArticles) {
-  if (!Array.isArray(newArticles) || !newArticles.length) return newArticles;
-  const have = new Set(photoKeysIn(newArticles));
-  const missing = photoKeysIn(sourceArticles).filter((k) => !have.has(k));
-  if (!missing.length) return newArticles;
-  const out = newArticles.map((a) => ({ ...a }));
+// 给定一组必须存活的 relKey，凡新稿里没有的按序补到最后一篇末尾（独占一行）。
+export function ensurePhotoKeys(relKeys, articles) {
+  if (!Array.isArray(articles) || !articles.length) return articles;
+  const have = new Set(photoKeysIn(articles));
+  const missing = (relKeys || []).filter((k) => !have.has(k));
+  if (!missing.length) return articles;
+  const out = articles.map((a) => ({ ...a }));
   const last = out[out.length - 1];
   last.body = `${String(last.body || "").replace(/\s+$/, "")}\n\n${missing.map((k) => `[[photo:${k}]]`).join("\n\n")}\n`;
   return out;
+}
+
+export function ensurePhotoMarkers(sourceArticles, newArticles) {
+  return ensurePhotoKeys(photoKeysIn(sourceArticles), newArticles);
+}
+
+// 初次挖矿的同款保底：录音期间拍的照片一张都不能丢。写盘前 fresh 重列本 session 的
+// photos/<ts>/（不用跑批开始的 allKeys 快照——照片可能在 ASR 期间才上传完），返回
+// relKey 列表（photos/… 前缀，即 marker token），交给 ensurePhotoKeys 补缺。
+async function listSessionPhotoRelKeys(env, audioKey) {
+  const prefix = userPrefix(audioKey);
+  const ts = sessionTs(audioKey);
+  if (!ts) return [];
+  const folder = `${prefix}photos/${ts}/`;
+  const keys = [];
+  let cursor;
+  do {
+    const r = await env.FILES.list({ prefix: folder, ...(cursor ? { cursor } : {}) });
+    for (const o of r.objects || []) if (/\.jpe?g$/i.test(o.key)) keys.push(o.key);
+    cursor = r.truncated ? r.cursor : null;
+  } while (cursor);
+  return keys.sort().map((k) => k.slice(prefix.length));
 }
 
 export async function restyleArticle(env, scope, stem, styleV, preview = null) {
@@ -1301,7 +1324,14 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
           const pendingTags = await consumePendingTags(audioKey, env);
           // 看图模式不追问（没有口述可回答），但统一过 extractFollowups 摘掉字段，
           // 防止 questions 混进版本内容。
-          const { articles: imgCleaned } = extractFollowups(arts);
+          const { articles: imgExtracted } = extractFollowups(arts);
+          // 保底：录音期间的照片一张都不能丢（模型漏插 / 加载失败 / 上传晚到都兜住）。
+          const imgSessionKeys = await listSessionPhotoRelKeys(env, audioKey);
+          const imgCleaned = ensurePhotoKeys(imgSessionKeys, imgExtracted);
+          {
+            const missed = imgSessionKeys.filter((k) => !photoKeysIn(imgExtracted).includes(k));
+            if (missed.length) log("补回漏掉的照片标记", { count: missed.length, keys: missed });
+          }
           const doc = {
             schema: 2, id: stem, sourceAudio: leaf,
             createdAt: uploaded[audioKey] || new Date().toISOString(),
@@ -1374,7 +1404,15 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // No photos array — [[photo:<key>]] markers in the body are the sole source of
     // truth for which photos appear and where.
     const pendingTags = await consumePendingTags(audioKey, env);
-    const { articles: cleaned, questions } = extractFollowups(articles);
+    const { articles: extracted, questions } = extractFollowups(articles);
+    // 保底：录音期间的照片一张都不能丢。写盘前 fresh 重列本 session 的照片（照片
+    // 可能在 ASR 期间才上传完，跑批开始的快照会漏），凡正文没引用的按序补标记。
+    const sessionPhotoKeys = await listSessionPhotoRelKeys(env, audioKey);
+    const cleaned = ensurePhotoKeys(sessionPhotoKeys, extracted);
+    {
+      const missed = sessionPhotoKeys.filter((k) => !photoKeysIn(extracted).includes(k));
+      if (missed.length) log("补回漏掉的照片标记", { count: missed.length, keys: missed });
+    }
     await writeArticle(audioKey, {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
