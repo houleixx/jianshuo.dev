@@ -1,8 +1,8 @@
 // 图片流水线 payload 层测试：照片只进 observe/review；style 只进 write；
-// previousIssues 只进 plan；温度/schema 按阶段配置。
+// previousIssues 只进 plan；schema 按阶段配置。
 import { describe, it, expect } from "vitest";
 import {
-  buildStagePayload, parseStageJson, STAGE_TEMPERATURE, QUALITY_GATE,
+  buildStagePayload, parseStageJson, QUALITY_GATE,
   OBSERVE_SYSTEM, PLAN_SYSTEM, WRITE_SYSTEM, REVIEW_SYSTEM,
 } from "../src/prompts/image-pipeline.js";
 
@@ -53,16 +53,6 @@ describe("buildStagePayload (anthropic)", () => {
   });
 });
 
-describe("buildStagePayload (openai-compat)", () => {
-  it("observe：image_url 块 + response_format json_object", () => {
-    const p = buildStagePayload({ stage: "observe", provider: "openai-compat", model: "m", photos: PHOTOS, factPack: FACTS });
-    expect(p.response_format.type).toBe("json_object");
-    expect(p.temperature).toBe(0.2); // 阶段温度仅 openai-compat 生效
-    expect(p.messages[0].role).toBe("system");
-    expect(p.messages[1].content.some(b => b.type === "image_url")).toBe(true);
-  });
-});
-
 describe("parseStageJson", () => {
   it("剥 ```json 围栏并解析", () => {
     expect(parseStageJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
@@ -81,7 +71,6 @@ describe("prompts 内容底线", () => {
   it("review prompt 输出 quality 且 QUALITY_GATE=70", () => {
     expect(REVIEW_SYSTEM).toContain('"quality"');
     expect(QUALITY_GATE).toBe(70);
-    expect(STAGE_TEMPERATURE.review).toBe(0.1);
   });
   it("observe/plan prompt 各自只做本阶段", () => {
     expect(OBSERVE_SYSTEM).toContain("只做观察");

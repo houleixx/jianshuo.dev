@@ -59,16 +59,6 @@ window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];va
 .detail .kv{font-size:.78rem;color:var(--muted);font-family:var(--fm)}
 .detail hr{border:none;border-top:1px dashed var(--line-strong);margin:15px 0}
 .loading{color:var(--muted);font-size:.85rem;padding:8px 0}
-
-/* ---- model panel ---- */
-.modelpanel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);
-  padding:20px 22px;margin-bottom:22px;box-shadow:var(--shadow)}
-.modelpanel .mp-h{font-weight:700;margin-bottom:6px;font-size:1.04rem;color:var(--ink)}
-.modelpanel .mp-note{font-size:.82rem;color:var(--muted);margin-bottom:16px;line-height:1.6}
-.modelpanel label>div{font-size:.8rem;color:var(--muted);margin-bottom:5px;font-weight:600}
-.modelpanel input,.modelpanel select{width:100%;padding:10px 12px;border:1px solid var(--line-strong);
-  border-radius:var(--r-sm);font-size:.95rem;background:var(--bg-sunk);color:var(--ink);box-shadow:none}
-.modelpanel input:focus,.modelpanel select:focus{outline:none;border-color:var(--accent);background:#fff}
 </style>
 </head>
 <body>
@@ -112,42 +102,6 @@ window.resolveArticles=window.resolveArticles||function(doc){if(!doc)return[];va
       <h1>概览</h1>
       <span class="tag" id="updated"></span>
       <span class="grow"></span>
-      <div class="tools">
-        <button class="btn" id="modelBtn">模型设置</button>
-      </div>
-    </div>
-
-    <!-- ── 模型设置面板 ── -->
-    <div id="modelPanel" class="modelpanel" style="display:none">
-      <div class="mp-h">挖文模型设置</div>
-      <div class="mp-note">API Key 通过 Cloudflare Worker Secrets 管理，此处不需要填写。</div>
-      <div style="display:grid;gap:12px;max-width:480px">
-        <label>
-          <div>供应商</div>
-          <select id="mProvider">
-            <option value="anthropic">Anthropic (Claude)</option>
-            <option value="openai">OpenAI</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="moonshot">Kimi (Moonshot)</option>
-            <option value="qwen">通义千问 (Alibaba)</option>
-            <option value="hunyuan">混元 (Tencent)</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="volc-ark">火山方舟 (ByteDance) ⚠️ 需填 ep-xxx</option>
-          </select>
-        </label>
-        <label>
-          <div>模型名称</div>
-          <input id="mModel" type="text" placeholder="claude-sonnet-4-6"/>
-        </label>
-        <label id="mBaseUrlRow" style="display:none">
-          <div>Base URL</div>
-          <input id="mBaseUrl" type="text"/>
-        </label>
-        <div style="display:flex;gap:12px;align-items:center;margin-top:2px">
-          <button class="btn primary" id="mSave" style="padding:9px 24px">保存</button>
-          <span id="mMsg" style="font-size:.86rem"></span>
-        </div>
-      </div>
     </div>
 
     <div class="cards" id="cards"></div>
@@ -433,7 +387,7 @@ async function enter(){
   $('#gateErr').textContent='校验中…';
   let ft; try{ ft=await vdAdminExchange(v); }
   catch(e){ $('#gateErr').textContent=e.message; return; }
-  TOKEN=ft; localStorage.setItem(TKEY,v); $('#gate').hidden=true; $('#app').hidden=false; load(); loadModelCfg();
+  TOKEN=ft; localStorage.setItem(TKEY,v); $('#gate').hidden=true; $('#app').hidden=false; load();
 }
 $('#enter').onclick=enter;
 $('#tok').addEventListener('keydown',e=>{ if(e.key==='Enter')enter(); });
@@ -445,74 +399,9 @@ $('#logout').onclick=()=>logout();
   if(!sess){ showGate(); return; }
   try{ TOKEN=await vdAdminExchange(sess); }
   catch(e){ localStorage.removeItem(TKEY); showGate(e.message||''); return; }
-  $('#app').hidden=false; load(); loadModelCfg();
+  $('#app').hidden=false; load();
 })();
 
-// ── 模型设置 ──────────────────────────────────────────────────────────────────
-const PROVIDERS = {
-  'anthropic':  { baseUrl: '',                                                    defaultModel: 'claude-sonnet-4-6' },
-  'openai':     { baseUrl: 'https://api.openai.com/v1',                          defaultModel: 'gpt-4o' },
-  'deepseek':   { baseUrl: 'https://api.deepseek.com/v1',                        defaultModel: 'deepseek-chat' },
-  'moonshot':   { baseUrl: 'https://api.moonshot.cn/v1',                         defaultModel: 'moonshot-v1-32k' },
-  'qwen':       { baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-max' },
-  'hunyuan':    { baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1',           defaultModel: 'hunyuan-turbo' },
-  'openrouter': { baseUrl: 'https://openrouter.ai/api/v1',                       defaultModel: 'deepseek/deepseek-chat' },
-  'volc-ark':   { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',           defaultModel: 'ep-xxxxxxxxxx' },
-};
-
-$('#modelBtn').onclick = () => {
-  const p = $('#modelPanel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
-};
-$('#mProvider').onchange = () => {
-  const key = $('#mProvider').value;
-  const p = PROVIDERS[key] || {};
-  const isAnthro = key === 'anthropic';
-  $('#mBaseUrlRow').style.display = isAnthro ? 'none' : 'block';
-  if (p.baseUrl !== undefined) $('#mBaseUrl').value = p.baseUrl;
-  // auto-fill model only if currently empty or is a known default
-  const cur = $('#mModel').value.trim();
-  const knownDefaults = Object.values(PROVIDERS).map(v => v.defaultModel);
-  if (!cur || knownDefaults.includes(cur)) $('#mModel').value = p.defaultModel || '';
-};
-async function loadModelCfg() {
-  try {
-    const r = await fetch(`${API}/download/config/model.json`, { headers:{ Authorization:`Bearer ${TOKEN}` }});
-    if (!r.ok) return;
-    const cfg = await r.json();
-    const key = cfg.providerKey || cfg.provider || 'anthropic';
-    if ($(`#mProvider option[value="${key}"]`)) $('#mProvider').value = key;
-    if (cfg.model)   $('#mModel').value   = cfg.model;
-    if (cfg.baseUrl) $('#mBaseUrl').value = cfg.baseUrl;
-    const isAnthro = key === 'anthropic';
-    $('#mBaseUrlRow').style.display = isAnthro ? 'none' : 'block';
-  } catch(_) {}
-}
-$('#mSave').onclick = async () => {
-  const providerKey = $('#mProvider').value;
-  const cfg = {
-    providerKey,
-    model:   $('#mModel').value.trim(),
-    baseUrl: $('#mBaseUrl').value.trim(),
-  };
-  if (!cfg.model) { showMsg('请填写模型名称', 'var(--warn)'); return; }
-  if (providerKey !== 'anthropic' && !cfg.baseUrl) { showMsg('请填写 Base URL', 'var(--warn)'); return; }
-  try {
-    $('#mSave').disabled = true;
-    const r = await fetch(`${API}/upload/config/model.json`, {
-      method: 'PUT',
-      headers: { Authorization:`Bearer ${TOKEN}`, 'Content-Type':'application/json' },
-      body: JSON.stringify(cfg),
-    });
-    if (!r.ok) throw new Error(`${r.status}`);
-    showMsg('已保存 ✓', 'var(--ok)');
-  } catch(e) { showMsg('保存失败：'+e.message, 'var(--err)'); }
-  finally { $('#mSave').disabled = false; }
-};
-function showMsg(txt, color) {
-  const m = $('#mMsg'); m.textContent = txt; m.style.color = color;
-  setTimeout(() => { m.textContent = ''; }, 3000);
-}
 </script>
 </body>
 </html>

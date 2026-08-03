@@ -25,4 +25,4 @@ photos（可选）：[{ "relKey": "photos/2026-xx/xx.jpg", "label": "HH:MM:SS", 
 - 金标 fixture：`image-local/*.json`（真实照片，**已 gitignore**）；合成样例见 `image-samples/sample-1.json`
 - fixture 结构：`{ id, stem, photos:[{b64,label,relKey}], styleText?, recentTitles?[] }`（stem 末尾可带地点标签）
 - 确定性检查（photo 标记完整性）在 `lib/image-proxy-checks.mjs`；语义质量用 `/wjs-evaling-voicedrop-prompts` 盲评 outputs
-- 通过标准（spec §6）：candidate 胜率 ≥ 60% 且编造项零回归 → 把 `config/model.json` 的 `imagePipeline` 置 true
+- 通过标准（spec §6）：candidate 胜率 ≥ 60% 且编造项零回归 → 流水线转正（生产已默认走流水线）

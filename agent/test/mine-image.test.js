@@ -34,8 +34,6 @@ function envWithPhotos(seed = {}) {
   return e;
 }
 
-const MODEL_CFG = { providerKey: "anthropic", provider: "anthropic", model: "claude-opus-4-8", baseUrl: "", apiKey: "sk-ant-test" };
-
 // Combined router for ASR (Volcano submit/query) + Claude + the Files article API,
 // same style as test/asr-resumable.test.js + test/share-routing.test.js.
 function makeFetch({ transcriptText = "", articles = [] } = {}) {
@@ -75,7 +73,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     const allKeys = [AUDIO, PHOTO_KEY];
-    const r = await mineOneAudio(AUDIO, allKeys, {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, allKeys, {}, env);
     expect(r).toBe("mined");
 
     // Vision (Claude) ran; no .empty PUT was made.
@@ -101,7 +99,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    const r = await mineOneAudio(AUDIO0, [AUDIO0, PHOTO_KEY], {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO0, [AUDIO0, PHOTO_KEY], {}, env);
     expect(r).toBe("mined");
     // 关键：火山 ASR 端点一次都没被调（0 秒被跳过）。
     expect(fetchSpy.calls.some((c) => c.url.includes("openspeech.bytedance.com"))).toBe(false);
@@ -117,7 +115,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     const allKeys = [AUDIO];
-    const r = await mineOneAudio(AUDIO, allKeys, {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, allKeys, {}, env);
     expect(r).toBe("empty");
 
     expect(fetchSpy.calls.some((c) => c.url.includes("api.anthropic.com"))).toBe(false);
@@ -126,15 +124,15 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     expect(JSON.parse(emptyPut.body)).toMatchObject({ reason: "no-speech" });
   });
 
-  it("ASR 空但有照片，vision 也没写出文章时仍回退 .empty(no-speech)，且 noForce 抑制了二次强制重试", async () => {
+  it("ASR 空但有照片，流水线和单发都没写出文章时仍回退 .empty(no-speech)，且 noForce 抑制了二次强制重试", async () => {
     const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
-    // Vision pass returns zero articles — miner should fall back to .empty rather than
-    // let mineVariant's normal force-retry fire a second Claude call against an empty transcript.
+    // 所有 LLM 调用都返回空文章：流水线在写作阶段抛 write-stage-empty（observe/plan/write
+    // 共 3 次调用），回退单发也为空 —— miner 应落 .empty，且 noForce 抑制单发的 force 重试。
     const fetchSpy = makeFetch({ transcriptText: "", articles: [] });
     vi.stubGlobal("fetch", fetchSpy);
 
     const allKeys = [AUDIO, PHOTO_KEY];
-    const r = await mineOneAudio(AUDIO, allKeys, {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, allKeys, {}, env);
     expect(r).toBe("empty");
 
     const emptyPut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.includes(`articles/${SUB}/${STEM}/empty`));
@@ -144,26 +142,25 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     const articlePut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
     expect(articlePut).toBeUndefined();
 
-    // noForce:true should suppress mineVariant's force-retry, so Claude was hit exactly once
-    // (the natural vision pass), not twice.
+    // 3 次流水线阶段调用（observe/plan/write，write 抛错）+ 1 次单发回退 = 4；
+    // noForce:true 保证单发之后没有第二次 force 调用。
     const claudeCalls = fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com"));
-    expect(claudeCalls.length).toBe(1);
+    expect(claudeCalls.length).toBe(4);
   });
 
-  it("看图模式的 system prompt 不含口述叙事措辞（PHOTO_INSTR 未被追加），但仍保留 [[photo:<key>]] 标记指引", async () => {
+  it("看图单发回退的 system prompt 不含口述叙事措辞（PHOTO_INSTR 未被追加），但仍保留 [[photo:<key>]] 标记指引", async () => {
     const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
-    const fetchSpy = makeFetch({
-      transcriptText: "",
-      articles: [{ title: "午后的三张照片", body: `随手拍。\n\n[[photo:${PHOTO_REL}]]` }],
-    });
+    // observe 首调失败 → 流水线放弃 → 单发回退（IMAGE_ONLY_SYSTEM）
+    const fetchSpy = makePipelineFetch({ failFirstLlm: true });
     vi.stubGlobal("fetch", fetchSpy);
 
     const allKeys = [AUDIO, PHOTO_KEY];
-    const r = await mineOneAudio(AUDIO, allKeys, {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, allKeys, {}, env);
     expect(r).toBe("mined");
 
-    const claudeCall = fetchSpy.calls.find((c) => c.url.includes("api.anthropic.com"));
-    const payload = JSON.parse(claudeCall.body);
+    // [0] = 失败的 observe，[1] = 单发回退
+    const claudeCalls = fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com"));
+    const payload = JSON.parse(claudeCalls[1].body);
     const systemText = Array.isArray(payload.system) ? payload.system.map((b) => b.text).join("") : payload.system;
 
     // PHOTO_INSTR talks about 口述/"一边说一边拍" (spoken narration) — meaningless (and
@@ -194,7 +191,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env);
     expect(r).toBe("mined");
     const articlePut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
     expect(articlePut).toBeTruthy();
@@ -210,7 +207,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     const allKeys = [AUDIO];
-    const r = await mineOneAudio(AUDIO, allKeys, {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, allKeys, {}, env);
     expect(r).toBe("mined");
 
     const claudeCall = fetchSpy.calls.find((c) => c.url.includes("api.anthropic.com"));
@@ -239,7 +236,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     fetchSpy.calls = calls;
     vi.stubGlobal("fetch", fetchSpy);
 
-    const r = await mineOneAudio(AUD, [AUD], {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUD, [AUD], {}, env);
     expect(r).toBe("mined");
     expect(calls.some((c) => c.url.includes("openspeech.bytedance.com"))).toBe(false); // 没打火山 ASR
     expect(env.FILES._store.has(`${SCOPE}CLAUDE.json`)).toBe(true);                    // 写了风格版本
@@ -267,7 +264,7 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
     fetchSpy.calls = calls;
     vi.stubGlobal("fetch", fetchSpy);
 
-    const r = await mineOneAudio(AUD, [AUD], {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUD, [AUD], {}, env);
     expect(r).toBe("mined");
     expect(calls.some((c) => c.url.includes("api.anthropic.com"))).toBe(false);   // 没打 Claude
     expect(env.FILES._store.has(`${SCOPE}CLAUDE.json`)).toBe(false);              // 没写风格版本
@@ -281,9 +278,8 @@ describe("mineOneAudio: 无语音 + 有照片 → vision", () => {
   });
 });
 
-// ── imagePipeline 开关（四阶段流水线）────────────────────────────────────────────
+// ── 四阶段流水线 ────────────────────────────────────────────────────────────────
 
-const CFG_PIPE = { ...MODEL_CFG, imagePipeline: true };
 const REL2 = PHOTO_REL;
 const PIPE_CANNED = {
   observe: { images: [{ key: REL2, caption: "拿铁", confidence: 0.9 }], timeline: "", clusters: [], repeated_entities: [] },
@@ -315,12 +311,12 @@ function makePipelineFetch({ failFirstLlm = false } = {}) {
   return fn;
 }
 
-describe("mineOneAudio: imagePipeline 开关", () => {
-  it("开关开：走四阶段流水线，doc 带 vision/plan/quality，文章来自终审稿", async () => {
+describe("mineOneAudio: 四阶段流水线", () => {
+  it("走四阶段流水线，doc 带 vision/plan/quality，文章来自终审稿", async () => {
     const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
     const fetchSpy = makePipelineFetch();
     vi.stubGlobal("fetch", fetchSpy);
-    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env, CFG_PIPE);
+    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env);
     expect(r).toBe("mined");
     expect(fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com")).length).toBe(4);
     const put = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
@@ -330,11 +326,11 @@ describe("mineOneAudio: imagePipeline 开关", () => {
     expect(doc.plan.thesis).toBe("t");
     expect(doc.quality.overall).toBe(90);
   });
-  it("开关开但流水线首调失败：回退单发，doc 无 vision，文章照写", async () => {
+  it("流水线首调失败：回退单发，doc 无 vision，文章照写", async () => {
     const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
     const fetchSpy = makePipelineFetch({ failFirstLlm: true });
     vi.stubGlobal("fetch", fetchSpy);
-    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env, CFG_PIPE);
+    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env);
     expect(r).toBe("mined");
     // 1 次失败的 observe + 1 次回退单发 = 2 次 LLM；回退侧文章按 seq 之外的分支给出
     expect(fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com")).length).toBe(2);
@@ -342,16 +338,6 @@ describe("mineOneAudio: imagePipeline 开关", () => {
     const doc = JSON.parse(put.body);
     expect(doc.vision).toBeUndefined();
     expect(doc.articles.length).toBe(1);
-  });
-  it("开关关：行为与现行一致（1 次单发调用，doc 无 vision）", async () => {
-    const env = envWithPhotos({ [AUDIO]: "audiobytes", [PHOTO_KEY]: "jpgbytes" });
-    const fetchSpy = makeFetch({ transcriptText: "", articles: [{ title: "旧路径", body: `w\n\n[[photo:${REL2}]]` }] });
-    vi.stubGlobal("fetch", fetchSpy);
-    const r = await mineOneAudio(AUDIO, [AUDIO, PHOTO_KEY], {}, env, MODEL_CFG);
-    expect(r).toBe("mined");
-    expect(fetchSpy.calls.filter((c) => c.url.includes("api.anthropic.com")).length).toBe(1);
-    const put = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
-    expect(JSON.parse(put.body).vision).toBeUndefined();
   });
 });
 
@@ -365,7 +351,6 @@ describe("restyleArticle: 图片流水线产物复用观察结果", () => {
       [`${SCOPE}articles/${STEM}.json`]: JSON.stringify(articleDoc),
       [`${SCOPE}CLAUDE.json`]: JSON.stringify(styleJson),
       [PHOTO_KEY]: "jpgbytes",
-      "config/model.json": JSON.stringify({ providerKey: "anthropic", imagePipeline: true }),
     });
     env.CLAUDE_API_KEY = "k";
     const calls = []; let n = 0; const seq = ["write", "review"];
@@ -399,8 +384,8 @@ describe("restyleArticle: 图片流水线产物复用观察结果", () => {
     expect(doc.vision).toBeTruthy();
     expect(doc.plan).toBeTruthy();
   });
-  it("开关关：restyle 走既有 mineVariant 路径（1 次 LLM）", async () => {
-    const articleDoc = { schema: 2, id: STEM, sourceAudio: `${STEM}.m4a`, transcript: "", srt: "", articles: [{ title: "旧", body: "旧文" }], status: "ready", vision: PIPE_CANNED.observe, plan: PIPE_CANNED.plan };
+  it("无 vision/plan 产物：restyle 走既有 mineVariant 路径（1 次 LLM）", async () => {
+    const articleDoc = { schema: 2, id: STEM, sourceAudio: `${STEM}.m4a`, transcript: "", srt: "", articles: [{ title: "旧", body: "旧文" }], status: "ready" };
     const styleJson = { head: 2, versions: [{ v: 2, style: "文风二" }] };
     const env = envWithPhotos({
       [`${SCOPE}articles/${STEM}.json`]: JSON.stringify(articleDoc),

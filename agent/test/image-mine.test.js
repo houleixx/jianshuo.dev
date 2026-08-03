@@ -170,7 +170,6 @@ const buildObservePayload = () => buildStagePayload({
 });
 
 describe("makeStageCaller / mineImageOnly（生产包装）", () => {
-  const CFG = { providerKey: "anthropic", provider: "anthropic", model: "claude-opus-4-8", baseUrl: "", apiKey: "k" };
   it("按阶段打 LLM 并写 llmlog（图片 base64 被脱敏）", async () => {
     const env = fakeEnv({});
     const calls = [];
@@ -178,7 +177,7 @@ describe("makeStageCaller / mineImageOnly（生产包装）", () => {
       calls.push({ url: String(url), body: init && init.body });
       return { ok: true, status: 200, json: async () => ({ content: [{ type: "text", text: JSON.stringify(CANNED.observe) }], usage: { input_tokens: 10, output_tokens: 5 } }), text: async () => "" };
     });
-    const cm = makeStageCaller(env, { modelCfg: CFG, scope: SCOPE, stem: "s", turnId: "t" });
+    const cm = makeStageCaller(env, { model: "claude-opus-4-8", scope: SCOPE, stem: "s", turnId: "t" });
     const raw = await cm({ stage: "observe", payload: buildObservePayload() });
     expect(JSON.parse(raw).images.length).toBe(1);
     expect(calls.some((c) => c.url.includes("api.anthropic.com"))).toBe(true);
@@ -192,7 +191,7 @@ describe("makeStageCaller / mineImageOnly（生产包装）", () => {
   it("LLM 非 200 → 抛错并写失败 llmlog", async () => {
     const env = fakeEnv({});
     vi.stubGlobal("fetch", async () => ({ ok: false, status: 500, text: async () => "boom", json: async () => ({}) }));
-    const cm = makeStageCaller(env, { modelCfg: CFG, scope: SCOPE, stem: "s", turnId: "t" });
+    const cm = makeStageCaller(env, { model: "claude-opus-4-8", scope: SCOPE, stem: "s", turnId: "t" });
     await expect(cm({ stage: "plan", payload: { model: "m" } })).rejects.toThrow("500");
     const logKeys = [...env.FILES._store.keys()].filter((k) => k.startsWith("llmlogs/"));
     expect(JSON.parse(env.FILES._store.get(logKeys[0])).ok).toBe(false);
@@ -206,7 +205,7 @@ describe("makeStageCaller / mineImageOnly（生产包装）", () => {
       json: async () => ({ content: [{ type: "text", text: JSON.stringify(CANNED[seq[n++]]) }], usage: {} }),
       text: async () => "",
     }));
-    const r = await mineImageOnly(env, { scope: SCOPE, stem: "VoiceDrop-2026-07-01-101010-1s-周三-上午-Shanghai", photos: PHOTOS2, styleText: "s", modelCfg: CFG, turnId: "t" });
+    const r = await mineImageOnly(env, { scope: SCOPE, stem: "VoiceDrop-2026-07-01-101010-1s-周三-上午-Shanghai", photos: PHOTOS2, styleText: "s", model: "claude-opus-4-8", turnId: "t" });
     expect(n).toBe(4);
     expect(r.articles[0].title).toBe("终稿题");
     expect(r.quality.overall).toBe(92);

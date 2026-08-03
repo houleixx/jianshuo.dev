@@ -34,8 +34,6 @@ function envWithPhotos(seed = {}) {
   return e;
 }
 
-const MODEL_CFG = { providerKey: "anthropic", provider: "anthropic", model: "claude-opus-4-8", baseUrl: "", apiKey: "sk-ant-test" };
-
 function makeFetch({ transcriptText = "", articles = [] } = {}) {
   const calls = [];
   const fn = async (url, init = {}) => {
@@ -98,7 +96,7 @@ describe("mineOneAudio: 初次挖矿照片保底", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    const r = await mineOneAudio(AUDIO, [AUDIO, KEY1, KEY2], {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, [AUDIO, KEY1, KEY2], {}, env);
     expect(r).toBe("mined");
 
     const articlePut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
@@ -117,7 +115,7 @@ describe("mineOneAudio: 初次挖矿照片保底", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     // KEY2 不在 allKeys（挖矿开始后才上传完），但在 R2 store 里
-    const r = await mineOneAudio(AUDIO, [AUDIO, KEY1], {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, [AUDIO, KEY1], {}, env);
     expect(r).toBe("mined");
 
     const articlePut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));
@@ -133,7 +131,7 @@ describe("mineOneAudio: 初次挖矿照片保底", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    const r = await mineOneAudio(AUDIO, [AUDIO, KEY1, KEY2], {}, env, MODEL_CFG);
+    const r = await mineOneAudio(AUDIO, [AUDIO, KEY1, KEY2], {}, env);
     expect(r).toBe("mined");
 
     const articlePut = fetchSpy.calls.find((c) => c.method === "PUT" && c.url.endsWith(`articles/${SUB}/${STEM}`));

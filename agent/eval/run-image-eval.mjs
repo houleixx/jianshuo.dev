@@ -3,11 +3,11 @@
 // 真实金标放 eval/fixtures/image-local/（gitignore，私人照片数据）；合成样例在 image-samples/。
 // 用法：CLAUDE_API_KEY=… node eval/run-image-eval.mjs <runId>
 // 判定：proxy 全过之后，用 /wjs-evaling-voicedrop-prompts 的盲评流程对 outputs 打分。
-// 通过标准（spec §6）：candidate 胜率 ≥ 60% 且编造项零回归 → config/model.json 置 imagePipeline:true。
+// 通过标准（spec §6）：candidate 胜率 ≥ 60% 且编造项零回归 → 流水线转正（生产已默认走流水线）。
 import { readFileSync, readdirSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { buildMinePrompt, parseArticles, MINE_MODEL_DEFAULT } from "../src/miner.js";
+import { buildMinePrompt, parseArticles, MINE_MODEL } from "../src/miner.js";
 import { IMAGE_ONLY_SYSTEM } from "../src/prompts/mine.js";
 import { runImagePipeline, parsePlaceTag, parseSessionInfo } from "../src/image-mine.js";
 import { runImageProxyChecks } from "./lib/image-proxy-checks.mjs";
@@ -39,7 +39,7 @@ export async function runImageEval({ fixtures, callModel, model }) {
     try {
       const payload = buildMinePrompt({
         transcript: "", styleText: fx.styleText || "", photos: fx.photos, force: false,
-        provider: "anthropic", model, systemPrompt: IMAGE_ONLY_SYSTEM, photoInstr: "",
+        model, systemPrompt: IMAGE_ONLY_SYSTEM, photoInstr: "",
       });
       champion.articles = parseArticles(await callModel({ stage: "single", payload }));
     } catch (e) { champion.error = String(e); }
@@ -75,7 +75,7 @@ async function anthropicCallModel({ payload }) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const runId = process.argv[2] || "image-run-local";
   const fixtures = loadImageFixtures();
-  const { results } = await runImageEval({ fixtures, callModel: anthropicCallModel, model: MINE_MODEL_DEFAULT });
+  const { results } = await runImageEval({ fixtures, callModel: anthropicCallModel, model: MINE_MODEL });
   const outDir = join(HERE, "runs", runId);
   mkdirSync(join(outDir, "outputs"), { recursive: true });
   for (const r of results) {
