@@ -1201,8 +1201,16 @@ export default {
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(obj),
         })));
       } catch (_) {}
-      const r = await restyleArticle(env, scope, stem, styleV, pusher && pusher.preview);
-      if (pusher) { try { await pusher.done(r.ok); } catch (_) {} }
+      // EdgeOne（voicedrop.cn 入口）回源响应超时约 15s 会掐断本请求；不包 waitUntil
+      // 时整个执行被连带取消（tail 实测 outcome: canceled），长录音重写永远写不成
+      // 新版本。包住后断线只丢这个响应：重写照跑，落库 + preview-done + status 推送不受影响。
+      const work = (async () => {
+        const r = await restyleArticle(env, scope, stem, styleV, pusher && pusher.preview);
+        if (pusher) { try { await pusher.done(r.ok); } catch (_) {} }
+        return r;
+      })();
+      ctx.waitUntil(work.catch(() => {}));
+      const r = await work;
       return new Response(JSON.stringify(r), { status: r.ok ? 200 : 422, headers: { "content-type": "application/json" } });
     }
 
