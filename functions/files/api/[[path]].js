@@ -730,6 +730,16 @@ async function handleRequest(context) {
       const kick = dispatchMine(userAuth);
       if (waitUntil) waitUntil(kick); else kick.catch(() => {});
     }
+    // 照片落盘 → 带 photoTs poke 该用户的 Miner DO：iOS 已不再保证「照片先于音频」，
+    // 晚到照片（甚至文章已成文后才到）由 DO 的 backfillSessionPhotos 补 [[photo:key]]
+    // 标记兜底。不做 doc-exists 预检——预检自带竞态，全量 poke + DO 串行无时序假设。
+    const mPhoto = /^(users\/[^/]+\/)photos\/([0-9-]+)\/[^/]+\.jpe?g$/i.exec(key);
+    if (mPhoto) {
+      // scope 一并带上：用户 token 下 trigger 忽略它（按 token 解析）；admin 直传
+      // 照片（人工验证/重放）靠它定向到目标用户分片而不是 sweep。
+      const kick = dispatchMine(request.headers.get('Authorization') || '', mPhoto[2], mPhoto[1]);
+      if (waitUntil) waitUntil(kick); else kick.catch(() => {});
+    }
     // 挖矿前预置的标签 sidecar（articles/<stem>.tags）→ 索引打 tags 标记，
     // recordings 轻量接口靠它告诉 App「这条待处理录音带标签，去拉内容」。
     const mTag = /^(.*\/)articles\/([^/]+)\.tags$/.exec(key);
@@ -1760,11 +1770,18 @@ async function handleRequest(context) {
 
 // Kick the Cloudflare miner Worker. authHeader is the caller's Authorization
 // header — any valid session token (user or admin) is accepted by /agent/mine/trigger.
-async function dispatchMine(authHeader) {
+// photoTs（可选）= 照片落盘 poke：让该用户的 Miner DO 记一个晚到照片补写待办。
+// scope（可选）= 照片所属用户前缀；仅 admin 调用方生效（trigger 用它定向分片）。
+async function dispatchMine(authHeader, photoTs = '', scope = '') {
   try {
     // Use the workers.dev URL to bypass same-zone Pages routing (which returns
     // 405 for POST on static paths before the Worker zone route can handle it).
-    const resp = await fetch('https://voicedrop-agent.jianshuo.workers.dev/agent/mine/trigger', {
+    const qs = [
+      photoTs ? `photoTs=${encodeURIComponent(photoTs)}` : '',
+      scope ? `scope=${encodeURIComponent(scope)}` : '',
+    ].filter(Boolean).join('&');
+    const resp = await fetch('https://voicedrop-agent.jianshuo.workers.dev/agent/mine/trigger'
+        + (qs ? `?${qs}` : ''), {
       method: 'POST',
       headers: { 'Authorization': authHeader },
     });

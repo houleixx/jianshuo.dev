@@ -20,7 +20,7 @@ import { ensureAccount, debit, asrCharged } from "./usage_store.js";
 import { sendPush } from "./push.js";
 import { asrCorpus } from "./asr-hotwords.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles, readArticleDoc, writeArticleDoc, setIndexFlag } from "../../functions/lib/article-store.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
 import { shareIdFor, communityKey } from "../../functions/lib/community-store.js";
 import { distillStyle, buildStyleIntroArticle, buildInsufficientCorpusArticle, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
@@ -734,7 +734,7 @@ export async function maybeAutoShareCommunity(srcKey, env, log = () => {}) {
 
 // ── StatusHub notification ─────────────────────────────────────────────────────
 
-async function notifyStatus(scope, stem, status, env) {
+export async function notifyStatus(scope, stem, status, env) {
   try {
     const stub = env.StatusHub.get(env.StatusHub.idFromName("status:" + scope));
     await stub.fetch(new Request("https://status-hub/broadcast", {
@@ -857,7 +857,11 @@ async function listSessionPhotoRelKeys(env, audioKey) {
   const prefix = userPrefix(audioKey);
   const ts = sessionTs(audioKey);
   if (!ts) return [];
-  const folder = `${prefix}photos/${ts}/`;
+  return listPhotoRelKeys(env, prefix, ts);
+}
+
+async function listPhotoRelKeys(env, scope, ts) {
+  const folder = `${scope}photos/${ts}/`;
   const keys = [];
   let cursor;
   do {
@@ -865,7 +869,60 @@ async function listSessionPhotoRelKeys(env, audioKey) {
     for (const o of r.objects || []) if (/\.jpe?g$/i.test(o.key)) keys.push(o.key);
     cursor = r.truncated ? r.cursor : null;
   } while (cursor);
-  return keys.sort().map((k) => k.slice(prefix.length));
+  return keys.sort().map((k) => k.slice(scope.length));
+}
+
+// ── 晚到照片补写（photo backfill）───────────────────────────────────────────────
+// iOS 不再保证「照片先于音频到位」（音频 PUT 曾被照片队列串行阻塞，弱网中位 214s）。
+// 照片 PUT 落盘后 Pages 会带 photoTs poke 本用户的 Miner DO 分片；成熟（PBF_GRACE_MS）
+// 后由 DO alarm 调这里。补写与挖矿写盘在同一 alarm 链上严格串行——这就是正确性来源：
+// 本函数看不到 doc ⇒ doc 尚未诞生 ⇒ 未来挖矿写盘前的 fresh 重列必然列到这张照片。
+export const PBF_GRACE_MS = 60 * 1000;   // 同 session 照片 burst 合并成一次补写（一个版本）
+
+export async function backfillSessionPhotos(env, scope, ts) {
+  const photoKeys = await listPhotoRelKeys(env, scope, ts);
+  if (!photoKeys.length) return { action: "no-photos" };
+
+  const listed = await env.FILES.list({ prefix: `${scope}articles/VoiceDrop-${ts}` });
+  const keys = (listed.objects || []).map((o) => o.key);
+  const docKey = keys.find((k) => k.endsWith(".json") && !/\.asr(?:done)?\.json$/.test(k));
+  const emptyKey = keys.find((k) => k.endsWith(".empty"));
+
+  if (!docKey) {
+    // 无语音 session 的照片晚到：清 .empty（连同 D1 empty 标记），同一 alarm 随后的
+    // runMine 复用 ASR checkpoint、走看图模式重挖成 photos-only 文章。只清照片能改变
+    // 结局的 no-speech/silent——asr-error/too-short 重挖照样落空，清了只会白烧一轮。
+    if (emptyKey) {
+      let reason = "";
+      try { reason = JSON.parse(await (await env.FILES.get(emptyKey)).text())?.reason || ""; } catch (_) {}
+      if (!/^(no-speech|silent)$/.test(reason)) return { action: "empty-kept", reason };
+      const stem = emptyKey.slice(`${scope}articles/`.length, -".empty".length);
+      await env.FILES.delete(emptyKey);
+      await setIndexFlag(env, scope, stem, "empty", false);
+      console.log("[pbf] 照片晚到,清 .empty 重挖", JSON.stringify({ stem }));
+      return { action: "empty-cleared" };
+    }
+    // doc 与 .empty 都不在 = 挖矿还没写盘。写盘只发生在本 DO 的串行 alarm 里，
+    // 所以未来的 fresh 重列必然发生在本次检查之后、必然看见这张照片 → 安全 no-op。
+    return { action: "not-mined-yet" };
+  }
+
+  const doc = await readArticleDoc(env, docKey);
+  if (!doc) return { action: "not-mined-yet" };
+  const stem = docKey.slice(`${scope}articles/`.length, -".json".length);
+  // 任何历史版本里出现过的 key 都不补：出现过又从 head 消失 = 用户主动删除，
+  // 「一张不丢」不等于「赖着不走」。
+  const everSeen = new Set();
+  for (const v of doc.versions || []) for (const k of photoKeysIn(v.articles)) everSeen.add(k);
+  for (const k of photoKeysIn(resolveArticles(doc))) everSeen.add(k);
+  const missing = photoKeys.filter((k) => !everSeen.has(k));
+  if (!missing.length) return { action: "none-missing" };
+
+  const patched = ensurePhotoKeys(missing, resolveArticles(doc));
+  await writeArticleDoc(env, docKey, { articles: patched }, "photo-backfill", { current: doc });
+  await notifyStatus(scope, stem, "ready", env);
+  console.log("[pbf] 补回晚到照片", JSON.stringify({ stem, keys: missing }));
+  return { action: "backfilled", missing };
 }
 
 export async function restyleArticle(env, scope, stem, styleV, preview = null) {

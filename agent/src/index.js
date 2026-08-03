@@ -18,7 +18,7 @@ import { Agent, getAgentByName } from "agents";
 import { TOOL_DEFS, deleteArticleFiles } from "./tools.js";
 import { runCommandTurn } from "./command-turn.js";
 import { sendPush } from "./push.js";
-import { runMine, scopesWithWork, MINE_RESUME_MS, restyleArticle } from "./miner.js";
+import { runMine, scopesWithWork, MINE_RESUME_MS, restyleArticle, backfillSessionPhotos, PBF_GRACE_MS } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { coreCleanupRefhits } from "../../functions/lib/core-db.js";
@@ -676,20 +676,56 @@ export class Miner {
     // handler has no request to read it from). No scope = the sweep dispatcher.
     const scope = url.searchParams.get("scope") || "";
     if (scope) await this.state.storage.put("scope", scope);
+    // photoTs = 照片落盘 poke（Pages upload handler 带来）：记一个待办键，成熟
+    //（PBF_GRACE_MS，合并同 session 的照片 burst）后由 alarm 调 backfillSessionPhotos
+    // 补写晚到照片标记。格式校验防脏 key 常驻 DO storage。
+    const photoTs = url.searchParams.get("photoTs") || "";
+    if (photoTs && scope && /^\d{4}-\d{2}-\d{2}-\d{6}$/.test(photoTs)) {
+      const cur = await this.state.storage.get("pbf:" + photoTs);
+      if (!cur) await this.state.storage.put("pbf:" + photoTs, { at: Date.now(), tries: 0 });
+    }
+    // alarm 取 min 语义：photo poke 想要 +PBF_GRACE_MS，挖矿 poke 想要 +500ms——
+    // 谁早听谁的。旧的「有 alarm 就不动」会让先到的 photo alarm 拖慢随后的挖矿 60s。
+    const desired = Date.now() + (photoTs ? PBF_GRACE_MS : 500);
     const existing = await this.state.storage.getAlarm();
-    if (!existing) await this.state.storage.setAlarm(Date.now() + 500);
+    if (!existing || existing > desired) await this.state.storage.setAlarm(desired);
     return new Response("queued", { status: 202 });
   }
 
   async alarm() {
     const scope = await this.state.storage.get("scope");
     if (scope) {
+      // 晚到照片补写：先于 runMine 处理成熟的 pbf 待办（清 .empty 的 re-mine 同一趟
+      // 就能被 runMine 顺手做掉）。补写与挖矿写盘同在这条串行 alarm 链上——时序竞态
+      // 结构性消失（见 miner.js backfillSessionPhotos 注释）。失败重试最多 3 次后放弃
+      //（照片本体永在 R2，可管理端重放补齐）。
+      let pbfNextDue = null;
+      const pbf = await this.state.storage.list({ prefix: "pbf:" });
+      for (const [key, val] of pbf) {
+        if (!key.startsWith("pbf:")) continue;   // 兼容不认 prefix 的 storage fake
+        const rec = typeof val === "object" && val ? val : { at: val, tries: 0 };
+        if (Date.now() - rec.at < PBF_GRACE_MS) {
+          pbfNextDue = Math.min(pbfNextDue ?? Infinity, rec.at + PBF_GRACE_MS);
+          continue;
+        }
+        try {
+          await backfillSessionPhotos(this.env, scope, key.slice(4));
+          await this.state.storage.delete(key);
+        } catch (e) {
+          console.log("[pbf] backfill 失败", key, String(e && e.message || e));
+          if (rec.tries >= 2) { await this.state.storage.delete(key); continue; }
+          await this.state.storage.put(key, { at: Date.now(), tries: rec.tries + 1 });
+          pbfNextDue = Math.min(pbfNextDue ?? Infinity, Date.now() + PBF_GRACE_MS);
+        }
+      }
       // Per-user shard: runMine processes a bounded slice (subrequest budget) of
       // THIS user's prefix and tells us if ASR is still cooking or work was
       // deferred — if so, come back soon to resume so long audio finishes across
       // passes instead of timing out in one invocation.
       const r = await runMine(this.env, scope);
-      if (r && r.moreWork) await this.state.storage.setAlarm(Date.now() + MINE_RESUME_MS);
+      const resume = (r && r.moreWork) ? Date.now() + MINE_RESUME_MS : null;
+      const next = [resume, pbfNextDue].filter((x) => x != null).sort((a, b) => a - b)[0];
+      if (next) await this.state.storage.setAlarm(next);
       return;
     }
     // Sweep dispatcher (cron/admin trigger): one whole-bucket list, then poke the
@@ -1152,11 +1188,19 @@ export default {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
       const tok = bearerToken(request);
       const isAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
-      const scope   = isAdmin ? "admin" : await resolveScope(tok, env);
+      // admin 可用 ?scope=users/<sub>/ 定向 poke 某个用户分片（photoTs 补写重放、
+      // 人工验证用）；不带 scope 的 admin 照旧踢 sweep dispatcher。
+      const adminScope = isAdmin ? (url.searchParams.get("scope") || "") : "";
+      const scope   = isAdmin ? (/^users\/[^/]+\/$/.test(adminScope) ? adminScope : "admin")
+                              : await resolveScope(tok, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
+      // photoTs：照片落盘 poke（Pages upload handler），透传给用户分片记补写待办。
+      const photoTs = url.searchParams.get("photoTs") || "";
       const shard = scope === "admin" ? "miner" : "miner:" + scope;
       const stub = env.Miner.get(env.Miner.idFromName(shard));
-      const target = scope === "admin" ? "https://miner/" : "https://miner/?scope=" + encodeURIComponent(scope);
+      const target = scope === "admin" ? "https://miner/"
+        : "https://miner/?scope=" + encodeURIComponent(scope)
+          + (photoTs ? "&photoTs=" + encodeURIComponent(photoTs) : "");
       return stub.fetch(new Request(target, { method: "POST" }));
     }
 
