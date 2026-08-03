@@ -2,6 +2,7 @@
 // claim 用邀请码归因（ownerFromToken 的 invites/ 分支）。
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { fakeD1, usageSql, fakeEnv } from "./fakes.js";
+import { corePutInvite, coreGetInvite, coreAllRefhits } from "../../functions/lib/core-db.js";
 
 // 邀请人到账推送：mock 掉 APNs 通道，claim 成功用例断言调用参数。
 vi.mock("../src/push.js", () => ({ sendPush: vi.fn(async () => true) }));
@@ -45,11 +46,11 @@ describe("inviteCodeForScope", () => {
     expect(await inviteCodeForScope(env, OWNER, SECRET)).toBe(OWNER_CODE);
   });
   it("extends to 10 chars when 6 is taken by someone else", async () => {
-    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: "users/anon-other/" }));
+    await corePutInvite(env, OWNER_CODE, "users/anon-other/", "", 1);
     expect(await inviteCodeForScope(env, OWNER, SECRET)).toBe("ABCDEF0123");
   });
   it("returns the same code when the entry is already mine", async () => {
-    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER }));
+    await corePutInvite(env, OWNER_CODE, OWNER, "", 1);
     expect(await inviteCodeForScope(env, OWNER, SECRET)).toBe(OWNER_CODE);
   });
   it("derives a stable HMAC code for non-anon scopes", async () => {
@@ -77,7 +78,7 @@ describe("GET /agent/referral/link", () => {
     expect(j.enabled).toBe(true);
     expect(j.suanliInviter).toBe(Math.round(9 * 5.6));
     expect(j.suanliFriend).toBe(Math.round(9 * 5.6));
-    const stored = JSON.parse(await (await env.FILES.get(`invites/${OWNER_CODE}`)).text());
+    const stored = await coreGetInvite(env, OWNER_CODE);
     expect(stored.owner).toBe(OWNER);
     expect(stored.name).toBe("舒博");
   });
@@ -89,10 +90,10 @@ describe("GET /agent/referral/link", () => {
     expect(j.code).toBe(OWNER_CODE);
   });
   it("name refreshes on each mint (rename propagates to the landing page)", async () => {
-    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER, name: "旧名" }));
+    await corePutInvite(env, OWNER_CODE, OWNER, "旧名", 1);
     await env.FILES.put(`${OWNER}CLAUDE.json`, JSON.stringify({ profile: { name: "新名" } }));
     await handleReferralRoutes(URL_LINK, linkReq(await makeToken(OWNER)), env);
-    const stored = JSON.parse(await (await env.FILES.get(`invites/${OWNER_CODE}`)).text());
+    const stored = await coreGetInvite(env, OWNER_CODE);
     expect(stored.name).toBe("新名");
   });
 });
@@ -101,7 +102,7 @@ describe("claim with an invite code token", () => {
   it("resolves invites/<code> to the owner and pays both sides", async () => {
     const db = fakeD1(usageSql());
     env.USAGE = db;
-    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER, name: "舒博" }));
+    await corePutInvite(env, OWNER_CODE, OWNER, "舒博", 1);
     const tok = await makeToken(NEWBIE);
     const req = new Request("https://jianshuo.dev/agent/referral/claim", {
       method: "POST",
@@ -124,7 +125,7 @@ describe("claim with an invite code token", () => {
   it("lowercase clipboard code still resolves (uppercase normalization)", async () => {
     const db = fakeD1(usageSql());
     env.USAGE = db;
-    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER }));
+    await corePutInvite(env, OWNER_CODE, OWNER, "", 1);
     await env.FILES.put("config/referral.json", JSON.stringify({ enabled: true, authorCoins: 9, newUserCoins: 9, dailyCapPerOwner: 30, requireDeviceCheck: false }));
     const tok = await makeToken(NEWBIE);
     const req = new Request("https://jianshuo.dev/agent/referral/claim", {
@@ -138,7 +139,7 @@ describe("claim with an invite code token", () => {
   it("self-invite is rejected", async () => {
     const db = fakeD1(usageSql());
     env.USAGE = db;
-    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER }));
+    await corePutInvite(env, OWNER_CODE, OWNER, "", 1);
     await env.FILES.put("config/referral.json", JSON.stringify({ enabled: true, authorCoins: 9, newUserCoins: 9, dailyCapPerOwner: 30, requireDeviceCheck: false }));
     const tok = await makeToken(OWNER);
     const req = new Request("https://jianshuo.dev/agent/referral/claim", {
@@ -175,9 +176,8 @@ describe("invite landing page", () => {
       calls.push({ url: String(url), body: init && init.body ? JSON.parse(init.body) : null });
       return new Response("", { status: 200 });
     });
-    const c = ctx(OWNER_CODE, {
-      [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),
-    });
+    const c = ctx(OWNER_CODE);
+    await corePutInvite(c.env, OWNER_CODE, OWNER, "舒博", 1);
     c.env.POSTHOG_API_KEY = "phc_test";
     c.request = new Request(`https://jianshuo.dev/voicedrop/i/${OWNER_CODE}?c=1`, {
       headers: { "CF-Connecting-IP": "8.8.4.4", "user-agent": "iPhone" },
@@ -197,9 +197,8 @@ describe("invite landing page", () => {
       calls.push({ url: String(url), body: init && init.body ? JSON.parse(init.body) : null });
       return new Response("", { status: 200 });
     });
-    const c = ctx(OWNER_CODE, {
-      [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),
-    });
+    const c = ctx(OWNER_CODE);
+    await corePutInvite(c.env, OWNER_CODE, OWNER, "舒博", 1);
     c.env.POSTHOG_API_KEY = "phc_test";
     // 反代形态：CF-Connecting-IP = 腾讯云出口（所有访客同值）。真实 IP 在 XFF 首段
     // （Caddy 追加访客 IP，CF 再追加 CVM IP；X-Real-IP 会被 CF 覆写，不可用）。
@@ -213,16 +212,16 @@ describe("invite landing page", () => {
     // 响应头带同一不透明 id，线上 curl -I 可核对
     expect(r.headers.get("x-vd-vid")).toBe(ph.body.distinct_id);
     // 反代下服务端仍不写 refhits（X-Real-IP 可伪造，归因层只认 beacon）
-    expect((await c._env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(0);
+    expect((await coreAllRefhits(c._env)).length).toBe(0);
     spy.mockRestore();
   });
 
   it("renders the inviter name, hero, download buttons and clipboard hook", async () => {
     const c = ctx(OWNER_CODE, {
-      [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),
       "config/mint-rate.json": JSON.stringify({ suanliPerCoin: 5.6 }),
       "config/referral.json": JSON.stringify({ enabled: true, authorCoins: 9, newUserCoins: 9 }),
     });
+    await corePutInvite(c.env, OWNER_CODE, OWNER, "舒博", 1);
     const r = await invitePage(c);
     expect(r.status).toBe(200);
     const h = await r.text();
@@ -247,13 +246,11 @@ describe("invite landing page", () => {
     // ⚠️ 反代访问（带 x-forwarded-host）：服务端不写 IP 指纹——CF-Connecting-IP
     // 是代理出口 IP（垃圾），真实 IP 由页面 beacon 直连 /agent/referral/hit 补。
     await Promise.all(c._tasks);
-    const hits = await c._env.FILES.list({ prefix: "refhits/" });
-    expect(hits.objects.length).toBe(0);
+    expect((await coreAllRefhits(c._env)).length).toBe(0);
   });
   it("direct (un-proxied) visit still writes the server-side refhit", async () => {
-    const c = ctx(OWNER_CODE, {
-      [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "舒博" }),
-    });
+    const c = ctx(OWNER_CODE);
+    await corePutInvite(c.env, OWNER_CODE, OWNER, "舒博", 1);
     c.request = new Request(`https://jianshuo.dev/voicedrop/i/${OWNER_CODE}`, {
       headers: { "CF-Connecting-IP": "8.8.4.4" },   // 无 x-forwarded-host = 直连
     });
@@ -261,14 +258,13 @@ describe("invite landing page", () => {
     // 直连域的卡片图走 /voicedrop/ 前缀
     expect(await r.text()).toContain('og:image" content="https://jianshuo.dev/voicedrop/icon-512.png"');
     await Promise.all(c._tasks);
-    const hits = await c._env.FILES.list({ prefix: "refhits/" });
-    expect(hits.objects.length).toBe(1);
-    expect(JSON.parse(await (await c._env.FILES.get(hits.objects[0].key)).text()).owner).toBe(OWNER);
+    const hits = await coreAllRefhits(c._env);
+    expect(hits.length).toBe(1);
+    expect(hits[0].owner).toBe(OWNER);
   });
   it("lowercase code in the URL resolves (uppercase normalization)", async () => {
-    const c = ctx(OWNER_CODE.toLowerCase(), {
-      [`invites/${OWNER_CODE}`]: JSON.stringify({ owner: OWNER, name: "" }),
-    });
+    const c = ctx(OWNER_CODE.toLowerCase());
+    await corePutInvite(c.env, OWNER_CODE, OWNER, "", 1);
     const r = await invitePage(c);
     expect(r.status).toBe(200);
     expect(await r.text()).toContain("你的朋友邀请你一起用");
@@ -310,30 +306,29 @@ describe("POST /agent/referral/hit", () => {
     });
   }
   it("invite code → 204 and a refhit keyed to the REQUEST ip (not any proxy)", async () => {
-    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER }));
+    await corePutInvite(env, OWNER_CODE, OWNER, "", 1);
     const r = await handleReferralRoutes(URL_HIT, hitReq(OWNER_CODE), env);
     expect(r.status).toBe(204);
-    const hits = await env.FILES.list({ prefix: "refhits/" });
-    expect(hits.objects.length).toBe(1);
-    const rec = JSON.parse(await (await env.FILES.get(hits.objects[0].key)).text());
-    expect(rec.owner).toBe(OWNER);
-    expect(rec.token).toBe(OWNER_CODE);
+    const hits = await coreAllRefhits(env);
+    expect(hits.length).toBe(1);
+    expect(hits[0].owner).toBe(OWNER);
+    expect(hits[0].token).toBe(OWNER_CODE);
   });
   it("article share id works too (both landing pages share the beacon)", async () => {
     await env.FILES.put("shares/AbCdEf1234", `${OWNER}articles/a1.json`);
     const r = await handleReferralRoutes(URL_HIT, hitReq("AbCdEf1234"), env);
     expect(r.status).toBe(204);
-    expect((await env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(1);
+    expect((await coreAllRefhits(env)).length).toBe(1);
   });
   it("unknown / garbage token → 204, nothing written (no probe signal)", async () => {
     expect((await handleReferralRoutes(URL_HIT, hitReq("ZZZZZZ"), env)).status).toBe(204);
     expect((await handleReferralRoutes(URL_HIT, hitReq("<xss>!!"), env)).status).toBe(204);
-    expect((await env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(0);
+    expect((await coreAllRefhits(env)).length).toBe(0);
   });
   it("missing IP header → 204, nothing written", async () => {
-    await env.FILES.put(`invites/${OWNER_CODE}`, JSON.stringify({ owner: OWNER }));
+    await corePutInvite(env, OWNER_CODE, OWNER, "", 1);
     const req = new Request("https://jianshuo.dev/agent/referral/hit", { method: "POST", body: OWNER_CODE });
     expect((await handleReferralRoutes(URL_HIT, req, env)).status).toBe(204);
-    expect((await env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(0);
+    expect((await coreAllRefhits(env)).length).toBe(0);
   });
 });

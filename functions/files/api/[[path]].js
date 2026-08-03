@@ -28,7 +28,7 @@ import { shareIdFor, communityKey, reportKey, isShareId, promptPostTitle } from 
 import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMarkdown, readProfileName, mergeProfile, ensureStyleSeeded, isDefaultSeed, readLegacyStyleMd } from "../../lib/style-store.js";
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
-import { coreLoadPromptShares, coreDeleteUserData, coreListArticles, coreReplaceArticles, coreCountArticles, coreUpsertRecording, coreDeleteRecording, coreListRecordings, coreReplaceRecordings, coreCountRecordings, coreGetIdentity, corePutIdentity, coreUpsertProfile, coreGetProfile, corePutPushToken, corePutReport, coreDeleteReport, coreGetReport, corePendingReportIds, coreListReports } from "../../lib/core-db.js";
+import { coreLoadPromptShares, coreDeleteUserData, coreListArticles, coreReplaceArticles, coreUpsertRecording, coreDeleteRecording, coreListRecordings, coreReplaceRecordings, coreGetIdentity, corePutIdentity, coreUpsertProfile, coreGetProfile, corePutPushToken, corePutReport, coreDeleteReport, coreGetReport, corePendingReportIds, coreListReports } from "../../lib/core-db.js";
 
 // Miner sidecars that live under articles/ and end in .json but are NOT article
 // docs: <stem>.asr.json (resumable-ASR task) and <stem>.asrdone.json (ASR
@@ -37,12 +37,12 @@ import { coreLoadPromptShares, coreDeleteUserData, coreListArticles, coreReplace
 const isAsrSidecar = (key) => key.endsWith('.asr.json') || key.endsWith('.asrdone.json');
 
 // 文章摘要索引全量对账（GET /articles 与 GET /recordings 的后台自愈共用）。
-// R2 listing 是权威：扫 articles/ 前缀全部对象，与索引比 etag 指纹只重读新/变
-// 的 doc，删掉已不存在的条目；同一次 listing 顺手重建 empty/blocked/tags 三种
-// sidecar 标记（零额外 R2 成本），脏了回写。返回按时间倒序的文章列表。
+// R2 listing 是权威（blob 本体在 R2）：扫 articles/ 前缀全部对象，与 D1 行比
+// etag 指纹只重读新/变的 doc，删掉已不存在的条目；同一次 listing 顺手重建
+// empty/blocked/tags 三种 sidecar 标记（零额外 R2 成本），脏了整体回写 D1。
+// 返回按时间倒序的文章列表。
 async function reconcileArticlesIndex(env, articleScope) {
   const prefix = `${articleScope}articles/`;
-  const indexKey = `${articleScope}articles-index.json`;
   const fp = (o) => o.etag || `${o.size}:${o.uploaded?.toISOString?.() || ''}`;
 
   let cursor, allObjects = [];
@@ -59,11 +59,15 @@ async function reconcileArticlesIndex(env, articleScope) {
     if (m) (sidecars[m[1]] ||= {})[m[2]] = true;
   }
 
-  let index = {};
-  try {
-    const io = await env.FILES.get(indexKey);
-    if (io) index = JSON.parse(await io.text()).items || {};
-  } catch { /* corrupt/missing cache → full rebuild below */ }
+  // D1 行是指纹缓存（fp = 写入时的 etag）；D1 不可用 → 空缓存，全量重读 blob，
+  // 列表照出，只是这次回写不了 D1。
+  const index = {};
+  for (const r of (await coreListArticles(env, articleScope)) || []) {
+    let entry = null;
+    if (r.entry) { try { entry = JSON.parse(r.entry); } catch {} }
+    index[r.stem] = { fp: r.fp, entry,
+      ...(r.empty ? { empty: true } : {}), ...(r.blocked ? { blocked: true } : {}), ...(r.tags ? { tags: true } : {}) };
+  }
 
   const articles = [];
   const stale = [];
@@ -115,18 +119,7 @@ async function reconcileArticlesIndex(env, articleScope) {
   }
 
   if (dirty) {
-    await env.FILES.put(
-      indexKey,
-      JSON.stringify({ schema: 1, updatedAt: Date.now(), items: index }),
-      { httpMetadata: { contentType: 'application/json' } },
-    ).catch(() => {});
-  }
-
-  // 存储迁移 P2：对账顺手把 D1 articles 表拉齐（脏了必写；不脏也比对行数，
-  // 覆盖「D1 尚未回填过的老用户」——第一次打开后 D1 就绪，之后列表走 D1）。
-  try {
-    const n = await coreCountArticles(env, articleScope);
-    if (n !== null && (dirty || n !== Object.keys(index).length)) {
+    try {
       await coreReplaceArticles(env, articleScope, Object.entries(index).map(([s, it]) => ({
         stem: s,
         entryJson: it.entry ? JSON.stringify(it.entry) : null,
@@ -134,18 +127,17 @@ async function reconcileArticlesIndex(env, articleScope) {
         createdMs: it.entry ? articleTime(it.entry.createdAt) : 0,
         empty: !!it.empty, blocked: !!it.blocked, tags: !!it.tags,
       })));
-    }
-  } catch { /* D1 同步是加速层，绝不打断对账 */ }
+    } catch { /* 回写失败不打断本次列表，下次对账再收敛 */ }
+  }
 
   articles.sort(byNewestFirst);
   return articles;
 }
 
-// ── 录音索引（recordings-index.json）───────────────────────────────────────────
+// ── 录音索引（D1 recordings 表）────────────────────────────────────────────────
 // GET /recordings 的直出数据源：items = { "<leaf>.m4a": { uploaded } }。上传/删除
-// 路由同步增删；权威是根目录 delimiter listing，由下面的对账重建（并发上传的
-// lost update、绕过 API 的直写在下一次打开后收敛）。写失败不打断主路径。
-const recordingsIndexKey = (scope) => `${scope}recordings-index.json`;
+// 路由同步增删；权威是根目录 delimiter listing（.m4a blob 在 R2），由下面的对账
+// 重建（并发上传的 lost update、绕过 API 的直写在下一次打开后收敛）。
 
 async function reconcileRecordingsIndex(env, scope) {
   const items = {};
@@ -161,42 +153,17 @@ async function reconcileRecordingsIndex(env, scope) {
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
   try {
-    let prev = null;
-    const io = await env.FILES.get(recordingsIndexKey(scope));
-    if (io) { try { prev = JSON.parse(await io.text()).items || null; } catch {} }
+    const prev = await coreListRecordings(env, scope);
     const same = prev && Object.keys(prev).length === Object.keys(items).length
       && Object.keys(items).every((k) => prev[k] && prev[k].uploaded === items[k].uploaded);
-    if (!same) {
-      await env.FILES.put(recordingsIndexKey(scope),
-        JSON.stringify({ schema: 1, updatedAt: Date.now(), items }),
-        { httpMetadata: { contentType: 'application/json' } });
-    }
-    // 存储迁移 P2：D1 recordings 表拉齐（变了必写；没变也比对行数，覆盖未回填用户）。
-    const n = await coreCountRecordings(env, scope);
-    if (n !== null && (!same || n !== Object.keys(items).length)) {
-      await coreReplaceRecordings(env, scope, items);
-    }
-  } catch { /* 加速层 */ }
+    if (!same) await coreReplaceRecordings(env, scope, items);
+  } catch { /* 回写失败不打断本次列表，下次对账再收敛 */ }
   return items;
 }
 
-// 上传/删除路由的同步维护（RMW；并发丢更新靠对账兜底）。
+// 上传/删除路由的同步维护（行级 UPSERT / DELETE；并发漂移靠对账兜底）。
 async function updateRecordingsIndex(env, scope, leaf, meta /* null = 删 */) {
   try {
-    let idx = { schema: 1, items: {} };
-    const io = await env.FILES.get(recordingsIndexKey(scope));
-    if (io) { try { const p = JSON.parse(await io.text()); if (p && p.items) idx = p; } catch {} }
-    if (meta) idx.items[leaf] = meta;
-    else if (leaf in idx.items) delete idx.items[leaf];
-    else {
-      // R2 索引里本就没有：D1 行照删（迁移期两层可能不同步）。
-      await coreDeleteRecording(env, scope, leaf);
-      return;
-    }
-    idx.updatedAt = Date.now();
-    await env.FILES.put(recordingsIndexKey(scope), JSON.stringify(idx),
-      { httpMetadata: { contentType: 'application/json' } });
-    // 存储迁移 P2：D1 行级同步（上传 UPSERT / 删除 DELETE）。
     if (meta) await coreUpsertRecording(env, scope, leaf, meta.uploaded);
     else await coreDeleteRecording(env, scope, leaf);
   } catch { /* 加速层 */ }
@@ -255,47 +222,29 @@ async function handleRequest(context) {
     // reuse its bound scope; otherwise bind it to the caller's current anon box
     // (no data moves) or a fresh users/<sub>/ if they have none.
     const appleExtId = sanitizeSeg(sub);
-    const linkKey = `links/apple-${appleExtId}.json`;
     let scope = null;
-    // 存储迁移 P3：身份→scope 解析 D1 优先，查无落 R2（未回填的老绑定）。
+    // 身份→scope 解析：D1 identities（first-write-wins）。
     const d1scope = await coreGetIdentity(env, 'apple', appleExtId);
     if (typeof d1scope === 'string') scope = d1scope;
-    if (!scope && d1scope !== false) {
-      const existing = await env.FILES.get(linkKey);
-      if (existing) { try { scope = JSON.parse(await existing.text()).scope; } catch {} }
-    }
     const now = Date.now();
     if (!scope) {
+      // D1 不可用（null）时不能盲建新绑定——否则老用户会被岔进一个空号。宁可让
+      // 这次登录失败重试。
+      if (d1scope === null) return json({ error: 'storage unavailable, retry' }, 503);
       const callerAnon = bearerToken(request);
       scope = (await anonScopeFromToken(callerAnon)) || `users/${sanitizeSeg(sub)}/`;
-      // 双写：R2 link 对象 + D1 identities 行（first-write-wins）。
-      await env.FILES.put(linkKey, JSON.stringify({ scope, linkedAt: now }),
-        { httpMetadata: { contentType: 'application/json' } });
       await corePutIdentity(env, 'apple', appleExtId, scope, now);
     }
     // Persist the Apple-provided identity. fullName is handed over ONLY on the first
     // authorization (and again only if the user revokes + re-grants), so it is
-    // first-write-wins; email rides in the verified token and is refreshed each sign-in.
-    // Merge so a later null never clobbers a previously-captured name.
+    // first-write-wins (COALESCE keeps the D1-stored name); email rides in the
+    // verified token and is refreshed each sign-in.
     {
-      const acctKey = `${scope}ACCOUNT.json`;
-      let acct = {};
-      const acctObj = await env.FILES.get(acctKey);
-      if (acctObj) { try { acct = JSON.parse(await acctObj.text()); } catch {} }
-      acct.appleSub = sub;
-      if (!acct.linkedAt) acct.linkedAt = now;
-      acct.lastSeenAt = now;
       const email = tokenEmail || bodyEmail;
-      if (email) acct.email = email;
-      const nameSet = !!(bodyName && !acct.name);   // 本次首次采纳名字（first-write-wins）
-      if (nameSet) acct.name = bodyName;
-      await env.FILES.put(acctKey, JSON.stringify(acct),
-        { httpMetadata: { contentType: 'application/json' } });
-      // 存储迁移 P3：档案双写 D1。name 只在本次刚采纳时传，COALESCE 不覆盖 D1 已有名字。
       await coreUpsertProfile(env, scope, {
         apple_sub: sub, email: email || undefined,
-        name: nameSet ? bodyName : undefined,
-        linked_at: acct.linkedAt, last_seen_at: now,
+        name: bodyName || undefined,
+        linked_at: now, last_seen_at: now,
       });
     }
     const session = await mintSession(scope, true, env.SESSION_SECRET);
@@ -332,44 +281,23 @@ async function handleRequest(context) {
     }
     const wechatId = wx.unionid ? `unionid-${wx.unionid}` : `openid-${wx.openid}`;
     const wechatExtId = sanitizeSeg(wechatId);
-    const linkKey = `links/wechat-${wechatExtId}.json`;
     let scope = null;
-    // 存储迁移 P3：身份→scope D1 优先，查无落 R2。
+    // 身份→scope 解析：D1 identities（first-write-wins）。
     const d1scope = await coreGetIdentity(env, 'wechat', wechatExtId);
     if (typeof d1scope === 'string') scope = d1scope;
-    if (!scope && d1scope !== false) {
-      const existing = await env.FILES.get(linkKey);
-      if (existing) { try { scope = JSON.parse(await existing.text()).scope; } catch {} }
-    }
     const now = Date.now();
     if (!scope) {
+      if (d1scope === null) return json({ error: 'storage unavailable, retry' }, 503);
       const callerAnon = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
       scope = (await anonScopeFromToken(callerAnon)) || `users/wechat-${sanitizeSeg(wechatId)}/`;
-      await env.FILES.put(linkKey, JSON.stringify({ scope, linkedAt: now }),
-        { httpMetadata: { contentType: 'application/json' } });
       await corePutIdentity(env, 'wechat', wechatExtId, scope, now);
     }
     {
-      const acctKey = `${scope}ACCOUNT.json`;
-      let acct = {};
-      const acctObj = await env.FILES.get(acctKey);
-      if (acctObj) { try { acct = JSON.parse(await acctObj.text()); } catch {} }
-      acct.wechatOpenid = wx.openid;
-      if (wx.unionid) acct.wechatUnionid = wx.unionid;
-      if (!acct.wechatLinkedAt) acct.wechatLinkedAt = now;
-      if (!acct.linkedAt) acct.linkedAt = now;
-      acct.lastSeenAt = now;
-      const nameSet = !!(nickname && !acct.name);
-      if (nameSet) acct.name = String(nickname).slice(0, 80);
       const av = avatar ? String(avatar).slice(0, 500) : null;
-      if (av) acct.avatar = av;
-      await env.FILES.put(acctKey, JSON.stringify(acct),
-        { httpMetadata: { contentType: 'application/json' } });
-      // 存储迁移 P3：档案双写 D1。
       await coreUpsertProfile(env, scope, {
         wechat_openid: wx.openid, wechat_unionid: wx.unionid || undefined,
-        name: nameSet ? acct.name : undefined, avatar: av || undefined,
-        linked_at: acct.linkedAt, wechat_linked_at: acct.wechatLinkedAt, last_seen_at: now,
+        name: nickname ? String(nickname).slice(0, 80) : undefined, avatar: av || undefined,
+        linked_at: now, wechat_linked_at: now, last_seen_at: now,
       });
     }
     const session = await mintWechatSession(scope, env.SESSION_SECRET);
@@ -457,10 +385,8 @@ async function handleRequest(context) {
     } else {
       const cm = await env.FILES.get(communityKey(id));
       if (cm) {
-        // 存储迁移 P3：举报=隐藏，D1 优先判定，null 落回 R2 head。
-        const rep = await coreGetReport(env, id);
-        const reported = rep ? true : (rep === false ? false : !!(await env.FILES.head(reportKey(id))));
-        if (reported) return json({ error: 'not found' }, 404);
+        // 举报=隐藏（Apple 1.2）：D1 有 pending 行即 404。
+        if (await coreGetReport(env, id)) return json({ error: 'not found' }, 404);
         type = 'community';
         try { key = JSON.parse(await cm.text()).articleKey || null; } catch { /* fallthrough */ }
       }
@@ -547,25 +473,14 @@ async function handleRequest(context) {
   if (request.method === 'POST' && action === 'account' && sub2 === 'delete') {
     if (!scope) return json({ error: 'admin token cannot delete an account' }, 400);
 
-    // Grab identity bindings before the scope (and its ACCOUNT.json) is wiped.
-    // 存储迁移 P3：D1 档案优先，缺行落回 R2 ACCOUNT.json（未回填的老账号）。
+    // Grab identity bindings (D1 user_profiles) before the scope is wiped —
+    // the legacy links/*.json cleanup below still needs the external ids.
     let appleSub = null, wechatUnionid = null, wechatOpenid = null;
     const prof = await coreGetProfile(env, scope);
     if (prof) {
       appleSub = prof.apple_sub || null;
       wechatUnionid = prof.wechat_unionid || null;
       wechatOpenid = prof.wechat_openid || null;
-    }
-    if (prof === null || prof === false) {
-      try {
-        const acct = await env.FILES.get(`${scope}ACCOUNT.json`);
-        if (acct) {
-          const parsed = JSON.parse(await acct.text());
-          appleSub = parsed.appleSub || null;
-          wechatUnionid = parsed.wechatUnionid || null;
-          wechatOpenid = parsed.wechatOpenid || null;
-        }
-      } catch {}
     }
 
     let communityPosts = 0;
@@ -603,23 +518,12 @@ async function handleRequest(context) {
 
     // 提示词分享码：shares/<码> 的值对提示词条目是 JSON（'{'开头），上面那段纯文本
     // startsWith(scope) 匹配永远打不中，销号后这些码会永久公开孤立、无人能关。
-    // 读 owner 索引 users/<sub>/prompt-shares.json（形状 {byItem:{itemId:{code,...}}}）
-    // 逐个删 shares/<码>，同生同死。必须在整段 users/<sub>/ 前缀被清空前做——索引本身
-    // 也在那个前缀下。读不到/坏 JSON 静默跳过：销号主路径不能被它打断。
+    // 读 D1 prompt_shares 逐个删 shares/<码>，同生同死。borrowed 条目必须跳过
+    // （溯源转发 spec 2026-07-22）：那些 code 指向【原作者的】shares/<码>，销号删它
+    // 等于毁掉别人的活跃分享。读不到静默跳过：销号主路径不能被它打断。
     let promptCodes = 0;
     {
-      // 码来源两处并集（存储迁移 P1 过渡期）：R2 索引 + D1 prompt_shares 行。
-      // borrowed 条目必须跳过（溯源转发 spec 2026-07-22）：那些 code 指向【原作者的】
-      // shares/<码>，销号删它等于毁掉别人的活跃分享。
       const codes = new Set();
-      try {
-        const obj = await env.FILES.get(`${scope}prompt-shares.json`);
-        if (obj) {
-          const idx = JSON.parse(await obj.text());
-          const byItem = idx && typeof idx.byItem === 'object' && idx.byItem ? idx.byItem : {};
-          for (const entry of Object.values(byItem)) if (entry && entry.code && !entry.borrowed) codes.add(String(entry.code));
-        }
-      } catch {}
       try {
         const d1 = await coreLoadPromptShares(env, scope);
         if (d1) for (const entry of Object.values(d1.byItem)) if (entry && entry.code && !entry.borrowed) codes.add(String(entry.code));
@@ -732,61 +636,30 @@ async function handleRequest(context) {
   // GET /recordings — 主界面「我的录音」的轻量列表（2026-07-13）。
   // 老路是 GET /list 全量翻用户所有 R2 对象（照片/文章/字幕全在内，~1500 个对象
   // 串行翻两页 + 170KB 回传 ≈ 2.5s），App 再自己筛出 .m4a 和 sidecar 存在性。
-  // 这里并发读两个小索引直接出结果：录音索引（recordings-index.json，上传/删除
-  // 时同步维护）+ 文章摘要索引（四个状态位：成文/无语音/算力不足/预置标签）。
-  // 权威仍是 R2 listing：响应后 waitUntil 里两个索引各对账一次——录音索引用根
-  // 目录 delimiter listing（试过在请求路径里直接 list，R2 内部要扫过全部 ~1500
-  // 个 key，1.0-1.6s，不达标，所以也退到后台）；老数据的标记回填同理。
+  // 现在两张 D1 表两条 SELECT 直出：recordings（上传/删除时行级维护）+ articles
+  // 摘要（四个状态位：成文/无语音/算力不足/预置标签）。权威仍是 R2 blob listing：
+  // 响应后 waitUntil 里两个对账各跑一次收敛漂移；D1 空/不可用则同步对账重建
+  // （覆盖没有 D1 行的老账号——一次 delimiter listing ~1.3s，仅此一回）。
   if (request.method === 'GET' && action === 'recordings') {
     if (!scope) return json({ error: 'user token required' }, 400);
-    // 存储迁移 P2 快路径：两张 D1 表两条 SELECT 直出（行数 >0 才算就绪；
-    // 空表可能是未回填的老用户，落回 R2 索引路径，由后台对账回填 D1）。
-    if (waitUntil) {
-      const [d1Recs, d1Arts] = await Promise.all([coreListRecordings(env, scope), coreListArticles(env, scope)]);
-      if (d1Recs && Object.keys(d1Recs).length) {
-        const flags = {};
-        for (const a of d1Arts || []) flags[a.stem] = a;
-        const recordings = Object.entries(d1Recs).map(([leaf, meta]) => {
-          const it = flags[leaf.slice(0, -4)] || {};
-          return {
-            name: leaf,
-            uploaded: meta.uploaded || '',
-            hasArticles: !!it.entry,
-            isEmpty: !!it.empty,
-            blocked: !!it.blocked,
-            hasTags: !!it.tags,
-          };
-        });
-        // 权威仍是 R2 listing：后台对账两个索引（同时拉齐 R2 索引与 D1 表）。
-        waitUntil(reconcileRecordingsIndex(env, scope).catch(() => {}));
-        waitUntil(reconcileArticlesIndex(env, scope).catch(() => {}));
-        return json({ recordings });
-      }
+    let [items, d1Arts] = await Promise.all([coreListRecordings(env, scope), coreListArticles(env, scope)]);
+    if (items && Object.keys(items).length) {
+      if (waitUntil) waitUntil(reconcileRecordingsIndex(env, scope).catch(() => {}));
+    } else {
+      items = await reconcileRecordingsIndex(env, scope);   // 空/不可用：同步重建
     }
-    const [recItems, artItems] = await Promise.all([
-      (async () => {
-        try {
-          const io = await env.FILES.get(recordingsIndexKey(scope));
-          if (io) return JSON.parse(await io.text()).items || null;
-        } catch {}
-        return null;   // null = 索引还没建过（≠ 没有录音）
-      })(),
-      (async () => {
-        try {
-          const io = await env.FILES.get(`${scope}articles-index.json`);
-          if (io) return JSON.parse(await io.text()).items || {};
-        } catch {}
-        return {};
-      })(),
-    ]);
-    let items = recItems;
-    if (items === null) {
-      items = await reconcileRecordingsIndex(env, scope);   // 首次：同步建（一次性 ~1.3s）
+    if ((!d1Arts || !d1Arts.length) && Object.keys(items).length) {
+      // 有录音但 D1 没有任何文章行：多半是没回填的老账号，同步对账一次把状态位补齐
+      //（否则整页显示「待处理」）。真没文章的账号 articles/ 前缀为空，这一步很便宜。
+      await reconcileArticlesIndex(env, scope).catch(() => {});
+      d1Arts = await coreListArticles(env, scope);
     } else if (waitUntil) {
-      waitUntil(reconcileRecordingsIndex(env, scope).catch(() => {}));
+      waitUntil(reconcileArticlesIndex(env, scope).catch(() => {}));
     }
+    const flags = {};
+    for (const a of d1Arts || []) flags[a.stem] = a;
     const recordings = Object.entries(items).map(([leaf, meta]) => {
-      const it = artItems[leaf.slice(0, -4)] || {};
+      const it = flags[leaf.slice(0, -4)] || {};
       return {
         name: leaf,
         uploaded: meta.uploaded || '',
@@ -796,7 +669,6 @@ async function handleRequest(context) {
         hasTags: !!it.tags,
       };
     });
-    if (waitUntil) waitUntil(reconcileArticlesIndex(env, scope).catch(() => {}));
     return json({ recordings });
   }
 
@@ -1186,13 +1058,8 @@ async function handleRequest(context) {
       const ex0 = cardExtras(articles, photos, p.owner);
       const ex = k === 'prompt' ? { hasPhoto: false, ...(ex0.preview ? { preview: ex0.preview } : {}) } : ex0;
       const title = articles[0]?.title ?? p.title ?? '';
-      // 存储迁移 P3：hidden 未显式给定时查举报态——D1 优先，null 落回 R2 head。
-      let hid;
-      if (hidden !== null) hid = hidden ? 1 : 0;
-      else {
-        const rep = await coreGetReport(env, p.shareId);
-        hid = rep ? 1 : (rep === false ? 0 : ((await env.FILES.head(reportKey(p.shareId))) ? 1 : 0));
-      }
+      // hidden 未显式给定时查 D1 举报态（不可用按未举报处理——展示索引由对账收敛）。
+      const hid = hidden !== null ? (hidden ? 1 : 0) : ((await coreGetReport(env, p.shareId)) ? 1 : 0);
       await env.RECO_DB.prepare(
         `INSERT INTO community_posts (share_id, owner, article_key, author, title, preview,
            cover_photo_key, has_photo, article_count, first_shared_at, updated_at, reply_to, hidden, kind)
@@ -1230,13 +1097,8 @@ async function handleRequest(context) {
   // （hidden 随 report 标记），最后把 R2 已不存在的行从索引删掉。
   async function reconcileIndex() {
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
-    // 存储迁移 P3：隐藏集 D1 优先（一条 SELECT），null 落回 R2 report 对象扫描。
-    let hidden = await corePendingReportIds(env);
-    if (hidden === null) {
-      hidden = new Set(listed.objects
-        .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
-        .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
-    }
+    // 隐藏集 = D1 pending 举报（一条 SELECT）；不可用按空集处理，下次对账收敛。
+    const hidden = (await corePendingReportIds(env)) || new Set();
     const postObjects = listed.objects.filter(o => /^community\/[^/]+\.json$/.test(o.key));
     const seen = new Set();
     let indexed = 0;
@@ -1310,13 +1172,8 @@ async function handleRequest(context) {
     }
     const listed = await env.FILES.list({ prefix: 'community/', limit: 1000 });
     // Apple 1.2: a reported post is HIDDEN immediately (pending owner review).
-    // 存储迁移 P3：隐藏集 D1 优先，null 落回 R2 report 对象扫描。
-    let hidden = await corePendingReportIds(env);
-    if (hidden === null) {
-      hidden = new Set(listed.objects
-        .filter(o => /^community\/reports\/[^/]+\.json$/.test(o.key))
-        .map(o => o.key.replace('community/reports/', '').replace(/\.json$/, '')));
-    }
+    // 隐藏集 = D1 pending 举报；不可用按空集处理（瞬时，宁可短暂多显示不 500）。
+    const hidden = (await corePendingReportIds(env)) || new Set();
     const postObjects = listed.objects
       .filter(o => /^community\/[^/]+\.json$/.test(o.key))
       .filter(o => !hidden.has(o.key.replace('community/', '').replace(/\.json$/, '')))
@@ -1393,20 +1250,12 @@ async function handleRequest(context) {
     if (!isShareId(shareId)) return json({ error: 'bad id' }, 400);
     if (!(await env.FILES.head(communityKey(shareId)))) return json({ error: 'not found' }, 404);
     let reason = ''; try { const b = await request.clone().json(); reason = (b && b.reason) || ''; } catch {}
-    const rk = reportKey(shareId);
     let rec = { shareId, status: 'pending', firstAt: Date.now(), reporters: [] };
-    // 存储迁移 P3：既有举报记录 D1 优先，缺行落 R2。
     const d1rec = await coreGetReport(env, shareId);
     if (d1rec) rec = { ...rec, ...d1rec, status: 'pending' };
-    else if (d1rec === null || d1rec === false) {
-      const ex = await env.FILES.get(rk);
-      if (ex) { try { rec = { ...rec, ...JSON.parse(await ex.text()), status: 'pending' }; } catch {} }
-    }
     if (!Array.isArray(rec.reporters)) rec.reporters = [];
     const by = scope || 'admin';
     if (!rec.reporters.some(r => r.by === by)) rec.reporters.push({ by, at: Date.now(), reason: String(reason).slice(0, 200) });
-    // 双写：R2 对象 + D1 行。
-    await env.FILES.put(rk, JSON.stringify(rec), { httpMetadata: { contentType: 'application/json' } });
     await corePutReport(env, shareId, 'pending', rec.firstAt, rec.reporters);
     await indexSetHidden(shareId, true);
     return json({ ok: true });
@@ -1415,18 +1264,9 @@ async function handleRequest(context) {
   // Admin: list pending reports with the reported post's current title/author/excerpt.
   if (request.method === 'GET' && action === 'community' && sub2 === 'reports') {
     if (scope !== '') return json({ error: 'admin only' }, 403);
-    // 存储迁移 P3：pending 举报明细 D1 优先（一条 SELECT），null 落回 R2 扫描。
-    let base = await coreListReports(env);
-    if (base === null) {
-      const listed = await env.FILES.list({ prefix: 'community/reports/', limit: 1000 });
-      base = [];
-      for (const o of listed.objects) {
-        const shareId = o.key.replace('community/reports/', '').replace(/\.json$/, '');
-        let rec = null; try { rec = JSON.parse(await (await env.FILES.get(o.key)).text()); } catch {}
-        if (!rec || rec.status !== 'pending') continue;
-        base.push({ shareId, firstAt: rec.firstAt, reporters: rec.reporters || [] });
-      }
-    }
+    // pending 举报明细：D1 一条 SELECT；不可用报 503（admin 页可重试，不给假空表）。
+    const base = await coreListReports(env);
+    if (base === null) return json({ error: 'storage unavailable, retry' }, 503);
     const out = [];
     for (const rec of base) {
       const shareId = rec.shareId;
@@ -1789,17 +1629,14 @@ async function handleRequest(context) {
     }
 
     // GET /articles — list.
-    // 快路径：摘要索引（users/<sub>/articles-index.json）直出——R2 listing 本身
-    // 就要 ~1s（几百个对象一页），是这个接口慢的大头，所以稳态不再等它。索引
+    // 快路径：D1 articles 表一条 SELECT 直出（entry 原样回吐）——R2 listing 本身
+    // 就要 ~1s（几百个对象一页），是这个接口慢的大头，所以稳态不再等它。索引行
     // 由每个写入口同步维护（article-store 的 putArticleDoc / 下面的 DELETE），
     // 新挖出的文章在 miner PUT 返回前就已入索引，App 刷新即见。R2 listing 仍是
     // 权威：响应发出后 waitUntil 里跑 reconcileArticles 全量对账，写-写并发的
     // lost update、绕过 API 的直写（agent 的 style-intro）一次打开后收敛。
-    // 索引缺失/空/损坏，或运行时没有 waitUntil（测试）→ 同步对账，行为同旧版。
+    // D1 空/不可用，或运行时没有 waitUntil（测试）→ 同步对账，行为同旧版。
     if (request.method === 'GET' && !stem) {
-      const indexKey = `${articleScope}articles-index.json`;
-      // 存储迁移 P2 快路径：D1 一条 SELECT 直出（entry 原样回吐，与 R2 索引
-      // 逐字节一致）。空表 = 未回填的老用户 → 落回 R2 索引路径。
       if (waitUntil) {
         const d1rows = await coreListArticles(env, articleScope);
         if (d1rows && d1rows.length) {
@@ -1814,20 +1651,6 @@ async function handleRequest(context) {
             return json({ articles: cached });
           }
         }
-      }
-      if (waitUntil) {
-        try {
-          const io = await env.FILES.get(indexKey);
-          if (io) {
-            const items = JSON.parse(await io.text()).items || {};
-            const cached = Object.values(items).map((i) => i && i.entry).filter(Boolean);
-            if (cached.length) {
-              cached.sort(byNewestFirst);
-              waitUntil(reconcileArticlesIndex(env, articleScope).catch(() => {}));
-              return json({ articles: cached });
-            }
-          }
-        } catch { /* 索引坏 → 下面同步对账重建 */ }
       }
       return json({ articles: await reconcileArticlesIndex(env, articleScope) });
     }

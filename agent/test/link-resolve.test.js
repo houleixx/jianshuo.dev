@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { onRequest } from "../../functions/files/api/[[path]].js";
 import { fakeEnv } from "./fakes.js";
+import { corePutReport } from "../../functions/lib/core-db.js";
 
 function ctx(id, seed = {}) {
   const env = { ...fakeEnv(seed), FILES_TOKEN: "admin", SESSION_SECRET: "secret" };
@@ -71,14 +72,15 @@ describe("GET link/<id> — universal-link resolver", () => {
   });
 
   it("a reported community post 404s (same takedown as the public page)", async () => {
-    const res = await onRequest(ctx("Cm12shareId00", {
+    const c = ctx("Cm12shareId00", {
       "community/Cm12shareId00.json": JSON.stringify({
         schema: 2, shareId: "Cm12shareId00", owner: "users/u9/",
         articleKey: "users/u9/articles/VoiceDrop-c.json", author: "阿珍", firstSharedAt: 1,
       }),
       "users/u9/articles/VoiceDrop-c.json": schema3({ title: "社区帖", body: "帖子正文" }),
-      "community/reports/Cm12shareId00.json": JSON.stringify({ status: "pending" }),
-    }));
+    });
+    await corePutReport(c.env, "Cm12shareId00", "pending", 1, []);
+    const res = await onRequest(c);
     expect(res.status).toBe(404);
   });
 

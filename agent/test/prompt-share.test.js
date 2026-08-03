@@ -7,6 +7,7 @@ import { vi, describe, it, expect } from "vitest";
 // Same pattern as paint-callback-route.test.js / mine-sharding.test.js.
 vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
 import { fakeEnv } from "./fakes.js";
+import { coreLoadPromptShares, coreUpsertPromptShare, coreMintedToday } from "../../functions/lib/core-db.js";
 import { hmacSign, b64url, anonScopeFromToken } from "../../functions/lib/auth.js";
 import {
   PROMPT_SHARE_DEFAULTS, loadPromptShareConfig, mintCode,
@@ -155,9 +156,9 @@ describe("POST /agent/prompt-share", () => {
     expect(doc.itemId).toBe(SYS_ITEM);
     expect(doc.label).toBe("更简洁");                       // 模板 label，用户还没 fork
     expect(doc.instruction).toContain("{{LINE}}");           // 模板内置默认指令
-    const idx = JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`));
+    const idx = await coreLoadPromptShares(e, OWNER);
     expect(idx.byItem[SYS_ITEM].code).toBe(code);
-    expect(idx.mintLog).toHaveLength(1);
+    expect(await coreMintedToday(e, OWNER, new Date().toISOString().slice(0, 10))).toBe(1);
   });
   it("200 mints a forked item's own text + custom label (不是模板原文)", async () => {
     const e = makeEnv();
@@ -174,7 +175,7 @@ describe("POST /agent/prompt-share", () => {
     const again = await (await post(e, { id: SYS_ITEM })).json();
     expect(again.code).toBe(first.code);
     expect(again.created).toBe(false);
-    expect(JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`)).mintLog).toHaveLength(1);
+    expect(await coreMintedToday(e, OWNER, new Date().toISOString().slice(0, 10))).toBe(1);
   });
   it("DELETE then POST revives the SAME code", async () => {
     const e = makeEnv();
@@ -206,23 +207,21 @@ describe("DELETE /agent/prompt-share/<itemId>", () => {
     expect(r.status).toBe(200);
     expect((await r.json()).sharing).toBe(false);
     expect(e.FILES._store.has(`shares/${code}`)).toBe(false);
-    expect(JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`)).byItem[SYS_ITEM].code).toBe(code);
+    expect((await coreLoadPromptShares(e, OWNER)).byItem[SYS_ITEM].code).toBe(code);
   });
   it("is idempotent for a never-shared item", async () => {
     const r = await del(makeEnv(), SYS_ITEM);
     expect(r.status).toBe(200);
   });
   it("老 dotted id 铸的码依旧能正常开关（DELETE 只碰索引 + R2 head，不经过 effectiveLeaf）", async () => {
-    const e = makeEnv({
-      [`${OWNER}prompt-shares.json`]: JSON.stringify({ byItem: { [ITEM]: { code: "4563567", createdAt: "2026-07-01T00:00:00Z" } }, mintLog: [] }),
-      "shares/4563567": sharedDoc(),
-    });
+    const e = makeEnv({ "shares/4563567": sharedDoc() });
+    await coreUpsertPromptShare(e, OWNER, ITEM, "4563567", "2026-07-01T00:00:00Z");
     const r = await del(e, ITEM);
     expect(r.status).toBe(200);
     expect((await r.json()).sharing).toBe(false);
     expect(e.FILES._store.has("shares/4563567")).toBe(false);
     // 索引原样保留（关闭不清索引，同码可再开）。
-    expect(JSON.parse(e.FILES._store.get(`${OWNER}prompt-shares.json`)).byItem[ITEM].code).toBe("4563567");
+    expect((await coreLoadPromptShares(e, OWNER)).byItem[ITEM].code).toBe("4563567");
   });
 });
 
@@ -335,21 +334,25 @@ describe("sanitizeMagicCode（use_shared_prompt 工具的码校验——长度�
 
 describe("magicForItem（item_id 精确解析魔法数字）", () => {
   const OWN_SCOPE = "users/me/";
-  const seeded = (extra = {}) => makeEnv({
-    [`${OWN_SCOPE}prompt-shares.json`]: JSON.stringify({ byItem: { it1: { code: "7766443" }, it2: { code: "5550001" } }, mintLog: [] }),
-    "shares/7766443": sharedDoc({ label: "波普漫画风插图", instruction: "将图片改编为波普漫画风插画海报。" }),
-    // it2 的码没有 shares/ 条目 = 开关已关
-    ...extra,
-  });
+  const seeded = async (extra = {}) => {
+    const e = makeEnv({
+      "shares/7766443": sharedDoc({ label: "波普漫画风插图", instruction: "将图片改编为波普漫画风插画海报。" }),
+      // it2 的码没有 shares/ 条目 = 开关已关
+      ...extra,
+    });
+    await coreUpsertPromptShare(e, OWN_SCOPE, "it1", "7766443", "t");
+    await coreUpsertPromptShare(e, OWN_SCOPE, "it2", "5550001", "t");
+    return e;
+  };
 
   it("自己的活跃分享 → 直接回 byItem 里的码", async () => {
-    expect(await magicForItem(seeded(), OWN_SCOPE, "it1")).toBe("7766443");
+    expect(await magicForItem(await seeded(), OWN_SCOPE, "it1")).toBe("7766443");
   });
   it("开关已关（索引在、shares/ 条目没了）→ null", async () => {
-    expect(await magicForItem(seeded(), OWN_SCOPE, "it2")).toBe(null);
+    expect(await magicForItem(await seeded(), OWN_SCOPE, "it2")).toBe(null);
   });
   it("导入件走 importedFrom（码属原作者），码活着才认", async () => {
-    const e = seeded({
+    const e = await seeded({
       [`${OWN_SCOPE}prompts.json`]: JSON.stringify({ items: [
         { id: "grp", type: "group", children: [{ id: "imp1", type: "action", label: "波普", prompt: "…", importedFrom: "4563566" }] },
         { id: "imp2", type: "action", label: "死码", prompt: "…", importedFrom: "9999999" },
@@ -360,8 +363,8 @@ describe("magicForItem（item_id 精确解析魔法数字）", () => {
     expect(await magicForItem(e, OWN_SCOPE, "imp2")).toBe(null); // 原作者已关
   });
   it("未知 item / 空 id → null", async () => {
-    expect(await magicForItem(seeded(), OWN_SCOPE, "nope")).toBe(null);
-    expect(await magicForItem(seeded(), OWN_SCOPE, "")).toBe(null);
+    expect(await magicForItem(await seeded(), OWN_SCOPE, "nope")).toBe(null);
+    expect(await magicForItem(await seeded(), OWN_SCOPE, "")).toBe(null);
   });
 });
 
@@ -406,10 +409,8 @@ describe("write-through on save (refreshPromptShare)", () => {
 describe("shareStates — itemId → {shareCode, sharing} 反映铸码/开关", () => {
   it("shareCode + sharing 随铸码/关闭变化；未铸码的条目不出现在结果里", async () => {
     const code = "4563567";
-    const e = makeEnv({
-      [`${OWNER}prompt-shares.json`]: JSON.stringify({ byItem: { [ITEM]: { code, createdAt: "2026-07-01T00:00:00Z" } }, mintLog: [] }),
-      [`shares/${code}`]: sharedDoc(),
-    });
+    const e = makeEnv({ [`shares/${code}`]: sharedDoc() });
+    await coreUpsertPromptShare(e, OWNER, ITEM, code, "2026-07-01T00:00:00Z");
     let states = await shareStates(e, OWNER);
     expect(states[ITEM]).toEqual({ shareCode: code, sharing: true });
     expect(states[SYS_ITEM]).toBeUndefined(); // 从没铸过码的条目不出现
@@ -688,7 +689,9 @@ describe("分享即发帖（2026-07-15 提示词社区帖）", () => {
   it("绑过实名的匿名 token（ACCOUNT.json 有 appleSub）→ 铸码/关分享都放行", async () => {
     const anonTok = "anon_bound_1234567890abcdef";
     const scope = await anonScopeFromToken(anonTok);
-    const e = makeEnv({ [`${scope}ACCOUNT.json`]: JSON.stringify({ appleSub: "apple-sub-1" }) });
+    const e = makeEnv();
+    const { coreUpsertProfile } = await import("../../functions/lib/core-db.js");
+    await coreUpsertProfile(e, scope, { apple_sub: "apple-sub-1" });
     const mint = new Request("https://jianshuo.dev/agent/prompt-share", {
       method: "POST", headers: { Authorization: `Bearer ${anonTok}` },
       body: JSON.stringify({ id: SYS_ITEM }),
@@ -711,7 +714,9 @@ describe("分享即发帖（2026-07-15 提示词社区帖）", () => {
   it("绑过微信的匿名 token（wechatOpenid）同样放行铸码", async () => {
     const anonTok = "anon_wxbound_1234567890abcd";
     const scope = await anonScopeFromToken(anonTok);
-    const e = makeEnv({ [`${scope}ACCOUNT.json`]: JSON.stringify({ wechatOpenid: "wx-openid-1" }) });
+    const e = makeEnv();
+    const { coreUpsertProfile } = await import("../../functions/lib/core-db.js");
+    await coreUpsertProfile(e, scope, { wechat_openid: "wx-openid-1" });
     const req = new Request("https://jianshuo.dev/agent/prompt-share", {
       method: "POST", headers: { Authorization: `Bearer ${anonTok}` },
       body: JSON.stringify({ id: SYS_ITEM }),

@@ -2,7 +2,7 @@
 //
 // URL:  https://voicedrop.cn/i/<码>  （经备案接入点反代 = /voicedrop/i/<码>，
 //        jianshuo.dev/voicedrop/i/<码> 直连同样命中）
-// 码由 GET /agent/referral/link 写穿到 R2 invites/<码> → {owner, name, ts}。
+// 码由 GET /agent/referral/link 写穿到 D1 invites → {owner, name, ts}。
 // 本页只做三件事：展示品牌下载页（「X 邀请你」）、写 IP 指纹（归因第 2 层）、
 // 下载点击把本页 URL 写进剪贴板（归因第 3 层）。已装用户在 Safari 点链接根本
 // 到不了这里——universal link 直接拉起 App（归因第 1 层）。
@@ -23,13 +23,8 @@ export async function onRequest(context) {
   if (!/^[A-Za-z0-9]{6,16}$/.test(raw)) return context.next();
   const code = raw.toUpperCase();
 
-  // 邀请码：D1 优先（存储迁移 P1），查无/不可用落回 R2。
-  let inv = await coreGetInvite(env, code);
-  if (inv === null || inv === false) {
-    const obj = await env.FILES.get(`invites/${code}`);
-    if (!obj) return notFound();
-    try { inv = JSON.parse(await obj.text()); } catch { return notFound(); }
-  }
+  // 邀请码：D1 invites 唯一真源。
+  const inv = await coreGetInvite(env, code);
   if (!inv || !/^users\/[^/]+\/$/.test(inv.owner || "")) return notFound();
   const name = String(inv.name || "").trim();
 

@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import { onRequest, promptShareHtml } from "../../functions/voicedrop/[token].js";
 import { fakeEnv } from "./fakes.js";
+import { corePutReport } from "../../functions/lib/core-db.js";
 
 function ctx(token, env) {
   return { params: { token }, env, request: { url: `https://jianshuo.dev/voicedrop/${token}` }, next: () => new Response("static", { status: 404 }) };
@@ -90,9 +91,9 @@ describe("GET /voicedrop/<code> (prompt share)", () => {
         schema: 2, shareId: "6PSHBnpL8F3s", owner: "users/anon-owner111/",
         kind: "prompt", promptCode: "4563566",
       }),
-      "community/reports/6PSHBnpL8F3s.json": JSON.stringify({ reported: true }),
       "shares/4563566": PROMPT_DOC,
     });
+    await corePutReport(env, "6PSHBnpL8F3s", "pending", 1, []);
     const res = await onRequest(ctx("6PSHBnpL8F3s", env));
     expect(res.status).toBe(404);
     expect(await res.text()).toContain("已不可用");

@@ -10,6 +10,7 @@
 import { describe, it, expect } from "vitest";
 import { onRequest, metaTags } from "../../functions/voicedrop/[token].js";
 import { fakeEnv } from "./fakes.js";
+import { corePutReport } from "../../functions/lib/core-db.js";
 
 const TWO_SECTIONS = {
   schema: 3,
@@ -135,9 +136,8 @@ describe("onRequest — VD社区 post via community/<shareId> (same page, same c
   });
 
   it("a reported (taken-down) community post is NOT publicly viewable (Apple 1.2)", async () => {
-    const env = seededCommunity({
-      "community/reports/Cm12shareId00.json": JSON.stringify({ shareId: "Cm12shareId00", status: "pending" }),
-    });
+    const env = seededCommunity();
+    await corePutReport(env, "Cm12shareId00", "pending", 1, []);
     const res = await onRequest(ctx("Cm12shareId00", env, ""));
     expect(res.status).toBe(404);
     expect(await res.text()).toContain("已不可用");

@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // A Map-backed R2 bucket mock — only the methods our tools use.
+// 自带一个内存 SQLite 的 CORE（voicedrop-core D1）——生产里状态数据的唯一真源，
+// 几乎所有被测路径都要它。测试可用自己的 CORE 覆盖（spread 在 fakeEnv 之后即可）。
 export function fakeEnv(seed = {}) {
   const store = new Map(Object.entries(seed)); // key -> string value
   const FILES = {
@@ -36,7 +38,7 @@ export function fakeEnv(seed = {}) {
     },
     _store: store,
   };
-  return { FILES };
+  return { FILES, CORE: fakeD1(coreSql()) };
 }
 
 // 内存版社区展示索引 D1（RECO_DB binding）。只实现 files API 双写用到的语句，
@@ -143,7 +145,10 @@ export function usageSql() {
 
 // voicedrop-core 库全部迁移（P1: refhits/invites/share_stats/prompt_shares；
 // P2: articles/recordings；P3: identities/user_profiles/push_tokens/community_reports）。
+let _coreSqlCache = null;
 export function coreSql() {
+  if (_coreSqlCache) return _coreSqlCache;
   const f = (name) => readFileSync(fileURLToPath(new URL("../migrations-core/" + name, import.meta.url)), "utf8");
-  return f("0001_core.sql") + "\n" + f("0002_articles_recordings.sql") + "\n" + f("0003_identity_push_reports.sql") + "\n" + f("0004_prompt_shares_borrowed.sql");
+  _coreSqlCache = f("0001_core.sql") + "\n" + f("0002_articles_recordings.sql") + "\n" + f("0003_identity_push_reports.sql") + "\n" + f("0004_prompt_shares_borrowed.sql");
+  return _coreSqlCache;
 }
