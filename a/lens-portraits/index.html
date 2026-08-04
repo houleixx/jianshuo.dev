@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>镜头语言实验 · 焦距与光圈如何塑造人像</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9}
+body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 24px 80px}
+header .crumb{font-size:.85rem;font-weight:700;margin-bottom:18px}
+header .crumb a{color:var(--soft);text-decoration:none}
+header .crumb a:hover{color:var(--ink)}
+h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:2rem;letter-spacing:-.01em}
+.sub{color:#82735f;font-weight:600;margin-top:10px;line-height:1.7;max-width:760px}
+.note{background:var(--card);border-radius:18px;padding:16px 20px;margin-top:22px;font-size:.88rem;color:#82735f;font-weight:600;line-height:1.7;border:1.5px solid rgba(255,255,255,.8);box-shadow:0 8px 24px rgba(74,63,53,.06);max-width:760px}
+.note b{color:var(--ink)}
+.grid{columns:2;column-gap:22px;margin-top:36px;max-width:960px}
+@media(max-width:640px){.grid{columns:1}}
+.card{background:var(--card);border-radius:22px;overflow:hidden;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8);transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s;cursor:zoom-in;margin-bottom:22px;break-inside:avoid}
+.card:hover{transform:translateY(-6px) rotate(-.4deg);box-shadow:0 22px 44px rgba(74,63,53,.14)}
+.card img{display:block;width:100%;height:auto;background:#eee}
+.card .meta{padding:16px 18px 18px}
+.badge{display:inline-flex;gap:6px;align-items:center;font-size:.78rem;font-weight:800;padding:4px 12px;border-radius:99px;background:var(--tint,#eee);color:var(--dark,#555);margin-bottom:8px}
+.card h3{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.02rem}
+.card p{font-size:.84rem;color:#82735f;font-weight:600;line-height:1.6;margin-top:6px}
+.compare{margin-top:52px;background:var(--card);border-radius:22px;padding:26px 28px;border:1.5px solid rgba(255,255,255,.8);box-shadow:0 10px 30px rgba(74,63,53,.07);max-width:760px}
+.compare h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.25rem;margin-bottom:12px}
+.compare ul{list-style:none}
+.compare li{font-size:.9rem;color:#82735f;font-weight:600;line-height:1.8;padding-left:22px;position:relative}
+.compare li::before{content:"📷";position:absolute;left:0;font-size:.8rem}
+.compare li b{color:var(--ink)}
+footer{margin-top:60px;font-size:.82rem;color:var(--soft);font-weight:600;line-height:1.8}
+footer a{color:inherit}
+.lb{position:fixed;inset:0;background:rgba(35,28,22,.92);display:none;align-items:center;justify-content:center;z-index:50;flex-direction:column;padding:24px}
+.lb.on{display:flex}
+.lb img{max-width:min(92vw,1000px);max-height:80vh;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.lb .lbcap{color:#f3e9dc;font-weight:700;margin-top:16px;font-size:1rem;text-align:center}
+.lb .lbcap span{display:block;font-size:.82rem;font-weight:600;color:#c9b9a5;margin-top:4px;max-width:600px}
+.lb .x{position:absolute;top:20px;right:28px;color:#f3e9dc;font-size:2rem;cursor:pointer;font-family:'Quicksand'}
+.lb .nav{position:absolute;top:50%;transform:translateY(-50%);color:#f3e9dc;font-size:2.4rem;cursor:pointer;padding:20px;user-select:none}
+.lb .prev{left:8px}.lb .next{right:8px}
+@media(max-width:560px){.lb .nav{font-size:1.8rem;padding:10px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="crumb"><a href="/a/">← a / 王建硕的小工具们</a></div>
+  <h1>📷 镜头语言实验：焦距与光圈如何塑造人像</h1>
+  <p class="sub">让 gpt-image-2 画 6 张亚洲清纯系年轻女生人像，每张指定一组不同的「焦距 + 光圈」，比较 AI 对摄影光学语言的理解：长焦的压缩感、大光圈的浅景深、广角的空间叙事。点图放大。</p>
+  <div class="note"><b>注意：</b>AI 生图没有真实镜头，这里的 200mm、f/1.4 都是靠文字描述让模型「演」出对应的透视压缩和景深——比较的其实是它对摄影语言的掌握程度。每张的人物、场景都不同，看的是镜头感，不是同场景严格对照。</div>
+</header>
+
+<div class="grid" id="g"></div>
+
+<div class="compare">
+  <h2>怎么看这组对比</h2>
+  <ul>
+    <li><b>焦距管透视：</b>200mm 把背景「拉近压扁」，人从环境里剥离；50mm 接近人眼；24mm 把空间撑开，人变成风景的一部分。</li>
+    <li><b>光圈管景深：</b>f/1.4 只有眼睛是实的，f/8 从睫毛到远景全清晰。对照 50mm 的两张：同一焦距，光圈一收，故事从「人」变成「人和地方」。</li>
+    <li><b>组合出叙事：</b>长焦大光圈 = 梦幻特写；广角小光圈 = 环境叙事。中间的 35mm f/2 是纪实人像的舒适区。</li>
+  </ul>
+</div>
+
+<footer>图像由 gpt-image-2（Codex 订阅）生成 · 人物均为 AI 虚构 · <a href="/a/">更多小工具 →</a></footer>
+</div>
+
+<div class="lb" id="lb">
+  <div class="x" onclick="closeLb()">×</div>
+  <div class="nav prev" onclick="step(-1)">‹</div>
+  <div class="nav next" onclick="step(1)">›</div>
+  <img id="lbimg" src="" alt="">
+  <div class="lbcap" id="lbcap"></div>
+</div>
+
+<script>
+const SHOTS = [
+ ["tele-200-f28","200mm · f/2.8","长焦压缩","#fde6d2","#c2510a","背景被『拉近』并彻底融成奶油虚化，人物像从画里剥出来。远摄特写的梦幻感。"],
+ ["portrait-85-f14","85mm · f/1.4","极浅景深","#fbe3d8","#D8593B","经典人像头。只有眼睛是实的，耳朵和发丝已经虚了，背后灯光化成大光斑。"],
+ ["normal-50-f18","50mm · f/1.8","标准视角","#e2ecdb","#0b6e4f","最接近人眼的透视，背景适度虚化——『看见的就是这样』的自然感。"],
+ ["normal-50-f8","50mm · f/8","全景深对照","#dcece9","#0E6E66","和上一张同焦距、只收小光圈：从脸到远处建筑全部清晰，故事里多了『地方』。"],
+ ["env-35-f2","35mm · f/2","环境人像","#dde9fd","#2A78D6","人是实的，弄堂是柔的但读得出来。纪实人像最常用的舒适区。"],
+ ["wide-24-f8","24mm · f/8","广角叙事","#dbeafe","#2563EB","透视被撑开，天空和滩涂全在焦内，人小景大——人物成为风景的一部分。"]
+];
+const g = document.getElementById('g');
+SHOTS.forEach(([slug, lens, tag, tint, dark, desc]) => {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<img src="img/${slug}.jpg" loading="lazy" alt="${lens}">
+    <div class="meta"><span class="badge" style="--tint:${tint};--dark:${dark}">${lens}</span>
+    <h3>${tag}</h3><p>${desc}</p></div>`;
+  card.onclick = () => openLb(slug);
+  g.appendChild(card);
+});
+let cur = 0;
+function openLb(slug){ cur = SHOTS.findIndex(s => s[0] === slug); render(); document.getElementById('lb').classList.add('on'); }
+function render(){
+  const [slug, lens, tag, , , desc] = SHOTS[cur];
+  document.getElementById('lbimg').src = `img/${slug}.jpg`;
+  document.getElementById('lbcap').innerHTML = `${lens} · ${tag}<span>${desc}</span>`;
+}
+function step(d){ cur = (cur + d + SHOTS.length) % SHOTS.length; render(); }
+function closeLb(){ document.getElementById('lb').classList.remove('on'); }
+document.getElementById('lb').onclick = e => { if (e.target.id === 'lb') closeLb(); };
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('lb').classList.contains('on')) return;
+  if (e.key === 'Escape') closeLb();
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+</script>
+</body>
+</html>
