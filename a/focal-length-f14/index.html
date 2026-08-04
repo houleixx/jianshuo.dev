@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>焦距单变量实验 · 同一人物从 16mm 拍到 200mm</title>
+<title>焦距单变量实验 f/1.4 横屏版 · 16mm → 200mm</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#2A78D6}
+:root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9;--accent:#D8593B}
 body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
 .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 80px}
 header .crumb{font-size:.85rem;font-weight:700;margin-bottom:18px}
@@ -17,27 +17,27 @@ header .crumb a{color:var(--soft);text-decoration:none}
 header .crumb a:hover{color:var(--ink)}
 h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:2rem;letter-spacing:-.01em}
 .sub{color:#82735f;font-weight:600;margin-top:10px;line-height:1.7;max-width:760px}
+.sub a{color:var(--accent)}
 .note{background:var(--card);border-radius:18px;padding:16px 20px;margin-top:22px;font-size:.88rem;color:#82735f;font-weight:600;line-height:1.7;border:1.5px solid rgba(255,255,255,.8);box-shadow:0 8px 24px rgba(74,63,53,.06);max-width:760px}
 .note b{color:var(--ink)}
-/* interactive viewer */
-.viewer{margin-top:36px;display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
-.stage{flex:0 1 460px;min-width:300px;background:var(--card);border-radius:24px;overflow:hidden;box-shadow:0 14px 40px rgba(74,63,53,.12);border:1.5px solid rgba(255,255,255,.8)}
+/* interactive viewer — landscape stage on top, panel below */
+.viewer{margin-top:36px}
+.stage{max-width:860px;background:var(--card);border-radius:24px;overflow:hidden;box-shadow:0 14px 40px rgba(74,63,53,.12);border:1.5px solid rgba(255,255,255,.8)}
 .stage img{display:block;width:100%;height:auto;background:#eee}
-.panel{flex:1;min-width:280px;padding-top:6px}
+.panel{margin-top:20px;max-width:860px}
 .pills{display:flex;flex-wrap:wrap;gap:10px}
 .pill{font-family:'Quicksand',sans-serif;font-weight:700;font-size:.95rem;padding:10px 18px;border-radius:99px;background:var(--card);color:#82735f;cursor:pointer;border:1.5px solid rgba(255,255,255,.8);box-shadow:0 6px 16px rgba(74,63,53,.06);transition:all .2s;user-select:none}
 .pill:hover{transform:translateY(-2px)}
-.pill.on{background:var(--accent);color:#fff;box-shadow:0 8px 20px rgba(42,120,214,.35)}
-.panel h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.5rem;margin-top:22px}
-.panel .fx{font-size:.92rem;color:#82735f;font-weight:600;line-height:1.8;margin-top:10px;max-width:480px}
-.panel .fx b{color:var(--ink)}
-.hint{font-size:.8rem;color:var(--soft);font-weight:700;margin-top:18px}
+.pill.on{background:var(--accent);color:#fff;box-shadow:0 8px 20px rgba(216,89,59,.35)}
+.panel h2{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.4rem;margin-top:18px}
+.panel .fx{font-size:.92rem;color:#82735f;font-weight:600;line-height:1.8;margin-top:8px;max-width:760px}
+.hint{font-size:.8rem;color:var(--soft);font-weight:700;margin-top:14px}
 kbd{background:var(--card);border-radius:6px;padding:2px 8px;border:1px solid #e5d9c9;font-family:inherit}
 /* strip grid */
 .sec{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.25rem;margin:52px 0 18px}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
-@media(max-width:960px){.grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.grid{grid-template-columns:1fr}}
 .card{background:var(--card);border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8);transition:transform .25s,box-shadow .25s;cursor:pointer}
 .card:hover{transform:translateY(-4px);box-shadow:0 16px 36px rgba(74,63,53,.13)}
 .card img{display:block;width:100%;height:auto;background:#eee}
@@ -58,9 +58,9 @@ footer a{color:inherit}
 <div class="wrap">
 <header>
   <div class="crumb"><a href="/a/">← a / 王建硕的小工具们</a></div>
-  <h1>📐 焦距单变量实验：同一人物，16mm → 200mm</h1>
-  <p class="sub">上一组实验（<a href="/a/lens-portraits/" style="color:var(--accent)">镜头语言实验</a>）人物和场景都在变。这一组做严格控制变量：人物提示词逐字相同、光圈锁定 f/8、取景框大小不变，唯一的变量是焦距——按摄影教学的经典做法，焦距越长、相机退得越远。点下面的焦距切换，看背景怎么被「推远」又「拉回来」。</p>
-  <div class="note"><b>看什么：</b>16mm 时相机贴得很近——五官被透视夸张、背景缩小跑远；200mm 时相机退到很远——脸被「压平」变得柔和，红砖楼像贴在人背后一样被拉大。这就是「焦距管透视」的全部含义。（AI 生成，模拟光学；每张人物由同一段逐字相同的提示词描述，但 AI 无法保证真正同一张脸。）</div>
+  <h1>🌸 焦距单变量实验 f/1.4 横屏版：16mm → 200mm</h1>
+  <p class="sub">上一组（<a href="/a/focal-length-f8/">f/8 竖屏版</a>）把光圈收到 f/8，背景全程清晰，看的是纯透视。这一组把光圈全开到 f/1.4、改成横屏，其他完全不变：人物提示词逐字相同、取景框大小不变、焦距 16→200mm 七档。这次看的是<b style="color:var(--ink)">同一档光圈下，焦距越长、虚化越猛</b>——背景从「略软」一路走到「彻底融化成色墙」。</p>
+  <div class="note"><b>看什么：</b>光圈值都是 f/1.4，但 16mm 的背景只是微微发软，200mm 的背景已经完全液化——因为实际虚化量 ≈ 焦距²/光圈值。透视压缩照旧：楼从远处小点被一路「拉」到糊满背景。（AI 生成，模拟光学；人物由逐字相同的提示词描述，但 AI 无法保证真正同一张脸。）</div>
 </header>
 
 <div class="viewer">
@@ -69,7 +69,7 @@ footer a{color:inherit}
     <div class="pills" id="pills"></div>
     <h2 id="vtitle"></h2>
     <p class="fx" id="vfx"></p>
-    <p class="hint">💡 用 <kbd>←</kbd> <kbd>→</kbd> 键快速切换，最能看出透视变化</p>
+    <p class="hint">💡 用 <kbd>←</kbd> <kbd>→</kbd> 键快速切换，虚化的膨胀过程最直观</p>
   </div>
 </div>
 
@@ -79,26 +79,27 @@ footer a{color:inherit}
 <div class="compare">
   <h2>这组对比说明了什么</h2>
   <ul>
-    <li><b>焦距本身不改变人：</b>改变的是你为了保持构图必须站的距离，距离才是透视的真正来源。</li>
-    <li><b>16-24mm：</b>近距离让鼻子放大、脸颊外扩，背景被推远缩小——适合环境叙事，不适合大头照。</li>
-    <li><b>50mm：</b>接近人眼的诚实比例，纪实的默认选择。</li>
-    <li><b>85-200mm：</b>面部被压平、显瘦显柔和，背景被拉近放大——这就是人像摄影师偏爱长焦的原因。</li>
-    <li><b>f/8 锁定景深：</b>七张背景都清晰，虚化不再干扰判断，看到的差异全部来自透视。</li>
+    <li><b>同是 f/1.4，虚化天差地别：</b>虚化量大致随焦距的平方增长——16mm f/1.4 背景只是发软，200mm f/1.4 背景直接成了奶油色墙。</li>
+    <li><b>广角 + 大光圈：</b>环境仍然可读，适合「人在场景里」的星空、室内题材。</li>
+    <li><b>50mm f/1.4：</b>经典「人文之眼」，背景虚而有形，光斑开始成型。</li>
+    <li><b>85-135mm f/1.4：</b>人像黄金段——压缩 + 浓虚化 + 大光斑，主体剥离感最强。</li>
+    <li><b>200mm f/1.4：</b>现实里几乎不存在的镜头（贵重到离谱），AI 里免费体验极致压缩加极致虚化。</li>
+    <li><b>对照 f/8 版：</b>两组唯一的差别是光圈——把两个页面开在两个窗口对照看，光圈的作用一目了然。</li>
   </ul>
 </div>
 
-<footer>图像由 gpt-image-2（Codex 订阅）生成 · 人物均为 AI 虚构 · <a href="/a/focal-length-f14/">对照组：f/1.4 横屏版 →</a> · <a href="/a/lens-portraits/">上一组：焦距与光圈 →</a> · <a href="/a/">更多小工具 →</a></footer>
+<footer>图像由 gpt-image-2（Codex 订阅）生成 · 人物均为 AI 虚构 · <a href="/a/focal-length-f8/">对照组：f/8 竖屏版 →</a> · <a href="/a/lens-portraits/">第一组：焦距与光圈 →</a> · <a href="/a/">更多小工具 →</a></footer>
 </div>
 
 <script>
 const SHOTS = [
- ["f16","16mm","超广角 · 贴脸拍","五官被拉伸夸张、鼻子显大，背景树和楼缩小跑远，天空占满画面。"],
- ["f24","24mm","广角 · 很近","仍有明显透视夸张，空间感开阔，红砖楼显得小而远。"],
- ["f35","35mm","小广角 · 略近","轻微广角味，环境交代充分，人和空间关系舒服。"],
- ["f50","50mm","标准 · 自然距离","人眼透视，比例诚实，人和背景平衡——纪实基准线。"],
- ["f85","85mm","人像头 · 退后","脸部开始被压平、更上相，背景明显变大凑近。"],
- ["f135","135mm","长焦 · 很远","压缩感清晰可见，红砖楼在背后隐隐逼近，空间被压扁。"],
- ["f200","200mm","超长焦 · 极远","极致压缩：楼几乎糊在人背后，脸完全压平柔和，空间像叠在一起。"]
+ ["f16","16mm","超广角 · 贴脸拍","五官透视夸张，天空树木尽收；f/1.4 也压不住广角的深景深——背景只是微微发软。"],
+ ["f24","24mm","广角 · 很近","空间开阔，背景轻虚，环境依然读得清——广角大光圈的典型样子。"],
+ ["f35","35mm","小广角 · 略近","背景明显虚了但形状还在，人和空间的关系仍然完整。"],
+ ["f50","50mm","标准 · 自然距离","人文经典段：背景虚而有形，圆形光斑开始出现。"],
+ ["f85","85mm","人像头 · 退后","人像黄金焦段：脸被压平变柔和，背景融成奶油、光斑变大。"],
+ ["f135","135mm","长焦 · 很远","压缩 + 浓虚化：红砖楼贴近却完全化开，主体剥离感极强。"],
+ ["f200","200mm","超长焦 · 极远","极致：背景彻底液化成一面色墙，现实中 200mm f/1.4 几乎不存在——AI 免费体验。"]
 ];
 let cur = 3;
 const pills = document.getElementById('pills');
@@ -113,7 +114,7 @@ SHOTS.forEach(([slug, mm, tag, desc], i) => {
   const c = document.createElement('div');
   c.className = 'card';
   c.innerHTML = `<img src="img/${slug}.jpg" loading="lazy" alt="${mm}">
-    <div class="meta"><h3>${mm} · f/8</h3><p>${tag}</p></div>`;
+    <div class="meta"><h3>${mm} · f/1.4</h3><p>${tag}</p></div>`;
   c.onclick = () => { show(i); window.scrollTo({top:0,behavior:'smooth'}); };
   g.appendChild(c);
 });
@@ -121,7 +122,7 @@ function show(i){
   cur = i;
   const [slug, mm, tag, desc] = SHOTS[i];
   document.getElementById('stageimg').src = `img/${slug}.jpg`;
-  document.getElementById('vtitle').textContent = `${mm} · f/8 — ${tag}`;
+  document.getElementById('vtitle').textContent = `${mm} · f/1.4 — ${tag}`;
   document.getElementById('vfx').textContent = desc;
   SHOTS.forEach((_, j) => document.getElementById('pill-' + j).classList.toggle('on', j === i));
 }
