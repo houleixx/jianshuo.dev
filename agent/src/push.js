@@ -1,6 +1,6 @@
 // src/push.js — APNs 推送（HTTP/2 API 直连，ES256 JWT 用 WebCrypto 签）。
 // 用途：①「文章挖好了」通知用户 ②运维报警（4xx/5xx 风暴）推给管理员。
-// 设备 token 由 iOS 端存到 R2 `users/<sub>/push-token.json`（{token, env, updatedAt}）。
+// 设备 token：iOS 端上传 push-token.json，upload 路由落 D1 push_tokens，这里读 D1。
 // secrets：APNS_KEY_P8（.p8 全文）/ APNS_KEY_ID / APNS_TEAM_ID；缺任一则静默降级为 no-op。
 import { coreGetPushToken, coreDeletePushToken } from "../../functions/lib/core-db.js";
 
@@ -46,15 +46,11 @@ export async function sendPush(env, scope, { title, body, threadId, link }) {
       console.log("[push] skip: APNs 未配置（secrets 或 FILES 绑定缺失）", scope);
       return false;
     }
-    // 存储迁移 P3：D1 push_tokens 优先，缺行/不可用落回 R2 push-token.json。
-    let reg = await coreGetPushToken(env, scope);
-    if (reg === null || reg === false) {
-      const obj = await env.FILES.get(`${scope}push-token.json`);
-      if (!obj) {
-        console.log("[push] skip: 该用户没有 push token（D1/R2 均无）", scope);
-        return false;
-      }
-      reg = JSON.parse(await obj.text());
+    // push token 真源在 D1 push_tokens（App 上传 push-token.json 时由 upload 路由落行）。
+    const reg = await coreGetPushToken(env, scope);
+    if (!reg) {
+      console.log("[push] skip: 该用户没有 push token", scope);
+      return false;
     }
     if (!reg?.token) {
       console.log("[push] skip: push token 里没有 token 字段", scope);

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { onRequest } from "../../functions/files/api/[[path]].js";
 import { fakeEnv, fakeRecoD1 } from "./fakes.js";
+import { coreUpsertProfile, coreGetProfile, coreGetIdentity, corePutReport } from "../../functions/lib/core-db.js";
 import { b64url, b64urlToString, hmacSign, anonScopeFromToken } from "../../functions/lib/auth.js";
 
 // The VD社区 (community) surface had NO test coverage, yet it carries the most
@@ -289,7 +290,7 @@ describe("POST community/share — write gate", () => {
     const token = "anon_" + "b".repeat(28);
     const scope = await anonScopeFromToken(token);
     const context = reqCtx("POST", ["community", "share", "articles", "s1.json"], { token });
-    context.env.FILES._store.set(`${scope}ACCOUNT.json`, JSON.stringify({ appleSub: "apple-sub-7" }));
+    await coreUpsertProfile(context.env, scope, { apple_sub: "apple-sub-7" });
     context.env.FILES._store.set(`${scope}articles/s1.json`, schema3("匿名但可追责"));
 
     const expectedId = await shareIdFor(`${scope}articles/s1.json`);
@@ -300,7 +301,7 @@ describe("POST community/share — write gate", () => {
     expect(stored.owner).toBe(scope);
 
     const ctx2 = reqCtx("POST", ["community", "unshare", expectedId], { token });
-    ctx2.env.FILES._store.set(`${scope}ACCOUNT.json`, JSON.stringify({ appleSub: "apple-sub-7" }));
+    await coreUpsertProfile(ctx2.env, scope, { apple_sub: "apple-sub-7" });
     ctx2.env.FILES._store.set(`community/${expectedId}.json`, JSON.stringify({
       schema: 2, shareId: expectedId, owner: scope, articleKey: `${scope}articles/s1.json`,
     }));
@@ -400,11 +401,11 @@ describe("POST auth/wechat", () => {
     const body = await resp.json();
     expect(resp.status).toBe(200);
     expect(body.scope).toMatch(/^users\/anon-[0-9a-f]{32}\/$/);
-    expect(context.env.FILES._store.has("links/wechat-unionid-union-1.json")).toBe(true);
+    expect(await coreGetIdentity(context.env, "wechat", "unionid-union-1")).toBe(body.scope);
 
-    const account = JSON.parse(context.env.FILES._store.get(`${body.scope}ACCOUNT.json`));
-    expect(account.wechatUnionid).toBe("union-1");
-    expect(account.wechatOpenid).toBe("open-1");
+    const account = await coreGetProfile(context.env, body.scope);
+    expect(account.wechat_unionid).toBe("union-1");
+    expect(account.wechat_openid).toBe("open-1");
     expect(account.name).toBe("安卓用户");
 
     const sess = JSON.parse(b64urlToString(body.session.split(".")[1]));
@@ -443,11 +444,11 @@ describe("POST auth/wechat", () => {
     const body = await resp.json();
     expect(resp.status).toBe(200);
     expect(body.scope).toMatch(/^users\/anon-[0-9a-f]{32}\/$/);
-    expect(context.env.FILES._store.has("links/wechat-unionid-mini-union-1.json")).toBe(true);
+    expect(await coreGetIdentity(context.env, "wechat", "unionid-mini-union-1")).toBe(body.scope);
 
-    const account = JSON.parse(context.env.FILES._store.get(`${body.scope}ACCOUNT.json`));
-    expect(account.wechatUnionid).toBe("mini-union-1");
-    expect(account.wechatOpenid).toBe("mini-open-1");
+    const account = await coreGetProfile(context.env, body.scope);
+    expect(account.wechat_unionid).toBe("mini-union-1");
+    expect(account.wechat_openid).toBe("mini-open-1");
     expect(account.name).toBe("小程序用户");
 
     const sess = JSON.parse(b64urlToString(body.session.split(".")[1]));
@@ -579,7 +580,7 @@ describe("community D1 index dual-write", () => {
     }));
     expect((await (await onRequest(ctxReport)).json()).ok).toBe(true);
 
-    const ctxList = reqCtx("GET", ["community", "reports"], { env: { FILES: ctxReport.env.FILES } });   // same R2 store, fresh admin request
+    const ctxList = reqCtx("GET", ["community", "reports"], { env: { FILES: ctxReport.env.FILES, CORE: ctxReport.env.CORE } });   // same stores, fresh admin request
     const body = await (await onRequest(ctxList)).json();
     const entry = body.reports.find((r) => r.shareId === "rep400000001");
     expect(entry).toBeTruthy();
@@ -597,7 +598,7 @@ describe("community D1 index dual-write", () => {
       schema: 2, shareId: "idx000000001", owner: "users/u/",
       articleKey: "users/u/articles/p1.json", author: "B", firstSharedAt: 5000,
     }));
-    env.FILES._store.set("community/reports/idx000000001.json", JSON.stringify({ status: "pending" }));
+    await corePutReport(env, "idx000000001", "pending", 1, []);
 
     const body = await (await onRequest(context)).json();
     expect(body.ok).toBe(true);

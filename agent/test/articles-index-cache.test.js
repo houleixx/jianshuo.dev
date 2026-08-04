@@ -1,11 +1,11 @@
-// GET /articles list is backed by a per-user summary cache
-// (users/<sub>/articles-index.json): steady state = prefix list + 1 index read,
-// no per-article full-doc GETs. The cache is self-healing — the R2 listing stays
-// authoritative, changed docs (etag/fingerprint mismatch) are re-read, deleted
-// stems are pruned.
+// GET /articles list is backed by the per-user D1 articles rows: steady state =
+// prefix list + 1 D1 SELECT, no per-article full-doc GETs. The cache is
+// self-healing — the R2 listing stays authoritative, changed docs
+// (etag/fingerprint mismatch) are re-read, deleted stems are pruned.
 import { describe, it, expect } from "vitest";
 import { onRequest } from "../../functions/files/api/[[path]].js";
 import { fakeEnv } from "./fakes.js";
+import { coreListArticles, coreUpsertArticleEntry } from "../../functions/lib/core-db.js";
 
 function ctx(method, path, { body } = {}) {
   const segments = ["articles", ...path.split("/").filter(Boolean)];
@@ -57,7 +57,7 @@ describe("GET /articles — summary cache", () => {
 
     const first = await list(env);
     expect(first.map((a) => a.stem)).toEqual(["s2", "s1"]);
-    expect(env.FILES._store.has("users/u/articles-index.json")).toBe(true);
+    expect((await coreListArticles(env, "users/u/")).length).toBe(2);
 
     const counts = countDocGets(env);
     const second = await list(env);
@@ -96,18 +96,18 @@ describe("GET /articles — summary cache", () => {
     env.FILES._store.delete("users/u/articles/s1.json");
     const after = await list(env);
     expect(after.map((a) => a.stem)).toEqual(["s2"]);
-    const idx = JSON.parse(env.FILES._store.get("users/u/articles-index.json"));
-    expect(Object.keys(idx.items)).toEqual(["s2"]);
+    const rows = await coreListArticles(env, "users/u/");
+    expect(rows.map((r) => r.stem)).toEqual(["s2"]);
   });
 
-  it("a corrupt index is ignored and rebuilt", async () => {
+  it("a corrupt D1 entry is ignored and rebuilt from the doc", async () => {
     const env = ctx("GET", "").env;
     seedArticle(env, "s1");
-    env.FILES._store.set("users/u/articles-index.json", "not json{{{");
+    await coreUpsertArticleEntry(env, "users/u/", "s1", "not json{{{", "bad-fp", 0);
     const out = await list(env);
     expect(out.map((a) => a.stem)).toEqual(["s1"]);
-    const idx = JSON.parse(env.FILES._store.get("users/u/articles-index.json"));
-    expect(idx.items.s1.entry.title).toBe("T1");
+    const rows = await coreListArticles(env, "users/u/");
+    expect(JSON.parse(rows.find((r) => r.stem === "s1").entry).title).toBe("T1");
   });
 
   it("an unparseable article object is cached as a miss, not re-fetched every list", async () => {
@@ -155,8 +155,8 @@ describe("GET /articles — index fast path (waitUntil runtimes)", () => {
     // 后台对账被排上，跑完后 s3 入索引
     expect(context.waitUntil).toHaveBeenCalled();
     await Promise.all(context.waitUntil.mock.calls.map((c) => c[0]));
-    const idx = JSON.parse(env.FILES._store.get("users/u/articles-index.json")).items;
-    expect(Object.keys(idx).sort()).toEqual(["s1", "s2", "s3"]);
+    const rows = await coreListArticles(env, "users/u/");
+    expect(rows.map((r) => r.stem).sort()).toEqual(["s1", "s2", "s3"]);
   });
 
   it("API writes keep the index fresh, so the fast path shows a just-mined article immediately", async () => {

@@ -5,7 +5,6 @@
 
 import { MINE_DEFAULT_STYLE } from "./mine.js";
 
-export const STAGE_TEMPERATURE = { observe: 0.2, plan: 0.3, write: 0.7, review: 0.1 };
 export const QUALITY_GATE = 70;      // review.overall 低于此值 → 从立意阶段重跑一次
 export const MAX_RECENT_TITLES = 20; // FactPack 历史文章标题条数上限
 
@@ -113,7 +112,7 @@ const STAGE_MAX_TOKENS = { observe: 4000, plan: 3000, write: 8000, review: 8000 
 // 组装某一阶段的 LLM 请求 payload。照片只进 observe/review；<style> 只进 write。
 // 纯函数（无 env、无 fetch），生产与 eval/vitest 共用，保证字节一致。
 export function buildStagePayload({
-  stage, provider = "anthropic", model,
+  stage, model,
   photos = [], factPack = null, observation = null, storyPlan = null,
   draftArticles = null, styleText = "", previousIssues = null,
   stageSystem = STAGE_SYSTEM,
@@ -133,34 +132,11 @@ export function buildStagePayload({
   const effectiveStyle = (styleText && styleText.trim()) ? styleText.trim() : MINE_DEFAULT_STYLE;
   const system = stage === "write" ? `${sys}\n\n<style>\n${effectiveStyle}\n</style>` : sys;
   const withPhotos = (stage === "observe" || stage === "review") && photos.length > 0;
-  const temperature = STAGE_TEMPERATURE[stage];
   const max_tokens = STAGE_MAX_TOKENS[stage];
 
-  if (provider === "openai-compat") {
-    let userContent;
-    if (!withPhotos) {
-      userContent = text;
-    } else {
-      userContent = [{ type: "text", text }];
-      for (const p of photos) {
-        userContent.push({ type: "text", text: `\n<photo key="${p.relKey}" time="${p.label}">` });
-        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${p.b64}`, detail: "low" } });
-        userContent.push({ type: "text", text: `\n</photo>` });
-      }
-    }
-    return {
-      model, max_tokens, temperature,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userContent },
-      ],
-      response_format: { type: "json_object" },
-    };
-  }
-
-  // anthropic —— 注意不发 temperature：claude-opus-4.8 起该参数被 API 拒收
+  // 注意不发 temperature：claude-opus-4.8 起该参数被 API 拒收
   //（400 "temperature is deprecated for this model"，eval run image-gate-01 实锤）。
-  // 阶段温度只对 openai-compat 生效；Anthropic 侧用 prompt 措辞控制发挥度。
+  // 发挥度用 prompt 措辞控制。
   let content;
   if (!withPhotos) {
     content = text;

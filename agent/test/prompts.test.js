@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("agents", () => ({ Agent: class Agent {}, getAgentByName: async () => ({}) }));
 import worker from "../src/index.js";
 import { fakeEnv } from "./fakes.js";
+import { coreLoadPromptShares, coreImportCount } from "../../functions/lib/core-db.js";
 import { resolveList, validateList, restoreDefaults, sanitizeStoredItems, MAX_ITEMS } from "../src/prompts.js";
 import { DEFAULT_PROMPT_TEMPLATE } from "../src/prompt-template.js";
 import { hmacSign, b64url } from "../../functions/lib/auth.js";
@@ -1126,7 +1127,7 @@ describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 
     headers: { Authorization: await authHeader() },
   }), env);
   const shareDocOf = (env, code) => JSON.parse(env.FILES._store.get(`shares/${code}`));
-  const indexOf = (env) => JSON.parse(env.FILES._store.get([...env.FILES._store.keys()].find((k) => k.endsWith("prompt-shares.json"))));
+  const indexOf = (env) => coreLoadPromptShares(env, SCOPE);
 
   it("★ 铸码于 sys_cartoon → PUT 把它 fork 成 p_x → 索引键从 sys_cartoon 挪到 p_x，码不变，shares/<码> 内容变成 fork 后的新词，GET /agent/prompt-shares 在 p_x 下能看到分享", async () => {
     const env = mkEnv();
@@ -1135,7 +1136,7 @@ describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 
     const res = await VPUT(env, [{ id: "p_forkx1", type: "action", label: "卡通风·我的版本", prompt: "我改过的卡通提示词", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
     expect(res.status).toBe(200);
 
-    const idx = indexOf(env);
+    const idx = await indexOf(env);
     expect(idx.byItem["sys_cartoon"]).toBeUndefined();
     expect(idx.byItem["p_forkx1"].code).toBe(code);
 
@@ -1156,7 +1157,7 @@ describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 
     await VPUT(env, tree);
     const res2 = await VPUT(env, tree);
     expect(res2.status).toBe(200);
-    const idx = indexOf(env);
+    const idx = await indexOf(env);
     expect(idx.byItem["p_forkx1"].code).toBe(code);
     expect(idx.byItem["sys_cartoon"]).toBeUndefined();
     expect(Object.keys(idx.byItem)).toHaveLength(1);
@@ -1171,7 +1172,7 @@ describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 
     // p_x 从列表里被删掉（用户删了这条自建项），再 fork 一次 sys_cartoon 成 p_y。
     await VPUT(env, [{ id: "p_forky1", type: "action", label: "第二次 fork", prompt: "第二版内容", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
 
-    const idx = indexOf(env);
+    const idx = await indexOf(env);
     expect(idx.byItem["p_forkx1"].code).toBe(code); // 首次 fork 的索引条目原样保留（冻结）
     expect(idx.byItem["p_forky1"]).toBeUndefined();  // 二次 fork 拿不到分享——不做聪明事
     expect(idx.byItem["sys_cartoon"]).toBeUndefined();
@@ -1184,17 +1185,17 @@ describe("PUT /agent/prompts — fork 一个正在分享的条目 → 分享码 
     expect(states.byItem["p_forky1"]).toBeUndefined();
   });
 
-  it("re-key 失败不影响 PUT 保存本身（best-effort）：写索引抛错，PUT 仍 200 且树已落盘", async () => {
+  it("re-key 失败不影响 PUT 保存本身（best-effort）：D1 UPDATE 抛错，PUT 仍 200 且树已落盘", async () => {
     const env = mkEnv();
     await MINT(env, "sys_cartoon");
-    const origPut = env.FILES.put.bind(env.FILES);
-    env.FILES.put = async (key, value) => {
-      if (key.endsWith("prompt-shares.json")) throw new Error("boom");
-      return origPut(key, value);
+    const rawPrepare = env.CORE.prepare.bind(env.CORE);
+    env.CORE.prepare = (sql) => {
+      if (/UPDATE OR IGNORE prompt_shares/.test(sql)) throw new Error("boom");
+      return rawPrepare(sql);
     };
     const res = await VPUT(env, [{ id: "p_forkx1", type: "action", label: "卡通风", prompt: "我改过的", appliesTo: ["image"], kind: "image", forkedFrom: "sys_cartoon" }]);
     expect(res.status).toBe(200);
-    env.FILES.put = origPut;
+    env.CORE.prepare = rawPrepare;
     const got = await (await VGET(env)).json();
     expect(got.items.find((i) => i.id === "p_forkx1").prompt).toBe("我改过的");
   });
@@ -1348,11 +1349,12 @@ describe("POST /agent/prompts/import — 魔法数字导入（4b）", () => {
     expect(got.items[0].origin).toBe("user");
   });
 
-  it("importCount +1 写回 shares/<码>", async () => {
+  it("importCount 在 D1 原子 +1（shares/<码> 文档快照不再回写）", async () => {
     const env = fakeEnv(seedShare());
     await IMPORT(env, "4820135");
-    const doc = JSON.parse(env.FILES._store.get("shares/4820135"));
-    expect(doc.importCount).toBe(129);
+    expect(await coreImportCount(env, "4820135")).toBe(1);
+    // 文档快照原样（预览端点按 max(D1, 快照) 展示，历史计数不倒退）
+    expect(JSON.parse(env.FILES._store.get("shares/4820135")).importCount).toBe(128);
   });
 
   it("老副本无 appliesTo → 导入成「都行」", async () => {
@@ -1407,7 +1409,7 @@ describe("POST /agent/prompts/import — 魔法数字导入（4b）", () => {
     const env = fakeEnv(seedShare());
     await IMPORT(env, "4820135");
     await IMPORT(env, "4820135");
-    expect(JSON.parse(env.FILES._store.get("shares/4820135")).importCount).toBe(129);
+    expect(await coreImportCount(env, "4820135")).toBe(1);
   });
 
   it("导入的条目落盘带 importedFrom=码，GET 解析结果也透传", async () => {

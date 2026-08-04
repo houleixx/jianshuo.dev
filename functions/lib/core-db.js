@@ -1,11 +1,11 @@
 // functions/lib/core-db.js — voicedrop-core D1 库的唯一访问层（2026-07-20 存储迁移 P1）。
 // Pages Functions 与 voicedrop-agent worker 共用这一份（binding 都叫 env.CORE）。
 //
-// 迁移约定（R2 → D1 过渡期）：
-//   · 写路径【双写】：R2 原对象照写，D1 同步落行——任何一边失败不打断另一边。
-//   · 读路径【D1 优先、R2 兜底】：D1 报错/无绑定 → 返回 null，调用方走原 R2 路径；
-//     「查无此行」返回 false / 空集，与 null 严格区分（null = 后端不可用，不是没数据）。
-//   · 本文件所有函数绝不 throw——存储迁移不能成为业务主路径的新故障点。
+// D1 是这些状态数据的唯一真源（2026-08-03 起，双写期的 R2 副本已停写停读；
+// blob 本体——文章 doc / 录音 / shares 正文——仍在 R2）。约定：
+//   · D1 报错/无绑定 → 返回 null；「查无此行」返回 false / 空集，两者严格区分
+//     （null = 后端不可用，不是没数据），由调用方按各自语义降级。
+//   · 本文件所有函数绝不 throw——存储层不能成为业务主路径的新故障点。
 // 表结构见 agent/migrations-core/0001_core.sql。
 
 const db = (env) => env.CORE || null;
@@ -269,16 +269,17 @@ export async function coreDeleteArticle(env, scope, stem) {
   } catch (e) { console.error("[core-db] deleteArticle:", e && e.message); return false; }
 }
 
-/// → [{stem, entry(字符串|null), empty, blocked, tags}]（created_ms 倒序）| null。
+/// → [{stem, entry(字符串|null), fp, empty, blocked, tags}]（created_ms 倒序）| null。
+/// fp = 写入时的 R2 etag，对账用它比对 listing 指纹，只重读新/变的 doc。
 export async function coreListArticles(env, scope) {
   const d = reader(env);
   if (!d) return null;
   try {
     const r = await d.prepare(
-      "SELECT stem, entry, flag_empty, flag_blocked, flag_tags FROM articles WHERE user_sub=? ORDER BY created_ms DESC"
+      "SELECT stem, entry, fp, flag_empty, flag_blocked, flag_tags FROM articles WHERE user_sub=? ORDER BY created_ms DESC"
     ).bind(scope).all();
     return (r.results || []).map((row) => ({
-      stem: row.stem, entry: row.entry,
+      stem: row.stem, entry: row.entry, fp: row.fp || null,
       empty: !!row.flag_empty, blocked: !!row.flag_blocked, tags: !!row.flag_tags,
     }));
   } catch (e) { console.error("[core-db] listArticles:", e && e.message); return null; }
@@ -420,19 +421,21 @@ export async function coreHasBinding(env, scope) {
   } catch (e) { console.error("[core-db] hasBinding:", e && e.message); return null; }
 }
 
-/// RMW 合并的行级版：只写传入的非 undefined 字段（COALESCE 保留旧值，name/linked
-/// 类 first-write-wins 交由调用方按 ACCOUNT.json 原语义决定是否传值）。
+/// RMW 合并的行级版：只写传入的非 undefined 字段。合并方向按列分两类——
+/// name / linked_at / wechat_linked_at 是 first-write-wins（已有值保留，对齐原
+/// ACCOUNT.json 语义：名字只采纳首次授权给的那份、绑定时间记首次）；其余列新值
+/// 覆盖旧值（email/avatar 每次登录刷新）。
 export async function coreUpsertProfile(env, scope, fields) {
   const d = db(env);
   if (!d) return false;
   const cols = ["apple_sub", "wechat_openid", "wechat_unionid", "email", "name", "avatar",
     "linked_at", "wechat_linked_at", "last_seen_at"];
+  const firstWrite = new Set(["name", "linked_at", "wechat_linked_at"]);
   const present = cols.filter((c) => fields[c] !== undefined);
   try {
-    // 先确保行存在，再逐列 COALESCE 更新（传 undefined 的列用 NULL bind + COALESCE 保旧值）。
     await d.prepare("INSERT OR IGNORE INTO user_profiles (user_sub) VALUES (?)").bind(scope).run();
     if (!present.length) return true;
-    const set = present.map((c) => `${c}=COALESCE(?, ${c})`).join(", ");
+    const set = present.map((c) => firstWrite.has(c) ? `${c}=COALESCE(${c}, ?)` : `${c}=COALESCE(?, ${c})`).join(", ");
     const binds = present.map((c) => fields[c]);
     await d.prepare(`UPDATE user_profiles SET ${set} WHERE user_sub=?`).bind(...binds, scope).run();
     return true;

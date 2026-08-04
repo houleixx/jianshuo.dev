@@ -309,19 +309,9 @@ export async function handlePromptImport(request, env, scope) {
   if (err) return J({ error: err }, 400);
   await saveUserPrompts(env, scope, items);
 
-  // importCount +1 —— D1 share_stats 原子自增（存储迁移 P1，丢计数问题就此了结）；
-  // R2 副本照旧回写（落地页直读文档显示计数），值对齐 D1 权威计数。失败不影响
-  // 导入本身：导入已经落盘了，回写计数只是锦上添花。
-  const bumped = await coreBumpImportCount(env, code);
-  try {
-    const obj = await env.FILES.get(`shares/${code}`);
-    if (obj) {
-      const share = JSON.parse(await obj.text());
-      // max：老码 backfill 缺行时 D1 首增=1，不能把文档历史计数写倒退。
-      share.importCount = Math.max(typeof bumped === "number" ? bumped : 0, (share.importCount || 0) + 1);
-      await env.FILES.put(`shares/${code}`, JSON.stringify(share, null, 2));
-    }
-  } catch (e) { console.error("[prompts] importCount bump failed:", e && e.message); }
+  // importCount +1 —— D1 share_stats 原子自增（权威计数，丢计数问题就此了结）。
+  // 失败不影响导入本身：导入已经落盘了，计数只是锦上添花。
+  await coreBumpImportCount(env, code);
 
   // 新条目可能落在分组里，不能再取「最后一个顶层项」——按 id 扁平找（与 already 分支同款）。
   const flat = [];

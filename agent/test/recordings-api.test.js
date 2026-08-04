@@ -81,13 +81,11 @@ describe("GET /recordings — 轻量录音列表", () => {
     env.FILES._store.set(`${scope}VoiceDrop-old.m4a`, "AUDIO");
     env.FILES._store.set(`${scope}articles/VoiceDrop-old.empty`, '{"status":"empty"}');   // 直写，索引不知道
 
-    const waitUntil = vi.fn();
-    const first = await call(env, "GET", ["recordings"], { waitUntil });
-    expect(first.recordings[0].isEmpty).toBe(false);           // 第一次还看不到
-    expect(waitUntil).toHaveBeenCalled();
-    await Promise.all(waitUntil.mock.calls.map((c) => c[0])); // 对账跑完
+    // D1 还没有任何行（老账号）→ 路由同步对账重建，第一次打开就回填到位
+    const first = await call(env, "GET", ["recordings"], { waitUntil: vi.fn() });
+    expect(first.recordings[0].isEmpty).toBe(true);
     const second = await call(env, "GET", ["recordings"]);
-    expect(second.recordings[0].isEmpty).toBe(true);           // 回填生效
+    expect(second.recordings[0].isEmpty).toBe(true);           // 稳态一致
   });
 
   it("sidecar 标记文件被直删（DELETE /file）→ 标记即时熄灭", async () => {
@@ -142,14 +140,17 @@ describe("recordings-index 同步维护", () => {
   it("绕过 API 直写的 .m4a 由后台对账收编", async () => {
     const env = ctx("GET", []).env;
     const scope = await resolveScope(env);
-    await call(env, "GET", ["recordings"]);                      // 建索引（空）
+    // 先有一条 D1 已知的录音（快路径有内容可直出），再绕过 API 直写第二条
+    const { coreUpsertRecording } = await import("../../functions/lib/core-db.js");
+    env.FILES._store.set(`${scope}VoiceDrop-known.m4a`, "AUDIO");
+    await coreUpsertRecording(env, scope, "VoiceDrop-known.m4a", "2026-07-01T00:00:00Z");
     env.FILES._store.set(`${scope}VoiceDrop-direct.m4a`, "AUDIO"); // 直写，索引不知道
 
     const waitUntil = vi.fn();
     const first = await call(env, "GET", ["recordings"], { waitUntil });
-    expect(first.recordings).toEqual([]);                        // 快路径还看不到
+    expect(first.recordings.map((r) => r.name)).toEqual(["VoiceDrop-known.m4a"]); // 快路径还看不到直写
     await Promise.all(waitUntil.mock.calls.map((c) => c[0]));    // 对账跑完
     const second = await call(env, "GET", ["recordings"], { waitUntil: vi.fn() });
-    expect(second.recordings.map((r) => r.name)).toEqual(["VoiceDrop-direct.m4a"]);
+    expect(second.recordings.map((r) => r.name).sort()).toEqual(["VoiceDrop-direct.m4a", "VoiceDrop-known.m4a"]);
   });
 });

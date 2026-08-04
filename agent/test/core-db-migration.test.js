@@ -1,5 +1,6 @@
-// 存储迁移 P1（R2 → voicedrop-core D1）：refhits / invites / share_stats /
-// prompt_shares 的「D1 优先、R2 兜底、双写、自愈回填」四条约定的行为测试。
+// voicedrop-core D1（状态数据唯一真源）：refhits / invites / share_stats /
+// prompt_shares / articles / recordings / identities / profiles / push / reports
+// 的访问层行为测试。2026-08-03 起 R2 副本停写停读，D1 不可用按各语义降级。
 import { describe, it, expect } from "vitest";
 import { fakeEnv, fakeD1, coreSql } from "./fakes.js";
 import { writeRefhit, lookupRefhit, DEBUG_PLAINTEXT_IP } from "../../functions/lib/refhits.js";
@@ -20,15 +21,12 @@ import { hasVerifiedBinding } from "../../functions/lib/auth.js";
 const SECRET = "test-secret";
 const coreEnv = (seed = {}) => ({ ...fakeEnv(seed), CORE: fakeD1(coreSql()) });
 
-describe("refhits：双写 + D1 优先查询 + R2 兜底", () => {
-  it("writeRefhit 同时落 R2 对象与 D1 行", async () => {
+describe("refhits：D1 唯一真源", () => {
+  it("writeRefhit 落 D1 行（不再写 R2 对象）", async () => {
     const env = coreEnv();
     const now = Date.now();
     await writeRefhit(env, "1.2.3.4", SECRET, "users/anon-abc/", "CODE01", now);
-    // R2 侧
-    const listed = await env.FILES.list({ prefix: "refhits/" });
-    expect(listed.objects.length).toBe(1);
-    // D1 侧
+    expect((await env.FILES.list({ prefix: "refhits/" })).objects.length).toBe(0);
     const fp = DEBUG_PLAINTEXT_IP ? "1.2.3.4" : null;
     const rows = await coreRefhitRows(env, fp, now - 1000);
     expect(rows.length).toBe(1);
@@ -52,22 +50,11 @@ describe("refhits：双写 + D1 优先查询 + R2 兜底", () => {
     expect(await lookupRefhit(env, "8.8.8.8", SECRET, now)).toBeNull();
   });
 
-  it("lookupRefhit：D1 空但 R2 有旧数据（backfill 前）→ 落回 R2 路径", async () => {
+  it("lookupRefhit：D1 不可用/无行 → null（宁漏不错，R2 旧对象不再兜底）", async () => {
     const now = Date.now();
-    const env = coreEnv({
-      [`refhits/7.7.7.7/${now - 1000}`]: JSON.stringify({ owner: "users/anon-old/", token: "OLD", ts: now - 1000 }),
-    });
-    const hit = await lookupRefhit(env, "7.7.7.7", SECRET, now);
-    expect(hit).toEqual({ owner: "users/anon-old/", token: "OLD" });
-  });
-
-  it("无 CORE 绑定 → 完全走 R2 老路径（回归保护）", async () => {
-    const now = Date.now();
-    const env = fakeEnv({
-      [`refhits/6.6.6.6/${now - 1000}`]: JSON.stringify({ owner: "users/anon-r2/", token: "R2", ts: now - 1000 }),
-    });
-    const hit = await lookupRefhit(env, "6.6.6.6", SECRET, now);
-    expect(hit).toEqual({ owner: "users/anon-r2/", token: "R2" });
+    const env = { FILES: fakeEnv().FILES };   // 无 CORE
+    expect(await lookupRefhit(env, "6.6.6.6", SECRET, now)).toBeNull();
+    expect(await lookupRefhit(coreEnv(), "7.7.7.7", SECRET, now)).toBeNull();
   });
 
   it("coreCleanupRefhits 只清 cutoff 之前的行", async () => {
@@ -95,8 +82,8 @@ describe("invites：UPSERT + 大小写归一", () => {
     expect((await coreGetInvite(env, "abc123")).name).toBe("新名");
   });
 
-  it("无 CORE 绑定 → null（调用方落 R2）", async () => {
-    expect(await coreGetInvite(fakeEnv(), "ABC123")).toBeNull();
+  it("无 CORE 绑定 → null（与「查无 false」严格区分）", async () => {
+    expect(await coreGetInvite({}, "ABC123")).toBeNull();
   });
 });
 
@@ -214,7 +201,7 @@ describe("identities + user_profiles（P3）", () => {
   it("identity first-write-wins；查无 false / 不可用 null", async () => {
     const env = coreEnv();
     expect(await coreGetIdentity(env, "apple", "SUB1")).toBe(false);
-    expect(await coreGetIdentity(fakeEnv(), "apple", "SUB1")).toBeNull();
+    expect(await coreGetIdentity({}, "apple", "SUB1")).toBeNull();
     await corePutIdentity(env, "apple", "SUB1", "users/anon-a/", 100);
     await corePutIdentity(env, "apple", "SUB1", "users/anon-OTHER/", 200); // 不覆盖
     expect(await coreGetIdentity(env, "apple", "SUB1")).toBe("users/anon-a/");
@@ -241,10 +228,9 @@ describe("identities + user_profiles（P3）", () => {
     expect(await hasVerifiedBinding(env, scope)).toBe(true);
   });
 
-  it("hasVerifiedBinding：无 D1 绑定 → 落回 R2 ACCOUNT.json", async () => {
+  it("hasVerifiedBinding：D1 不可用 → false（fail closed，引导登录比误放行安全）", async () => {
     const scope = "users/anon-legacy/";
-    const env = fakeEnv({ [`${scope}ACCOUNT.json`]: JSON.stringify({ appleSub: "OLD" }) });
-    expect(await hasVerifiedBinding(env, scope)).toBe(true);       // 无 CORE 绑定 → R2 命中
+    expect(await hasVerifiedBinding({}, scope)).toBe(false);
   });
 });
 

@@ -45,7 +45,9 @@ describe("GET /agent/prompt-market", () => {
       "shares/1111111": doc("导入王", ["text"], 50),
       "shares/2222222": doc("新来的", ["text"], 0),
     });
-    await coreUpsertPromptShare(env, "users/anon-a/", "p_1", "1111111", "2026-07-01T00:00:00.000Z");
+    // 老码写「10 天前」而非固定日期——hotScore 随今天衰减，写死日期的话 ageDays
+    // 越跑越大，50 次导入迟早被新码的新鲜度压过（2026-08-03 真栽过）。
+    await coreUpsertPromptShare(env, "users/anon-a/", "p_1", "1111111", new Date(Date.now() - 10 * 86400e3).toISOString());
     await coreUpsertPromptShare(env, "users/anon-b/", "p_2", "2222222", new Date().toISOString());
     await coreSeedImportCount(env, "1111111", 50);
     const hot = (await (await GET(env, "?sort=hot")).json()).items;

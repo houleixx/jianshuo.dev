@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { onRequest } from "../../functions/files/api/[[path]].js";
 import { fakeEnv } from "./fakes.js";
+import { coreUpsertProfile, coreUpsertPromptShare } from "../../functions/lib/core-db.js";
 import { sha256hex } from "../../functions/lib/auth.js";
 
 // Apple 5.1.1(v): POST account/delete must erase the WHOLE user — their
@@ -46,6 +47,7 @@ describe("POST account/delete", () => {
       "users/other/articles/x.json": "{}",
     };
     const context = ctx("POST", ["account", "delete"], { token: ANON, seed });
+    await coreUpsertProfile(context.env, scope, { apple_sub: "apple-sub-1", wechat_unionid: "union-1", wechat_openid: "open-1" });
     const resp = await onRequest(context);
     const body = await resp.json();
     expect(resp.status).toBe(200);
@@ -69,14 +71,6 @@ describe("POST account/delete", () => {
   it("wipes the user's prompt share codes (shares/<码> is JSON, not the plain-text articleKey shape)", async () => {
     const scope = await anonScope();
     const seed = {
-      [`${scope}ACCOUNT.json`]: JSON.stringify({}),
-      [`${scope}prompt-shares.json`]: JSON.stringify({
-        byItem: {
-          p_1: { code: "1112223", createdAt: "2026-07-01T00:00:00Z" },
-          sys_cartoon: { code: "4445556", createdAt: "2026-07-02T00:00:00Z" },
-        },
-        mintLog: [],
-      }),
       "shares/1112223": JSON.stringify({ type: "prompt", sub: "x", label: "口语化", instruction: "把这段改得更口语" }),
       "shares/4445556": JSON.stringify({ type: "prompt", sub: "x", label: "卡通化", instruction: "把这段改得更卡通" }),
       // an article share link into the same scope must still be cleaned by the existing path
@@ -87,6 +81,9 @@ describe("POST account/delete", () => {
       "shares/9998887": JSON.stringify({ type: "prompt", sub: "other", label: "别人的", instruction: "别删我" }),
     };
     const context = ctx("POST", ["account", "delete"], { token: ANON, seed });
+    await coreUpsertPromptShare(context.env, scope, "p_1", "1112223", "2026-07-01T00:00:00Z");
+    await coreUpsertPromptShare(context.env, scope, "sys_cartoon", "4445556", "2026-07-02T00:00:00Z");
+    await coreUpsertPromptShare(context.env, "users/other/", "p_9", "9998887", "x");
     const resp = await onRequest(context);
     const body = await resp.json();
     expect(resp.status).toBe(200);
@@ -103,19 +100,13 @@ describe("POST account/delete", () => {
   it("skips borrowed entries: 销号不删原作者的 shares/<码>", async () => {
     const scope = await anonScope();
     const seed = {
-      [`${scope}ACCOUNT.json`]: JSON.stringify({}),
-      [`${scope}prompt-shares.json`]: JSON.stringify({
-        byItem: {
-          p_own: { code: "1112223", createdAt: "2026-07-01T00:00:00Z" },
-          p_imp: { code: "4563", createdAt: "2026-07-22T00:00:00Z", borrowed: true },
-        },
-        mintLog: [],
-      }),
       "shares/1112223": JSON.stringify({ type: "prompt", sub: "x", label: "自有", instruction: "我的正文" }),
       // borrowed 指向的原作者副本必须幸存
       "shares/4563": JSON.stringify({ type: "prompt", sub: "origin-author", label: "原作者的", instruction: "原作者正文" }),
     };
     const context = ctx("POST", ["account", "delete"], { token: ANON, seed });
+    await coreUpsertPromptShare(context.env, scope, "p_own", "1112223", "2026-07-01T00:00:00Z");
+    await coreUpsertPromptShare(context.env, scope, "p_imp", "4563", "2026-07-22T00:00:00Z", true);
     const resp = await onRequest(context);
     expect(resp.status).toBe(200);
     expect((await resp.json()).deleted.promptCodes).toBe(1);     // 只清了自有码

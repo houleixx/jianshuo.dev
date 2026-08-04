@@ -9,8 +9,9 @@
 // shadows /voicedrop/ or /voicedrop/privacy/.
 
 import { TITLE_FALLBACK, resolveArticles } from "../lib/article-store.js";
-import { communityKey, reportKey, promptPostTitle } from "../lib/community-store.js";
+import { communityKey, promptPostTitle } from "../lib/community-store.js";
 import { writeRefhit, ipHash } from "../lib/refhits.js";
+import { coreGetReport } from "../lib/core-db.js";
 import { phCapture } from "../lib/posthog.js";
 
 // 分享页访问打点（2026-07-17 用户要求：看每张分享页的访问量）。元数据 only；
@@ -111,7 +112,7 @@ export async function onRequest(context) {
     const cm = await env.FILES.get(communityKey(id));
     if (cm) {
       // A reported (taken-down) post must not stay publicly viewable (Apple 1.2).
-      if (await env.FILES.head(reportKey(id))) {
+      if (await coreGetReport(env, id)) {
         return html(page('已不可用', '<p class="muted">这篇分享已被移除。</p>'), 404);
       }
       try {

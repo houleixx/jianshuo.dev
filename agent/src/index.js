@@ -18,7 +18,7 @@ import { Agent, getAgentByName } from "agents";
 import { TOOL_DEFS, deleteArticleFiles } from "./tools.js";
 import { runCommandTurn } from "./command-turn.js";
 import { sendPush } from "./push.js";
-import { runMine, scopesWithWork, loadModelConfig, resolveEditModel, MINE_RESUME_MS, restyleArticle } from "./miner.js";
+import { runMine, scopesWithWork, MINE_RESUME_MS, restyleArticle, backfillSessionPhotos, PBF_GRACE_MS } from "./miner.js";
 import { buildHistoryMessages, HISTORY_MAX_TURNS } from "./history.js";
 import { withTopLevelArticles } from "../../functions/lib/article-store.js";
 import { coreCleanupRefhits } from "../../functions/lib/core-db.js";
@@ -48,9 +48,8 @@ import { handleRealtimeSession, probeOpenAI, RT_RELAY_LOCATION_HINT } from "./re
 import { REVISE_SYSTEM, EDIT_SYSTEM as SYSTEM } from "./prompts/edit.js";
 export { AnthropicRelay, RealtimeRelay } from "./relay.js";
 
-// Fallback model when no config/model.json is set. Editing is Anthropic-only
-// (tool-use loop), so the live model is resolved per-turn from the admin config
-// via resolveEditModel — honoring a Claude model choice, ignoring non-Anthropic.
+// 编辑模型（Anthropic tool-use loop）：编辑是快速机械改写，延迟远比质量重要，
+// 所以用比挖矿模型（miner.js MINE_MODEL）更快更便宜的型号，两者刻意解耦。
 const MODEL = "claude-sonnet-4-6";
 
 // 写后校验（编辑质检员）用的便宜模型：终结编辑工具落盘后，对照「指令 + 正文 diff」
@@ -66,18 +65,6 @@ const VERIFY_MODEL = "claude-haiku-4-5-20251001";
 // 队列静止时为空，无在途损失）。
 const EDITOR_GEN = "w1:";
 const EDITOR_PLACEMENT = { locationHint: "wnam" };
-
-// config/model.json 的短 TTL 内存缓存：每个编辑 turn 都要读一次模型配置，内容
-// 几乎不变；从 HKG 时代量到过单次 R2 读 5.3s。60s 内直接用上次结果，管理端改
-// 配置最多迟一分钟生效。按 isolate 缓存（模块级），无跨用户数据，无泄露面。
-let _modelCfgCache = null, _modelCfgAt = 0;
-async function cachedModelConfig(env) {
-  if (!_modelCfgCache || Date.now() - _modelCfgAt > 60_000) {
-    _modelCfgCache = await loadModelConfig(env);
-    _modelCfgAt = Date.now();
-  }
-  return _modelCfgCache;
-}
 
 // writeLlmLog is imported from ./llmlog.js (shared with miner.js).
 // rand6 stays here — also used to build per-turn ids below.
@@ -227,13 +214,12 @@ export class ArticleEditor extends Agent {
     const tTurn = Date.now();
     // 排队多久才轮到（WS 收到指令 → drain 到这一行）：排查「点了半天没动静」时先看这个
     if (row.created_at) console.log(`[edit] turn ${turnId} queue_wait=${tTurn - row.created_at}ms`);
-    const editModel = resolveEditModel(await cachedModelConfig(this.env));
     console.log(`[edit] turn ${turnId} setup=${Date.now() - tTurn}ms`);
     // 实时预览（Phase 2）：模型流式产出工具参数时，把 write_article 的整篇正文
     // （幽灵稿）和 edit_current_article 的行级新文本（打字机）边生成边广播给
     // 已连接的详情页。DO 内直连 broadcast，best-effort。
     const editPreview = makeEditPreview((obj) => this.broadcast(JSON.stringify(obj)));
-    const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction: row.text, model: editModel, onEvent: editPreview.onEvent });
+    const callClaude = this._makeLoggedCall({ turnId, scope, stem, instruction: row.text, model: MODEL, onEvent: editPreview.onEvent });
     // 独立的 haiku 通道给写后校验用：同 turnId 进 llmlog（model 字段区分）、同一套
     // 算力计费。与 callClaude 各有自己的 step 计数器，step 序号可能重叠——只影响
     // 日志排序观感，不影响任何逻辑。
@@ -269,7 +255,7 @@ export class ArticleEditor extends Agent {
     // Same turn_id as the LLM steps so the admin shows it under the same turn.
     if (res.toolRuns && res.toolRuns.length) {
       await writeLlmLog(this.env, {
-        ts: Date.now(), source: "agent", user_scope: scope, model: editModel,
+        ts: Date.now(), source: "agent", user_scope: scope, model: MODEL,
         kind: "tool_runs", turn_id: turnId, step: 900,
         ok: res.toolRuns.every((t) => t.ok), tool_runs: res.toolRuns,
         meta: { stem, instruction: row.text },
@@ -454,8 +440,7 @@ export class LibraryAgent extends Agent {
     if (decision === "no-credit") return { ok: false, error: "算力不足" };
 
     const turnId = `${Date.now()}-${rand6()}`;
-    const model = resolveEditModel(await cachedModelConfig(this.env));
-    const callClaude = this._makeLoggedCall({ turnId, scope, stem: "", instruction: row.text, model });
+    const callClaude = this._makeLoggedCall({ turnId, scope, stem: "", instruction: row.text, model: MODEL });
     // refs 走 queue 的 images 列（客户端发来的编号清单 [{n,stem,title}]，见 onMessage）。
     const refs = row.images ? (() => { try { return JSON.parse(row.images); } catch { return []; } })() : [];
     // 带上最近几轮对话（同单篇编辑 DO），模型才接得住「刚才那两篇」「再来一次」。
@@ -691,20 +676,56 @@ export class Miner {
     // handler has no request to read it from). No scope = the sweep dispatcher.
     const scope = url.searchParams.get("scope") || "";
     if (scope) await this.state.storage.put("scope", scope);
+    // photoTs = 照片落盘 poke（Pages upload handler 带来）：记一个待办键，成熟
+    //（PBF_GRACE_MS，合并同 session 的照片 burst）后由 alarm 调 backfillSessionPhotos
+    // 补写晚到照片标记。格式校验防脏 key 常驻 DO storage。
+    const photoTs = url.searchParams.get("photoTs") || "";
+    if (photoTs && scope && /^\d{4}-\d{2}-\d{2}-\d{6}$/.test(photoTs)) {
+      const cur = await this.state.storage.get("pbf:" + photoTs);
+      if (!cur) await this.state.storage.put("pbf:" + photoTs, { at: Date.now(), tries: 0 });
+    }
+    // alarm 取 min 语义：photo poke 想要 +PBF_GRACE_MS，挖矿 poke 想要 +500ms——
+    // 谁早听谁的。旧的「有 alarm 就不动」会让先到的 photo alarm 拖慢随后的挖矿 60s。
+    const desired = Date.now() + (photoTs ? PBF_GRACE_MS : 500);
     const existing = await this.state.storage.getAlarm();
-    if (!existing) await this.state.storage.setAlarm(Date.now() + 500);
+    if (!existing || existing > desired) await this.state.storage.setAlarm(desired);
     return new Response("queued", { status: 202 });
   }
 
   async alarm() {
     const scope = await this.state.storage.get("scope");
     if (scope) {
+      // 晚到照片补写：先于 runMine 处理成熟的 pbf 待办（清 .empty 的 re-mine 同一趟
+      // 就能被 runMine 顺手做掉）。补写与挖矿写盘同在这条串行 alarm 链上——时序竞态
+      // 结构性消失（见 miner.js backfillSessionPhotos 注释）。失败重试最多 3 次后放弃
+      //（照片本体永在 R2，可管理端重放补齐）。
+      let pbfNextDue = null;
+      const pbf = await this.state.storage.list({ prefix: "pbf:" });
+      for (const [key, val] of pbf) {
+        if (!key.startsWith("pbf:")) continue;   // 兼容不认 prefix 的 storage fake
+        const rec = typeof val === "object" && val ? val : { at: val, tries: 0 };
+        if (Date.now() - rec.at < PBF_GRACE_MS) {
+          pbfNextDue = Math.min(pbfNextDue ?? Infinity, rec.at + PBF_GRACE_MS);
+          continue;
+        }
+        try {
+          await backfillSessionPhotos(this.env, scope, key.slice(4));
+          await this.state.storage.delete(key);
+        } catch (e) {
+          console.log("[pbf] backfill 失败", key, String(e && e.message || e));
+          if (rec.tries >= 2) { await this.state.storage.delete(key); continue; }
+          await this.state.storage.put(key, { at: Date.now(), tries: rec.tries + 1 });
+          pbfNextDue = Math.min(pbfNextDue ?? Infinity, Date.now() + PBF_GRACE_MS);
+        }
+      }
       // Per-user shard: runMine processes a bounded slice (subrequest budget) of
       // THIS user's prefix and tells us if ASR is still cooking or work was
       // deferred — if so, come back soon to resume so long audio finishes across
       // passes instead of timing out in one invocation.
       const r = await runMine(this.env, scope);
-      if (r && r.moreWork) await this.state.storage.setAlarm(Date.now() + MINE_RESUME_MS);
+      const resume = (r && r.moreWork) ? Date.now() + MINE_RESUME_MS : null;
+      const next = [resume, pbfNextDue].filter((x) => x != null).sort((a, b) => a - b)[0];
+      if (next) await this.state.storage.setAlarm(next);
       return;
     }
     // Sweep dispatcher (cron/admin trigger): one whole-bucket list, then poke the
@@ -1167,11 +1188,19 @@ export default {
       if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
       const tok = bearerToken(request);
       const isAdmin = env.FILES_TOKEN && tok === env.FILES_TOKEN;
-      const scope   = isAdmin ? "admin" : await resolveScope(tok, env);
+      // admin 可用 ?scope=users/<sub>/ 定向 poke 某个用户分片（photoTs 补写重放、
+      // 人工验证用）；不带 scope 的 admin 照旧踢 sweep dispatcher。
+      const adminScope = isAdmin ? (url.searchParams.get("scope") || "") : "";
+      const scope   = isAdmin ? (/^users\/[^/]+\/$/.test(adminScope) ? adminScope : "admin")
+                              : await resolveScope(tok, env);
       if (!scope) return new Response("unauthorized", { status: 401 });
+      // photoTs：照片落盘 poke（Pages upload handler），透传给用户分片记补写待办。
+      const photoTs = url.searchParams.get("photoTs") || "";
       const shard = scope === "admin" ? "miner" : "miner:" + scope;
       const stub = env.Miner.get(env.Miner.idFromName(shard));
-      const target = scope === "admin" ? "https://miner/" : "https://miner/?scope=" + encodeURIComponent(scope);
+      const target = scope === "admin" ? "https://miner/"
+        : "https://miner/?scope=" + encodeURIComponent(scope)
+          + (photoTs ? "&photoTs=" + encodeURIComponent(photoTs) : "");
       return stub.fetch(new Request(target, { method: "POST" }));
     }
 

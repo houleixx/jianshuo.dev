@@ -79,13 +79,12 @@ export async function readArticleDoc(env, key) {
   try { return migrateToV3(JSON.parse(await obj.text())); } catch { return null; }
 }
 
-// ── 文章摘要索引（articles-index.json）────────────────────────────────────────
+// ── 文章摘要索引（D1 articles 表）─────────────────────────────────────────────
 // GET /articles 的快路径直接拿这份索引出列表（慢的大头是 R2 listing 本身，
 // 几百个对象一页 ~1s），所以每个写入口在下面的 putArticleDoc 里同步维护它。
 // 索引只是加速层：R2 listing 仍是权威，list 路由每次响应后在 waitUntil 里全量
 // 对账——写-写并发的 lost update、绕过 API 的直写（如 agent 的 style-intro
 // 文章）都在下一次打开时收敛。索引写失败绝不打断文章写主路径。
-export function articlesIndexKey(scope) { return `${scope}articles-index.json`; }
 
 // 列表条目的唯一出处——list 路由的对账和写入口的同步维护都用它，字段不漂。
 export function indexEntryFor(stem, doc) {
@@ -114,20 +113,7 @@ async function upsertIndexEntry(env, key, doc, putResult) {
   const loc = scopeStemFromKey(key);
   if (!loc) return;
   try {
-    const ik = articlesIndexKey(loc.scope);
-    let idx = { schema: 1, items: {} };
-    const io = await env.FILES.get(ik);
-    if (io) {
-      try { const parsed = JSON.parse(await io.text()); if (parsed && parsed.items) idx = parsed; } catch {}
-    }
-    // 保留已有的 sidecar 标记（empty/blocked/tags）——它们由 setIndexFlag 维护，
-    // 文章 doc 的写入不该抹掉。
     const entry = indexEntryFor(loc.stem, doc);
-    idx.items[loc.stem] = { ...(idx.items[loc.stem] || {}),
-      fp: (putResult && putResult.etag) || null, entry };
-    idx.updatedAt = Date.now();
-    await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
-    // 存储迁移 P2：D1 行级 UPSERT 同步维护（列表读的主路径）。best-effort 同上。
     await coreUpsertArticleEntry(env, loc.scope, loc.stem, JSON.stringify(entry),
       (putResult && putResult.etag) || null, articleTime(entry.createdAt));
   } catch { /* 索引是加速层，绝不打断写主路径 */ }
@@ -139,25 +125,6 @@ async function upsertIndexEntry(env, key, doc, putResult) {
 // 漂移由 list/recordings 的后台对账按 listing 权威重建。
 export async function setIndexFlag(env, scope, stem, flag, on = true) {
   try {
-    const ik = articlesIndexKey(scope);
-    let idx = { schema: 1, items: {} };
-    const io = await env.FILES.get(ik);
-    if (io) {
-      try { const parsed = JSON.parse(await io.text()); if (parsed && parsed.items) idx = parsed; } catch {}
-    }
-    const it = idx.items[stem] || (idx.items[stem] = { fp: null, entry: null });
-    if (on) {
-      if (it[flag]) return;
-      it[flag] = true;
-    } else {
-      if (!(flag in it)) return;
-      delete it[flag];
-      // 条目既无文章也无任何标记 → 整个摘掉
-      if (!it.entry && !it.empty && !it.blocked && !it.tags) delete idx.items[stem];
-    }
-    idx.updatedAt = Date.now();
-    await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
-    // 存储迁移 P2：D1 标记列同步（on/off 与「无摘要无标记整行摘掉」语义一致）。
     await coreSetArticleFlag(env, scope, stem, flag, on);
   } catch { /* 同上：加速层，绝不打断写主路径 */ }
 }
@@ -167,16 +134,6 @@ export async function removeIndexEntry(env, key) {
   const loc = scopeStemFromKey(key);
   if (!loc) return;
   try {
-    const ik = articlesIndexKey(loc.scope);
-    const io = await env.FILES.get(ik);
-    if (!io) return;
-    const idx = JSON.parse(await io.text());
-    if (idx && idx.items && loc.stem in idx.items) {
-      delete idx.items[loc.stem];
-      idx.updatedAt = Date.now();
-      await env.FILES.put(ik, JSON.stringify(idx), { httpMetadata: { contentType: "application/json" } });
-    }
-    // 存储迁移 P2：D1 行同步删除（索引文件缺失时也要删，别包在上面的 if 里）。
     await coreDeleteArticle(env, loc.scope, loc.stem);
   } catch {}
 }

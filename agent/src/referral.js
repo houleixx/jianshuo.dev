@@ -54,56 +54,23 @@ export async function publishMintRate(env, db, now) {
 // HTML 页与后台 JSON（?format=json）共用这一份。
 async function refhitsRows(env) {
   const fam = (fp) => fp.includes(":") ? "v6" : fp.includes(".") ? "v4" : "hash";
-  // D1 主路径：一条 SELECT 全表（2 天窗口内几百行），彻底取代 list+80 GET。
-  // null（不可用）或空表（backfill 前）→ 落回 R2 老路径。
-  const d1rows = await coreAllRefhits(env);
-  if (d1rows && d1rows.length) {
-    const byFp = new Map(); // fp → {tss:[], latest}
-    for (const r of d1rows) {
-      const rec = byFp.get(r.fingerprint) || { tss: [], latest: null, latestTs: 0, firstTs: Infinity };
-      rec.tss.push(r.ts);
-      if (r.ts > rec.latestTs) { rec.latestTs = r.ts; rec.latest = r; }
-      if (r.ts < rec.firstTs) rec.firstTs = r.ts;
-      byFp.set(r.fingerprint, rec);
-    }
-    const rows = [...byFp.entries()]
-      .sort((a, b) => b[1].latestTs - a[1].latestTs)
-      .map(([fp, rec]) => ({
-        fp, family: fam(fp), hits: rec.tss.length, firstTs: rec.firstTs, lastTs: rec.latestTs,
-        token: String(rec.latest.token || ""),
-        owner: String(rec.latest.owner || "").replace("users/", "").replace("anon-", "").replace(/\/$/, "").slice(0, 8),
-      }));
-    return { rows, plain: rows.filter((r) => r.family !== "hash").length, generatedAt: Date.now() };
+  // D1 一条 SELECT 全表（2 天窗口内几百行）；不可用按空表展示。
+  const d1rows = (await coreAllRefhits(env)) || [];
+  const byFp = new Map(); // fp → {tss:[], latest}
+  for (const r of d1rows) {
+    const rec = byFp.get(r.fingerprint) || { tss: [], latest: null, latestTs: 0, firstTs: Infinity };
+    rec.tss.push(r.ts);
+    if (r.ts > rec.latestTs) { rec.latestTs = r.ts; rec.latest = r; }
+    if (r.ts < rec.firstTs) rec.firstTs = r.ts;
+    byFp.set(r.fingerprint, rec);
   }
-  const listed = await env.FILES.list({ prefix: "refhits/", limit: 1000 });
-  const byFp = new Map(); // fp → {tss:[], latestKey}
-  for (const o of listed.objects || []) {
-    const parts = o.key.split("/");
-    if (parts.length !== 3) continue;
-    const ts = parseInt(parts[2], 10);
-    if (!Number.isFinite(ts)) continue;
-    const rec = byFp.get(parts[1]) || { tss: [], latestKey: null, latestTs: 0, firstTs: Infinity };
-    rec.tss.push(ts);
-    if (ts > rec.latestTs) { rec.latestTs = ts; rec.latestKey = o.key; }
-    if (ts < rec.firstTs) rec.firstTs = ts;
-    byFp.set(parts[1], rec);
-  }
-  const sorted = [...byFp.entries()].sort((a, b) => b[1].latestTs - a[1].latestTs);
-  const rows = [];
-  for (const [i, [fp, rec]] of sorted.entries()) {
-    let v = null;
-    if (i < 80) {
-      try {
-        const obj = await env.FILES.get(rec.latestKey);
-        if (obj) v = JSON.parse(await obj.text());
-      } catch {}
-    }
-    rows.push({
+  const rows = [...byFp.entries()]
+    .sort((a, b) => b[1].latestTs - a[1].latestTs)
+    .map(([fp, rec]) => ({
       fp, family: fam(fp), hits: rec.tss.length, firstTs: rec.firstTs, lastTs: rec.latestTs,
-      token: v ? String(v.token || "") : null,
-      owner: v ? String(v.owner || "").replace("users/", "").replace("anon-", "").replace(/\/$/, "").slice(0, 8) : null,
-    });
-  }
+      token: String(rec.latest.token || ""),
+      owner: String(rec.latest.owner || "").replace("users/", "").replace("anon-", "").replace(/\/$/, "").slice(0, 8),
+    }));
   return { rows, plain: rows.filter((r) => r.family !== "hash").length, generatedAt: Date.now() };
 }
 
@@ -150,13 +117,9 @@ async function ownerFromToken(env, token) {
     if (cm) { try { key = JSON.parse(await cm.text()).articleKey || null; } catch {} }
   }
   if (!key && /^[A-Za-z0-9]{6,16}$/.test(id)) {
-    // 邀请码：D1 优先，查无/不可用落回 R2（迁移期兜底）。
+    // 邀请码：D1 invites 唯一真源。
     const row = await coreGetInvite(env, id);
     if (row && /^users\/[^/]+\/$/.test(row.owner)) return row.owner;
-    if (row === null || row === false) {
-      const inv = await env.FILES.get(`invites/${id.toUpperCase()}`);
-      if (inv) { try { const o = JSON.parse(await inv.text()).owner; if (/^users\/[^/]+\/$/.test(o)) return o; } catch {} }
-    }
   }
   const m = key && key.match(/^(users\/[^/]+\/)/);
   return m ? m[1] : null;
@@ -171,18 +134,17 @@ export async function inviteCodeForScope(env, scope, secret) {
   for (const len of [6, 10, 16]) {
     const code = hex.slice(0, len).toUpperCase();
     if (code.length < len) break;                       // 源串不够长，用上一档
-    // 占用检查：D1 与 R2 都看（迁移期两边都可能有旧记录；都空才算空位）。
+    // 占用检查走 D1。不可用（null）时宁可这次不发码——盲铸可能顶掉别人的码。
     const row = await coreGetInvite(env, code);
+    if (row === null) return null;
     if (row && row.owner === scope) return code;
-    if (row) continue;                                  // D1 里被别人占
-    const cur = await env.FILES.get(`invites/${code}`);
-    if (!cur) return code;
-    try { if (JSON.parse(await cur.text()).owner === scope) return code; } catch { return code; }
+    if (row) continue;                                  // 被别人占
+    return code;
   }
   return null;                                          // 三档全被别人占（实际不可能）
 }
 
-// GET /agent/referral/link — 铸/取自己的邀请链接。写穿 invites/<码>（owner+name，
+// GET /agent/referral/link — 铸/取自己的邀请链接。写穿 D1 invites（owner+name，
 // name 每次刷新，落地页「X 邀请你」跟着改名走）；奖励数字按现价估算（与落地页同式）。
 async function handleInviteLink(request, env) {
   const tok = bearerToken(request);
@@ -200,12 +162,7 @@ async function handleInviteLink(request, env) {
     const o = await env.FILES.get(`${scope}CLAUDE.json`);
     if (o) name = String(JSON.parse(await o.text())?.profile?.name || "").trim().slice(0, 20);
   } catch {}
-  // 迁移期双写：R2 照写（真源兜底），D1 落行（查询主路径）。
-  const invTs = Date.now();
-  await Promise.allSettled([
-    env.FILES.put(`invites/${code}`, JSON.stringify({ owner: scope, name, ts: invTs })),
-    corePutInvite(env, code, scope, name, invTs),
-  ]);
+  await corePutInvite(env, code, scope, name, Date.now());
 
   let rate = null;
   try { const o = await env.FILES.get("config/mint-rate.json"); if (o) rate = JSON.parse(await o.text()); } catch {}

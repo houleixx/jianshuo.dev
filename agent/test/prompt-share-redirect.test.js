@@ -129,9 +129,9 @@ describe("溯源转发（POST）", () => {
     const origin = JSON.parse(e.FILES._store.get(`shares/${ORIGIN_CODE}`));
     expect(origin.sub).toBe("other-author");        // 副本没被写穿成导入者
     expect(origin.importCount).toBe(5);
-    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    const idx = await coreLoadPromptShares(e, IMPORTER);
     expect(idx.byItem.p_imp002).toMatchObject({ code: ORIGIN_CODE, borrowed: true });
-    expect(idx.mintLog).toHaveLength(0);            // 不占日上限
+    expect(await coreMintedToday(e, IMPORTER, new Date().toISOString().slice(0, 10))).toBe(0); // 不占日上限
   });
   it("幂等重放：再 POST 一次仍返回原码，副本仍是原作者的", async () => {
     const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
@@ -168,7 +168,7 @@ describe("溯源转发（POST）", () => {
     const j = await (await share(e, "p_imp002")).json();
     expect(j.code).not.toBe(ORIGIN_CODE);
     expect(j.created).toBe(true);
-    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    const idx = await coreLoadPromptShares(e, IMPORTER);
     expect(idx.byItem.p_imp002.code).toBe(j.code);
     expect(idx.byItem.p_imp002.borrowed).toBeUndefined();
     expect(JSON.parse(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).sub).toBe("other-author"); // 原副本始终没动
@@ -181,7 +181,7 @@ describe("溯源转发（POST）", () => {
     const j = await r.json();
     expect(j.sharing).toBe(false);
     expect(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).toBeTruthy();   // 原作者分享没被删
-    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    const idx = await coreLoadPromptShares(e, IMPORTER);
     expect(idx.byItem.p_imp003).toBeUndefined();
     const j2 = await (await share(e, "p_imp003")).json();               // 再开 → 重新转发
     expect(j2.code).toBe(ORIGIN_CODE);
@@ -250,13 +250,13 @@ describe("review 修复（2026-07-22 code-review）", () => {
     expect((await unshare(e, "p_imp004")).status).toBe(200); // 恢复后重试成功
   });
 
-  it("V3: 转发落索引两路全失败 → 500，不返回假 sharing:true", async () => {
-    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() }); // 无 CORE：D1 路必 false
+  it("V3: 转发落索引（D1）失败 → 500，不返回假 sharing:true", async () => {
+    const e = env2({ [`shares/${ORIGIN_CODE}`]: originDoc() });
     await putTree(e, [cleanImport]);
-    const rawPut = e.FILES.put.bind(e.FILES);
-    e.FILES.put = async (k, v) => { if (String(k).endsWith("prompt-shares.json")) throw new Error("r2 boom"); return rawPut(k, v); };
+    const rawPrepare = e.CORE.prepare.bind(e.CORE);
+    e.CORE.prepare = (sql) => { if (/INSERT INTO prompt_shares/.test(sql)) throw new Error("d1 boom"); return rawPrepare(sql); };
     expect((await share(e, "p_imp004")).status).toBe(500);
-    e.FILES.put = rawPut;
+    e.CORE.prepare = rawPrepare;
     const j = await (await share(e, "p_imp004")).json(); // 恢复后转发成功
     expect(j.code).toBe(ORIGIN_CODE);
   });
@@ -278,7 +278,7 @@ describe("review 修复（2026-07-22 code-review）", () => {
     await putTree(e, [cleanImport]);
     await share(e, "p_imp004");
     await putTree(e, [{ ...cleanImport, prompt: "我自己改过的版本。" }]);
-    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    const idx = await coreLoadPromptShares(e, IMPORTER);
     expect(idx.byItem.p_imp004).toBeUndefined();                       // 转发关系失效即撤
     expect(await shareStates(e, IMPORTER)).toEqual({});                // 分享卡不再显示分享中
     expect(e.FILES._store.get(`shares/${ORIGIN_CODE}`)).toBeTruthy();  // 原作者分享无恙
@@ -289,7 +289,7 @@ describe("review 修复（2026-07-22 code-review）", () => {
     await putTree(e, [cleanImport]);
     await share(e, "p_imp004");
     await putTree(e, [{ ...cleanImport, label: "新名字" }]);
-    const idx = JSON.parse(e.FILES._store.get(`${IMPORTER}prompt-shares.json`));
+    const idx = await coreLoadPromptShares(e, IMPORTER);
     expect(idx.byItem.p_imp004).toMatchObject({ code: ORIGIN_CODE, borrowed: true });
   });
 
@@ -302,19 +302,14 @@ describe("review 修复（2026-07-22 code-review）", () => {
     expect(j.original).toBe(true);
   });
 
-  it("V8: D1 COUNT 瞬时失败且 idx 来自 D1 → 回退数 R2 mintLog，日上限仍生效", async () => {
-    const today = new Date().toISOString();
-    const e = env2({
-      "config/prompt-share.json": JSON.stringify({ dailyCapPerUser: 1 }),
-      [`${IMPORTER}prompt-shares.json`]: JSON.stringify({ byItem: { p_other9: { code: "9871", createdAt: today } }, mintLog: [today] }),
-    });
-    e.CORE = fakeD1(coreSql());
-    e.CORE.prepare("INSERT INTO prompt_shares (user_sub, item_id, code, created_at, borrowed) VALUES (?,?,?,?,?)")
-      .bind(IMPORTER, "p_other9", "9871", today, 0).run();
+  it("V8: D1 COUNT 瞬时失败 → 500 报错重试（不默认 0 放行，也不误伤）", async () => {
+    const e = env2({ "config/prompt-share.json": JSON.stringify({ dailyCapPerUser: 1 }) });
     const rawPrepare = e.CORE.prepare.bind(e.CORE);
     e.CORE.prepare = (sql) => { if (/COUNT\(\*\)/.test(sql) && /created_at LIKE/.test(sql)) throw new Error("d1 count boom"); return rawPrepare(sql); };
     await putTree(e, [{ id: "p_fresh01", type: "action", label: "新条目", prompt: "全新正文。", appliesTo: ["text"] }]);
-    expect((await share(e, "p_fresh01")).status).toBe(429); // 修复前这里会放行铸码
+    expect((await share(e, "p_fresh01")).status).toBe(500); // 不能默认 0 白送日上限
+    e.CORE.prepare = rawPrepare;
+    expect((await share(e, "p_fresh01")).status).toBe(200); // 恢复后正常铸码
   });
 
   it("V6: 无 borrowed 列的旧库 → market 退回老 SQL 不 500；upsert 自有码退回 4 列写法", async () => {

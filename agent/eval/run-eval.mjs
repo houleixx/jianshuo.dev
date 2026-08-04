@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { buildMinePrompt, parseArticles, MINE_MODEL_DEFAULT } from "../src/miner.js";
+import { buildMinePrompt, parseArticles, MINE_MODEL } from "../src/miner.js";
 import { runProxyChecks } from "./lib/proxy-checks.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +24,7 @@ export async function runEval({ fixtures, champSystem, candSystem, callModel, mo
     const runOne = async (systemPrompt) => {
       const payload = buildMinePrompt({
         transcript: fx.transcript, styleText: "", photos: fx.photos || [],
-        force: false, provider: "anthropic", model, systemPrompt,
+        force: false, model, systemPrompt,
       });
       const raw = await callModel(payload);
       let articles = [];
@@ -65,7 +65,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const fixtures = loadFixtures();
   const { results } = await runEval({
     fixtures, champSystem: MINE_SYSTEM, candSystem,
-    callModel: anthropicCallModel, model: MINE_MODEL_DEFAULT,
+    callModel: anthropicCallModel, model: MINE_MODEL,
   });
   const outDir = join(HERE, "runs", runId);
   mkdirSync(join(outDir, "outputs"), { recursive: true });

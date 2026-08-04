@@ -4,6 +4,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 vi.mock("../src/push.js", () => ({ sendPush: vi.fn(async () => true) }));
 import { sendPush } from "../src/push.js";
 import { fakeD1, usageSql, fakeEnv } from "./fakes.js";
+import { coreUpsertProfile } from "../../functions/lib/core-db.js";
 import { handleMintRoutes, feedQuote } from "../src/mint.js";
 import { hmacSign, b64url, anonScopeFromToken } from "../../functions/lib/auth.js";
 import { balanceUY, getLedger } from "../src/usage_store.js";
@@ -214,10 +215,10 @@ describe("POST /agent/feed", () => {
     expect(r2.status).toBe(403);
   });
 
-  it("绑过实名的匿名 token（ACCOUNT.json 有 appleSub）→ 投币放行，feeder 记匿名 scope", async () => {
+  it("绑过实名的匿名 token（D1 档案有 apple_sub）→ 投币放行，feeder 记匿名 scope", async () => {
     const anonTok = "anon_feedbound_0123456789ab";
     const scope = await anonScopeFromToken(anonTok);
-    await env.FILES.put(`${scope}ACCOUNT.json`, JSON.stringify({ appleSub: "apple-sub-9" }));
+    await coreUpsertProfile(env, scope, { apple_sub: "apple-sub-9" });
     const r = await post("/agent/feed", anonTok, { share_id: SHARE1 });
     const j = await r.json();
     expect(j.ok).toBe(true);

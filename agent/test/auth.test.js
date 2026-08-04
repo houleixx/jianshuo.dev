@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { b64url, hmacSign, verifySession, anonScopeFromToken, sha256hex, timingSafeEqual, hasVerifiedBinding } from "../../functions/lib/auth.js";
 import { fakeEnv } from "./fakes.js";
+import { coreUpsertProfile } from "../../functions/lib/core-db.js";
 
 // The Files API and the agent worker both verify tokens via this one module.
 // These lock the contract so a future edit can't silently break auth in one place.
@@ -67,26 +68,27 @@ describe("timingSafeEqual", () => {
   });
 });
 
-// 社区写门槛的第二条腿：匿名 scope 只要 ACCOUNT.json 里绑过 Apple/微信，就算可追责。
+// 社区写门槛的第二条腿：匿名 scope 只要 D1 档案里绑过 Apple/微信，就算可追责。
 describe("hasVerifiedBinding", () => {
   const SCOPE = "users/anon-bound0001/";
 
-  it("ACCOUNT.json 有 appleSub / wechatOpenid / wechatUnionid → true", async () => {
-    for (const acct of [{ appleSub: "s1" }, { wechatOpenid: "o1" }, { wechatUnionid: "u1" }]) {
-      const env = fakeEnv({ [`${SCOPE}ACCOUNT.json`]: JSON.stringify(acct) });
+  it("档案有 apple_sub / wechat_openid / wechat_unionid → true", async () => {
+    for (const fields of [{ apple_sub: "s1" }, { wechat_openid: "o1" }, { wechat_unionid: "u1" }]) {
+      const env = fakeEnv();
+      await coreUpsertProfile(env, SCOPE, fields);
       expect(await hasVerifiedBinding(env, SCOPE)).toBe(true);
     }
   });
 
-  it("没有 ACCOUNT.json、或有但无绑定字段 → false", async () => {
+  it("没有档案、或有但无绑定字段 → false", async () => {
     expect(await hasVerifiedBinding(fakeEnv(), SCOPE)).toBe(false);
-    const env = fakeEnv({ [`${SCOPE}ACCOUNT.json`]: JSON.stringify({ name: "只有名字" }) });
+    const env = fakeEnv();
+    await coreUpsertProfile(env, SCOPE, { name: "只有名字" });
     expect(await hasVerifiedBinding(env, SCOPE)).toBe(false);
   });
 
-  it("坏 JSON、非 users/ scope、空 scope、缺 FILES → false（永不 throw）", async () => {
-    const env = fakeEnv({ [`${SCOPE}ACCOUNT.json`]: "not-json{" });
-    expect(await hasVerifiedBinding(env, SCOPE)).toBe(false);
+  it("非 users/ scope、空 scope、D1 不可用 → false（永不 throw）", async () => {
+    const env = fakeEnv();
     expect(await hasVerifiedBinding(env, "")).toBe(false);
     expect(await hasVerifiedBinding(env, null)).toBe(false);
     expect(await hasVerifiedBinding(env, "admin/")).toBe(false);

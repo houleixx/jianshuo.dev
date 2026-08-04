@@ -20,7 +20,7 @@ import { ensureAccount, debit, asrCharged } from "./usage_store.js";
 import { sendPush } from "./push.js";
 import { asrCorpus } from "./asr-hotwords.js";
 import { hmacSign } from "../../functions/lib/auth.js";
-import { TITLE_FALLBACK, resolveArticles } from "../../functions/lib/article-store.js";
+import { TITLE_FALLBACK, resolveArticles, readArticleDoc, writeArticleDoc, setIndexFlag } from "../../functions/lib/article-store.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
 import { shareIdFor, communityKey } from "../../functions/lib/community-store.js";
 import { distillStyle, buildStyleIntroArticle, buildInsufficientCorpusArticle, corpusChars, MIN_CORPUS_CHARS } from "./style-extract.js";
@@ -34,7 +34,8 @@ import {
 import { MOD_CATEGORIES, buildModerationSystem } from "./prompts/moderation.js";
 import { mineImageOnly, rewriteFromVision, buildFactPack, makeStageCaller } from "./image-mine.js";
 
-export const MINE_MODEL_DEFAULT = "claude-opus-4-8";
+// 挖矿模型 —— 质量优先；编辑模型（快、便宜）在 index.js 另设，两者刻意解耦。
+export const MINE_MODEL = "claude-opus-4-8";
 const MIN_CHARS          = 20;
 const ORIGIN             = "https://jianshuo.dev";
 
@@ -51,54 +52,6 @@ const ASR_MAX_AGE_MS       = 30 * 60 * 1000;   // give up (mark empty) if not do
 const MINE_SUBREQ_BUDGET   = 30;               // ~fetch-subrequests to spend per invocation before deferring
 const MINE_RESUME_MS       = 10 * 1000;        // reschedule the alarm this soon while work remains
 export { ASR_MAX_AGE_MS, MINE_RESUME_MS };
-
-// ── Model config (R2 `config/model.json`, falls back to env + default) ─────────
-
-export const PROVIDER_ENV_KEY = {
-  "anthropic":  "CLAUDE_API_KEY",
-  "openai":     "OPENAI_API_KEY",
-  "deepseek":   "DEEPSEEK_API_KEY",
-  "moonshot":   "MOONSHOT_API_KEY",
-  "qwen":       "QWEN_API_KEY",
-  "hunyuan":    "HUNYUAN_API_KEY",
-  "openrouter": "OPENROUTER_API_KEY",
-  "volc-ark":   "VOLC_ARK_API_KEY",
-};
-
-export async function loadModelConfig(env) {
-  try {
-    const obj = await env.FILES.get("config/model.json");
-    if (obj) {
-      const cfg = await obj.json();
-      const providerKey = cfg.providerKey || "anthropic";
-      const provider    = providerKey === "anthropic" ? "anthropic" : "openai-compat";
-      const envKey      = PROVIDER_ENV_KEY[providerKey];
-      const apiKey      = envKey ? (env[envKey] || "") : "";
-      return {
-        providerKey,
-        provider,
-        model:   cfg.model   || MINE_MODEL_DEFAULT,
-        baseUrl: cfg.baseUrl || "",
-        apiKey,
-        imagePipeline: cfg.imagePipeline === true,
-      };
-    }
-  } catch (_) {}
-  return { providerKey: "anthropic", provider: "anthropic", model: MINE_MODEL_DEFAULT, baseUrl: "", apiKey: env.CLAUDE_API_KEY || "", imagePipeline: false };
-}
-
-// Voice editing runs an Anthropic tool-use loop (Claude only). It's a quick,
-// mechanical rewrite where latency matters far more than raw quality, so it uses
-// a faster / cheaper model than the mining model by default — deliberately
-// decoupled from the mining model (which is quality-critical). An explicit Claude
-// `editModel` in config/model.json overrides; the mining provider/model is
-// irrelevant to editing.
-export const EDIT_MODEL_DEFAULT = "claude-sonnet-4-6";
-
-export function resolveEditModel(modelCfg) {
-  const m = modelCfg && modelCfg.editModel;
-  return (typeof m === "string" && m.startsWith("claude-")) ? m : EDIT_MODEL_DEFAULT;
-}
 
 const ARTICLES_SCHEMA = {
   type: "object",
@@ -558,7 +511,7 @@ async function gatherPhotos(audioKey, allKeys, env, log = () => {}) {
 
 // ── Claude (article generation) ───────────────────────────────────────────────
 
-// cacheMode picks the prompt-cache layout (Anthropic only; ignored for openai-compat):
+// cacheMode picks the prompt-cache layout:
 //   "system"     (default) — 文风 rides in the cached system block. Best when the SAME
 //                文风 is reused across DIFFERENT recordings (normal mining): system
 //                (SYSTEM+文风) is the stable prefix, the transcript varies per recording.
@@ -589,10 +542,10 @@ function redactReqForLog(payload) {
 
 // Pure prompt/payload builder — no env, no fetch, no billing/logging side effects.
 // Shared by production generateArticles AND the eval harness (agent/eval/run-eval.mjs)
-// so the prompt bytes are identical. cacheMode/provider behavior unchanged.
+// so the prompt bytes are identical. cacheMode behavior unchanged.
 export function buildMinePrompt({
   transcript, styleText, photos, force, cacheMode = "system",
-  provider = "anthropic", model,
+  model,
   systemPrompt = SYSTEM, forcePrompt = SYSTEM_FORCE,
   photoInstr = _PHOTO_INSTR, defaultStyle = DEFAULT_STYLE,
 }) {
@@ -602,30 +555,6 @@ export function buildMinePrompt({
   const styleTail = !force ? `\n\n<style>\n${effectiveStyle}\n</style>` : "";
   const transcriptText = `<transcript>\n${transcript}\n</transcript>`;
   const transcriptCache = cacheMode === "transcript" && !force;
-
-  if (provider === "openai-compat") {
-    const system = staticSystem + styleTail;
-    let userContent;
-    if (!hasPhotos) {
-      userContent = transcriptText;
-    } else {
-      userContent = [{ type: "text", text: transcriptText }];
-      for (let i = 0; i < photos.length; i++) {
-        userContent.push({ type: "text", text: `\n<photo key="${photos[i].relKey}" time="${photos[i].label}">` });
-        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${photos[i].b64}`, detail: "low" } });
-        userContent.push({ type: "text", text: `\n</photo>` });
-      }
-    }
-    return {
-      model,
-      max_tokens: force ? 2000 : 24000,  // 8000 会把超长录音的多篇输出拦腰截断(JSON 必坏);流式已解掉长生成的 524
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: userContent },
-      ],
-      response_format: { type: "json_object" },
-    };
-  }
 
   // Anthropic — prompt caching via cache_control breakpoints
   const systemText = transcriptCache ? staticSystem : (staticSystem + styleTail);
@@ -658,11 +587,11 @@ export function buildMinePrompt({
   return payload;
 }
 
-async function generateArticles(transcript, claudeMd, photos, force, env, modelCfg, cacheMode = "system", systemOverride = null, photoInstr = undefined, onText = null) {
+async function generateArticles(transcript, claudeMd, photos, force, env, cacheMode = "system", systemOverride = null, photoInstr = undefined, onText = null) {
   const _P = await loadPrompts(env);
   const payload = buildMinePrompt({
     transcript, styleText: claudeMd, photos, force, cacheMode,
-    provider: modelCfg.provider, model: modelCfg.model,
+    model: MINE_MODEL,
     systemPrompt: systemOverride || _P["mine.system"],
     forcePrompt: _P["mine.force"],
     // Explicit "" (image-only vision path) must win over buildMinePrompt's PHOTO_INSTR
@@ -671,34 +600,20 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
   });
   const reqForLog = redactReqForLog(payload);
   const t0 = Date.now();
-  let text, latencyMs, rawResp;
 
-  if (modelCfg.provider === "openai-compat") {
-    const resp = await fetch(`${modelCfg.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${modelCfg.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    latencyMs = Date.now() - t0;
-    if (!resp.ok) throw new Error(`LLM ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-    rawResp = await resp.json();
-    text = rawResp.choices?.[0]?.message?.content || "";
-  } else {
-    const r = await callAnthropic(env, payload, {
-      apiKey: modelCfg.apiKey,
-      // 实时预览：把生成中的 text token 漏给调用方（restyle 用）。relay 路径无 delta。
-      onEvent: onText ? (ev) => { if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") onText(ev.delta.text); } : null,
-    });
-    latencyMs = Date.now() - t0;
-    if (!r.ok) throw new Error(`Claude ${r.status}: ${(r.errorText || "").slice(0, 200)}`);
-    rawResp = r.json;
-    text = (rawResp.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-  }
+  const r = await callAnthropic(env, payload, {
+    // 实时预览：把生成中的 text token 漏给调用方（restyle 用）。relay 路径无 delta。
+    onEvent: onText ? (ev) => { if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") onText(ev.delta.text); } : null,
+  });
+  const latencyMs = Date.now() - t0;
+  if (!r.ok) throw new Error(`Claude ${r.status}: ${(r.errorText || "").slice(0, 200)}`);
+  const rawResp = r.json;
+  const text = (rawResp.content || []).filter(b => b.type === "text").map(b => b.text).join("");
 
   // 输出被 max_tokens 截断 → JSON 必坏。给 minelog 一个人话错误,别让
   // parseArticles 的 "Expected ',' or ']'" 当谜语(2026-07-12 事故排查半天)。
-  const stopReason = rawResp?.stop_reason || rawResp?.choices?.[0]?.finish_reason;
-  if (stopReason === "max_tokens" || stopReason === "length") {
+  const stopReason = rawResp?.stop_reason;
+  if (stopReason === "max_tokens") {
     throw new Error(`LLM 输出被 max_tokens 截断(${text.length} chars)——上限还不够大或该分批`);
   }
 
@@ -708,8 +623,8 @@ async function generateArticles(transcript, claudeMd, photos, force, env, modelC
 // ── Content moderation (Apple App Store 1.2 — filter objectionable UGC) ────────
 // Judged ONCE here at generation time and stamped onto the article doc as
 // `moderation:{flagged,categories,at}`. The community-share route only READS this
-// flag (no second LLM call) and refuses to publish a flagged article. Anthropic
-// (haiku) regardless of the mining provider, so moderation stays reliable + cheap.
+// flag (no second LLM call) and refuses to publish a flagged article. Uses haiku
+// so moderation stays reliable + cheap.
 // Fail-open on any infra error (don't block legit content) — report/block still cover it.
 // MOD_CATEGORIES / buildModerationSystem now live in ./prompts/moderation.js (imported above).
 export async function moderateArticles(articles, env) {
@@ -819,7 +734,7 @@ export async function maybeAutoShareCommunity(srcKey, env, log = () => {}) {
 
 // ── StatusHub notification ─────────────────────────────────────────────────────
 
-async function notifyStatus(scope, stem, status, env) {
+export async function notifyStatus(scope, stem, status, env) {
   try {
     const stub = env.StatusHub.get(env.StatusHub.idFromName("status:" + scope));
     await stub.fetch(new Request("https://status-hub/broadcast", {
@@ -857,7 +772,7 @@ async function notifyStatus(scope, stem, status, env) {
 //                    no speech at all; IMAGE_ONLY_SYSTEM already carries its own complete
 //                    instructions, including the [[photo:<key>]] marker guidance.
 async function mineVariant(env, {
-  transcript, styleText, photos, cacheMode, modelCfg, scope, stem, turnId,
+  transcript, styleText, photos, cacheMode, scope, stem, turnId,
   metaExtra = {}, debitExtra = {}, label = "", log = () => {},
   systemOverride = null, noForce = false, photoInstr = undefined, preview = null,
 }) {
@@ -868,20 +783,20 @@ async function mineVariant(env, {
     log(`LLM 开始${tag}${force ? " (force)" : ""}`, { step });
     if (preview) { try { preview.reset(); } catch (_) {} }   // force 重试 = 全新一份流
     try {
-      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, modelCfg, cacheMode, systemOverride, photoInstr,
+      const r = await generateArticles(transcript, force ? "" : styleText, force ? null : (photos && photos.length ? photos : null), force, env, cacheMode, systemOverride, photoInstr,
         preview ? (t) => { try { preview.text(t); } catch (_) {} } : null);
-      await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
+      await writeLlmLog(env, { ts: tLlm, source: "mine", ok: true, status: 200, model: MINE_MODEL, latency_ms: r.latencyMs, step, turn_id: turnId, meta, request: r.request, response: r.rawResp });
       try {
         if (env.USAGE) {
           const u = r.rawResp?.usage || {};
-          await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
-            "mine", { model: modelCfg.model, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId, ...debitExtra }, Date.now());
+          await debit(env.USAGE, scope, claudeCostUY(MINE_MODEL, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
+            "mine", { model: MINE_MODEL, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId, ...debitExtra }, Date.now());
         }
       } catch (_) {}
       log(`LLM 完成${tag}${force ? " (force)" : ""}`, { articles: r.articles.length, latency_ms: r.latencyMs });
       return r.articles;
     } catch (e) {
-      await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now() - tLlm, step, turn_id: turnId, meta, error: String(e) });
+      await writeLlmLog(env, { ts: tLlm, source: "mine", ok: false, status: 0, model: MINE_MODEL, latency_ms: Date.now() - tLlm, step, turn_id: turnId, meta, error: String(e) });
       throw e;
     }
   };
@@ -942,7 +857,11 @@ async function listSessionPhotoRelKeys(env, audioKey) {
   const prefix = userPrefix(audioKey);
   const ts = sessionTs(audioKey);
   if (!ts) return [];
-  const folder = `${prefix}photos/${ts}/`;
+  return listPhotoRelKeys(env, prefix, ts);
+}
+
+async function listPhotoRelKeys(env, scope, ts) {
+  const folder = `${scope}photos/${ts}/`;
   const keys = [];
   let cursor;
   do {
@@ -950,7 +869,60 @@ async function listSessionPhotoRelKeys(env, audioKey) {
     for (const o of r.objects || []) if (/\.jpe?g$/i.test(o.key)) keys.push(o.key);
     cursor = r.truncated ? r.cursor : null;
   } while (cursor);
-  return keys.sort().map((k) => k.slice(prefix.length));
+  return keys.sort().map((k) => k.slice(scope.length));
+}
+
+// ── 晚到照片补写（photo backfill）───────────────────────────────────────────────
+// iOS 不再保证「照片先于音频到位」（音频 PUT 曾被照片队列串行阻塞，弱网中位 214s）。
+// 照片 PUT 落盘后 Pages 会带 photoTs poke 本用户的 Miner DO 分片；成熟（PBF_GRACE_MS）
+// 后由 DO alarm 调这里。补写与挖矿写盘在同一 alarm 链上严格串行——这就是正确性来源：
+// 本函数看不到 doc ⇒ doc 尚未诞生 ⇒ 未来挖矿写盘前的 fresh 重列必然列到这张照片。
+export const PBF_GRACE_MS = 60 * 1000;   // 同 session 照片 burst 合并成一次补写（一个版本）
+
+export async function backfillSessionPhotos(env, scope, ts) {
+  const photoKeys = await listPhotoRelKeys(env, scope, ts);
+  if (!photoKeys.length) return { action: "no-photos" };
+
+  const listed = await env.FILES.list({ prefix: `${scope}articles/VoiceDrop-${ts}` });
+  const keys = (listed.objects || []).map((o) => o.key);
+  const docKey = keys.find((k) => k.endsWith(".json") && !/\.asr(?:done)?\.json$/.test(k));
+  const emptyKey = keys.find((k) => k.endsWith(".empty"));
+
+  if (!docKey) {
+    // 无语音 session 的照片晚到：清 .empty（连同 D1 empty 标记），同一 alarm 随后的
+    // runMine 复用 ASR checkpoint、走看图模式重挖成 photos-only 文章。只清照片能改变
+    // 结局的 no-speech/silent——asr-error/too-short 重挖照样落空，清了只会白烧一轮。
+    if (emptyKey) {
+      let reason = "";
+      try { reason = JSON.parse(await (await env.FILES.get(emptyKey)).text())?.reason || ""; } catch (_) {}
+      if (!/^(no-speech|silent)$/.test(reason)) return { action: "empty-kept", reason };
+      const stem = emptyKey.slice(`${scope}articles/`.length, -".empty".length);
+      await env.FILES.delete(emptyKey);
+      await setIndexFlag(env, scope, stem, "empty", false);
+      console.log("[pbf] 照片晚到,清 .empty 重挖", JSON.stringify({ stem }));
+      return { action: "empty-cleared" };
+    }
+    // doc 与 .empty 都不在 = 挖矿还没写盘。写盘只发生在本 DO 的串行 alarm 里，
+    // 所以未来的 fresh 重列必然发生在本次检查之后、必然看见这张照片 → 安全 no-op。
+    return { action: "not-mined-yet" };
+  }
+
+  const doc = await readArticleDoc(env, docKey);
+  if (!doc) return { action: "not-mined-yet" };
+  const stem = docKey.slice(`${scope}articles/`.length, -".json".length);
+  // 任何历史版本里出现过的 key 都不补：出现过又从 head 消失 = 用户主动删除，
+  // 「一张不丢」不等于「赖着不走」。
+  const everSeen = new Set();
+  for (const v of doc.versions || []) for (const k of photoKeysIn(v.articles)) everSeen.add(k);
+  for (const k of photoKeysIn(resolveArticles(doc))) everSeen.add(k);
+  const missing = photoKeys.filter((k) => !everSeen.has(k));
+  if (!missing.length) return { action: "none-missing" };
+
+  const patched = ensurePhotoKeys(missing, resolveArticles(doc));
+  await writeArticleDoc(env, docKey, { articles: patched }, "photo-backfill", { current: doc });
+  await notifyStatus(scope, stem, "ready", env);
+  console.log("[pbf] 补回晚到照片", JSON.stringify({ stem, keys: missing }));
+  return { action: "backfilled", missing };
 }
 
 export async function restyleArticle(env, scope, stem, styleV, preview = null) {
@@ -982,19 +954,18 @@ export async function restyleArticle(env, scope, stem, styleV, preview = null) {
     for (const pk of keys) { try { const p = await loadPhoto(pk, env); if (p) photos.push(p); } catch (_) {} }
   }
 
-  const modelCfg = await loadModelConfig(env);
   const turnId = `${Date.now()}-${stem.slice(-8)}`;
 
   // 图片流水线产物（无转写、doc.vision/plan 在）→ 复用观察与立意，只重跑写作+审稿。
   // 换文风不换立意；照片只在审稿阶段重新入场核对误读。失败静默落回下方 mineVariant。
   let articles = null;
-  if (modelCfg.imagePipeline && !transcript && doc.vision && doc.plan && photos.length) {
+  if (!transcript && doc.vision && doc.plan && photos.length) {
     try {
       const factPack = await buildFactPack(env, { scope, stem, photos });
-      const callModel = makeStageCaller(env, { modelCfg, scope, stem, turnId });
+      const callModel = makeStageCaller(env, { model: MINE_MODEL, scope, stem, turnId });
       const r = await rewriteFromVision({
         photos, factPack, vision: doc.vision, plan: doc.plan, styleText,
-        provider: modelCfg.provider, model: modelCfg.model, callModel,
+        model: MINE_MODEL, callModel,
       });
       if (r.articles.length) articles = r.articles;
     } catch (_) { articles = null; }
@@ -1003,7 +974,7 @@ export async function restyleArticle(env, scope, stem, styleV, preview = null) {
     // Same mining core as the scheduled mine — natural pass then a force retry for thin
     // recordings — so restyle can never again drift from runMine.
     articles = await mineVariant(env, {
-      transcript: mineSource, styleText, photos, cacheMode: "transcript", modelCfg, scope, stem, turnId,
+      transcript: mineSource, styleText, photos, cacheMode: "transcript", scope, stem, turnId,
       metaExtra: { restyle: v }, debitExtra: { restyle: v }, preview,
     });
   }
@@ -1020,7 +991,7 @@ export async function restyleArticle(env, scope, stem, styleV, preview = null) {
   const newDoc = {
     schema: 2, id: doc.id || stem, sourceAudio: doc.sourceAudio || `${stem}.m4a`,
     createdAt: doc.createdAt || new Date().toISOString(),
-    transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: modelCfg.model,
+    transcript, srt: doc.srt || "", articles: tagged, status: "ready", model: MINE_MODEL,
     ...(questions.length ? { questions } : {}),
     // 标签是 doc 级元数据，重写必须原样带上——PUT 是整体替换，漏了就把标签吃掉
     ...(Array.isArray(doc.tags) && doc.tags.length ? { tags: doc.tags } : {}),
@@ -1058,7 +1029,7 @@ async function writeMineLog(env, rec) {
 // Dispatch by task type. Each handler writes articles/<stem>.json (the output) + notifies
 // status, returns "mined" | "empty". Add new task types here.
 const TASK_HANDLERS = { "style-extract": mineStyleExtract };
-async function runTask(task, audioKey, env, modelCfg, log) {
+async function runTask(task, audioKey, env, log) {
   const handler = TASK_HANDLERS[task && task.type];
   if (!handler) {
     log("未知任务类型", { type: task && task.type });
@@ -1066,7 +1037,7 @@ async function runTask(task, audioKey, env, modelCfg, log) {
     await notifyStatus(userPrefix(audioKey), stemOf(audioKey), "empty", env);
     return "empty";
   }
-  return await handler(task, audioKey, env, modelCfg, log);
+  return await handler(task, audioKey, env, log);
 }
 
 // Minimal Claude caller for task handlers (worker CLAUDE_API_KEY; accumulates usage).
@@ -1086,7 +1057,7 @@ function makeTaskClaude(env, model, usage) {
 
 // Task「style-extract」: read the 风格数据集 corpus → distill → write a new 写作风格 version +
 // write the 写作风格介绍 article as this placeholder's article (the visible output).
-async function mineStyleExtract(task, audioKey, env, modelCfg, log) {
+async function mineStyleExtract(task, audioKey, env, log) {
   const scope = userPrefix(audioKey);
   const stem = stemOf(audioKey);
   await notifyStatus(scope, stem, "mining", env);
@@ -1129,7 +1100,7 @@ async function mineStyleExtract(task, audioKey, env, modelCfg, log) {
   }
 
   const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
-  const style = await distillStyle(samples, makeTaskClaude(env, modelCfg.model, usage));
+  const style = await distillStyle(samples, makeTaskClaude(env, MINE_MODEL, usage));
   await writeStyleDoc(env, scope, style, "share-extract");
   const { title, body } = buildStyleIntroArticle(style, samples);
   await writeReadyArticle(title, body);
@@ -1145,14 +1116,14 @@ async function mineStyleExtract(task, audioKey, env, modelCfg, log) {
   try {
     if (env.USAGE) {
       await ensureAccount(env.USAGE, scope, Date.now());
-      await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, usage.input_tokens, usage.output_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens), "style-extract", { samples: samples.length }, Date.now());
+      await debit(env.USAGE, scope, claudeCostUY(MINE_MODEL, usage.input_tokens, usage.output_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens), "style-extract", { samples: samples.length }, Date.now());
     }
   } catch (_) {}
   log("风格提取完成", { name: (style.split("\n")[0] || "").slice(0, 12), samples: samples.length });
   return "mined";
 }
 
-export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
+export async function mineOneAudio(audioKey, allKeys, uploaded, env) {
   const leaf  = audioKey.split("/").pop();
   const scope = userPrefix(audioKey);
   const stem  = stemOf(audioKey);
@@ -1185,7 +1156,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // "style-extract" (读语料→蒸馏→写风格版本+介绍文章). Tag lives in the filename, not a sidecar.
     const task = taskSpec(audioKey);
     if (task) {
-      result = await runTask(task, audioKey, env, modelCfg, log);
+      result = await runTask(task, audioKey, env, log);
       return result;
     }
 
@@ -1290,7 +1261,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
       // 才落回原来的 .empty(no-speech)。
       const photos = await gatherPhotos(audioKey, allKeys, env, log);
       if (photos.length) {
-        log("无语音但有照片,改走看图模式", { count: photos.length, pipeline: !!modelCfg.imagePipeline });
+        log("无语音但有照片,改走看图模式", { count: photos.length });
         await notifyStatus(scope, stem, "mining", env);
         // 和正常语音挖矿一样：文风文本进 prompt，articles[i].style 打 head 版本号
         //（不打的话 iOS chip 显示「选风格」，看起来像没用文风）。
@@ -1299,23 +1270,21 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
         const imgHeadV = imgStyleDoc && Number.isInteger(imgStyleDoc.head) ? imgStyleDoc.head : null;
         const turnId = `${Date.now()}-${stem.slice(-8)}`;
 
-        // 流水线（modelCfg.imagePipeline，缺省关）：观察→立意→写作→审稿。
-        // 任何失败回退下方现行单发 —— 质量下限就是今天的行为。
+        // 四阶段流水线：观察→立意→写作→审稿。
+        // 任何失败回退下方单发 —— 质量下限就是单发的行为。
         let arts = [], pipe = null;
-        if (modelCfg.imagePipeline) {
-          try {
-            pipe = await mineImageOnly(env, { scope, stem, photos, styleText, modelCfg, turnId, log });
-            arts = pipe.articles;
-            if (pipe.lowQuality) log("流水线质量门未过,交付较高一版", { overall: pipe.quality && pipe.quality.overall });
-          } catch (e) {
-            pipe = null;
-            log("流水线失败,回退单发", { error: String((e && e.message) || e).slice(0, 200) });
-          }
+        try {
+          pipe = await mineImageOnly(env, { scope, stem, photos, styleText, model: MINE_MODEL, turnId, log });
+          arts = pipe.articles;
+          if (pipe.lowQuality) log("流水线质量门未过,交付较高一版", { overall: pipe.quality && pipe.quality.overall });
+        } catch (e) {
+          pipe = null;
+          log("流水线失败,回退单发", { error: String((e && e.message) || e).slice(0, 200) });
         }
         if (!arts.length) {
           pipe = null;
           arts = await mineVariant(env, {
-            transcript: "", styleText, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
+            transcript: "", styleText, photos, cacheMode: "system", scope, stem, turnId,
             systemOverride: IMAGE_ONLY_SYSTEM, noForce: true, photoInstr: "",
             metaExtra: { source: "image" }, log,
           });
@@ -1337,7 +1306,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
             createdAt: uploaded[audioKey] || new Date().toISOString(),
             transcript: "", srt: "",
             articles: imgHeadV ? imgCleaned.map((a) => ({ ...a, style: imgHeadV })) : imgCleaned,
-            status: "ready", model: modelCfg.model,
+            status: "ready", model: MINE_MODEL,
             ...(pendingTags.length ? { tags: pendingTags } : {}),
             ...(pipe ? { vision: pipe.vision, plan: pipe.plan, quality: pipe.quality } : {}),
           };
@@ -1387,7 +1356,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     // Mine once with the head style → articles ([] if none). Shared core with text-mine
     // and restyle (force retry + log + debit live in mineVariant; no per-path copies).
     const arts = await mineVariant(env, {
-      transcript, styleText: claudeMd, photos, cacheMode: "system", modelCfg, scope, stem, turnId,
+      transcript, styleText: claudeMd, photos, cacheMode: "system", scope, stem, turnId,
       label: headV ? `风格v${headV}` : "", log,
     });
     const articles = headV ? arts.map((a) => ({ ...a, style: headV })) : arts;
@@ -1416,7 +1385,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
     await writeArticle(audioKey, {
       schema: 2, id: stem, sourceAudio: leaf,
       createdAt: uploaded[audioKey] || new Date().toISOString(),
-      transcript, srt, status: "ready", model: modelCfg.model,
+      transcript, srt, status: "ready", model: MINE_MODEL,
       ...(pendingTags.length ? { tags: pendingTags } : {}),
       articles: cleaned, ...(questions.length ? { questions } : {}),
     }, env);
@@ -1466,7 +1435,7 @@ export async function mineOneAudio(audioKey, allKeys, uploaded, env, modelCfg) {
 
 // ── Per-text pipeline (shared 挖文章 text/links — no ASR) ───────────────────────
 
-async function mineOneText(textKey, uploaded, env, modelCfg) {
+async function mineOneText(textKey, uploaded, env) {
   const leaf  = textKey.split("/").pop();
   const scope = userPrefix(textKey);
   const stem  = stemOf(textKey);
@@ -1508,7 +1477,7 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
     // its own transcript, no photos, system-cache layout.
     const articles = await mineVariant(env, {
       transcript: text, styleText: claudeMd, photos: null, cacheMode: "system",
-      modelCfg, scope, stem, turnId, metaExtra: { source: "text" }, log,
+      scope, stem, turnId, metaExtra: { source: "text" }, log,
     });
     if (!articles.length) {
       await writeEmpty(textKey, "no-article", env);
@@ -1521,7 +1490,7 @@ async function mineOneText(textKey, uploaded, env, modelCfg) {
     const doc = {
       schema: 2, id: stem, sourceText: leaf,
       createdAt: uploaded[textKey] || new Date().toISOString(),
-      transcript: text, srt: "", articles: cleaned, status: "ready", model: modelCfg.model,
+      transcript: text, srt: "", articles: cleaned, status: "ready", model: MINE_MODEL,
       ...(questions.length ? { questions } : {}),
     };
     await writeArticle(textKey, doc, env);
@@ -1618,16 +1587,14 @@ export async function scopesWithWork(env) {
 
 export async function runMine(env, scope = null) {
   const t0 = Date.now();
-  const modelCfg = await loadModelConfig(env);
-  console.log(`[mine] model: ${modelCfg.provider}/${modelCfg.model}${scope ? ` scope: ${scope}` : ""}`);
+  console.log(`[mine] model: ${MINE_MODEL}${scope ? ` scope: ${scope}` : ""}`);
 
-  // Guard: the admin selected a provider whose API key secret isn't configured.
-  // Without this, every call would go out with an empty Bearer token, 401, and the
-  // recording would stay 待处理 forever — retried every run, with no surfaced cause.
-  // Abort loudly instead; recordings are untouched and process once the secret is set.
-  if (!modelCfg.apiKey) {
-    const envName = PROVIDER_ENV_KEY[modelCfg.providerKey] || "CLAUDE_API_KEY";
-    console.error(`[mine] ABORT: 供应商 "${modelCfg.providerKey}" 已选中，但 Worker Secret ${envName} 未配置（API key 为空）— 跳过本次挖文，录音保持待处理`);
+  // Guard: without the API key every call would go out with an empty Bearer token,
+  // 401, and the recording would stay 待处理 forever — retried every run, with no
+  // surfaced cause. Abort loudly instead; recordings are untouched and process once
+  // the secret is set.
+  if (!env.CLAUDE_API_KEY) {
+    console.error(`[mine] ABORT: Worker Secret CLAUDE_API_KEY 未配置（API key 为空）— 跳过本次挖文，录音保持待处理`);
     return;
   }
 
@@ -1645,7 +1612,7 @@ export async function runMine(env, scope = null) {
     if (budget <= 0) { truncated = true; console.log(`[mine] subrequest 预算用尽,剩 ${todo.length - i} 条音频留待下趟`); break; }
     console.log(`[mine] ── ${todo[i].split("/").pop()} (audio ${i+1}/${todo.length})`);
     try {
-      const r = await mineOneAudio(todo[i], allKeys, uploaded, env, modelCfg);
+      const r = await mineOneAudio(todo[i], allKeys, uploaded, env);
       if (r === "mined") { mined++; budget -= 8; }
       else if (r === "empty") { empty++; budget -= 4; }
       else if (r === "pending") { pending++; budget -= ASR_POLLS_PER_PASS + 2; }
@@ -1660,7 +1627,7 @@ export async function runMine(env, scope = null) {
     if (budget <= 0) { truncated = true; console.log(`[mine] subrequest 预算用尽,剩 ${tasks.length - i} 条任务留待下趟`); break; }
     console.log(`[mine] ── ${tasks[i].split("/").pop()} (task ${i+1}/${tasks.length})`);
     try {
-      const r = await mineOneAudio(tasks[i], allKeys, uploaded, env, modelCfg);
+      const r = await mineOneAudio(tasks[i], allKeys, uploaded, env);
       if (r === "mined") { mined++; budget -= 8; }
       else if (r === "empty") { empty++; budget -= 4; }
       else budget -= 2;
@@ -1674,7 +1641,7 @@ export async function runMine(env, scope = null) {
     if (budget <= 0) { truncated = true; console.log(`[mine] subrequest 预算用尽,剩 ${texts.length - i} 条文本留待下趟`); break; }
     console.log(`[mine] ── ${texts[i].split("/").pop()} (text ${i+1}/${texts.length})`);
     try {
-      const r = await mineOneText(texts[i], uploaded, env, modelCfg);
+      const r = await mineOneText(texts[i], uploaded, env);
       if (r === "mined") { mined++; budget -= 8; }
       else if (r === "empty") { empty++; budget -= 4; }
       else budget -= 2;

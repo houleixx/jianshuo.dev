@@ -74,9 +74,9 @@ const normalizeArticles = (arts) => (arts || [])
   .map((a) => ({ title: (a.title || TITLE_FALLBACK).trim(), body: (a.body || "").trim() }));
 
 // 写作 + 审稿一轮（plan 固定）。restyle 复用观察结果时也走这里——换文风不换立意。
-export async function rewriteFromVision({ photos, factPack, vision, plan, styleText, provider = "anthropic", model, callModel, stageSystem }) {
+export async function rewriteFromVision({ photos, factPack, vision, plan, styleText, model, callModel, stageSystem }) {
   const run = async (stage, extra) =>
-    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, provider, model, stageSystem, ...extra }) }));
+    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, model, stageSystem, ...extra }) }));
   const draft = await run("write", { factPack, observation: vision, storyPlan: plan, styleText });
   const draftArts = normalizeArticles(draft.articles);
   if (!draftArts.length) throw new Error("write-stage-empty");
@@ -90,9 +90,9 @@ export async function rewriteFromVision({ photos, factPack, vision, plan, styleT
 }
 
 // 全流水线：观察 → (立意 → 写作 → 审稿)，质量门不过带 issues 从立意重跑一次，取分高一版。
-export async function runImagePipeline({ photos, factPack, styleText, provider = "anthropic", model, callModel, log = () => {}, stageSystem }) {
+export async function runImagePipeline({ photos, factPack, styleText, model, callModel, log = () => {}, stageSystem }) {
   const run = async (stage, extra) =>
-    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, provider, model, stageSystem, ...extra }) }));
+    parseStageJson(await callModel({ stage, payload: buildStagePayload({ stage, model, stageSystem, ...extra }) }));
 
   const vision = await run("observe", { photos, factPack });
   log("观察完成", { images: (vision.images || []).length });
@@ -100,7 +100,7 @@ export async function runImagePipeline({ photos, factPack, styleText, provider =
   const oneRound = async (previousIssues) => {
     const plan = await run("plan", { factPack, observation: vision, previousIssues });
     log("立意完成", { selected: plan.selected });
-    const r = await rewriteFromVision({ photos, factPack, vision, plan, styleText, provider, model, callModel, stageSystem });
+    const r = await rewriteFromVision({ photos, factPack, vision, plan, styleText, model, callModel, stageSystem });
     return { plan, ...r };
   };
 
@@ -135,56 +135,45 @@ function redactPayloadForLog(payload) {
   return req;
 }
 
-// 生产 callModel：provider 分发 + llmlog + 算力 debit，每阶段一次调用一条日志一笔账。
-// Anthropic 走 callAnthropic（geo-403 时自动经美东中继 DO 重放，见 anthropic.js）。
-export function makeStageCaller(env, { modelCfg, scope, stem, turnId, log = () => {} }) {
+// 生产 callModel：callAnthropic + llmlog + 算力 debit，每阶段一次调用一条日志一笔账。
+// callAnthropic 在 geo-403 时自动经美东中继 DO 重放，见 anthropic.js。
+export function makeStageCaller(env, { model, scope, stem, turnId, log = () => {} }) {
   return async ({ stage, payload }) => {
     const meta = { user_scope: scope, stem, stage, source: "image-pipeline" };
     const t0 = Date.now();
     let via;
     try {
-      let text, rawResp, colo;
-      if (modelCfg.provider === "openai-compat") {
-        const resp = await fetch(`${modelCfg.baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${modelCfg.apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (!resp.ok) throw new Error(`LLM ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
-        rawResp = await resp.json();
-        text = rawResp.choices?.[0]?.message?.content || "";
-      } else {
-        const r = await callAnthropic(env, payload, { apiKey: modelCfg.apiKey });
-        via = r.via; colo = r.colo;
-        if (!r.ok) throw new Error(`Claude ${r.status}: ${(r.errorText || "").slice(0, 200)}`);
-        rawResp = r.json;
-        text = (rawResp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-      }
+      const r = await callAnthropic(env, payload);
+      via = r.via;
+      const colo = r.colo;
+      if (!r.ok) throw new Error(`Claude ${r.status}: ${(r.errorText || "").slice(0, 200)}`);
+      const rawResp = r.json;
+      const text = (rawResp.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
       const latency = Date.now() - t0;
-      await writeLlmLog(env, { ts: t0, source: "mine", ok: true, status: 200, model: modelCfg.model, latency_ms: latency, step: stage, turn_id: turnId, via, ...(colo ? { colo } : {}), meta, request: redactPayloadForLog(payload), response: rawResp });
+      await writeLlmLog(env, { ts: t0, source: "mine", ok: true, status: 200, model, latency_ms: latency, step: stage, turn_id: turnId, via, ...(colo ? { colo } : {}), meta, request: redactPayloadForLog(payload), response: rawResp });
       try {
         if (env.USAGE) {
           const u = rawResp?.usage || {};
-          await debit(env.USAGE, scope, claudeCostUY(modelCfg.model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
-            "mine", { model: modelCfg.model, stage, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId }, Date.now());
+          await debit(env.USAGE, scope, claudeCostUY(model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens),
+            "mine", { model, stage, in_tok: u.input_tokens, out_tok: u.output_tokens, cache_w: u.cache_creation_input_tokens, cache_r: u.cache_read_input_tokens, stem, turn_id: turnId }, Date.now());
         }
       } catch (_) {}
       log(`阶段完成:${stage}`, { latency_ms: latency });
       return text;
     } catch (e) {
-      await writeLlmLog(env, { ts: t0, source: "mine", ok: false, status: 0, model: modelCfg.model, latency_ms: Date.now() - t0, step: stage, turn_id: turnId, via, meta, error: String(e) });
+      await writeLlmLog(env, { ts: t0, source: "mine", ok: false, status: 0, model, latency_ms: Date.now() - t0, step: stage, turn_id: turnId, via, meta, error: String(e) });
       throw e;
     }
   };
 }
 
 // 生产入口：素材 → 流水线。任何异常向上抛，miner.js 捕获后回退现行单发。
-export async function mineImageOnly(env, { scope, stem, photos, styleText, modelCfg, turnId, log = () => {} }) {
+export async function mineImageOnly(env, { scope, stem, photos, styleText, model, turnId, log = () => {} }) {
   const factPack = await buildFactPack(env, { scope, stem, photos });
   log("流水线开始", { photos: photos.length, place: factPack.place, titles: factPack.recentTitles.length });
-  const callModel = makeStageCaller(env, { modelCfg, scope, stem, turnId, log });
+  const callModel = makeStageCaller(env, { model, scope, stem, turnId, log });
   // 每次运行解析一次 prompt 覆盖，四个阶段共用同一份 map（不逐阶段重复解析 R2）。
   const _P = await loadPrompts(env);
   const stageSystem = { observe: _P["image.observe"], plan: _P["image.plan"], write: _P["image.write"], review: _P["image.review"] };
-  return await runImagePipeline({ photos, factPack, styleText, provider: modelCfg.provider, model: modelCfg.model, callModel, log, stageSystem });
+  return await runImagePipeline({ photos, factPack, styleText, model, callModel, log, stageSystem });
 }

@@ -8,7 +8,7 @@
 // 当前生效文本的**写穿副本**（铸码时写入，作者保存指令时由 prompt-routes.js 的
 // syncActiveShares 经 refreshPromptShare 同步），落地页与兑换都只读这一个对象，
 // 不再现算合并。
-// 一条指令一辈子一个码：owner 索引 users/<sub>/prompt-shares.json 记 byItem，
+// 一条指令一辈子一个码：owner 索引在 D1 prompt_shares（user_sub × item_id → code），
 // 开关关 = 删 shares/<码>（码立即失效），索引保留，再开同码复活。
 import { verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../functions/lib/auth.js";
 import { checkArticlesShareable, loadShareBlocklist } from "../../functions/lib/moderation.js";
@@ -26,7 +26,7 @@ import { promptPostTitle } from "../../functions/lib/community-store.js";
 import { readProfileName } from "../../functions/lib/style-store.js";
 import {
   coreLoadPromptShares, coreUpsertPromptShare, coreRekeyPromptShare, coreMintedToday,
-  coreDeletePromptShare, coreImportCount, coreSeedImportCount,
+  coreDeletePromptShare, coreImportCount,
 } from "../../functions/lib/core-db.js";
 
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
@@ -79,21 +79,6 @@ export async function mintCode(env, rand = randomCodeOfLength) {
   return null;
 }
 
-const indexKey = (scope) => `${scope}prompt-shares.json`;
-
-/// R2 owner 索引读改写（mint / 转发落索引 / borrowed 关分享共用——同一段
-/// load→mutate→put 别再各抄一份）。失败记日志并返回 false，调用方决定要不要把
-/// 失败升级成报错（borrowed 的状态只活在索引里，那边必须升级；mint 有 D1 主路径
-/// 兜着，best-effort 即可）。
-async function mutateIndexR2(env, scope, mutate) {
-  try {
-    const r2idx = await loadIndexR2(env, scope);
-    mutate(r2idx);
-    await env.FILES.put(indexKey(scope), JSON.stringify(r2idx, null, 2));
-    return true;
-  } catch (e) { console.error("[prompt-share] r2 index write failed:", e && e.message); return false; }
-}
-
 /// 作者显示名（spec §8：读不到 → 空串，客户端靠空串隐藏「来自」行）。
 /// GET 预览与转发响应共用——fallback 策略只写这一处。
 async function shareAuthorName(env, sub) {
@@ -108,33 +93,11 @@ function matchesOrigin(originInstruction, leafInstruction) {
     truncateUtf16(originInstruction, MAX_PROMPT) === leafInstruction;
 }
 
-// R2 版索引（迁移期兜底真源；存储迁移 P1 之前的唯一实现）。
-async function loadIndexR2(env, scope) {
-  try {
-    const o = await env.FILES.get(indexKey(scope));
-    if (o) {
-      const doc = JSON.parse(await o.text());
-      return { byItem: doc.byItem && typeof doc.byItem === "object" ? doc.byItem : {}, mintLog: Array.isArray(doc.mintLog) ? doc.mintLog : [] };
-    }
-  } catch { /* 坏文件当没有 */ }
-  return { byItem: {}, mintLog: [] };
-}
-
-// 统一入口（存储迁移 P1）：D1 优先；D1 空但 R2 有 → 用 R2 并回填 D1（自愈，
-// 覆盖 backfill 之前的老用户）；D1 不可用 → R2。mintLog 只在 R2 路径有值——
-// 每日铸码上限在 D1 路径直接 COUNT（见 coreMintedToday 调用处）。
+// 统一入口：D1 prompt_shares 唯一真源。→ {byItem} | null（D1 不可用——调用方
+// 自行决定降级：展示路径按空处理，写路径必须报错重试，绝不能误判成「没有条目」
+// 而铸出重复码）。每日铸码上限在 D1 直接 COUNT（见 coreMintedToday 调用处）。
 async function loadIndex(env, scope) {
-  const d1 = await coreLoadPromptShares(env, scope);
-  if (d1 === null) return await loadIndexR2(env, scope);
-  if (Object.keys(d1.byItem).length) return { byItem: d1.byItem, mintLog: null };
-  const r2 = await loadIndexR2(env, scope);
-  if (Object.keys(r2.byItem).length) {
-    for (const [itemId, e] of Object.entries(r2.byItem)) {
-      if (e && e.code) await coreUpsertPromptShare(env, scope, itemId, e.code, e.createdAt || new Date().toISOString(), !!e.borrowed);
-    }
-    return r2;
-  }
-  return { byItem: {}, mintLog: [] };
+  return await coreLoadPromptShares(env, scope);
 }
 
 /// 该用户此刻某条提示词的生效内容（走新解析器：ref 读模板 / 实体读自己）。
@@ -189,8 +152,9 @@ function sharedDocFor(scope, itemId, leaf, createdAt, importCount = 0) {
 /// 尽力而为，失败不打断保存。
 export async function refreshPromptShare(env, scope, itemId) {
   try {
-    const { byItem } = await loadIndex(env, scope);
-    const entry = byItem[itemId];
+    const idx = await loadIndex(env, scope);
+    if (!idx) return;   // D1 不可用：best-effort 同步这次跳过
+    const entry = idx.byItem[itemId];
     const code = entry?.code;
     if (!code) return;
     // borrowed（溯源转发）条目：码属原作者，shares/<码> 是【原作者的】写穿副本——
@@ -207,7 +171,6 @@ export async function refreshPromptShare(env, scope, itemId) {
       const leaf2 = await effectiveLeaf(env, scope, itemId);
       if (leaf2 && matchesOrigin(originDoc.instruction, leaf2.instruction)) return; // 仍一致，转发关系保持
       await coreDeletePromptShare(env, scope, itemId);
-      await mutateIndexR2(env, scope, (r2idx) => { delete r2idx.byItem[itemId]; });
       return;
     }
     const existing = await env.FILES.get(`shares/${code}`);
@@ -255,12 +218,11 @@ export async function resolvePromptShare(env, code) {
     const doc = JSON.parse(await o.text());
     if (!doc || doc.type !== "prompt" || typeof doc.instruction !== "string") return null;
     const groupPath = sanitizeGroupPath(doc.groupPath);
-    // importCount（存储迁移 P1）：D1 share_stats 是权威计数（原子自增）；无行时用
-    // 文档旧值并顺手播种 D1（自愈）。D1 不可用 → 文档值。取 max 防止过渡期回退。
+    // importCount：D1 share_stats 是权威计数（原子自增）；文档里的值只是分享时的
+    // 快照，取 max 兜底（老码的 D1 行可能从 0 起步，不能把历史计数显示倒退）。
     let importCount = doc.importCount || 0;
     const d1c = await coreImportCount(env, code);
     if (typeof d1c === "number") importCount = Math.max(d1c, importCount);
-    else if (d1c === false && importCount > 0) await coreSeedImportCount(env, code, importCount);
     return {
       code, sub: doc.sub, itemId: doc.itemId,
       label: doc.label || "分享指令", instruction: doc.instruction,
@@ -281,8 +243,8 @@ export async function resolvePromptShare(env, code) {
 export async function magicForItem(env, scope, itemId) {
   try {
     if (!itemId) return null;
-    const { byItem } = await loadIndex(env, scope);
-    const own = byItem[itemId]?.code;
+    const idx = await loadIndex(env, scope);
+    const own = idx?.byItem[itemId]?.code;
     if (own && (await env.FILES.head(`shares/${own}`))) return own;
     const doc = await loadUserPrompts(env, scope);
     const flat = [];
@@ -402,16 +364,16 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
 
   if (isDelete) {
     const itemId = decodeURIComponent(url.pathname.slice("/agent/prompt-share/".length));
-    const { byItem } = await loadIndex(env, scope);
-    const entry = byItem[itemId];
-    // borrowed（转发原码）关分享：只删自己的索引条目——shares/<码> 是原作者的分享
+    const idx = await loadIndex(env, scope);
+    // D1 不可用时不能按「无条目」处理——borrowed 条目会被误报已关。如实报错重试。
+    if (!idx) return J({ error: "try again" }, 500);
+    const entry = idx.byItem[itemId];
+    // borrowed（转发原码）关分享：只删自己的索引行——shares/<码> 是原作者的分享
     // 本体绝不能碰，也没有自己的帖可撤。删行后再开 = 重新走转发判定（spec §5）。
-    // 两路必须都删干净才算关掉：D1 残行会被「D1 优先」读复活；R2 残条目会在 D1
-    // 变空时被自愈回填复活。任何一路失败都如实报错让客户端重试，不谎报已关。
+    // 删行失败如实报错让客户端重试，不谎报已关。
     if (entry && entry.borrowed) {
       const d1ok = await coreDeletePromptShare(env, scope, itemId);
-      const r2ok = await mutateIndexR2(env, scope, (r2idx) => { delete r2idx.byItem[itemId]; });
-      if (!d1ok || !r2ok) return J({ error: "try again" }, 500);
+      if (!d1ok) return J({ error: "try again" }, 500);
       return J({ ok: true, code: entry.code, sharing: false });
     }
     const code = entry?.code;
@@ -439,6 +401,9 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   ]);
   if (!cfg.enabled) return J({ error: "disabled" }, 503);
   if (!leaf) return J({ error: "unknown id" }, 404);
+  // D1 不可用时绝不能当「没有条目」铸码——一旦铸出第二个码，「一辈子一个码」的
+  // 归属就永久错了。如实报错让客户端重试。
+  if (!idx) return J({ error: "try again" }, 500);
   if (leaf.instruction.length > cfg.maxLength) return J({ error: "too long" }, 413);
   // 关键词审核（与文章分享同一把闸）：标题+正文拼一篇"文章"扫一遍。表已预取，纯本地扫。
   // 标题用「分组｜名字」组合口径（promptPostTitle）——分组名如今也公开展示，必须一并过审。
@@ -475,12 +440,9 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
       if (!existing) {
         const createdAt = new Date().toISOString();
         const d1ok = await coreUpsertPromptShare(env, scope, itemId, leaf.importedFrom, createdAt, true);
-        const r2ok = await mutateIndexR2(env, scope, (r2idx) => {
-          r2idx.byItem[itemId] = { code: leaf.importedFrom, createdAt, borrowed: true };
-        });
-        // borrowed 分享唯一的记录就是索引条目——两路都没写成时不能谎报 sharing:true
+        // borrowed 分享唯一的记录就是这条索引行——没写成不能谎报 sharing:true
         //（客户端会显示已分享而实际无任何落盘，下次启动开关静默归零）。
-        if (!d1ok && !r2ok) return J({ error: "try again" }, 500);
+        if (!d1ok) return J({ error: "try again" }, 500);
       }
       const [author, communityShareId] = await Promise.all([
         shareAuthorName(env, origin.sub),
@@ -493,31 +455,21 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
   let code = ownEntry?.code;
   let created = false;
   if (!code) {
-    // 只有真铸新码才占日上限（幂等重开不算）。D1 直接 COUNT 当日行；
-    // D1 不可用时退回 R2 mintLog（此时 idx 必然来自 R2 路径，mintLog 是数组）。
+    // 只有真铸新码才占日上限（幂等重开不算）。D1 直接 COUNT 当日行；COUNT 瞬时
+    // 失败不能默认 0（等于把日上限白送），如实报错重试。
     const today = new Date().toISOString().slice(0, 10);
-    let mintedToday = await coreMintedToday(env, scope, today);
-    if (mintedToday === null) {
-      // D1 COUNT 瞬时失败时不能默认 0——idx 走的是 D1 路径时 mintLog 是 null
-      //（loadIndex 的形状），直接 0 等于把日上限白送。退一步读 R2 mintLog（铸码
-      // 双写，R2 也有账）；连它也读不到才 0（放行优于误伤）。
-      let log = idx.mintLog;
-      if (!Array.isArray(log)) { try { log = (await loadIndexR2(env, scope)).mintLog; } catch { log = null; } }
-      mintedToday = Array.isArray(log) ? log.filter((ts) => String(ts).slice(0, 10) === today).length : 0;
-    }
+    const mintedToday = await coreMintedToday(env, scope, today);
+    if (mintedToday === null) return J({ error: "try again" }, 500);
     if (mintedToday >= cfg.dailyCapPerUser) return J({ error: "daily cap" }, 429);
     code = await mintCode(env);
     if (!code) return J({ error: "try again" }, 500);
     created = true;
     const createdAt = new Date().toISOString();
     idx.byItem[itemId] = { code, createdAt };
-    // 索引落盘（存储迁移 P1）：D1 行是主路径；R2 索引照写兜底（读时自愈依赖它）。
-    // R2 写失败不再阻断铸码——D1 已落行，码可用。
-    await coreUpsertPromptShare(env, scope, itemId, code, createdAt);
-    await mutateIndexR2(env, scope, (r2idx) => {
-      r2idx.byItem[itemId] = { code, createdAt };
-      r2idx.mintLog.push(createdAt);
-    });
+    // 索引落行是码的唯一归属记录——写失败必须报错重试，否则下次 POST 会再铸一个码。
+    if (!(await coreUpsertPromptShare(env, scope, itemId, code, createdAt))) {
+      return J({ error: "try again" }, 500);
+    }
   }
 
   // 幂等重开（sharing 已经是 true，这条 POST 只是重放）不能把 importCount 清零——
@@ -550,7 +502,7 @@ export async function handlePromptShareRoutes(url, request, env, ctx) {
 /// shareCode 在那条路由里对外改叫 code，两边的字段名故意不同——这里是内部实现
 /// 细节，那边是客户端契约）。
 export async function shareStates(env, scope) {
-  const { byItem } = await loadIndex(env, scope);
+  const byItem = (await loadIndex(env, scope))?.byItem || {};
   const out = {};
   // 逐条 head 并发（原来 for-await 串行——分享 N 条就 N 次串行 R2 往返；这个函数在
   // syncActiveShares 和 iOS 分享卡 GET /agent/prompt-shares 两条热路径上都被调）。
@@ -600,17 +552,9 @@ export async function rekeyForkedShares(env, scope, items) {
   try {
     const forked = collectForkedEntities(items);
     if (!forked.length) return;
-    // re-key 双轨（存储迁移 P1）：D1 行 UPDATE + R2 索引 RMW，语义一致（目标 id 已占则不动）。
-    const idx = await loadIndexR2(env, scope);
-    let changed = false;
+    // D1 行 UPDATE OR IGNORE（目标 id 已占则不动，语义见 coreRekeyPromptShare）。
     for (const { id, forkedFrom } of forked) {
       await coreRekeyPromptShare(env, scope, forkedFrom, id);
-      if (idx.byItem[forkedFrom] && !idx.byItem[id]) {
-        idx.byItem[id] = idx.byItem[forkedFrom];
-        delete idx.byItem[forkedFrom];
-        changed = true;
-      }
     }
-    if (changed) await env.FILES.put(indexKey(scope), JSON.stringify(idx, null, 2));
   } catch (e) { console.error("[prompt-share] rekeyForkedShares failed:", e && e.message); }
 }

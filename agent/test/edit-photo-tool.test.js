@@ -115,9 +115,9 @@ describe("edit_photo tool", () => {
 
   it("长按菜单场景：ctx.itemId 精确解析出 magic 进 xmp_meta", async () => {
     const base = await makeCtx();
-    // 种上自己的分享索引 + 活跃副本（波普漫画风）
-    await base.env.FILES.put(`${SCOPE}prompt-shares.json`,
-      JSON.stringify({ byItem: { it1: { code: "7766443" } }, mintLog: [] }));
+    // 种上自己的分享索引（D1）+ 活跃副本（波普漫画风）
+    const { coreUpsertPromptShare } = await import("../../functions/lib/core-db.js");
+    await coreUpsertPromptShare(base.env, SCOPE, "it1", "7766443", "t");
     await base.env.FILES.put("shares/7766443", JSON.stringify({
       type: "prompt", sub: "sub123", itemId: "it1",
       label: "波普漫画风插图", instruction: "将图片改编为波普漫画风插画海报。",
