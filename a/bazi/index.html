@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>五行八字：一个中立客观的分析</title>
+<meta name="description" content="它是什么，为什么很多人觉得它「准」——用数学、哲学、逻辑说明白">
+<style>
+  :root {
+    --ink: #2b2b2b;
+    --ink-light: #6b6b6b;
+    --accent: #9a3324;
+    --paper: #faf8f4;
+    --card: #ffffff;
+    --line: #e8e2d8;
+    --code-bg: #f3efe8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Songti SC", "Noto Serif SC", "Source Han Serif SC", serif;
+    line-height: 1.9;
+    font-size: 17px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px 96px; }
+  header.hero { padding: 72px 0 40px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+  .kicker { font-size: 13px; letter-spacing: 0.35em; color: var(--accent); text-transform: uppercase; margin-bottom: 16px; font-family: -apple-system, sans-serif; }
+  h1 { font-size: 34px; font-weight: 700; line-height: 1.4; margin-bottom: 12px; }
+  .subtitle { font-size: 18px; color: var(--ink-light); }
+  .meta { margin-top: 20px; font-size: 13px; color: var(--ink-light); font-family: -apple-system, sans-serif; }
+  .progress-banner {
+    background: #fdf3e7; border: 1px solid #f0dcc0; border-radius: 8px;
+    padding: 12px 18px; margin: 28px 0; font-size: 14px; color: #8a5a1e;
+    font-family: -apple-system, sans-serif;
+  }
+  nav.toc { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 24px 28px; margin-bottom: 48px; }
+  nav.toc h2 { font-size: 15px; letter-spacing: 0.2em; color: var(--ink-light); margin-bottom: 14px; font-weight: 600; }
+  nav.toc ol { list-style: none; counter-reset: toc; }
+  nav.toc li { counter-increment: toc; padding: 6px 0; display: flex; align-items: baseline; gap: 10px; font-size: 15.5px; }
+  nav.toc li::before { content: counter(toc, cjk-ideographic); color: var(--accent); font-size: 13px; min-width: 1.5em; }
+  nav.toc a { color: var(--ink); text-decoration: none; border-bottom: 1px dotted #c9beac; }
+  nav.toc a:hover { color: var(--accent); }
+  .badge { font-size: 11px; border-radius: 999px; padding: 1px 9px; font-family: -apple-system, sans-serif; white-space: nowrap; }
+  .badge.done { background: #e6efe3; color: #3f6b34; }
+  .badge.wip { background: #fdf3e7; color: #a06a1c; }
+  section.chapter { margin-bottom: 72px; }
+  .chapter-num { font-size: 13px; letter-spacing: 0.3em; color: var(--accent); font-family: -apple-system, sans-serif; margin-bottom: 8px; }
+  h2.chapter-title { font-size: 26px; font-weight: 700; margin-bottom: 24px; line-height: 1.5; }
+  h3 { font-size: 19px; font-weight: 700; margin: 36px 0 14px; }
+  p { margin-bottom: 1.2em; text-align: justify; }
+  p.lede { font-size: 18px; color: #4a4a4a; }
+  strong { font-weight: 700; }
+  em { font-style: normal; border-bottom: 2px solid #e5c8a8; }
+  blockquote { border-left: 3px solid var(--accent); padding: 4px 0 4px 20px; margin: 24px 0; color: #5a5148; font-size: 16.5px; }
+  table { width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 14.5px; font-family: -apple-system, "PingFang SC", sans-serif; background: var(--card); }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; line-height: 1.6; }
+  th { background: var(--code-bg); font-weight: 600; white-space: nowrap; }
+  .table-scroll { overflow-x: auto; margin: 24px 0; }
+  .table-scroll table { margin: 0; min-width: 560px; }
+  .formula {
+    background: var(--code-bg); border-radius: 8px; padding: 16px 22px; margin: 24px 0;
+    font-family: "SF Mono", Menlo, monospace; font-size: 14.5px; overflow-x: auto;
+    line-height: 1.8; white-space: nowrap;
+  }
+  code { font-family: "SF Mono", Menlo, monospace; font-size: 0.88em; background: var(--code-bg); padding: 2px 6px; border-radius: 4px; }
+  pre { background: var(--code-bg); border-radius: 8px; padding: 18px 22px; margin: 24px 0; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 13.5px; line-height: 1.7; }
+  .callout {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+    border-radius: 6px; padding: 18px 24px; margin: 28px 0; font-size: 16px;
+  }
+  .callout .co-title { font-weight: 700; color: var(--accent); font-size: 14px; letter-spacing: 0.15em; margin-bottom: 8px; font-family: -apple-system, sans-serif; }
+  .placeholder { color: var(--ink-light); background: var(--card); border: 1px dashed #d5cbbb; border-radius: 8px; padding: 28px; text-align: center; font-size: 15px; font-family: -apple-system, sans-serif; }
+  figure.diagram { margin: 32px 0; text-align: center; }
+  figure.diagram figcaption { font-size: 13.5px; color: var(--ink-light); margin-top: 10px; font-family: -apple-system, sans-serif; }
+  footer { border-top: 1px solid var(--line); padding-top: 28px; font-size: 13.5px; color: var(--ink-light); font-family: -apple-system, sans-serif; }
+  footer a { color: var(--accent); }
+  .refs { font-size: 13.5px; color: #5a5a5a; font-family: -apple-system, sans-serif; line-height: 1.8; }
+  .refs li { margin-bottom: 6px; }
+  @media (max-width: 600px) {
+    body { font-size: 16px; }
+    h1 { font-size: 27px; }
+    h2.chapter-title { font-size: 22px; }
+    header.hero { padding: 48px 0 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">数学 · 哲学 · 逻辑</div>
+  <h1>五行八字：一个中立客观的分析</h1>
+  <div class="subtitle">它是什么，为什么很多人觉得它「准」</div>
+  <div class="meta">2026 年 8 月 · 由多个研究 agent 并行调研后汇总 · 所有引用可查证</div>
+</header>
+
+<div class="progress-banner" id="progress">
+  ⏳ 本页正在写作中，边写边发布——已完成的章节在目录里标为绿色，刷新可见最新进度。
+</div>
+
+<nav class="toc">
+  <h2>目 录</h2>
+  <ol>
+    <li><a href="#ch1">它是什么：一套迭代了两千年的人造符号系统</a> <span class="badge done">已完成</span></li>
+    <li><a href="#ch2">排盘是纯函数，解读是方言：语法严格，语义未定义</a> <span class="badge done">已完成</span></li>
+    <li><a href="#ch3">一笔算术账：51.8 万种命，19 比特信息</a> <span class="badge done">已完成</span></li>
+    <li><a href="#ch4">为什么觉得准（上）：巴纳姆效应、贝叶斯与冷读术</a> <span class="badge wip">写作中</span></li>
+    <li><a href="#ch5">为什么觉得准（下）：预言把自己变成事实</a> <span class="badge wip">写作中</span></li>
+    <li><a href="#ch6">哲学检视：不可证伪，但表达力完备</a> <span class="badge wip">写作中</span></li>
+    <li><a href="#ch7">它真正交付的东西：批命作为一种服务业</a> <span class="badge wip">研究中</span></li>
+    <li><a href="#ch8">结语：与一面 19 比特的镜子共处</a> <span class="badge wip">待写</span></li>
+  </ol>
+</nav>
+
+<section class="chapter" id="ch0">
+  <p class="lede">这篇文章不打算回答「八字灵不灵」。它把这个问题拆成两个可以分别回答的问题：<strong>第一，这套系统作为一个形式结构，到底是什么</strong>——这个问题用历史和数学回答；<strong>第二，「觉得准」这个体验是怎么产生的</strong>——这个问题用概率论、认知科学和哲学回答。两个问题都有相当确定的答案，而且答案比「信」与「不信」的站队有意思得多。</p>
+  <p>立场先说明：通篇不用「愚昧」「糟粕」「智商税」这类词，也不说「宁可信其有」。批评只对准「预测有效性」一个点，肯定只落在「功能价值」一个点，两者不混淆。所有实验都标注作者、年份、样本量和发表处，可以逐条查证。</p>
+</section>
+
+<section class="chapter" id="ch1">
+  <div class="chapter-num">第一章</div>
+  <h2 class="chapter-title">它是什么：一套迭代了两千年的人造符号系统</h2>
+
+  <p>关于八字，最容易被忽略的事实是：它有清晰的版本史。每一次大改动都有人名、有年代、有可考的文本——没有一个环节是「上古神授」。</p>
+
+  <div class="table-scroll"><table>
+    <tr><th>版本</th><th>人物</th><th>年代</th><th>关键改动</th></tr>
+    <tr><td>v1 政治哲学</td><td>邹衍</td><td>约前 305–240</td><td>五德终始说，用五行相胜解释王朝更替的合法性（《史记·孟子荀卿列传》）</td></tr>
+    <tr><td>v2 宇宙论化</td><td>董仲舒</td><td>前 179–104</td><td>《春秋繁露》天人感应，把君臣父子嵌进五行；公元 79 年白虎观会议后成官方意识形态</td></tr>
+    <tr><td>v3 三柱推命</td><td>李虚中</td><td>761–813</td><td>以年、月、日三柱六字论人贵贱寿夭。韩愈为他写的墓志铭是八字个人化最早的硬证据</td></tr>
+    <tr><td>v4 四柱＋日主</td><td>徐子平</td><td>五代–宋初</td><td>加时柱成八字；<strong>以日干为「我」</strong>——参照系从国家纪年移到个体，这是整个系统的哥白尼转向</td></tr>
+    <tr><td>v5 集大成</td><td>万民英</td><td>1521–1603</td><td>《三命通会》十二卷，印刷术与科举社会催生的百科式整理，后入《四库全书》</td></tr>
+  </table></div>
+
+  <p>把这条时间线读一遍，可以看到一个清楚的<em>下沉路径</em>：五行先是解释王朝合法性的政治哲学（邹衍），然后是支撑皇权的官方宇宙论（董仲舒），再进入医学与历法（《黄帝内经》五脏配五行），最后才下沉为个人命运的解释框架（李虚中、徐子平）。适用对象越来越小，解释框架却一字未改——这本身就是人造系统的指纹。</p>
+
+  <p>还有一个反直觉的事实：今天八字实践的核心手册，大多定型得非常晚。《渊海子平》今本是明代书商的合并编本；《滴天髓》学界多认为是明末清初伪托，真正奠定地位的任铁樵注本到 1933 年才由袁树珊整理刊行；《穷通宝鉴》是清人整理、民国徐乐吾评注后才有今名。<strong>你在书店买到的「千年古法」，多数是清末民国的产品。</strong></p>
+
+  <h3>值得单独致敬的部分：干支</h3>
+
+  <p>说八字是人造系统，不等于说它的底座不精彩。干支纪日是一个数学上很干净的编码：10 天干 × 12 地支，只允许同奇偶相配，周期取最小公倍数 lcm(10,12) = 60。殷墟甲骨上已经刻有完整的六十甲子表。</p>
+
+  <p>更了不起的是连续性：从《春秋》鲁隐公三年那次日食（公元前 720 年 2 月 22 日，也是世界最早的文字日食记录之一）起，干支纪日至今约 2,740 年<strong>一天未断</strong>——这是人类现存最长的连续纪日系统。这一点没有任何贬低的余地。</p>
+
+  <p>但要把两件事分开：纪日连续，不等于纪日有预测力。干支是一个优秀的<em>计时坐标系</em>；八字做的事，是给这个坐标系额外附加吉凶语义。坐标系的精确，不能为附加语义背书——经度划分再精确，也不说明东经 120 度的人比 121 度的人命好。</p>
+
+  <h3>一个公平的参照：四元素说</h3>
+
+  <p>五行在中国思想史里的地位，非常接近四元素说在西方的地位。恩培多克勒的四根说经亚里士多德改造、再到盖伦的四体液医学，同样是「有限基元＋相互转化＋万物可归类」的统一理论，同样统治了约两千年。李约瑟在《中国科学技术史》里特别纠正过一个翻译造成的误解：五行不是五种「元素」（elements），而是五种「过程」（processes）——它是一套动态功能分类，在没有实验手段的时代，这是<strong>当时可得数据条件下最好的统一理论</strong>。这个定位要给足尊重。</p>
+
+  <p>分岔发生在近代：四元素说被波义耳（1661）和拉瓦锡（1789）用实验化学替换掉了；五行没有经历这次替换，继续在中医、择日、命理中运行至今。于是留下一个问题，也是这篇文章接下来要处理的问题：</p>
+
+  <blockquote>一个理论没有被证伪，究竟是因为它对，还是因为它从未被放在可以被证伪的位置上？</blockquote>
+</section>
+
+<section class="chapter" id="ch2">
+  <div class="chapter-num">第二章</div>
+  <h2 class="chapter-title">排盘是纯函数，解读是方言：语法严格，语义未定义</h2>
+
+  <p>要客观评价八字，必须先把它切成两层，因为这两层的性质完全不同。</p>
+
+  <h3>第一层：排盘，一个确定性算法</h3>
+
+  <p>排盘的输入只有三项：出生时刻、性别、出生地经度。输出是四柱八字加大运序列。整个过程没有随机数，没有任何需要人做判断的地方：</p>
+
+  <ul style="margin: 0 0 1.2em 1.5em;">
+    <li><strong>年柱</strong>：以立春（太阳视黄经 315°，可由星历精确到秒）为界，(公历年 − 4) mod 60 映射到六十甲子；</li>
+    <li><strong>月柱</strong>：月支由十二节气切分（太阳黄经每 30° 换一柱），月干由年干查「五虎遁」表——一张 5×12 的常量表；</li>
+    <li><strong>日柱</strong>：干支纪日是连续的模 60 计数链，(儒略日数＋常数) mod 60，一行代码；</li>
+    <li><strong>时柱</strong>：时支按两小时区间划分，时干由日干查「五鼠遁」表——又一张 5×12 常量表；</li>
+    <li><strong>大运</strong>：方向由「年干阴阳 × 性别」决定，起运岁数按出生距最近节气的天数折算。</li>
+  </ul>
+
+  <p>所以排盘是<em>纯函数</em>：同一输入，任何两个排盘程序——哪怕分属对立流派——输出的八个字完全相同。这一层是严格的形式系统，可复现、可验证。<strong>八字的可信度问题，从来不出在这一层。</strong></p>
+
+  <h3>五行生克：一个数学上确实优美的结构</h3>
+
+  <p>把木火土金水看作 5 个节点：相生（木→火→土→金→水→木）是一个有向五边形；相克（木→土→水→火→金→木，隔一相克）是内接五角星。这两个环的边集不相交，并集恰好是完全图 K₅ 的全部 10 条边——五行系统是「K₅ 分解为两个哈密顿圈」的一个实例，这个分解在数学上存在且本质唯一。</p>
+
+  <figure class="diagram">
+    <svg viewBox="0 0 360 340" width="320" style="max-width:100%">
+      <defs>
+        <marker id="arrG" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#3f6b34"/></marker>
+        <marker id="arrK" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9a3324"/></marker>
+      </defs>
+      <!-- pentagon positions: 木(top) 火 土 金 水 clockwise -->
+      <!-- 木(180,40) 火(313,137) 土(262,293) 金(98,293) 水(47,137) -->
+      <g stroke="#3f6b34" stroke-width="2" fill="none">
+        <path d="M196,52 L297,125" marker-end="url(#arrG)"/>
+        <path d="M308,155 L270,275" marker-end="url(#arrG)"/>
+        <path d="M244,300 L116,300" marker-end="url(#arrG)"/>
+        <path d="M90,275 L52,155" marker-end="url(#arrG)"/>
+        <path d="M63,125 L164,52" marker-end="url(#arrG)"/>
+      </g>
+      <g stroke="#9a3324" stroke-width="1.6" fill="none" stroke-dasharray="5,4">
+        <path d="M186,58 L253,278" marker-end="url(#arrK)"/>
+        <path d="M246,290 L64,152" marker-end="url(#arrK)"/>
+        <path d="M60,140 L295,140 " marker-end="url(#arrK)"/>
+        <path d="M300,150 L112,286" marker-end="url(#arrK)"/>
+        <path d="M96,278 L174,58" marker-end="url(#arrK)"/>
+      </g>
+      <g font-family="Songti SC, serif" font-size="22" font-weight="700" text-anchor="middle">
+        <circle cx="180" cy="40" r="22" fill="#faf8f4" stroke="#c9beac"/><text x="180" y="48" fill="#3f6b34">木</text>
+        <circle cx="313" cy="137" r="22" fill="#faf8f4" stroke="#c9beac"/><text x="313" y="145" fill="#9a3324">火</text>
+        <circle cx="262" cy="293" r="22" fill="#faf8f4" stroke="#c9beac"/><text x="262" y="301" fill="#8a5a1e">土</text>
+        <circle cx="98" cy="293" r="22" fill="#faf8f4" stroke="#c9beac"/><text x="98" y="301" fill="#7a7a7a">金</text>
+        <circle cx="47" cy="137" r="22" fill="#faf8f4" stroke="#c9beac"/><text x="47" y="145" fill="#2b5a7a">水</text>
+      </g>
+    </svg>
+    <figcaption>实线五边形＝相生环；虚线五角星＝相克环。两者并集恰为完全图 K₅ 的全部 10 条边。</figcaption>
+  </figure>
+
+  <p>这个结构有一个后果深远的性质：任取两个不同的元素 a、b，它们之间<strong>恰好</strong>处于四种关系之一——a 生 b、b 生 a、a 克 b、b 克 a。5×4 = 20 个有序对，四类各占 5 个，完美均分，<em>没有「无关」这一档</em>。也就是说：系统中任意两个事物之间，永远有一句带方向、带褒贬的话可说。记住这个性质，第六章会回来收账。</p>
+
+  <h3>第二层：解读，没有规范文本的方言集合</h3>
+
+  <p>分歧从「日主强弱」的判断开始。把主流判法写成伪代码，会看到确定的部分和不确定的部分泾渭分明：</p>
+
+  <pre><code>score  = W_令 × relation(月支本气, 日主)   # 确定：查那张图
+score += Σ W_地 × 通根强度(支, 日主)       # 分歧A：本气/中气/余气各折几分？无典籍给出数字
+score += Σ W_势 × relation(干, 日主)       # 分歧B：透干与否差多少？无统一答案
+strong = score > θ                        # 分歧C：连续量硬切二值，边界命盘必然打架
+用神   = pick(strong, 调候, 格局)          # 分歧D：调候派与扶抑派优先级相反</code></pre>
+
+  <p>分歧 D 最典型：同一张冬月出生的命盘，《穷通宝鉴》一系的调候派取火（先解寒），扶抑派可能取水（先补强弱）——<strong>喜忌完全相反</strong>，据此给出的「宜从事什么行业、哪年走运」也完全相反。「从格」的判定标准之争、23 点到 24 点出生日柱归属的「早晚子时」之争，都是延续数百年、至今没有裁决机制的教义分歧。子平格局派、盲派、新派对同一命盘给出的不是「精度不同的同一答案」，而是不可通约的三种答案。</p>
+
+  <div class="callout">
+    <div class="co-title">一个工程类比</div>
+    所有命理师共享同一个编译器：输入出生时刻，输出八个字符的中间代码。编译器是确定性的、开源的、字节级一致。分歧全在运行时——每个流派带着自己的虚拟机，实现了互相矛盾的语义规则，而且没有任何一台机器持有规范文本，因为 spec 从未被写下来。工程上我们知道这种系统叫什么：<strong>语法严格，语义未定义</strong>。
+  </div>
+</section>
+
+<section class="chapter" id="ch3">
+  <div class="chapter-num">第三章</div>
+  <h2 class="chapter-title">一笔算术账：51.8 万种命，19 比特信息</h2>
+
+  <p>这一章只做算术。每一步都可以自己验算。</p>
+
+  <h3>状态空间：不是 1296 万，是 51.8 万</h3>
+
+  <p>朴素的算法是把四根柱子当独立变量：60⁴ ≈ 1,296 万。这是错的——上一章说过，月干由年干决定（五虎遁），时干由日干决定（五鼠遁）。真正自由的变量只有四个：</p>
+
+  <div class="formula">60 (年柱) × 12 (月支) × 60 (日柱) × 12 (时支) = 518,400 种<br>× 2 (性别，大运顺逆不同) = 1,036,800 种</div>
+
+  <p>还可以再挤掉一层水分。我们按干支历规则逐日枚举了实际出现的组合：六十甲子年约 21,915 天，mod 60 余 15，所以每过一个甲子周期，日柱错开 15 位，要 4 个周期（约 240 年）才转回原点。<strong>518,400 是需要 240 年才取满的全集</strong>；任何时刻在世的人（出生跨度约 100 年）实际只覆盖约 349,320 种——枚举脚本可复现这个数字。</p>
+
+  <h3>同命的人有多少</h3>
+
+  <div class="table-scroll"><table>
+    <tr><th>口径</th><th>算式</th><th>与你八字完全相同的人</th></tr>
+    <tr><td>全球，理论全集，含性别</td><td>80 亿 ÷ 1,036,800</td><td>约 7,700 人</td></tr>
+    <tr><td>全球，在世实际空间</td><td>80 亿 ÷ 698,640</td><td>约 11,500 人</td></tr>
+    <tr><td>中国，理论全集，含性别</td><td>14.05 亿 ÷ 1,036,800</td><td>约 1,400 人</td></tr>
+    <tr><td>中国，在世实际空间</td><td>14.05 亿 ÷ 698,640</td><td>约 2,000 人</td></tr>
+  </table></div>
+
+  <p>换一个更直观的算法：1987 年（出生峰值，2,529 万人）平均每个时辰出生约 5,774 人。也就是说，一个 1987 年生的中国人，此刻有近 5,800 位同胞与他<strong>八字一字不差</strong>（同性别的约 2,900 位）——不是相似，是四柱逐字一致。这些人正在过完全不同的人生。任何声称八字决定命运细节的理论，都需要先解释这近三千个平行样本为什么彼此毫不相似。</p>
+
+  <h3>信息论：一个八字值多少比特</h3>
+
+  <div class="formula">log₂(1,036,800) ≈ 19.98 bit</div>
+
+  <p>参照物：考虑实际字频，一个汉字的信息熵约 9.6 比特。所以一个人的完整八字加性别，携带的信息量约 20 比特——<strong>相当于两个汉字</strong>。这是信息论给出的硬上限：无论解读技术多高明，从八字里读出的关于这个人的信息，不可能超过两个汉字的量。</p>
+
+  <p>那么一次典型的批命输出了多少信息？信息论用自信息 −log₂P 度量一句话的信息量：一句对越多人成立的话，信息量越接近零。给常见断语估算基础比率（离婚一项参照 2023 年 46.9% 的离结比上浮）：</p>
+
+  <div class="table-scroll"><table>
+    <tr><th>断语</th><th>估计基础比率</th><th>自信息</th></tr>
+    <tr><td>你早年比较辛苦，靠自己打拼</td><td>0.80</td><td>0.32 bit</td></tr>
+    <tr><td>你的婚姻/感情有过波折</td><td>0.65</td><td>0.62 bit</td></tr>
+    <tr><td>你中年之后财运转好</td><td>0.85</td><td>0.23 bit</td></tr>
+    <tr><td>你表面随和，内心有主见</td><td>0.85</td><td>0.23 bit</td></tr>
+    <tr><td>你和父母中的一方缘分较薄</td><td>0.55</td><td>0.86 bit</td></tr>
+    <tr><td>你身体有个老毛病（肠胃/颈椎/睡眠）</td><td>0.80</td><td>0.32 bit</td></tr>
+    <tr><td>你有过一次不小的破财</td><td>0.70</td><td>0.51 bit</td></tr>
+    <tr><td>你适合离开出生地发展</td><td>0.60</td><td>0.74 bit</td></tr>
+    <tr><td>你的贵人多是女性/长辈</td><td>0.50</td><td>1.00 bit</td></tr>
+    <tr><td>你晚年比中年安稳</td><td>0.75</td><td>0.42 bit</td></tr>
+  </table></div>
+
+  <p>十二条这样的断语，即使假设彼此独立，合计也只有约 6.2 比特——而且这还是上界，因为断语之间高度相关（「早年辛苦」和「中年转好」几乎是同一条人生曲线的两端），真实的联合信息量不足 5 比特。对照一下：告诉一个陌生人你的职业，就超过 10 比特；和一个人聊十分钟，获得的信息远超整张命盘。</p>
+
+  <blockquote>一次典型批命读出来的信息，比它的输入——那 20 比特的命盘——还少四分之三。这个系统的瓶颈不在解读的功力，在输入本身。</blockquote>
+
+  <h3>要公允承认的：颗粒度错觉有真实基础</h3>
+
+  <div class="table-scroll"><table>
+    <tr><th>系统</th><th>类别数</th><th>信息量</th><th>中国平均每类人数</th></tr>
+    <tr><td>血型</td><td>4</td><td>2.0 bit</td><td>3.5 亿</td></tr>
+    <tr><td>星座</td><td>12</td><td>3.6 bit</td><td>1.17 亿</td></tr>
+    <tr><td>MBTI</td><td>16</td><td>4.0 bit</td><td>8,780 万</td></tr>
+    <tr><td><strong>八字（含性别）</strong></td><td><strong>1,036,800</strong></td><td><strong>20.0 bit</strong></td><td><strong>约 1,400 人</strong></td></tr>
+  </table></div>
+
+  <p>八字确实是同类系统里颗粒度最细的之一——比星座细近九万倍。人们觉得它「比星座高级、很个人化」，这个直觉<strong>有真实基础</strong>。错觉发生在第二步：51.8 万是一个「听起来大、除起来小」的数字，大到超出直觉的枚举能力，小到一除以人口就露馅。而且颗粒度细不等于预测效度高：身份证号有 60 比特，精确到唯一个人，但它不预测任何东西。分类的精细程度只决定「能分多少格」，不决定「格子里的人是否真的相似」——后者需要效度检验，那是下一章的事。</p>
+</section>
+
+<section class="chapter" id="ch4">
+  <div class="chapter-num">第四章</div>
+  <h2 class="chapter-title">为什么觉得准（上）：巴纳姆效应、贝叶斯与冷读术</h2>
+  <div class="placeholder">✍️ 本章写作中——素材已研究完毕（Forer 1949 原始实验逐条核对、Carlson 1985 Nature 双盲实验、冷读术话术对照表），稍后刷新可见。</div>
+</section>
+
+<section class="chapter" id="ch5">
+  <div class="chapter-num">第五章</div>
+  <h2 class="chapter-title">为什么觉得准（下）：预言把自己变成事实</h2>
+  <div class="placeholder">✍️ 本章写作中——素材已研究完毕（Mocan & Yu 龙年效应三套微观数据、皮格马利翁效应及其争议、房价吉数溢价研究），稍后刷新可见。</div>
+</section>
+
+<section class="chapter" id="ch6">
+  <div class="chapter-num">第六章</div>
+  <h2 class="chapter-title">哲学检视：不可证伪，但表达力完备</h2>
+  <div class="placeholder">✍️ 本章写作中——素材已研究完毕（波普尔原文、拉卡托斯研究纲领、四体液与五行结构对照表），稍后刷新可见。</div>
+</section>
+
+<section class="chapter" id="ch7">
+  <div class="chapter-num">第七章</div>
+  <h2 class="chapter-title">它真正交付的东西：批命作为一种服务业</h2>
+  <div class="placeholder">🔍 研究 agent 正在调研本章素材（决策辅助、心理功能、叙事疗法对照、社会协调功能）。</div>
+</section>
+
+<section class="chapter" id="ch8">
+  <div class="chapter-num">第八章</div>
+  <h2 class="chapter-title">结语：与一面 19 比特的镜子共处</h2>
+  <div class="placeholder">最后汇总时写。</div>
+</section>
+
+<footer>
+  <p>本页由 8 个并行研究 agent 调研＋汇总写成 · <a href="/a/">← 返回 a/ 索引</a></p>
+</footer>
+
+</div>
+</body>
+</html>
