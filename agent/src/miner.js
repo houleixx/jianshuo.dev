@@ -19,6 +19,7 @@ import { gateDecision, claudeCostUY, asrCostUY } from "./usage.js";
 import { ensureAccount, debit, asrCharged } from "./usage_store.js";
 import { sendPush } from "./push.js";
 import { asrCorpus } from "./asr-hotwords.js";
+import { sniffImageType } from "./image-type.js";
 import { hmacSign } from "../../functions/lib/auth.js";
 import { TITLE_FALLBACK, resolveArticles, readArticleDoc, writeArticleDoc, setIndexFlag } from "../../functions/lib/article-store.js";
 import { readStyleText, readProfileName, readStyleDoc, resolveStyle, ensureStyleSeeded, writeStyleDoc } from "../../functions/lib/style-store.js";
@@ -476,6 +477,10 @@ async function loadPhoto(photoKey, env) {
     if (!obj) return null;
     buf = await obj.arrayBuffer();
   }
+  // 字节未必是 JPEG（.jpg 名下可能是 PNG/WebP/HEIC）——media_type 报错 Anthropic 会把
+  // 整个请求 400，一张图拖垮整次挖矿/重写。按 magic bytes 认；认不出的直接跳过该图。
+  const mediaType = sniffImageType(buf);
+  if (!mediaType) return null;
   const b64  = bufToB64(buf);
   const name = photoKey.split("/").pop().replace(/\.jpe?g$/i, "");
   const parts = name.split("-");
@@ -485,7 +490,7 @@ async function loadPhoto(photoKey, env) {
   // token the model writes into [[photo:<key>]] markers.
   const i = photoKey.indexOf("photos/");
   const relKey = i >= 0 ? photoKey.slice(i) : photoKey;
-  return { b64, label, relKey };
+  return { b64, label, relKey, mediaType };
 }
 
 function findSessionPhotos(audioKey, allKeys) {
@@ -571,7 +576,7 @@ export function buildMinePrompt({
     content = [{ type: "text", text: transcriptText }];
     for (let i = 0; i < photos.length; i++) {
       content.push({ type: "text", text: `\n<photo key="${photos[i].relKey}" time="${photos[i].label}">` });
-      const img = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: photos[i].b64 } };
+      const img = { type: "image", source: { type: "base64", media_type: photos[i].mediaType || "image/jpeg", data: photos[i].b64 } };
       if (transcriptCache && i === photos.length - 1) img.cache_control = { type: "ephemeral" };
       content.push(img);
       content.push({ type: "text", text: `\n</photo>` });

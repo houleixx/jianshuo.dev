@@ -13,6 +13,7 @@ import { loadPromptTemplate } from "./prompt-template.js";
 import { resolveList } from "./prompts.js";
 import { loadUserPrompts } from "./prompt-store.js";
 import { VERIFY_SYSTEM } from "./prompts/edit.js";
+import { sniffB64ImageType } from "./image-type.js";
 
 const TERMINAL = ["edit_current_article", "write_article", "write_style", "publish_wechat", "share_to_community", "edit_photo", "new_photo"];
 
@@ -128,13 +129,12 @@ function bufToB64(buf) {
 async function imageBlocks(images, { env, scope, origin }) {
   const out = [];
   for (const img of images) {
-    let data = img.data, mediaType = img.mediaType || "image/jpeg";
+    let data = img.data;
     if (!data && img.key) {
       try {
         const r = await fetch(`${origin}/cdn-cgi/image/width=320,quality=70/files/api/photo/${encodeURI(scope + img.key)}`);
         if (r.ok && (r.headers.get("content-type") || "").startsWith("image/")) {
           data = bufToB64(await r.arrayBuffer());
-          mediaType = r.headers.get("content-type") || "image/jpeg";
         }
       } catch {}
       if (!data) {
@@ -144,7 +144,12 @@ async function imageBlocks(images, { env, scope, origin }) {
         } catch {}
       }
     }
-    if (data) out.push({ type: "image", source: { type: "base64", media_type: mediaType, data } });
+    if (!data) continue;
+    // 声明的 media_type 不可信（R2 contentType 是上传方随手报的，.jpg 名下可能是
+    // PNG/WebP/HEIC）——不符时 Anthropic 把整个请求 400。按字节认，认不出跳过该图。
+    const sniffed = sniffB64ImageType(data);
+    if (!sniffed) continue;
+    out.push({ type: "image", source: { type: "base64", media_type: sniffed, data } });
   }
   return out;
 }

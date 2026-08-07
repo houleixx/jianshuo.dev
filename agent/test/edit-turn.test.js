@@ -166,11 +166,24 @@ describe("runEditTurn", () => {
 describe("runEditTurn images — 服务端 320 缩图", () => {
   const DOC = { schema: 2, createdAt: 1, transcript: "原文", articles: [{ title: "T", body: "B" }] };
 
+  // 图片字节现在按魔数嗅探——fixture 一律带真 JPEG 魔数，否则会被当垃圾跳过。
+  function jpegBuf(s) {
+    const body = new TextEncoder().encode(s);
+    const u = new Uint8Array(3 + body.length);
+    u.set([0xff, 0xd8, 0xff]); u.set(body, 3);
+    return u.buffer;
+  }
+  function jpegB64(s) {
+    const u = new Uint8Array(jpegBuf(s));
+    let bin = ""; for (const c of u) bin += String.fromCharCode(c);
+    return btoa(bin);
+  }
+
   // 能回 headers/arrayBuffer 的图片响应（fakeFetch 只会 JSON，这里自己搭）。
   function imageResp(bytes) {
     return { ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === "content-type" ? "image/jpeg" : null) },
-      arrayBuffer: async () => new TextEncoder().encode(bytes).buffer };
+      arrayBuffer: async () => jpegBuf(bytes) };
   }
 
   async function runWith({ images, edgeOK }) {
@@ -181,7 +194,7 @@ describe("runEditTurn images — 服务端 320 缩图", () => {
     // 要过 bufToB64，这里单独给这个 key 一个真 ArrayBuffer。
     const realGet = env.FILES.get.bind(env.FILES);
     env.FILES.get = async (k) => k === "users/u/photos/7/1.jpg"
-      ? { arrayBuffer: async () => new TextEncoder().encode("RAWJPEG").buffer }
+      ? { arrayBuffer: async () => jpegBuf("RAWJPEG") }
       : realGet(k);
     let captured = null;
     const callClaude = async (params) => { captured = params; return { content: [{ type: "text", text: "好" }] }; };
@@ -206,20 +219,27 @@ describe("runEditTurn images — 服务端 320 缩图", () => {
     const p = await runWith({ images: [{ key: "photos/7/1.jpg" }], edgeOK: true });
     const imgs = p.messages.find((m) => m.role === "user").content.filter((b) => b.type === "image");
     expect(imgs).toHaveLength(1);
-    expect(imgs[0].source.data).toBe(btoa("EDGE320"));
+    expect(imgs[0].source.data).toBe(jpegB64("EDGE320"));
   });
 
   it("老 app 带 data → 原样透传，不去拉边缘缩图", async () => {
-    const p = await runWith({ images: [{ key: "photos/7/1.jpg", data: "LEGACY64" }], edgeOK: false });
+    const legacy = jpegB64("LEGACY");
+    const p = await runWith({ images: [{ key: "photos/7/1.jpg", data: legacy }], edgeOK: false });
     const imgs = p.messages.find((m) => m.role === "user").content.filter((b) => b.type === "image");
-    expect(imgs[0].source.data).toBe("LEGACY64");
+    expect(imgs[0].source.data).toBe(legacy);
+  });
+
+  it("字节不是模型认的图片格式（HEIC 顶着 .jpg 名）→ 跳过该图不喂模型", async () => {
+    const p = await runWith({ images: [{ key: "photos/7/1.jpg", data: btoa("NOTANIMAGE00") }], edgeOK: false });
+    const imgs = p.messages.find((m) => m.role === "user").content.filter((b) => b.type === "image");
+    expect(imgs).toHaveLength(0);
   });
 
   it("边缘缩图 404（zone 没开）→ 回退 R2 原图", async () => {
     const p = await runWith({ images: [{ key: "photos/7/1.jpg" }], edgeOK: false });
     const imgs = p.messages.find((m) => m.role === "user").content.filter((b) => b.type === "image");
     expect(imgs).toHaveLength(1);
-    expect(atob(imgs[0].source.data)).toBe("RAWJPEG");
+    expect(imgs[0].source.data).toBe(jpegB64("RAWJPEG"));
   });
 });
 

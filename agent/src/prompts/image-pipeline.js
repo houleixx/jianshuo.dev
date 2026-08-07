@@ -144,7 +144,7 @@ export function buildStagePayload({
     content = [{ type: "text", text }];
     for (const p of photos) {
       content.push({ type: "text", text: `\n<photo key="${p.relKey}" time="${p.label}">` });
-      content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: p.b64 } });
+      content.push({ type: "image", source: { type: "base64", media_type: p.mediaType || "image/jpeg", data: p.b64 } });
       content.push({ type: "text", text: `\n</photo>` });
     }
   }
