@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="VoiceDrop User Manual — everything from your first recording to advanced features: recording, editing, publishing, community, writing style, credits, and FAQ.">
+<meta property="og:title" content="VoiceDrop User Manual">
+<meta property="og:description" content="Speak it, it writes itself. The complete VoiceDrop guide, from getting started to going further, with FAQ included.">
+<meta property="og:url" content="https://jianshuo.dev/voicedrop/en/help/manual/">
+<title>VoiceDrop User Manual · jianshuo.dev</title>
+<link rel="alternate" hreflang="zh-CN" href="https://jianshuo.dev/voicedrop/help/manual/">
+<link rel="alternate" hreflang="en" href="https://jianshuo.dev/voicedrop/en/help/manual/">
+<link rel="alternate" hreflang="x-default" href="https://jianshuo.dev/voicedrop/help/manual/">
+<style>
+  :root{--ink:#1d1d1f;--sub:#6e6e73;--line:#eae4da;--bg:#ffffff;--panel:#faf7f2;
+    --accent:#c0563f;--accent-2:#d8593b;--accent-soft:#f3ddd5}
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;font-size:16px;line-height:1.8}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;
+    background:#f1efec;color:#37373a;padding:.1em .42em;border-radius:6px;word-break:break-word}
+  pre{background:#f6f3ee;border:1px solid var(--line);border-radius:12px;padding:14px 18px;overflow-x:auto}
+  pre code{background:none;padding:0;font-size:13px}
+  header.site{position:sticky;top:0;z-index:60;border-bottom:1px solid var(--line);
+    background:rgba(255,255,255,.86);backdrop-filter:saturate(140%) blur(14px)}
+  header.site .inner{max-width:1140px;margin:0 auto;padding:15px 28px;display:flex;align-items:center;gap:11px}
+  header.site .bars{display:inline-flex;align-items:flex-end;gap:2.5px;height:20px}
+  header.site .bars span{width:3px;border-radius:2px;background:var(--accent)}
+  header.site .title{font-weight:600;font-size:18px;letter-spacing:-.01em}
+  header.site .spacer{margin-left:auto;display:flex;gap:22px;align-items:center}
+  header.site .spacer a{font-size:13.5px;color:var(--sub)}
+  .hero{max-width:1140px;margin:0 auto;padding:46px 28px 10px}
+  .eyebrow{font-size:12px;letter-spacing:.16em;color:#a79f93;text-transform:uppercase;font-weight:600}
+  .hero h1{font-size:36px;line-height:1.18;letter-spacing:-.02em;margin:12px 0 0}
+  .hero .lede{font-size:17px;line-height:1.75;color:var(--sub);margin:14px 0 0;max-width:38em}
+  .layout{max-width:1140px;margin:0 auto;padding:26px 28px 90px;display:grid;
+    grid-template-columns:212px 1fr;gap:44px;align-items:start}
+  nav.toc{position:sticky;top:78px;align-self:start}
+  nav.toc .toc-lbl{font-size:11.5px;letter-spacing:.14em;color:#a79f93;text-transform:uppercase;font-weight:600;margin:0 0 12px 12px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;color:var(--sub);
+    font-size:14.5px;font-weight:500;transition:background .12s,color .12s}
+  .nav-item:hover{background:var(--panel);color:var(--ink);text-decoration:none}
+  .ni-num{font-size:12px;width:20px;height:20px;border-radius:6px;background:var(--panel);
+    display:inline-flex;align-items:center;justify-content:center;color:#a79f93;font-weight:600;flex:none}
+  main.content{min-width:0}
+  .chapter{padding:16px 0 34px;border-top:1px solid var(--line);scroll-margin-top:76px}
+  .chapter:first-child{border-top:none;padding-top:0}
+  .chapter h2{font-size:25px;letter-spacing:-.01em;margin:18px 0 6px}
+  .chapter h3{font-size:17.5px;margin:28px 0 6px}
+  .chapter p{margin:10px 0;color:#3a3a3d}
+  .chapter ul,.chapter ol{margin:10px 0;padding-left:1.5em;color:#3a3a3d}
+  .chapter li{margin:5px 0}
+  table{border-collapse:collapse;margin:14px 0;width:100%;max-width:34em;font-size:15px}
+  th,td{border:1px solid var(--line);padding:8px 13px;text-align:left}
+  th{background:var(--panel);font-weight:600}
+  footer.site{border-top:1px solid var(--line);background:var(--panel)}
+  footer.site .inner{max-width:1140px;margin:0 auto;padding:26px 28px;font-size:13px;color:var(--sub);
+    display:flex;gap:20px;flex-wrap:wrap}
+  @media(max-width:860px){.layout{grid-template-columns:1fr;gap:10px}
+    nav.toc{position:static;display:flex;flex-wrap:wrap;gap:4px;padding-bottom:8px}
+    nav.toc .toc-lbl{display:none}
+    .hero h1{font-size:29px}}
+</style>
+</head>
+<body>
+<header class="site"><div class="inner">
+  <span class="bars"><span style="height:8px"></span><span style="height:14px"></span><span style="height:20px"></span><span style="height:11px"></span></span>
+  <span class="title">VoiceDrop</span>
+  <span class="spacer">
+    <a href="/voicedrop/en/">Product Home</a>
+    <a href="/voicedrop/en/help/">Help Center</a>
+    <a href="/voicedrop/help/manual/">中文</a>
+  </span>
+</div></header>
+
+<section class="hero">
+  <div class="eyebrow">User Manual</div>
+  <h1>VoiceDrop User Manual</h1>
+  <p class="lede">Speak it, it writes itself. This manual walks through VoiceDrop's features in order — from your first recording to the finer points: how to record, how to edit, how to publish, and how to make an article sound more like you. The last chapter covers the questions people ask most.</p>
+</section>
+
+<div class="layout">
+  <nav class="toc">
+    <p class="toc-lbl">Contents</p>
+<a class="nav-item" href="#ch1"><span class="ni-num">1</span>Getting Started</a>
+<a class="nav-item" href="#ch2"><span class="ni-num">2</span>Recording, Explained</a>
+<a class="nav-item" href="#ch3"><span class="ni-num">3</span>After the Article: Read It, Edit It</a>
+<a class="nav-item" href="#ch4"><span class="ni-num">4</span>Publishing Your Articles</a>
+<a class="nav-item" href="#ch5"><span class="ni-num">5</span>VD Community</a>
+<a class="nav-item" href="#ch6"><span class="ni-num">6</span>Making It Sound Like You: Style &amp; Prompts</a>
+<a class="nav-item" href="#ch7"><span class="ni-num">7</span>Account, Credits &amp; Invites</a>
+<a class="nav-item" href="#ch8"><span class="ni-num">8</span>FAQ</a>
+  </nav>
+  <main class="content">
+<section id="ch1" class="chapter"><h2>Chapter 1: Getting Started</h2>
+<h3>What This App Does</h3>
+<p>Talk into your phone, tap Stop when you're done, and the recording uploads to the cloud automatically. AI turns it into an article and sends it back to your phone. No typing, no organizing.</p>
+<h3>Download &amp; Install</h3>
+<p>On iPhone, search "VoiceDrop" in the App Store, or open <a href="https://apps.apple.com/cn/app/id6781565141">apps.apple.com/cn/app/id6781565141</a> directly.</p>
+<p>On Android, open <a href="https://jianshuo.dev/voicedrop/en/apk/">jianshuo.dev/voicedrop/en/apk/</a>, tap "Install via Yingyongbao (Android)", or tap "Download APK Directly" on the same page. If your system warns "Installing apps from unknown sources isn't allowed", go to Settings and allow your browser to install apps.</p>
+<h3>No Sign-Up Required</h3>
+<p>Open it and start using it right away — no phone number, no password. The app automatically generates an ID on your phone and backs it up via iCloud Keychain. Sign in to the same Apple account on a new phone, and everything comes back automatically. To see this ID, tap the gear icon in the top right → "Account".</p>
+<h3>Record Your First Memo: Tap the Red Button → Talk → Tap Stop</h3>
+<ol>
+<li>Open the app and tap the red circular button at the bottom of the screen.</li>
+<li>The screen switches to the recording view — <strong>recording has already started the moment it appears</strong>, so just start talking.</li>
+<li>When you're done, tap the Stop button in the middle (labeled "Tap to Stop").</li>
+</ol>
+<p>Back on the list, your new recording sits at the top, first showing "Uploading" and then moving along on its own. A call coming in, locking your screen, or switching to another app along the way is no problem — the recording won't be lost.</p>
+<h3>The Five Statuses in the List</h3>
+<p>Next to each recording is a small dot and a word or two telling you where it stands:</p>
+<table><thead><tr><th>Status</th><th>What it means</th></tr></thead><tbody><tr><td>Pending</td><td>The recording has uploaded and is queued for processing</td></tr><tr><td>Transcribing</td><td>Converting what you said into text</td></tr><tr><td>Mining</td><td>Turning those words into an article</td></tr><tr><td>Done</td><td>Finished — tap it to read</td></tr><tr><td>No Speech</td><td>No one was heard talking in this recording (e.g. an accidental recording in your pocket) — it won't be turned into an article</td></tr></tbody></table>
+<p>The order is Pending → Transcribing → Mining → Done. You don't need to watch it happen — you'll get a notification on your phone once it's ready.</p>
+<h3>New Users Get 200 Free Credits</h3>
+<p>Credits are the usage unit inside the app — writing an article or making an edit both draw from your balance. New users get a one-time gift of <strong>200 credits</strong>. An article costs around 9 credits, so 200 credits is good for roughly twenty articles.</p>
+<p>Credits convert at <strong>23 credits = ¥1</strong>, but they're purely a usage unit — they can't be withdrawn or refunded. To check your balance, go to the gear icon → "Credits", where you'll see your balance, an estimate of "≈ N articles remaining", and a full breakdown of where every credit went. When you run out, you can subscribe monthly right on the same page, or earn more through "Invite Friends" in Settings.</p>
+<h3>Interface at a Glance</h3>
+<p>There are two tabs at the top of the main screen:</p>
+<ul>
+<li><strong>My Recordings</strong> — all your own recordings and articles; also the app's home screen.</li>
+<li><strong>VD Community</strong> — articles other people have chosen to share publicly. What you write is private to you by default.</li>
+</ul>
+<p>The gear icon in the top right is <strong>Settings</strong>: Account, Credits, Name, Writing Style, WeChat Official Account, and Data &amp; Backup all live there. The red button at the bottom stays with you everywhere — tap it anytime to start recording (holding it down is a different feature, covered in a later chapter).</p>
+</section>
+<section id="ch2" class="chapter"><h2>Chapter 2: Recording, Explained</h2>
+<h3>The Full-Screen Recording View</h3>
+<p>Tap the red circular button at the bottom of the "My Recordings" home screen, and the whole screen turns into the recording view — <strong>recording starts the instant you're in</strong>, no extra tap needed. At the top is a red dot with "Recording"; in the middle, a large timer (minutes:seconds) and a waveform that rises and falls with your voice; below that, a red square inside a white circle — that's the Stop button, labeled "Tap to Stop".</p>
+<p>Tap Stop, and the view closes immediately, returning you to the list. The recording appears at the top marked "Uploading" — everything from here is handled for you.</p>
+<p>If recording can't start, the screen won't pretend it's recording. Without microphone permission, it shows "Microphone Access Needed" with a "Go to Settings" button; if startup fails, it shows "Recording Error"; if something goes wrong mid-recording, a red warning line pops up above the timer; and if the audio file fails to save when you tap Stop, you'll get a clear "Recording Failed" message instead of the view silently closing.</p>
+<h3>Taking Photos While Recording</h3>
+<p>There's a faint camera icon to the <strong>right</strong> of the Stop button, labeled "Photo". Tap it to open a square-viewfinder camera screen — recording keeps going without interruption (the top keeps showing "● Recording · minutes:seconds").</p>
+<p>You don't have to close the camera after each shot — keep snapping one after another. Photos taken line up at the bottom in a small filmstrip, each with a ✕ in its top right corner to delete it. The icon in the bottom left lets you pick photos from your library, <strong>up to 9 at a time</strong>. When you're done, tap "Done" in the top right — the photos upload together and are automatically linked to this recording. When the AI writes the article, it places them wherever you describe that scene.</p>
+<h3>The AI Interviewer</h3>
+<p>The microphone-waveform icon to the <strong>left</strong> of the Stop button is "Interview". You can turn it on or off at any point during recording, and it never affects the recording itself.</p>
+<p>When you turn it on, it first shows "Connecting…", then "AI Interviewing · Tap again to end" once connected. Most of the time it stays quiet, only stepping in with a question when you pause or run out of things to say, helping you keep talking. Its voice does get recorded into the audio — that's expected. If the connection drops, it shows "AI Disconnected · Recording Continues" and quietly reconnects on its own; if it shows "AI Interview Unavailable", the service is temporarily down, but recording continues as normal.</p>
+<h3>Uploads Continue Even If You Lock, Background, or Force-Quit the App</h3>
+<p>Once you tap Stop, the system takes over the upload. You can lock your screen, switch to WeChat, or even swipe VoiceDrop away from the background right away — the system finishes uploading in the background. Even if you force-quit the app, the file stays on your phone, and the app automatically re-queues it for upload the next time you open it.</p>
+<h3>What Happens Without a Connection</h3>
+<p><strong>Your recording is never lost.</strong> It's saved locally on your phone first, and stays there if it can't upload, showing "Uploading" in the list. The moment your connection comes back, the app uploads it automatically — you don't need to remember to come back and do anything.</p>
+<h3>An Incoming Call Interrupts Recording</h3>
+<p>If a call comes in while you're recording, or Siri interrupts, it's <strong>the equivalent of tapping Stop for you</strong>: everything recorded up to that point is kept intact and enters the upload queue as usual. Whatever you recorded before the interruption is preserved — the whole recording isn't discarded.</p>
+<h3>Recordings Under 4 Seconds Aren't Uploaded</h3>
+<p>A recording <strong>under 4 seconds</strong> can't say much, so no article can come from it, and it isn't uploaded. After tapping Stop, you'll see a message: "Recording Too Short — too short to produce an article, so this recording won't be uploaded." Tap "OK" to go back, and the recording is deleted right away.</p>
+<h3>Audio Quality &amp; Filenames</h3>
+<p>Recordings exist for AI transcription, so they're optimized for speech: mono, 16 kHz AAC — about 1.2 MB for 5 minutes, which uploads fast and saves data.</p>
+<p>The filename carries all the context on its own, for example:</p>
+<pre><code>VoiceDrop-2026-06-18-143052-0m33s-Thu-Afternoon-Shanghai-Xuhui.m4a</code></pre>
+<p>In order: date, time, duration, weekday, time of day (morning/afternoon/evening, etc.), city, and district. Location comes from your phone's GPS — without location permission, that part is simply omitted and everything else stays the same.</p>
+<h3>An Escape Hatch for Recording Trouble</h3>
+<p>If recording keeps failing on your phone (won't start, or cuts off mid-way), go to <strong>Settings → Data &amp; Backup → Classic Recording Engine</strong> and turn it on. This switches back to a battle-tested older recording method — the trade-off is that <strong>the "Interview" button disappears from the recording view</strong> (the AI Interviewer won't work), but everything else stays the same. Remember to turn it back off once the issue is resolved.</p>
+</section>
+<section id="ch3" class="chapter"><h2>Chapter 3: After the Article: Read It, Edit It</h2>
+<h3>The Detail Page at a Glance</h3>
+<p>Tap a "Done" recording in "My Recordings" to open its article detail page. In the top right, in order: the play button (the thin ring around it is playback progress), insert photos, Undo/Redo (only appears once you've made an edit), and the ⋯ menu. The body mixes text and images — photos taken during recording sit next to the paragraphs they belong to. The ⋯ menu holds Publish to WeChat Drafts, Visible in VD Community, Share to Xiaohongshu, Share, and Delete.</p>
+<h3>Follow-up Questions: The AI Asks You Back</h3>
+<p>Once an article takes shape, the AI picks its thinnest spots and prepares 1 to 3 questions. It doesn't interrupt you — a star just lights up to the right of the "Hold to Speak · Edit" bar at the bottom. Tap the star to expand the card, which shows "Question 1/3" and the question itself; hold the bar and speak your answer, then release, and the AI weaves what you said into the most relevant paragraph. Don't want to answer? Tap "Skip". Don't want to see the whole set? Drag the card down to tuck the star away. Unanswered questions disappear on their own after seven days.</p>
+<h3>Editing by Voice: Hold to Speak Your Instructions</h3>
+<p>Hold the "Hold to Speak · Edit" bar at the bottom and just say it in plain language: "the second paragraph is too wordy, cut it in half" or "make the ending punchier." Release, and the AI queues it up and executes — the article updates automatically once it's done.</p>
+<p>While you're holding, line numbers like "Line 3" and "Line 4" pop up to the left of the body text, and "Image 2" pops up in the top left of each photo. Point at whatever you want to change by its number — say "shorten line 3" or "restyle image 2 as watercolor" and it targets exactly the right spot. You can string several commands together; they queue up and run one after another.</p>
+<h3>Long-Press a Paragraph: Four Rewrites, Copy, and Edit</h3>
+<p>Long-press any paragraph in the body to bring up a menu: "Rewrite this paragraph" offers more concise, more casual, more formal, and expand a bit; below that are "Insert image," "Copy" (copies the paragraph's text), and "Edit" (see "Precise Edits by Keyboard" below). Tapping an option is the same as speaking that instruction — it goes through the same edit pipeline.</p>
+<h3>Long-Press an Image: Have the AI Redraw It</h3>
+<p>Long-press an image already generated in the article and choose "Image Style" — there are six options: cartoon (Miyazaki-esque), advertising, watercolor, sketch, oil painting, and film. Once picked, the image switches to "Generating…" and is replaced with the new version in about a minute. There's no menu while an image is generating or if it failed to generate, so don't rush to long-press it. If you don't know images can be long-pressed, three small dots appear in the bottom right corner of every image after the page sits still for three seconds, as a hint.</p>
+<h3>One-Tap WeChat Cover Image</h3>
+<p>Long-press any paragraph and choose "Insert Image" → "WeChat Cover Image," and the AI draws a titled banner cover in a 2.45:1 ratio, placed at the very top of the article. The same menu also has "Cartoon Explainer," which illustrates the article's structure and is inserted in the middle of the body.</p>
+<h3>Precise Edits by Keyboard: Edit Text in Place</h3>
+<p>If you want to fix a word or two yourself, long-press the paragraph and choose "Edit" — it instantly turns into an editable text box, without shifting the layout by a single pixel. Tap "Done" in the top right when you're finished, or "Cancel" to leave the original text untouched.</p>
+<h3>Rewrite the Whole Article in a Different Style</h3>
+<p>Next to the date under the article title is a small pencil button showing the current style (e.g. "v8 style"). Tap it, pick a writing style version, and the whole article is rewritten in that style. The original stays untouched, and you can switch back anytime — switching to a style version already used is instant, with nothing regenerated.</p>
+<h3>Undo / Redo: Recover From a Bad Edit</h3>
+<p>Every edit saves a new version, with up to 10 versions kept. The Undo/Redo buttons in the top bar step back and forth through these versions — one tap, and it takes effect instantly.</p>
+<p>One thing to note: undoing reverts the whole article to a previous version, so any image not yet present in that version gets "hidden" along with it — it isn't deleted, and tapping Redo brings it back.</p>
+<h3>What Changed Lights Up for a Few Seconds</h3>
+<p>Whether it's a voice edit, a follow-up answer being woven in, or a new image, any new or changed paragraph flashes with a highlight for a few seconds before fading — you never have to hunt for what changed.</p>
+<h3>Adding Your Own Photos to an Article</h3>
+<p>Tap the photo button in the top bar, take a new shot or pick a few from your library. Once uploaded, the AI places each photo next to the paragraph it best matches. Both uploading and placing take a moment, and the interface shows a status while it works.</p>
+<h3>Regenerating an Article</h3>
+<p>Long-press the green "Done" badge in the list; after confirming, the current article is deleted (the recording is kept) and mined again from scratch — the new output will differ from before. Swiping left in the list also has a "Rewrite" option that does the same thing without asking for confirmation.</p>
+<h3>Tagging Articles and Grouping the List by Tag</h3>
+<p>Once an article has a tag, a page named after that tag automatically shows up next to "My Recordings" and "VD Community" — tap it to see every article under that tag. The easiest way to tag an article is to give a voice command to the whole library (see below), or simply record from inside a tag page — the resulting article is tagged with it by default.</p>
+<h3>Voice Commands Across Your Whole Library</h3>
+<p>On the "My Recordings" home screen, <strong>long-press</strong> the red button at the bottom (a tap starts recording, a hold lets you talk) and circled numbers pop up next to each article. Now just say what you want in plain language: "merge ③ and ④," "delete article ②," "rewrite ②③④ in a different style," "file these into 'Shanghai.'" Numbers always follow the order you see on screen, and anything involving deletion pops up a confirmation first.</p>
+<h3>Deleting a Recording</h3>
+<p>Swipe a row left in the list, tap "Delete," and confirm. The audio and any articles mined from it are deleted from the cloud permanently — it can't be undone. The same delete option is also in the ⋯ menu on the article detail page.</p>
+</section>
+<section id="ch4" class="chapter"><h2>Chapter 4: Publishing Your Articles</h2>
+<h3>Share Link</h3>
+<p>Open an article, tap <strong>⋯</strong> in the top right → <strong>Share</strong>. The app generates a short link like <code>voicedrop.cn/a1b2c3d4e5</code> that anyone can read in a browser, no app install needed.</p>
+<p>When one recording produces several articles, the link points to whichever one you're <strong>currently viewing</strong> — it shares whatever you have open.</p>
+<h3>Sharing to WeChat</h3>
+<p>Choose WeChat in the share sheet, and what gets sent is the link itself. WeChat automatically displays it as a card: the article title, a short excerpt, and the first photo in the article. If the article has no photos, it's a clean text-only card.</p>
+<h3>Publishing to WeChat Official Account Drafts</h3>
+<p>First connect your Official Account once: go to <strong>Settings → WeChat Official Account</strong>, enter your AppID and AppSecret, and add the IP address shown on that page to the "IP Whitelist" in your Official Account admin console, then save. The page includes a link and instructions on exactly where to find both of these in the admin console.</p>
+<p>Once connected, tap <strong>⋯ → Publish to WeChat Drafts</strong> on an article, and within a few seconds you'll see "Saved to Drafts." Go to your Official Account admin console to find the draft, finish it up, and publish it yourself. Tap the same button again on the same article, and it becomes <strong>Update WeChat Draft</strong>, overwriting the previous one.</p>
+<p>To skip this step, turn on <strong>Auto-Push Drafts</strong> on the WeChat Official Account settings page — every new article mined from then on goes straight into the draft box.</p>
+<h3>Automatic Cover Image &amp; Excerpt for WeChat</h3>
+<p>The cover image uses the first photo in the article; without one, a built-in default cover from the app is used instead. The excerpt is pulled from roughly the first hundred characters of the body text. Neither requires any effort from you, and you can still change them in the admin console once the draft lands there.</p>
+<h3>Exporting to Xiaohongshu</h3>
+<p><strong>⋯ → Share to Xiaohongshu.</strong> The app does three things: copies rewritten Xiaohongshu-style copy (title, body, and a few topic tags) to your clipboard; saves the accompanying images to your system photo library; and then opens Xiaohongshu directly.</p>
+<p>Images prioritize the article's original photos, up to 9; if there aren't 9, 3:4 text-image cards fill the rest — the first is a title card, followed by paginated body-text cards, so people can read the whole article just by swiping through.</p>
+<p>On Xiaohongshu's post-composer page: pick the images from your library (the most recent ones), then long-press and <strong>paste</strong> into the body text box. If you don't have Xiaohongshu installed, you'll be told the copy is already on your clipboard.</p>
+<h3>System Share</h3>
+<p><strong>⋯ → Share</strong> brings up iOS's native share sheet — WeChat, X, Notes, Copy Link, all in there. Sending to WeChat produces a link card; sending to X and other apps sends "body text + link" as plain text.</p>
+<h3>Exporting All Your Data</h3>
+<p><strong>Settings → Data &amp; Backup → Export Data</strong>, and the app packages everything into a zip archive: the original recordings, a web-page version of every article, subtitle files, all your photos, plus an index page <code>index.html</code> you can open in any browser to browse through everything.</p>
+<p>Once packaging finishes, tap <strong>Share / Save Locally</strong> to save it to the Files app or send it to yourself. If you have a lot of recordings, it may take a moment — don't close the window.</p>
+<h3>Backing Up to iCloud</h3>
+<p><strong>Settings → Data &amp; Backup → Backup to iCloud</strong> is turned on by default. After every recording, a copy of the original audio file is automatically saved to your iCloud Drive, visible in the <strong>VoiceDrop</strong> folder in the Files app. Nothing is lost when you switch phones.</p>
+<h3>Sharing Into VoiceDrop From Other Apps</h3>
+<p>Tap the "Share" button in WeChat, a podcast app, your photo library, or a browser, choose <strong>VoiceDrop</strong>, and it's handled in one of three ways depending on the content:</p>
+<ul>
+<li><strong>Audio</strong>: shows "Turn this recording into an article" — tap to start, and it's mined into an article just like something you recorded yourself.</li>
+<li><strong>Images</strong>: shows "Write from this photo" — the AI writes based on what it sees.</li>
+<li><strong>Text, web links, PDF/Word documents</strong>: go into the "Style Dataset" as material for learning your writing style; once you've collected enough, tap <strong>Extract Writing Style</strong>, and future articles follow that voice.</li>
+</ul>
+<p>The window closes on its own after sharing, and the work happens in the background. Check progress back in VoiceDrop's "My Recordings." Before using this for the first time, you'll need to have opened the app once to complete sign-in.</p>
+<h3>Tapping Someone Else's voicedrop.cn Link Opens the App Directly</h3>
+<p>On a phone with VoiceDrop installed, tapping any <code>voicedrop.cn</code> link jumps straight into the app: if it's your own article, it opens that recording directly; if it's someone else's, it reads as a webpage inside the app — no switching back and forth to a browser.</p>
+</section>
+<section id="ch5" class="chapter"><h2>Chapter 5: VD Community</h2>
+<p>VD Community is where everyone reads each other's articles inside VoiceDrop. Open the app, and there are two tabs at the top of the home screen: "My Recordings" and "VD Community" — tap the latter to get in.</p>
+<h3>Browsing the Community</h3>
+<p>There are three tabs at the top of the community page: <strong>Recommended</strong>, <strong>Latest</strong>, and <strong>Responses</strong>. It opens on "Latest" by default, sorted newest-first by share time; "Recommended" is re-ranked by everyone's reading and engagement; "Responses" shows only posts that are responses to other posts.</p>
+<p>Below that is a two-column waterfall grid: posts with photos use the photo as a cover, text-only posts get a warm-toned card, and uneven card heights are normal. Under each card is the author's name and coin count (⚡); posts with responses show an extra bubble number. Pull down to refresh.</p>
+<p>Prompt posts also show up in the community feed, marked with a "Prompt" badge at the top of the body area. To browse them all in one place, go to "Settings" → "Prompts" → "Community Trending."</p>
+<h3>Search</h3>
+<p>Tap the magnifying glass to the right of the tab row, and the top turns into a search box. Typing filters instantly, matching against the <strong>title, author name, and the opening of the body text</strong>. Tap "Cancel" to exit search.</p>
+<p>Search runs against posts already loaded — no network round-trip — so results appear instantly.</p>
+<h3>Sharing Your Own Article to the Community</h3>
+<ol>
+<li>Open one of your own articles.</li>
+<li>Tap <strong>⋯</strong> in the top right.</li>
+<li>Turn on the "<strong>Visible in VD Community</strong>" switch.</li>
+</ol>
+<p>The first time, the "Community Guidelines" pop up — read them and tap "Agree &amp; Publish," and you won't be asked again.</p>
+<p>To withdraw it, just turn off the same switch — it disappears from the community immediately. You can also long-press your own card on the community page and choose "Remove from Community." What you share is a live pointer to the original — if you edit it later, what people see in the community updates along with it.</p>
+<h3>Auto-Sharing New Articles to the Community</h3>
+<p>If you don't want to flip the switch for every article, go to "Settings" → "Publishing" → turn on "<strong>Auto-Share to VD Community</strong>." From then on, every newly mined article is posted to the community automatically. You can turn it off anytime.</p>
+<h3>Tossing Coins (Tipping)</h3>
+<p>Like an article? Tap the <strong>lightning icon</strong> in the top right of the detail page to toss a coin. The author gets <strong>2 coins</strong>, and you get <strong>0.5 coins</strong> — both are instantly converted to credits at the current coin rate, and the screen shows exactly how much each side received.</p>
+<p>A few rules: you can only toss a coin once per article; you can't tip your own article; and tossing requires Sign in with Apple first (an anonymous identity won't work). When someone tosses a coin on your article, you get a push notification that takes you straight to your credit ledger.</p>
+<h3>Responding to a Post With a Recording</h3>
+<p>Tap <strong>⋯</strong> in the top right of the detail page → "<strong>Write a Response</strong>," and a recording bar appears at the bottom of the screen — just talk into your phone, then tap the red square to stop.</p>
+<p>The recording goes into your "My Recordings," and once it's mined into an article, it's automatically posted to the community as a "Response" attached under the original post, with a small "Response" tag on the card — you'll also find it under the "Responses" tab. Recordings under 4 seconds don't count, and you'll be told it's too short.</p>
+<h3>Liking</h3>
+<p>The <strong>red heart</strong> in the top right of the detail page fills in solid when you tap it to show you like the article; tap again to unlike. Liking an article helps it rank higher under "Recommended."</p>
+<h3>Reporting Inappropriate Content</h3>
+<p>See content that shouldn't be there? Tap <strong>⋯</strong> → "<strong>Report</strong>" → "<strong>Report &amp; Take Down</strong>."</p>
+<p>The post disappears from the community <strong>immediately</strong>, and we'll review it by hand within <strong>24 hours</strong>. A report is one-time only — you can't undo it once you've submitted it.</p>
+<h3>Blocking a User</h3>
+<p>Tap <strong>⋯</strong> → "<strong>Block This User</strong>," and none of their content will show up in the community again.</p>
+<p>Blocking <strong>only takes effect on your own phone</strong> — it isn't uploaded, and the other person is never notified. To undo it, go to "Settings" → "Other" → "About" → "Blocked Users" and tap "Unblock."</p>
+<h3>Community Guidelines &amp; Complaints</h3>
+<p>The "<strong>Community Guidelines</strong>" live under "Settings" → "Other" → "About," and you can re-read them anytime. The gist is one sentence: sexual content, graphic violence, hate or discrimination, harassment, and illegal content all get zero tolerance — accounts that violate the rules get removed.</p>
+<p>At the bottom of the same page is "<strong>Contact Us / Content Complaints</strong>" — tap it to email us directly (jianshuo@hotmail.com) with complaints and suggestions.</p>
+</section>
+<section id="ch6" class="chapter"><h2>Chapter 6: Making It Sound Like You: Writing Style &amp; Prompts</h2>
+<p>Whether an article VoiceDrop writes sounds like you depends on two things: a "writing style" and a set of "prompts." The former governs the tone of the whole article; the latter governs which actions show up when you long-press a paragraph or an image. Both are edited in <strong>Settings</strong>.</p>
+<h3>Setting Your Name: Byline &amp; How the AI Addresses You</h3>
+<p>Open <strong>Settings → Name</strong>, enter your name (up to 20 characters), and tap "Done." This name appears in the article byline, and the AI uses it to address you while mining. You can change it anytime.</p>
+<h3>Writing Style: Write It Yourself, or Have the AI Distill It From Your Old Articles</h3>
+<p><strong>Settings → Writing Style</strong> opens a plain-text editor — the description in there is exactly what the AI imitates when writing. You can write a few lines yourself (like "mostly short sentences, no exclamation marks, likes concrete examples") and tap "Save" in the top right.</p>
+<p>Don't want to write it yourself? Let the AI distill one — share articles you've written before into VoiceDrop as source material, and use "Extract Writing Style" in the next section to distill one automatically.</p>
+<h3>Style Dataset: Share Articles, Web Pages, or PDFs as Material, Then "Extract Writing Style"</h3>
+<p>See something you wrote in WeChat, a browser, or the Files app? Tap the system "Share" button, choose VoiceDrop, and the "<strong>Style Dataset</strong>" card appears:</p>
+<ol>
+<li>The top of the card shows the material you've already collected; whatever you shared this time is listed under "Added this time."</li>
+<li>To collect more, tap "<strong>Keep Collecting</strong>" to close the card and go share a few more, then come back once you have enough.</li>
+<li>Once you have <strong>300+ characters</strong>, "<strong>Extract Writing Style</strong>" in the bottom right becomes tappable. Tap it, and the AI reads through all your material and distills a new writing style.</li>
+<li>"<strong>Clear dataset after extraction</strong>" is checked by default at the bottom — the material gets cleared once extraction is done, so next time starts fresh. Uncheck it if you want to keep using the same material.</li>
+</ol>
+<p>Extraction runs in the background, and the card closes on its own. Back in the app's "My Recordings" list, you'll see a new entry appear — once it finishes "Processing," it turns into an introduction article telling you what style was distilled and which material it drew on.</p>
+<p>Web pages, PDFs, Word documents, and plain text can all be shared in this way. Sharing audio or photos takes a different path — that mines an article, not builds up material.</p>
+<h3>Switching and Rolling Back Style Versions</h3>
+<p>Every save adds a new version instead of overwriting the old one. Open <strong>Settings → Writing Style</strong>, and there's a bar at the top of the page — the version number (like <code>v3</code>) on the left, "8 versions total" on the right. Tap the bar to expand the full version history, with each row showing the version number, style name, character count, and date; the currently active version has a checkmark.</p>
+<p>To roll back to an old version: tap it in this dropdown (the body switches to that version's content), then tap "Save" in the top right. The old version doesn't disappear — you can always switch back to it later.</p>
+<h3>Managing Prompts: Customize Every Action in the Long-Press Menu</h3>
+<p>Long-press a paragraph or image in an article, and a menu pops up — "More Concise," "More Casual," "Watercolor," "Cartoon," and so on. What's in that menu is controlled by <strong>Settings → Prompts</strong>.</p>
+<ul>
+<li>Tap <strong>＋</strong> in the top right to create a new action: fill in "Menu Label" (the words shown in the menu), "Prompt" (write it the way you'd normally talk, like "make this paragraph more concise without changing its meaning"), and choose whether it "Applies To" text or images — that decides whether it shows up in the long-press-text menu or the long-press-image menu.</li>
+<li><strong>＋</strong> can also create a new group to hold several actions, turning it into a submenu. Long-press a group to rename or delete it.</li>
+<li>Built-in entries can also be edited directly — edited ones are tagged "Customized"; ones you created yourself are tagged "Custom"; ones you picked up from others are tagged "Imported."</li>
+<li>If you accidentally delete something, don't worry — "<strong>Restore Default Prompts</strong>" at the bottom of the page brings the built-in ones back, without touching anything you've created or customized.</li>
+</ul>
+<h3>Prompt Share Code, the "Magic Number": Send a String of Digits to a Friend</h3>
+<p>Open a prompt, and there's a "<strong>Share to Community</strong>" switch at the bottom of the page. Turn it on, and you get a <strong>7-digit number</strong>, along with a short link like <code>voicedrop.cn/1234567</code> underneath. The three buttons are "Copy Number," "Copy Link," and "Share…"</p>
+<p>Send that number to a friend, and they can use it two ways: enter the 7-digit number into the dashed box at the bottom of the <strong>Settings → Prompts</strong> page to import it; or skip importing entirely — hold to speak in any article and say something like "edit this with 1234567," and the AI runs your prompt just once, without touching their own settings.</p>
+<p>Turn off the switch, and the number becomes invalid immediately, taking the community post down with it. Turn it back on later, and it's the same number as before.</p>
+<h3>Picking Up Other People's Prompts From the Community</h3>
+<p>There are two places to pick up ready-made prompts:</p>
+<ul>
+<li><strong>Settings → Prompts</strong> page, scroll down to find "Community Trending," filterable by "Hot / Latest / Text / Images" — tap "Import" on the right of one you like, or open its details to see the full prompt and example results, then tap "Add to My Prompts."</li>
+<li>Browsing the <strong>Community</strong>, come across a post with a "Prompt" badge, open it, and tap "<strong>Save This Prompt</strong>."</li>
+</ul>
+<p>What you save is your own copy — rename it, edit its content, or delete it anytime. Whatever the original author does with theirs later has no effect on yours.</p>
+<h3>Using It on Your Computer: Connect Claude and Other AI Clients</h3>
+<p>Your recordings, articles, and writing style aren't limited to your phone. In Claude or another AI client on your computer, add <code>voicedrop.cn/mcp</code> as a connection, and the AI can directly read and write your articles, adjust your writing style, and publish to WeChat, all from your computer.</p>
+<p>Signing in relies on two short numbers: first, read out the <strong>6-digit code</strong> shown to the right of the "Account" row at the top of the Settings page in the phone app to the AI on your computer. Your phone then pops up a <strong>4-digit verification code</strong> (and a push notification), which you also read out to finish signing in. The whole pairing window lasts only <strong>2 minutes</strong> — if it times out, just start over. If a login prompt pops up on your phone that you didn't initiate, tap "Not Me."</p>
+<h3>Other Platforms: Android &amp; English Interface</h3>
+<p><strong>An Android version</strong> exists, but it isn't in an app store — download the install package from <code>jianshuo.dev/voicedrop/en/apk/</code>. Features follow the iPhone version, arriving a step behind.</p>
+<p>An <strong>English interface</strong> is already available and follows your phone's system language — there's no language switch inside the app itself. To see it in English, go to iOS "Settings → VoiceDrop → Language" and set the app's language to English individually.</p>
+</section>
+<section id="ch7" class="chapter"><h2>Chapter 7: Account, Credits &amp; Invites</h2>
+<h3>Your Anonymous ID Is Your Account</h3>
+<p>You don't need to register, and there's no username or password — the moment you install the app, this device automatically has an account. Open "Settings → Account" to find two things: <strong>your ID</strong> (a string of characters, copyable) and your <strong>Access Token</strong> (masked by default; tap "Copy" to get the full text). The 6-digit short code to the right of the "Account" row on the Settings page is a shorthand for that ID — it's also what you use when inviting friends.</p>
+<p>The Access Token is essentially your key. Whoever has it has your account — never post it in a group chat.</p>
+<h3>Sign in with Apple: Required to Post or Tip in the Community</h3>
+<p>Tap "Sign in with Apple (sync devices · join the community)" at the bottom of the "Account" page. You can record, mine articles, and generate share links without signing in — everything works as normal. But two things require Apple sign-in first: <strong>sharing an article to the community</strong>, and <strong>tossing a coin on someone else's article</strong>. Try either without being signed in, and the app automatically prompts you to sign in, then continues automatically.</p>
+<p>Binding doesn't replace your account — your recordings and credits stay exactly as they were.</p>
+<h3>WeChat Login Is Android-Only</h3>
+<p>There's no WeChat login on iPhone or iPad — only Apple sign-in. WeChat login is the Android approach (there's no Sign in with Apple on Android, so community posting and coin-tossing are verified through WeChat instead). If you don't see a WeChat login option on iOS, it's not broken — that's expected.</p>
+<h3>Switching to a New Phone</h3>
+<p>There are three ways, ordered from easiest to most involved:</p>
+<ol>
+<li><strong>Do nothing at all.</strong> Your ID lives in iCloud Keychain — sign in to the same Apple account and install VoiceDrop on your new phone, and the account comes back automatically. That's what "iCloud Keychain Sync · On" on the Account page refers to.</li>
+<li><strong>Paste your Access Token.</strong> On your old phone: "Account → Access Token → Copy." On your new phone: "Account → Enter Access Token (Switch to an Existing Account)" and paste it in (it starts with <code>anon_</code>) — the device switches to that account immediately.</li>
+<li><strong>Approve pairing from your old phone (6-digit + 4-digit).</strong> This method is now used only for signing in to your account on a computer (like connecting Claude and similar tools): enter your 6-digit code on the computer, your old phone shows a 4-digit verification code, and typing it into the computer completes the sign-in. There's no longer a way to initiate pairing from within the phone app, so use the two methods above for switching between phones.</li>
+</ol>
+<h3>What Are Credits</h3>
+<p>Credits are simply a way of representing the real cost of what you use in the app — transcription, mining, and editing all cost money behind the scenes, and whatever you spend gets deducted from your credit balance. Credits <strong>are not money, cannot be withdrawn, and aren't loyalty points</strong> — their only use is letting you write more articles. They stop at 0, never go negative, and you're never charged automatically.</p>
+<h3>Balance &amp; Transaction History</h3>
+<p>"Settings → Credits." The dark card at the top shows your remaining credits, with an "≈ N articles" estimate next to it (at roughly 9 credits per article), and a line below reading "total granted · used." Further down are three sections: <strong>Credit Sources</strong> (sign-up gift, promotional gift, monthly allowance, referral bonus, etc.), <strong>Spending Summary</strong>, and <strong>History</strong> (every transaction with a time and amount, loading older entries automatically as you scroll).</p>
+<p>The entries in your history fall into just a few categories: sign-up gift, transcription, mining, and voice edits. New accounts get a one-time gift of <strong>200 credits</strong>, valid for one year; credits from promotions and coin tosses are generally valid for <strong>90 days</strong> — just spend them.</p>
+<h3>Monthly Subscription, ¥19.9</h3>
+<p>If a "Monthly Credits" card appears on the "Credits" page, tap "Subscribe to Monthly Credits" to purchase: <strong>¥19.9 a month, automatically topping up 200 credits every month.</strong> These 200 credits are valid for that month only, <strong>resetting to zero at month's end without carrying over</strong>. It renews automatically each month, charged to your Apple ID 24 hours before renewal, and can be canceled anytime in the system "Subscriptions" settings — once subscribed, the card shows your renewal date and a "Manage Subscription" button. If you switch phones or reinstall the app, tap "Restore Purchase" below the card to get it back.</p>
+<h3>Inviting Friends</h3>
+<p>"Settings → Invite Friends" — tap it, and a share sheet pops up instantly, ready to send to WeChat or anyone else. Your invite code is the same 6-digit short code as your account, serving double duty: whoever taps your link opens a download page, and once they install the app, <strong>both you and your friend each get a credit reward</strong>. The exact amount fluctuates and is shown to the right of "Invite Friends" (e.g. <code>+9</code>), and the shared message carries the same number. The landing page your friend opens in a browser shows the same figure.</p>
+<p>The link looks like this: <code>voicedrop.cn/i/your-short-code</code>. Tapping your own link doesn't count.</p>
+<h3>What Notifications You'll Get</h3>
+<p>The first time you open the app, the system asks whether to enable notifications — we recommend saying yes. There are three kinds:</p>
+<ul>
+<li><strong>Article Ready</strong> — a recording has finished mining; tap it to jump straight to the article.</li>
+<li><strong>Article Tipped</strong> — someone tossed a coin on your community article, telling you who, which article, and how many credits were added; tap it to jump to the Credits page.</li>
+<li><strong>Invite Successful</strong> — a friend you invited has installed the app, credits have landed in your account; tap it to jump to the Credits page.</li>
+</ul>
+<h3>Privacy</h3>
+<p>Your recordings, transcripts, and articles live only in your own space and are invisible to anyone else, unless you actively share them to the community or generate a share link. Usage analytics inside the app send only behavioral data (which screens you tapped, how long you recorded, how many articles you produced) — <strong>recordings, transcripts, article text, and your voice commands are never sent to any analytics system</strong>.</p>
+<h3>Deleting Your Account</h3>
+<p>"Settings → Account → Account Management → Delete Account." After confirming, all cloud data — recordings, articles, photos, settings, community shares, and your Apple binding — is permanently deleted, local data is cleared at the same time, and the app resets to a brand-new empty account. <strong>This can't be undone, and there's no recycle bin</strong> — export anything you want to keep first.</p>
+</section>
+<section id="ch8" class="chapter"><h2>Chapter 8: FAQ</h2>
+<p><strong>Q: My recording keeps showing "Uploading" — will it get lost?</strong></p>
+<p>No. The recording is handed off to iOS's background transfer — locking your screen, backgrounding the app, or even force-quitting it, the system keeps uploading it to completion. If there's temporarily no connection, it uploads automatically once you're back online or the next time you open the app. The file stays on your phone until the upload succeeds.</p>
+<p><strong>Q: The upload is very slow — is something broken?</strong></p>
+<p>No. On a weak connection, the audio is prioritized first, while photos taken during recording upload afterward at their own pace — they never hold up the recording. Give it a bit more time, or switch to Wi-Fi, which is much faster.</p>
+<p><strong>Q: Nothing happens after I finish recording, and it's missing from the list?</strong></p>
+<p>A recording under 4 seconds isn't uploaded — it's too short to produce an article. When you stop, you'll see a full-screen message: "Recording Too Short, too short to produce an article." If you saw this, that's the reason — just record a bit longer.</p>
+<p><strong>Q: Why does the badge say "No Speech"?</strong></p>
+<p>No human voice was detected in the recording — it was silent the whole time, too short, or only picked up background noise. The recording itself is still there and won't be deleted; you can record another one.</p>
+<p><strong>Q: It's stuck on "Mining" and not moving — what do I do?</strong></p>
+<p>Very long recordings (over an hour) run in several passes, so it may look stuck in between — waiting a few more minutes usually resolves it. Once it becomes "Done," if you're not happy with the content, long-press the "Done" badge to regenerate it.</p>
+<p><strong>Q: What do "Out of Credits" or "Recording Too Long" mean?</strong></p>
+<p>"Out of Credits" means your credit balance has run out — invite a friend to install VoiceDrop and you'll both get credits, and this recording is automatically re-mined once your balance is back. "Recording Too Long" means a single recording exceeded the 3-hour limit — it won't be processed, so please split long content into several recordings.</p>
+<p><strong>Q: Where did the images in my article go?</strong></p>
+<p>Most likely you tapped "Undo" and rolled back to a version before the image was added. Tap "Redo" next to it to bring it back — both the image and the text are still safe in the cloud; nothing is actually lost (each article keeps up to 10 historical versions).</p>
+<p><strong>Q: Photos I took while recording didn't make it into the article — what now?</strong></p>
+<p>No action needed — photos that upload late are automatically appended to the end of the article by the server, usually within a minute or two. But photos you've deleted from the article yourself won't come back — the system treats that deletion as intentional.</p>
+<p><strong>Q: Tapping "Rewrite" shows a failure?</strong></p>
+<p>A very long article can take a minute or two to generate — wait a bit and check the list again, since the server has often already finished by then. If it genuinely still fails, just tap Rewrite again.</p>
+<p><strong>Q: Why does one recording only produce a single article?</strong></p>
+<p>This is intentional: a single recording always maps to one article. If you cover a lot of ground or talk for a long time, the article just gets longer; it won't be forcibly split into several pieces, and nothing you said gets cut just to keep it short.</p>
+<p><strong>Q: What if the AI Interviewer won't connect?</strong></p>
+<p>This is a temporary server-side issue, unrelated to your network. The interface shows "AI Interview Unavailable · Recording Continues" — the recording itself is completely unaffected, keeps going, and still mines into an article normally.</p>
+<p><strong>Q: I get an "IP Whitelist" error when publishing to WeChat?</strong></p>
+<p>As prompted, copy the IP address shown below into the "IP Whitelist" in your Official Account admin console. After saving the whitelist, wait a minute or two before coming back and saving again. Whitelist changes take a little time to propagate on WeChat's side, so trying immediately often shows the same error.</p>
+<p><strong>Q: Why doesn't sharing to WeChat show an image card?</strong></p>
+<p>The card's image comes from the first photo in the article — a text-only article with no photos is simply a clean text card, that's not an error. If an article clearly has photos but the image still doesn't show, update to the latest app version and share again.</p>
+<p><strong>Q: Tapping a link inside WeChat doesn't open the app?</strong></p>
+<p>This is a WeChat restriction — links inside WeChat can't directly launch the app. Tap "···" in the top right and choose "Open in Safari"; a VoiceDrop banner appears at the top of the page, and tapping it opens the app.</p>
+<p><strong>Q: Why did my post in the community go empty?</strong></p>
+<p>If you deleted the original recording, the corresponding community post is automatically cleaned up — since the post points to your original article, it disappears when the original does. Also, while an article is being regenerated, its post is temporarily hidden and comes back on its own once generation finishes — no need to re-share.</p>
+<p><strong>Q: How long does it take for a report to be handled?</strong></p>
+<p>Reported content is hidden from the community list immediately — no one can see it — and then reviewed by hand within 24 hours. After you report a post, it also disappears from your own list right away.</p>
+<p><strong>Q: Why does sharing a prompt ask me to log in?</strong></p>
+<p>Minting a share code and posting to the community both require Apple or WeChat login first — both are public actions that need an accountable identity behind them. Using prompts, recording, and writing articles for yourself never requires logging in.</p>
+<p><strong>Q: Can credits be refunded for cash?</strong></p>
+<p>No. Credits have no cash value, can't be withdrawn, and can't be refunded — they're simply a unit that records how much compute you've used, not a top-up balance.</p>
+<p><strong>Q: Will I lose anything when I switch phones?</strong></p>
+<p>No. Your account ID travels with iCloud Keychain — sign in to the same Apple account on your new phone, and it's restored automatically. Without iCloud, there are two other ways: copy the <code>anon_</code> token from "Account → Access Token" on your old phone and paste it into your new one, or pair using the 6-digit code on your old phone with the 4-digit verification code that pops up on your new phone.</p>
+<p><strong>Q: Can a deleted account be recovered?</strong></p>
+<p>No. Deleting your account permanently erases all data, both in the cloud and on your device — recordings, articles, photos, settings, community shares, and your Apple sign-in binding — none of it can be recovered, and there's no recycle bin.</p>
+</section>
+  </main>
+</div>
+
+<footer class="site"><div class="inner">
+  <span>© Jian Shuo Wang · VoiceDrop</span>
+  <a href="/voicedrop/en/help/">Help Center</a>
+  <a href="/voicedrop/en/">Download VoiceDrop</a>
+</div></footer>
+</body>
+</html>
