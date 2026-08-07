@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Standert 单车店 · 16 种艺术风格重绘</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#fbf3e9;--ink:#4a3f35;--soft:#9b8b78;--card:#fffdf9}
+body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 24px 80px}
+header{margin-bottom:12px}
+header .crumb{font-size:.85rem;font-weight:700;margin-bottom:18px}
+header .crumb a{color:var(--soft);text-decoration:none}
+header .crumb a:hover{color:var(--ink)}
+h1{font-family:'Quicksand',sans-serif;font-weight:700;font-size:2rem;letter-spacing:-.01em}
+.sub{color:#82735f;font-weight:600;margin-top:10px;line-height:1.7;max-width:720px}
+.hero{margin:28px 0 8px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.hero .ph{flex:0 0 260px;border-radius:22px;overflow:hidden;box-shadow:0 12px 32px rgba(74,63,53,.14);border:1.5px solid rgba(255,255,255,.8);cursor:zoom-in}
+.hero .ph img{display:block;width:100%;height:auto}
+.hero .cap{flex:1;min-width:240px;font-size:.9rem;color:#82735f;font-weight:600;line-height:1.8;padding-top:6px}
+.hero .cap b{color:var(--ink)}
+.sec{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.25rem;margin:44px 0 18px;display:flex;align-items:center;gap:10px}
+.sec .tag{font-family:'Nunito',sans-serif;font-size:.75rem;font-weight:800;padding:4px 12px;border-radius:99px;background:var(--tint,#eee);color:var(--dark,#666)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+@media(max-width:860px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border-radius:22px;overflow:hidden;box-shadow:0 10px 30px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.8);transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s;cursor:zoom-in}
+.card:hover{transform:translateY(-6px) rotate(-.4deg);box-shadow:0 22px 44px rgba(74,63,53,.14)}
+.card img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:#eee}
+.card .meta{padding:16px 18px 18px}
+.card h3{font-family:'Quicksand',sans-serif;font-weight:700;font-size:1.05rem}
+.card h3 span{font-size:.78rem;color:var(--soft);font-weight:600;margin-left:6px}
+.card p{font-size:.84rem;color:#82735f;font-weight:600;line-height:1.55;margin-top:6px}
+footer{margin-top:60px;font-size:.82rem;color:var(--soft);font-weight:600;line-height:1.8}
+footer a{color:inherit}
+/* lightbox */
+.lb{position:fixed;inset:0;background:rgba(35,28,22,.92);display:none;align-items:center;justify-content:center;z-index:50;flex-direction:column;padding:24px}
+.lb.on{display:flex}
+.lb img{max-width:min(92vw,900px);max-height:80vh;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.lb .lbcap{color:#f3e9dc;font-weight:700;margin-top:16px;font-size:1rem;text-align:center}
+.lb .lbcap span{display:block;font-size:.82rem;font-weight:600;color:#c9b9a5;margin-top:4px}
+.lb .x{position:absolute;top:20px;right:28px;color:#f3e9dc;font-size:2rem;cursor:pointer;font-family:'Quicksand'}
+.lb .nav{position:absolute;top:50%;transform:translateY(-50%);color:#f3e9dc;font-size:2.4rem;cursor:pointer;padding:20px;user-select:none}
+.lb .prev{left:8px}.lb .next{right:8px}
+@media(max-width:560px){.lb .nav{font-size:1.8rem;padding:10px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="crumb"><a href="/a/">← a / 王建硕的小工具们</a></div>
+  <h1>🎨 Standert 单车店 · 16 种艺术风格重绘</h1>
+  <p class="sub">同一张照片，交给 gpt-image-2 按 16 种美术风格各画一遍。原图是上海 Standert China Club 单车店：红色霓虹招牌、白格照片墙上挂满公路车。点任意一张图可放大对比。</p>
+</header>
+
+<div class="hero">
+  <div class="ph" data-full="img/original.jpg" data-name="原图" data-desc="Standert China Club 店内实拍"><img src="img/original.jpg" alt="原图"></div>
+  <div class="cap"><b>怎么做的：</b>每种风格一条改图 prompt（保持构图不变，只换画法），由 Codex 订阅版 gpt-image-2 逐一重绘，1024×1024。风格分三组：漫画/印刷感、复古海报感、现代插画感。</div>
+</div>
+
+<div class="sec">漫画 / 印刷感 <span class="tag" style="--tint:#fde6d2;--dark:#c2510a">波普漫画的近亲</span></div>
+<div class="grid" id="g1"></div>
+
+<div class="sec">复古印刷 / 海报感 <span class="tag" style="--tint:#dbeafe;--dark:#2563EB">套色与年代感</span></div>
+<div class="grid" id="g2"></div>
+
+<div class="sec">现代扁平 / 插画感 <span class="tag" style="--tint:#e2ecdb;--dark:#0b6e4f">当下流行</span></div>
+<div class="grid" id="g3"></div>
+
+<footer>照片摄于 Standert China Club（上海）· 图像由 gpt-image-2 生成 · <a href="/a/">更多小工具 →</a></footer>
+</div>
+
+<div class="lb" id="lb">
+  <div class="x" onclick="closeLb()">×</div>
+  <div class="nav prev" onclick="step(-1)">‹</div>
+  <div class="nav next" onclick="step(1)">›</div>
+  <img id="lbimg" src="" alt="">
+  <div class="lbcap" id="lbcap"></div>
+</div>
+
+<script>
+const GROUPS = {
+g1: [
+ ["retro-comic","美式复古漫画","Retro American Comic","粗黑描边、网点阴影、报纸印刷质感"],
+ ["lichtenstein","利希滕斯坦","Lichtenstein Pop Art","Ben-Day 圆点、大色块，波普艺术鼻祖"],
+ ["manga","日式少年漫画","Manga","黑白网点、速度线、高对比墨线"],
+ ["ligne-claire","欧式清线派","Ligne Claire","丁丁风：均匀细线、平涂色、干净利落"],
+ ["graffiti","涂鸦街头风","Graffiti Street Art","喷漆质感、高饱和、滴漆的街头能量"],
+ ["lowbrow","低俗漫画风","Lowbrow / Pop Surrealism","波普+超现实，怪诞可爱、糖果色"]
+],
+g2: [
+ ["screen-print","复古丝网印刷","Vintage Screen Print","限色套印、错位、油墨颗粒"],
+ ["propaganda","宣传画","Propaganda Poster","强构图、红米灰配色、口号年代感"],
+ ["art-deco","装饰艺术","Art Deco","几何对称、金色线条、旅行海报式优雅"],
+ ["memphis","孟菲斯风","Memphis Design","80 年代几何碎片、波浪线、撞色"],
+ ["risograph","Risograph 印刷","Risograph","荧光粉+青双色油墨、纸张颗粒、zine 感"]
+],
+g3: [
+ ["flat","扁平插画","Flat Illustration","无描边大色块、现代编辑插画"],
+ ["grainy","孔版噪点插画","Grainy Gradient","噪点渐变、温暖限色，这两年最流行"],
+ ["papercut","剪纸拼贴","Paper Cutout","层层彩纸、投影分明、手工感"],
+ ["pixel","像素艺术","Pixel Art","16-bit 游戏像素、抖动阴影、怀旧"],
+ ["cyberpunk","赛博朋克霓虹","Cyberpunk Neon","霓虹拉满、品红+青色边缘光、雨夜反光"]
+]};
+
+const flat = [["original","原图","Original","Standert China Club 店内实拍"]];
+for (const [gid, items] of Object.entries(GROUPS)) {
+  const g = document.getElementById(gid);
+  for (const [slug, zh, en, desc] of items) {
+    flat.push([slug, zh, en, desc]);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.slug = slug;
+    card.innerHTML = `<img src="img/${slug}.jpg" loading="lazy" alt="${zh}">
+      <div class="meta"><h3>${zh}<span>${en}</span></h3><p>${desc}</p></div>`;
+    card.onclick = () => openLb(slug);
+    g.appendChild(card);
+  }
+}
+document.querySelector('.hero .ph').onclick = () => openLb('original');
+
+let cur = 0;
+function openLb(slug){
+  cur = flat.findIndex(f => f[0] === slug);
+  render();
+  document.getElementById('lb').classList.add('on');
+}
+function render(){
+  const [slug, zh, en, desc] = flat[cur];
+  document.getElementById('lbimg').src = `img/${slug}.jpg`;
+  document.getElementById('lbcap').innerHTML = `${zh} · ${en}<span>${desc}</span>`;
+}
+function step(d){ cur = (cur + d + flat.length) % flat.length; render(); }
+function closeLb(){ document.getElementById('lb').classList.remove('on'); }
+document.getElementById('lb').onclick = e => { if (e.target.id === 'lb') closeLb(); };
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('lb').classList.contains('on')) return;
+  if (e.key === 'Escape') closeLb();
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+</script>
+</body>
+</html>

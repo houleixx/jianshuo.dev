@@ -1,0 +1,2466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="WiFi FTM（Fine Timing Measurement）精细时间测量完全指南 — 从 802.11mc 到 802.11az/bk，室内定位如何从「猜」走向「量」。32 页技术幻灯片，全部数据带一手来源。">
+<title>用光速当尺子：WiFi FTM 完全指南</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fbf3e9; --ink:#3d342c; --soft:#8b7d6b; --card:#fffdf9;
+  --accent:#ef7d54; --accent2:#f6a560; --blue:#5b8fb9; --green:#6fae7c;
+  --red:#d9605c; --purple:#8b7ab8; --line:rgba(74,63,53,.12);
+  --w:1180px;
+}
+html{scroll-behavior:smooth}
+body{
+  background:radial-gradient(ellipse 120% 60% at 50% -5%,#fdf0e0,var(--bg)) fixed;
+  color:var(--ink); font-family:'Nunito',-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  -webkit-font-smoothing:antialiased; line-height:1.6;
+}
+
+/* ── 顶部进度条 ───────────────── */
+#bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));z-index:100;width:0;transition:width .15s}
+#nav{position:fixed;top:14px;right:18px;z-index:100;display:flex;gap:8px;align-items:center;
+  background:rgba(255,253,249,.92);backdrop-filter:blur(8px);border-radius:999px;padding:6px 14px;
+  box-shadow:0 4px 16px rgba(74,63,53,.1);font-size:.78rem;font-weight:700;color:var(--soft)}
+#nav a{color:var(--soft);text-decoration:none;padding:3px 8px;border-radius:99px;transition:.2s}
+#nav a:hover{background:var(--bg);color:var(--accent)}
+#toc-btn{cursor:pointer;user-select:none}
+
+/* ── 目录抽屉 ───────────────── */
+#toc{position:fixed;inset:0;background:rgba(251,243,233,.97);backdrop-filter:blur(10px);z-index:200;
+  overflow-y:auto;padding:70px 24px;display:none}
+#toc.on{display:block}
+#toc .inner{max-width:900px;margin:0 auto}
+#toc h3{font-family:'Quicksand';font-size:1.5rem;margin-bottom:24px;color:var(--accent)}
+#toc ol{list-style:none;columns:2;column-gap:36px}
+@media(max-width:760px){#toc ol{columns:1}}
+#toc li{break-inside:avoid;margin-bottom:7px}
+#toc a{color:var(--ink);text-decoration:none;font-size:.9rem;font-weight:600;display:block;padding:5px 10px;border-radius:8px;transition:.15s}
+#toc a:hover{background:#fff;color:var(--accent)}
+#toc .pt{font-family:'Quicksand';font-weight:700;color:var(--accent);margin:16px 0 8px;font-size:.95rem;break-after:avoid}
+#toc .x{position:absolute;top:20px;right:26px;font-size:1.6rem;cursor:pointer;color:var(--soft)}
+
+/* ── 幻灯片 ───────────────── */
+.slide{max-width:var(--w);margin:0 auto 28px;background:var(--card);border-radius:24px;
+  padding:44px 52px 40px;box-shadow:0 10px 34px rgba(74,63,53,.07);border:1.5px solid rgba(255,255,255,.9);
+  scroll-margin-top:20px;position:relative;min-height:auto}
+@media(max-width:820px){.slide{padding:30px 22px;border-radius:18px;margin-bottom:18px}}
+.deck{padding:26px 20px 90px}
+
+.num{position:absolute;top:18px;right:24px;font-size:.72rem;font-weight:800;color:#d8cbb8;font-family:'Quicksand'}
+.kicker{display:inline-block;font-family:'Quicksand';font-weight:700;font-size:.74rem;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--accent);background:#fff3ea;padding:5px 13px;border-radius:99px;margin-bottom:14px}
+.slide h2{font-family:'Quicksand';font-weight:700;font-size:clamp(1.5rem,3.2vw,2.15rem);line-height:1.2;
+  letter-spacing:-.02em;margin-bottom:6px}
+.slide h3{font-family:'Quicksand';font-weight:700;font-size:1.08rem;margin:26px 0 10px;color:#5c4f42;
+  display:flex;align-items:center;gap:8px}
+.slide h3::before{content:'';width:4px;height:16px;border-radius:2px;background:var(--accent2)}
+.sub{color:var(--soft);font-weight:600;font-size:.95rem;margin-bottom:20px}
+.slide p{margin-bottom:12px;font-size:.95rem}
+.slide ul{margin:0 0 14px 2px;list-style:none}
+.slide li{position:relative;padding-left:20px;margin-bottom:9px;font-size:.94rem}
+.slide li::before{content:'';position:absolute;left:4px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--accent2)}
+.slide li ul{margin-top:8px}
+.slide li li::before{background:#d8cbb8;width:5px;height:5px}
+b,strong{font-weight:800;color:#2f2822}
+code{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.87em;background:#f4ede3;padding:2px 6px;border-radius:5px;color:#8a5a3c}
+
+/* 大数字 */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:20px 0}
+.stat{background:linear-gradient(160deg,#fff8f0,#fffdf9);border-radius:16px;padding:18px 16px;border:1.5px solid #f6e6d4}
+.stat .v{font-family:'Quicksand';font-weight:700;font-size:1.75rem;color:var(--accent);line-height:1.1;letter-spacing:-.02em}
+.stat .l{font-size:.78rem;color:var(--soft);font-weight:700;margin-top:6px;line-height:1.35}
+
+/* 表格 */
+.tw{overflow-x:auto;margin:16px 0;border-radius:14px;border:1.5px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:.85rem;background:#fff;min-width:480px}
+th{background:#f7efe4;font-family:'Quicksand';font-weight:700;text-align:left;padding:11px 13px;color:#5c4f42;
+  font-size:.82rem;white-space:nowrap;border-bottom:1.5px solid var(--line)}
+td{padding:10px 13px;border-bottom:1px solid #f2ebe1;vertical-align:top}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#fffaf4}
+td.hi,th.hi{background:#fff4ec}
+.tag{display:inline-block;font-size:.7rem;font-weight:800;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.t-v{background:#e8f2ea;color:#3f7a51}   /* 厂商 */
+.t-a{background:#fdf3d9;color:#8a6d1f}   /* 学术 */
+.t-r{background:#fbe6e5;color:#a8403c}   /* 实测 */
+.t-x{background:#eceaf3;color:#5d5478}   /* 攻击 */
+
+/* 洞察框 */
+.insight{background:linear-gradient(135deg,#fff4ec,#fffaf5);border-left:4px solid var(--accent);
+  border-radius:0 16px 16px 0;padding:18px 22px;margin:22px 0 4px;font-size:.97rem;font-weight:600;color:#4a3f35}
+.insight::before{content:'洞察';display:block;font-family:'Quicksand';font-size:.7rem;font-weight:800;
+  letter-spacing:.1em;color:var(--accent);margin-bottom:6px}
+.warn{background:#fdf6e8;border-left:4px solid #e0a942;border-radius:0 14px 14px 0;padding:14px 18px;margin:16px 0;font-size:.88rem}
+.warn::before{content:'⚠ 别说错';display:block;font-family:'Quicksand';font-size:.7rem;font-weight:800;color:#b8862c;margin-bottom:5px}
+
+/* 图表容器 */
+.fig{background:#fffdfa;border:1.5px solid var(--line);border-radius:16px;padding:20px 18px 14px;margin:20px 0}
+.fig svg{display:block;width:100%;height:auto;overflow:visible}
+.cap{font-size:.76rem;color:var(--soft);font-weight:700;margin-top:10px;text-align:center;line-height:1.45}
+.fig text{font-family:'Nunito',sans-serif}
+
+/* 分栏 */
+.cols{display:grid;gap:18px;margin:16px 0}
+.c2{grid-template-columns:1fr 1fr}
+.c3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:820px){.c2,.c3{grid-template-columns:1fr}}
+.box{background:#fffaf4;border:1.5px solid #f4e7d8;border-radius:14px;padding:16px 18px}
+.box h4{font-family:'Quicksand';font-weight:700;font-size:.95rem;margin-bottom:8px;color:#5c4f42}
+.box p,.box li{font-size:.87rem;margin-bottom:7px}
+
+/* Part 分隔页 */
+.part{max-width:var(--w);margin:0 auto 28px;border-radius:24px;padding:60px 52px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
+  box-shadow:0 14px 40px rgba(239,125,84,.28);position:relative;overflow:hidden}
+.part::after{content:'';position:absolute;right:-60px;bottom:-90px;width:280px;height:280px;
+  border-radius:44% 56% 60% 40%/50% 45% 55% 50%;background:rgba(255,255,255,.13)}
+.part .pn{font-family:'Quicksand';font-weight:700;font-size:.8rem;letter-spacing:.16em;opacity:.85;margin-bottom:10px}
+.part h2{font-family:'Quicksand';font-weight:700;font-size:clamp(1.7rem,4vw,2.6rem);line-height:1.15;letter-spacing:-.02em;margin-bottom:14px}
+.part p{font-size:1rem;opacity:.94;max-width:640px;font-weight:600;position:relative;z-index:1}
+.part ol{margin-top:18px;list-style:none;display:flex;flex-wrap:wrap;gap:8px;position:relative;z-index:1}
+.part ol li{background:rgba(255,255,255,.2);border-radius:99px;padding:5px 14px;font-size:.82rem;font-weight:700}
+
+/* 封面 */
+.cover{max-width:var(--w);margin:0 auto 28px;background:var(--card);border-radius:26px;padding:62px 54px 52px;
+  box-shadow:0 14px 44px rgba(74,63,53,.1);border:1.5px solid #fff;text-align:center}
+.cover .pill{display:inline-block;background:#fff3ea;color:var(--accent);border-radius:99px;padding:7px 18px;
+  font-family:'Quicksand';font-weight:700;font-size:.8rem;margin-bottom:22px}
+.cover h1{font-family:'Quicksand';font-weight:700;font-size:clamp(2rem,5.5vw,3.4rem);line-height:1.1;letter-spacing:-.03em}
+.cover h1 em{font-style:normal;color:var(--accent)}
+.cover .tag2{font-size:1.05rem;color:var(--soft);font-weight:700;margin-top:16px;line-height:1.5}
+.cover .meta{margin-top:28px;padding-top:22px;border-top:1.5px solid var(--line);display:flex;justify-content:center;
+  gap:28px;flex-wrap:wrap;font-size:.82rem;color:var(--soft);font-weight:700}
+.eq{font-family:ui-monospace,'SF Mono',Menlo,monospace;background:#f7efe4;border-radius:12px;padding:14px 18px;
+  margin:16px 0;font-size:.92rem;color:#6b4a33;text-align:center;font-weight:600;overflow-x:auto}
+
+footer{max-width:var(--w);margin:36px auto 0;text-align:center;font-size:.8rem;color:var(--soft);font-weight:600;padding:0 20px}
+footer a{color:var(--accent);text-decoration:none}
+.srcs{font-size:.75rem;color:#a89880;margin-top:14px;line-height:1.7;font-weight:600}
+.srcs b{color:#8b7d6b;font-weight:800}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="nav"><span id="toc-btn">☰ 目录</span><a href="/a/">← /a</a></div>
+
+<div id="toc">
+  <span class="x" onclick="tg()">✕</span>
+  <div class="inner">
+    <h3>目录</h3>
+    <ol id="toc-list"></ol>
+  </div>
+</div>
+
+<div class="deck">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<marker id="ar1" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#ef7d54"/></marker>
+<marker id="ar2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#5b8fb9"/></marker>
+<marker id="a3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8b7d6b"/></marker>
+<marker id="a4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#ef7d54"/></marker>
+<marker id="a5" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#d9605c"/></marker>
+</defs></svg>
+
+
+<!-- ══════════ 封面 ══════════ -->
+<div class="cover" id="s0">
+  <span class="pill">📡 技术幻灯片 · 33 页 + 附录 · 数据全部标注一手来源</span>
+  <h1>用光速当尺子：<br><em>WiFi FTM</em> 精细时间测量完全指南</h1>
+  <p class="tag2">从 802.11mc 到 802.11az/bk —— 室内定位如何从「猜」走向「量」</p>
+  <div class="eq" style="max-width:520px;margin:26px auto 0">RTT = (t₄ − t₁) − (t₃ − t₂)　　d = RTT × c / 2</div>
+  <div class="meta">
+    <span>核校截止 2026-08-05</span><span>6 个部分 · 33 页正文 + 2 页附录</span><span>一手来源 30+</span>
+  </div>
+</div>
+
+<!-- ══════════ PART 1 ══════════ -->
+<div class="part" id="p1" data-t="定位技术全景">
+  <div class="pn">PART 1</div>
+  <h2>定位技术全景<br>为什么你的手机在商场里找不到自己</h2>
+  <p>室外定位在 2005 年就解决了，室内定位到 2026 年仍然没有统一答案。这一部分回答：GPS 进门后到底发生了什么，为什么 RSSI 和指纹这两条主流路线都撞在同一堵墙上。</p>
+  <ol><li>GPS 一进门就瞎了</li><li>四条技术路线</li><li>RSSI 天生不准</li><li>指纹不 scale</li><li>换一把尺子</li></ol>
+</div>
+
+<!-- ── 1.1 ── -->
+<section class="slide" id="s1-1">
+  <span class="num">1.1</span>
+  <span class="kicker">Slide 1.1</span>
+  <h2>一个尴尬的事实：GPS 一进门就瞎了</h2>
+  <p class="sub">不是"变得不准"，是根本收不到 —— 这是一道功率预算题</p>
+
+  <div class="stats">
+    <div class="stat"><div class="v">−128.5<span style="font-size:1rem"> dBm</span></div><div class="l">GPS L1 C/A 到达地表的规范最小功率（IS-GPS-200）</div></div>
+    <div class="stat"><div class="v">−25 dB</div><div class="l">常规室内额外衰减（深室内 &gt;35 dB）</div></div>
+    <div class="stat"><div class="v">−140<span style="font-size:1rem"> dBm</span></div><div class="l">手机 GNSS 捕获灵敏度门限</div></div>
+    <div class="stat"><div class="v">1/22</div><div class="l">室内信号功率相对捕获门限，差 13.5 dB</div></div>
+  </div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 300" role="img" aria-label="GPS 功率预算瀑布图">
+      <defs><linearGradient id="gdead" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#d9605c" stop-opacity=".16"/><stop offset="1" stop-color="#d9605c" stop-opacity=".04"/>
+      </linearGradient></defs>
+      <!-- y: -120 → 20px ; -175 → 250px  =>  y = 20 + (dBm+120)*(-230/55) -->
+      <!-- helper: f(v) = 20 + (-120 - v) * (230/55) -->
+      <!-- grid -->
+      <g stroke="#efe6d9" stroke-width="1">
+        <line x1="88" y1="20" x2="700" y2="20"/><line x1="88" y1="78" x2="700" y2="78"/>
+        <line x1="88" y1="136" x2="700" y2="136"/><line x1="88" y1="194" x2="700" y2="194"/>
+        <line x1="88" y1="250" x2="700" y2="250"/>
+      </g>
+      <g font-size="11" fill="#a89880" font-weight="700" text-anchor="end">
+        <text x="80" y="24">−120</text><text x="80" y="82">−134</text><text x="80" y="140">−148</text>
+        <text x="80" y="198">−162</text><text x="80" y="254">−175 dBm</text>
+      </g>
+      <!-- 死区填充 -->
+      <rect x="88" y="103.6" width="612" height="146.4" fill="url(#gdead)"/>
+      <!-- 门限线 -->
+      <line x1="88" y1="103.6" x2="700" y2="103.6" stroke="#d9605c" stroke-width="2" stroke-dasharray="7 4"/>
+      <text x="696" y="99" font-size="11.5" fill="#d9605c" font-weight="800" text-anchor="end">手机捕获门限 −140 dBm</text>
+      <line x1="88" y1="124.5" x2="700" y2="124.5" stroke="#e0a942" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <text x="696" y="138" font-size="11" fill="#c99432" font-weight="700" text-anchor="end">跟踪门限 −145 dBm</text>
+      <!-- 台阶折线 -->
+      <polyline points="120,55.6 260,55.6 260,118.3 400,118.3 400,160.1 540,160.1 540,222.8 680,222.8"
+        fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linejoin="round"/>
+      <g fill="var(--accent)">
+        <circle cx="190" cy="55.6" r="5"/><circle cx="330" cy="118.3" r="5"/>
+        <circle cx="470" cy="160.1" r="5"/><circle cx="610" cy="222.8" r="5"/>
+      </g>
+      <g font-size="11.5" font-weight="800" fill="#5c4f42" text-anchor="middle">
+        <text x="190" y="45">−128.5</text><text x="330" y="108">−143.5</text>
+        <text x="470" y="150">−153.5</text><text x="610" y="213">−168.5</text>
+      </g>
+      <g font-size="11" font-weight="700" fill="#8b7d6b" text-anchor="middle">
+        <text x="190" y="275">到达地表</text><text x="330" y="275">软室内（窗边）</text>
+        <text x="470" y="275">常规室内</text><text x="610" y="275">深室内</text>
+      </g>
+      <text x="470" y="182" font-size="11" fill="#d9605c" font-weight="800" text-anchor="middle">↓ 已在门限之下 13.5 dB</text>
+    </svg>
+    <div class="cap">图 1.1｜GPS 功率预算瀑布：常规室内衰减 25 dB 之后，信号掉进"捕不到星"的灰色区域。<br>数据来源：IS-GPS-200（−158.5 dBW）、MDPI Sensors 24(5):1416（室内衰减三档）、GPS World（手机灵敏度）</div>
+  </div>
+
+  <h3>为什么室内需求是 &lt;1 米（不是营销话术，是监管硬线）</h3>
+  <ul>
+    <li><b>FCC 无线 E911</b> 要求垂直方向 <b>±3 米、覆盖 80% 的室内呼叫</b>（前 25 大市场 2021-04 截止）。而楼层间距通常只有 3–4 米 —— <b>±3 米意味着必须能分清楼层</b>。</li>
+    <li>水平方向要求 80% 的呼叫给出可调度地址或 ≤50 米精度。</li>
+    <li>零售场景的目标口径更狠：802.11bk 直接叫 <b>"product on shelf"</b>（在货架上找到那一件商品）。</li>
+  </ul>
+
+  <div class="tw"><table>
+    <thead><tr><th>指标</th><th>数值</th><th>统计口径</th><th>来源</th></tr></thead>
+    <tbody>
+      <tr><td>GPS 空间信号 URE</td><td>≤ 2.0 m</td><td>日均全球，95% 概率</td><td>GPS.gov</td></tr>
+      <tr><td>手机 GPS 开阔天空</td><td>4.9 m 半径</td><td>典型值</td><td>GPS.gov</td></tr>
+      <tr class="hi"><td>FCC E911 垂直（z 轴）</td><td><b>±3 m</b></td><td>80% 室内呼叫</td><td>FCC 2020</td></tr>
+      <tr><td>楼层间距（需求推导）</td><td>3–4 m</td><td>—</td><td>建筑常识</td></tr>
+      <tr class="hi"><td>零售"货架级"目标</td><td><b>&lt; 0.1 m</b></td><td>802.11bk 目标</td><td>arXiv:2509.03901</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">GPS 不是在室内"变得不准"，而是<b>根本收不到</b>——常规室内衰减 25 dB 之后，信号比手机的捕获门限还低 13.5 dB，功率只剩 1/22；而 FCC 那条 ±3 米的垂直硬线又要求你能分清楼层。供给和需求之间隔着的不是一个百分比，是一个数量级。</div>
+</section>
+
+<!-- ── 1.2 ── -->
+<section class="slide" id="s1-2">
+  <span class="num">1.2</span>
+  <span class="kicker">Slide 1.2</span>
+  <h2>室内定位的四条技术路线</h2>
+  <p class="sub">本质是：你拿信号的哪个属性当尺子</p>
+
+  <div class="cols c2">
+    <div class="box"><h4>物理测量（有解析几何模型）</h4>
+      <ul style="margin:0">
+        <li><b>测强度</b> RSSI —— 路径损耗反推距离</li>
+        <li><b>测时间</b> ToF / RTT —— <b>FTM 在这里</b></li>
+        <li><b>测角度</b> AoA / AoD —— 天线阵列测入射角</li>
+      </ul></div>
+    <div class="box"><h4>模式匹配（靠数据库）</h4>
+      <ul style="margin:0">
+        <li><b>测特征</b> 指纹 / CSI / 地磁 / 视觉</li>
+        <li>离线建库 + 在线匹配</li>
+        <li>没有物理模型，只有相似度</li>
+      </ul></div>
+  </div>
+  <p>这个划分决定了它们的<b>失效方式完全不同</b>：物理测量在多径下<b>有偏</b>（可建模、可治理），模式匹配在环境变化下<b>失效</b>（只能重建库）。</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 380" role="img" aria-label="精度与部署成本四象限散点图">
+      <!-- axes: x=成本 0-10 → 90..680 ; y=精度 log10(m) 从 0.05(上) 到 12(下) -->
+      <rect x="90" y="20" width="590" height="290" fill="#fffdfa" stroke="#efe6d9"/>
+      <!-- 高亮框：低成本高精度 -->
+      <rect x="90" y="132" width="180" height="120" fill="#e8f2ea" opacity=".55" rx="10"/>
+      <text x="180" y="152" font-size="11.5" font-weight="800" fill="#3f7a51" text-anchor="middle">低成本 × 高精度</text>
+      <g stroke="#efe6d9" stroke-width="1">
+        <line x1="90" y1="83" x2="680" y2="83"/><line x1="90" y1="165" x2="680" y2="165"/>
+        <line x1="90" y1="248" x2="680" y2="248"/>
+      </g>
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="end">
+        <text x="84" y="34">0.05 m</text><text x="84" y="87">0.2 m</text>
+        <text x="84" y="169">1 m</text><text x="84" y="252">5 m</text><text x="84" y="313">12 m</text>
+      </g>
+      <!-- points: cx = 90+ x*59 ; cy computed by log scale -->
+      <g font-size="10.5" font-weight="700">
+        <!-- UWB (9.5, 0.08) -->
+        <circle cx="650" cy="52" r="7" fill="#8b7ab8"/><text x="638" y="46" fill="#6b5f92" text-anchor="end">UWB</text>
+        <!-- 802.11bk (3, 0.1) -->
+        <circle cx="267" cy="62" r="9" fill="var(--accent)"/><text x="280" y="59" fill="#c9603a">802.11bk</text>
+        <!-- BT CS (5, 0.2) -->
+        <circle cx="385" cy="83" r="6" fill="#5b8fb9"/><text x="396" y="80" fill="#42708f">蓝牙信道探测</text>
+        <!-- 视觉 VIO (7,0.3) -->
+        <circle cx="503" cy="102" r="6" fill="#9a9a9a"/><text x="514" y="99" fill="#7d7d7d">视觉 VIO</text>
+        <!-- WiFi AoA (8,0.4) -->
+        <circle cx="562" cy="116" r="6" fill="#5b8fb9"/><text x="573" y="113" fill="#42708f">WiFi AoA</text>
+        <!-- BLE AoA (6,0.65) -->
+        <circle cx="444" cy="143" r="6" fill="#5b8fb9"/><text x="455" y="140" fill="#42708f">BLE AoA</text>
+        <!-- 802.11az (2.5,0.7) -->
+        <circle cx="238" cy="147" r="9" fill="var(--accent)"/><text x="251" y="144" fill="#c9603a">802.11az</text>
+        <!-- WiFi RTT/FTM (2,1.5) -->
+        <circle cx="208" cy="188" r="9" fill="var(--accent)"/><text x="221" y="185" fill="#c9603a">WiFi RTT (mc)</text>
+        <!-- 地磁 (5,2) -->
+        <circle cx="385" cy="203" r="6" fill="#6fae7c"/><text x="396" y="200" fill="#4d8a5c">地磁指纹</text>
+        <!-- BLE 信标 (3,3.5) -->
+        <circle cx="267" cy="235" r="6" fill="#6fae7c"/><text x="278" y="232" fill="#4d8a5c">BLE 信标</text>
+        <!-- RSSI 指纹 (5,7) -->
+        <circle cx="385" cy="277" r="6" fill="#d9605c"/><text x="396" y="274" fill="#a8403c">RSSI 指纹</text>
+        <!-- RSSI 三边 (1,10) -->
+        <circle cx="149" cy="297" r="6" fill="#d9605c"/><text x="160" y="294" fill="#a8403c">RSSI 三边定位</text>
+      </g>
+      <text x="385" y="340" font-size="11.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">部署 + 维护成本　→</text>
+      <text x="30" y="170" font-size="11.5" font-weight="800" fill="#8b7d6b" text-anchor="middle" transform="rotate(-90 30 170)">↑ 精度更高（对数）</text>
+      <text x="385" y="365" font-size="10.5" fill="#a89880" text-anchor="middle">气泡大小 ≈ 终端普及度；橙色为 Wi-Fi FTM 家族</text>
+    </svg>
+    <div class="cap">图 1.2｜精度 × 部署成本四象限。左上角的绿色高亮区只有三个点：<b>WiFi RTT / 802.11az / 802.11bk</b> —— 全篇的论点就是这个框。<br>数据来源：arXiv:2509.03901 Table 2、SpotFi (SIGCOMM'15)、MDPI Sensors 21(11):3589、Bluetooth SIG</div>
+  </div>
+
+  <h3>综述给出的标准级横向对比（arXiv:2509.03901 Table 2）</h3>
+  <div class="tw"><table>
+    <thead><tr><th></th><th>UWB</th><th>蓝牙信道探测</th><th class="hi">Wi-Fi 802.11</th></tr></thead>
+    <tbody>
+      <tr><td>带宽</td><td>500 MHz / 1 GHz</td><td>40 × 2 MHz</td><td class="hi">20–320 MHz</td></tr>
+      <tr><td>功率谱密度</td><td>−41.3 / −31.3 dBm/MHz</td><td>17 dBm/MHz</td><td class="hi">17 dBm/MHz</td></tr>
+      <tr><td>LOS 精度</td><td><b>&lt;0.1 m</b></td><td>1–2 m</td><td class="hi"><b>0.4 m</b>(az)｜<b>&lt;0.1 m</b>(bk)</td></tr>
+      <tr><td>LOS 作用距离</td><td>&lt;15 m</td><td>10 m</td><td class="hi"><b>50+ m</b></td></tr>
+      <tr><td>需独立射频？</td><td>否（需专用芯片）</td><td>是</td><td class="hi">是（已装在墙上）</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>关键读法</b>：UWB 精度赢，但作用距离只有 &lt;15 米、功率谱密度低 58 dB —— 覆盖同样面积需要的锚点数量是 Wi-Fi 的数倍。<b>这是 UWB 十年没铺开的根本原因，不是技术不行，是账不划算。</b></p>
+
+  <h3>比精度表更有洞察的一张表：四条路线的"失效方式"</h3>
+  <div class="tw"><table>
+    <thead><tr><th>路线</th><th>在多径下</th><th>在 NLOS 下</th><th>环境变化时</th><th>换台设备时</th></tr></thead>
+    <tbody>
+      <tr><td><b>测强度</b></td><td>抖动（随机）</td><td>有偏（偏远）</td><td class="hi"><b>直接失效</b></td><td class="hi"><b>系统性偏差</b></td></tr>
+      <tr><td><b>测时间</b></td><td>有偏（可分首径则可解）</td><td>有偏（可建模/可学习）</td><td>基本不受影响</td><td>固定偏置，一次校准可消</td></tr>
+      <tr><td><b>测角度</b></td><td>多径假峰（超分辨可解）</td><td>有偏</td><td>基本不受影响</td><td>取决于阵列一致性</td></tr>
+      <tr><td><b>测特征</b></td><td>被吸收进特征</td><td>被吸收进特征</td><td class="hi"><b>直接失效</b></td><td class="hi"><b>需跨设备校准</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">四条路线不是四种精度，是四种<b>失效方式</b>：测强度的东西怕环境变、测特征的东西怕数据库过期，而测时间的东西只怕多径 —— 而多径可以靠带宽和算法治，环境变化和数据库过期治不了。<b>这就是为什么连蓝牙都在从 RSSI 改宗 Channel Sounding。</b></div>
+</section>
+
+<!-- ── 1.3 ── -->
+<section class="slide" id="s1-3">
+  <span class="num">1.3</span>
+  <span class="kicker">Slide 1.3</span>
+  <h2>RSSI 为什么天生不准</h2>
+  <p class="sub">模型本身没错，错在参数不可知 —— 路径损耗模型的四重崩塌</p>
+
+  <div class="eq">RSSI(d) = A − 10·n·log₁₀(d)　　　ITU-R P.1238 写作 N·log₁₀ d，<b>N = 10n</b></div>
+  <div class="warn">别把 ITU 的 <code>N</code> 当成教科书的 <code>n</code>。ITU 办公室 N=30 就是 n=3.0，差 10 倍。PPT 上直接放 ITU 表务必加一列换算。</div>
+
+  <h3>崩塌一：路径损耗指数 n 在同一栋楼里就漂 2.2 倍</h3>
+  <p>ITU-R P.1238-7 官方结论段（900–2000 MHz）给出的漂移范围：</p>
+  <div class="tw"><table>
+    <thead><tr><th>场景</th><th>N（ITU）</th><th>n（教科书）</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>走廊、超市长货架通道</td><td>18</td><td><b>1.8</b></td><td>波导效应，<b>比自由空间还小</b></td></tr>
+      <tr><td>有直射径 / 大开间（商场、体育馆）</td><td>20</td><td>2.0</td><td>自由空间损耗主导</td></tr>
+      <tr><td>常规办公室 2.4 GHz</td><td>30</td><td>3.0</td><td>ITU Table 2</td></tr>
+      <tr class="hi"><td>绕障碍、穿墙、隔间式办公楼</td><td>40</td><td><b>4.0</b></td><td>同一栋楼里，n 变化 <b>2.2 倍</b></td></tr>
+    </tbody>
+  </table></div>
+  <p><b>而你的定位算法只能假设一个 n。</b>真实 n=3 却按 n=2 算，10 米会被估成 31.6 米（3.2 倍），30 米估成 164 米（5.5 倍）。</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 340" role="img" aria-label="RSSI 距离曲线族">
+      <!-- x: log10(d) 1..50 → 90..670 ; y: -40..-110 → 24..280 -->
+      <rect x="90" y="24" width="580" height="256" fill="#fffdfa" stroke="#efe6d9"/>
+      <g stroke="#efe6d9" stroke-width="1">
+        <line x1="90" y1="97" x2="670" y2="97"/><line x1="90" y1="170" x2="670" y2="170"/><line x1="90" y1="243" x2="670" y2="243"/>
+        <line x1="188" y1="24" x2="188" y2="280"/><line x1="316" y1="24" x2="316" y2="280"/>
+        <line x1="443" y1="24" x2="443" y2="280"/><line x1="571" y1="24" x2="571" y2="280"/>
+      </g>
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="end">
+        <text x="84" y="28">−40</text><text x="84" y="101">−60</text><text x="84" y="174">−80</text><text x="84" y="247">−100</text>
+      </g>
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="middle">
+        <text x="90" y="296">1 m</text><text x="188" y="296">2</text><text x="316" y="296">5</text>
+        <text x="443" y="296">10</text><text x="571" y="296">25</text><text x="670" y="296">50 m</text>
+      </g>
+      <!-- ±10dB band around n=3 -->
+      <path d="M90,24 L188,139.4 L316,293 L443,408 L571,523 L670,613 L670,741 L571,651 L443,536 L316,421 L188,267 L90,152 Z"
+        fill="#5b8fb9" opacity=".13" clip-path="inset(0 0 60px 0)"/>
+      <!-- curves: y = 24 + ((-40 - RSSI) * 256/70) ; RSSI = -40 - 10n*log10(d) -->
+      <!-- n=1.8 -->
+      <polyline points="90,24 188,43.8 316,70 443,89.9 571,109.7 670,124.7" fill="none" stroke="#9ec5dd" stroke-width="2.5"/>
+      <!-- n=2.2 -->
+      <polyline points="90,24 188,48.2 316,80.1 443,104.3 571,128.5 670,146.8" fill="none" stroke="#7aabcb" stroke-width="2.5"/>
+      <!-- n=3.0 -->
+      <polyline points="90,24 188,57 316,100.4 443,133.4 571,166.4 670,191.3" fill="none" stroke="#3d7ba3" stroke-width="3.5"/>
+      <!-- n=4.0 -->
+      <polyline points="90,24 188,68 316,127.3 443,171.2 571,215.2 570.9,215.2 670,248.4" fill="none" stroke="#25506e" stroke-width="2.5"/>
+      <!-- -70 dBm 水平线 -->
+      <line x1="90" y1="133.7" x2="670" y2="133.7" stroke="var(--red)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="96" y="128" font-size="11" fill="var(--red)" font-weight="800">同一个 −70 dBm 读数 ↓</text>
+      <g fill="var(--red)">
+        <circle cx="443" cy="133.7" r="5"/><circle cx="571" cy="133.7" r="0"/>
+      </g>
+      <g font-size="10.5" font-weight="800" fill="#25506e">
+        <text x="676" y="128">n=1.8</text><text x="676" y="150">n=2.2</text><text x="676" y="195">n=3.0</text><text x="676" y="252">n=4.0</text>
+      </g>
+      <g font-size="11" font-weight="800" fill="var(--red)" text-anchor="middle">
+        <text x="443" y="322">→ 答案可以是 <tspan font-size="13">5.6 m</tspan>（n=4）、<tspan font-size="13">10 m</tspan>（n=3）、<tspan font-size="13">23 m</tspan>（n=2.2）或 <tspan font-size="13">46 m</tspan>（n=1.8）</text>
+      </g>
+    </svg>
+    <div class="cap">图 1.3｜RSSI-距离曲线族（A = −40 dBm）。蓝色带为 n=3.0 时 ±10 dB 的阴影衰落 1σ。<br>数据来源：ITU-R P.1238-7 Table 2 / Table 4 / 结论段</div>
+  </div>
+
+  <h3>崩塌二～四：随机、人体、设备，三层误差叠在模型误差之上</h3>
+  <div class="tw"><table>
+    <thead><tr><th>层</th><th>误差源</th><th>量级</th><th>能否消除</th><th>来源</th></tr></thead>
+    <tbody>
+      <tr><td>① 模型层</td><td>n 随场景漂移 1.8 → 4.0</td><td>距离估计偏 <b>2–5 倍</b></td><td>需现场标定，换场景失效</td><td>ITU-R P.1238-7</td></tr>
+      <tr class="hi"><td>② 随机层</td><td>阴影衰落 σ（对数正态）</td><td><b>8–17 dB</b>（5.8 GHz 办公室达 17）</td><td><b>空间相关，时间平均无效</b></td><td>ITU Table 4</td></tr>
+      <tr><td>③ 人体层</td><td>朝向 / 遮挡</td><td>≤5 dBm（同一点换个朝向）</td><td>不可预测</td><td>RADAR, INFOCOM 2000</td></tr>
+      <tr><td>④ 设备层</td><td>芯片/天线/固件差异</td><td>刻度不一，可见 AP 集合都不同</td><td>只能靠差分/排序绕开</td><td>Kjærgaard 2011</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>为什么平均救不了</b>：把 σ=10 dB 压到 1 dB 需要 100 个<b>独立</b>样本，但阴影衰落是<b>空间相关</b>的 —— 同一位置反复采样拿到的是同一个衰落值。时间平均只能压掉快衰落，压不掉阴影衰落。<b>这是物理天花板，不是工程问题。</b></p>
+
+  <h3>把 σ 翻译成距离：全页最有杀伤力的一步计算</h3>
+  <p>n=3.0、σ=10 dB → 距离估计的 1σ 乘性误差 = 10^(10/30) = <b>2.15×</b></p>
+  <div class="tw"><table>
+    <thead><tr><th>真实距离</th><th>−2σ</th><th>−1σ</th><th>中心</th><th>+1σ</th><th>+2σ</th><th class="hi">95% 区间宽度</th></tr></thead>
+    <tbody>
+      <tr><td>2 m</td><td>0.43</td><td>0.93</td><td><b>2.0</b></td><td>4.3</td><td>9.3</td><td class="hi">8.9 m</td></tr>
+      <tr><td>5 m</td><td>1.08</td><td>2.32</td><td><b>5.0</b></td><td>10.8</td><td>23.2</td><td class="hi">22.1 m</td></tr>
+      <tr class="hi"><td><b>10 m</b></td><td><b>2.15</b></td><td>4.64</td><td><b>10.0</b></td><td>21.5</td><td><b>46.4</b></td><td class="hi"><b>44.2 m</b></td></tr>
+      <tr><td>20 m</td><td>4.31</td><td>9.28</td><td><b>20.0</b></td><td>43.1</td><td>92.9</td><td class="hi">88.6 m</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">RSSI 的问题不是"不够准"，是<b>它测的根本不是距离</b>。ITU 自己的表就写着：同一栋楼从走廊走进隔间，路径损耗指数从 1.8 跳到 4.0；办公室的阴影衰落标准差是 10 dB。把这两个数代进公式，一次 RSSI 读数对应的 95% 距离区间是 <b>2 米到 46 米</b> —— 你拿到的不是一把尺子，是一个概率云。</div>
+</section>
+
+<!-- ── 1.4 ── -->
+<section class="slide" id="s1-4">
+  <span class="num">1.4</span>
+  <span class="kicker">Slide 1.4</span>
+  <h2>指纹定位为什么不 scale</h2>
+  <p class="sub">不是不准，是不划算 —— 26 年过去了，实地部署的数字没有本质变好</p>
+
+  <h3>开山之作就定下了精度天花板：RADAR（微软研究院, INFOCOM 2000）</h3>
+  <div class="stats">
+    <div class="stat"><div class="v">980 m²</div><div class="l">测试场地（3 层楼的 2 层，50+ 房间）</div></div>
+    <div class="stat"><div class="v">280</div><div class="l">采样点 = 70 物理点 × 4 朝向，每点 ≥20 样本</div></div>
+    <div class="stat"><div class="v">2.94 m</div><div class="l">中位误差（25/75 分位：1.92 / 4.69 m）</div></div>
+    <div class="stat"><div class="v">3</div><div class="l">基站数量</div></div>
+  </div>
+  <p><b>这就是"3–5 米天花板"的原始出处。</b>26 年后行业实地部署仍是 5–10 米（Mappedin 2026 指南），而同一份指南给 Wi-Fi RTT 的口径是<b>优化部署下 1–2 米</b>。</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 200" role="img" aria-label="实验室与实地的精度落差">
+      <g font-size="12" font-weight="800" fill="#5c4f42">
+        <text x="20" y="58">指纹定位</text><text x="20" y="128">WiFi RTT</text>
+      </g>
+      <!-- 指纹：1.8 → 7.5 -->
+      <line x1="150" y1="52" x2="620" y2="52" stroke="#d9605c" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="150" cy="52" r="9" fill="#f0b4b2"/><circle cx="620" cy="52" r="9" fill="#d9605c"/>
+      <text x="150" y="34" font-size="11.5" font-weight="800" fill="#a8403c" text-anchor="middle">实验室 1.8 m</text>
+      <text x="620" y="34" font-size="11.5" font-weight="800" fill="#a8403c" text-anchor="middle">实地 5–10 m</text>
+      <text x="385" y="76" font-size="12.5" font-weight="800" fill="#d9605c" text-anchor="middle">落差 4.2 倍 ↑</text>
+      <!-- RTT：1.0 → 1.5 -->
+      <line x1="150" y1="122" x2="215" y2="122" stroke="#6fae7c" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="150" cy="122" r="9" fill="#b5d9bd"/><circle cx="215" cy="122" r="9" fill="#6fae7c"/>
+      <text x="150" y="104" font-size="11.5" font-weight="800" fill="#4d8a5c" text-anchor="middle">1.0 m</text>
+      <text x="238" y="126" font-size="11.5" font-weight="800" fill="#4d8a5c">实地 1–2 m　　落差 1.5 倍</text>
+      <text x="385" y="170" font-size="11.5" font-weight="700" fill="#8b7d6b" text-anchor="middle">指纹法从论文走到现场会掉一个档，RTT 不会</text>
+      <text x="385" y="190" font-size="10.5" fill="#a89880" text-anchor="middle">数据来源：Mappedin《High-accuracy WiFi indoor positioning》2026 指南</text>
+    </svg>
+  </div>
+
+  <h3>采集成本是原罪，而且是超线性的</h3>
+  <p>RADAR 的采集密度是<b>每 3.5 m² 一个采样点</b>。按这个密度线性推算：</p>
+  <div class="tw"><table>
+    <thead><tr><th>场地</th><th>面积</th><th>采样点数</th><th class="hi">纯采集工时（60 s/点）</th></tr></thead>
+    <tbody>
+      <tr><td>RADAR 原始测试楼层</td><td>980 m²</td><td>280</td><td class="hi">~4.7 h（论文实测参数）</td></tr>
+      <tr><td>一层中型商场</td><td>10,000 m²</td><td>~2,857</td><td class="hi"><b>~48 h</b></td></tr>
+      <tr><td>五层商场</td><td>50,000 m²</td><td>~14,286</td><td class="hi"><b>~238 h（约 30 人日）</b></td></tr>
+      <tr class="hi"><td>机场航站楼</td><td>200,000 m²</td><td>~57,143</td><td class="hi"><b>~952 h（约 119 人日）</b></td></tr>
+    </tbody>
+  </table></div>
+  <p style="font-size:.82rem;color:var(--soft)">※ 按 RADAR 公开采集密度线性推算，不含建图、对齐、清洗与后续重测。</p>
+
+  <h3>公开基准数据集的规模，说明这件事有多重</h3>
+  <p><b>UJIIndoorLoc</b>（2014，西班牙 Jaume I 大学，第一个公开 RSS 数据集）：3 栋楼、4–5 层、约 108,703 m²、<b>933 个参考点</b>、<b>21,049 条样本</b>、520 个 WAP、<b>25 台不同设备、20 位采集者</b>。</p>
+  <p>为一栋楼建一份能用的指纹库，需要 20 个人、25 台设备、两万多次采样。<b>这就是"不 scale"的具体形状。</b></p>
+
+  <h3>指纹会过期 —— 而且是断崖式，不是渐进式</h3>
+  <p>UJI 团队跨越 <b>2 年多</b>（2019-02 → 2021-03）的连续长期数据集：<b>7,446,538 条 Wi-Fi 样本</b>，探测到 <b>2,711 个不同的 AP</b>。核心结论是：定位性能在指纹库与测试数据同一天采集时明显最好，虽然退化随时间累积，但<b>只有当 Wi-Fi 基础设施发生显著变化时才导致大的定位误差</b>。</p>
+  <div class="cols c2">
+    <div class="box"><h4>关键洞察</h4><p>退化不是均匀老化，是被"AP 换了 / 改了功率 / 装修了"这类<b>离散事件</b>打断的。所以你无法排一个"每季度重测一次"的运维计划 —— <b>你根本不知道什么时候需要重测。</b></p></div>
+    <div class="box"><h4>顺带一个数字</h4><p>2 年里在一栋楼探测到 <b>2,711 个不同 AP</b>，而 UJIIndoorLoc 建库时只有 <b>520 个</b>。<b>射频环境的换手率本身就是指纹法的敌人。</b></p></div>
+  </div>
+  <div class="warn">别说"指纹库每 X 个月就要重测"。UJI 的长期数据集明确说退化是<b>事件驱动的断崖</b>，不是时间驱动的渐变；定量退化曲线在他们的另一篇论文里，不要编具体米数。</div>
+
+  <div class="insight">指纹定位不是不准，是<b>不划算</b>：RADAR 用 980 平米配 280 个采样点换来中位 2.94 米，26 年后行业实地部署仍然是 5–10 米；而 UJI 那份跨 2 年的数据集告诉你，同一栋楼里冒出过 <b>2,711 个不同的 AP</b> —— 你辛苦画的那张射频地图，从画完那天起就在被 IT 运维、装修队和人流悄悄改写，而且是断崖式改写。</div>
+</section>
+
+<!-- ── 1.5 ── -->
+<section class="slide" id="s1-5">
+  <span class="num">1.5</span>
+  <span class="kicker">Slide 1.5</span>
+  <h2>换个思路：如果 WiFi 能直接告诉你「多远」</h2>
+  <p class="sub">换尺子的真正理由不是"时间比强度准"，而是 —— 误差的形状变了</p>
+
+  <div class="eq">c = 299,792,458 m/s ≈ <b>30 cm / ns</b>　　（英文口径更好记：光速 ≈ 1 foot / nanosecond）</div>
+
+  <div class="cols c2">
+    <div class="box"><h4>RSSI 的误差随距离放大</h4>
+      <p><code>∂d/∂RSSI = d·ln10/(10n)</code> —— 与 d 成正比。<br>10 米处 1 dB 值 0.80 米；30 米处 1 dB 值 <b>2.51 米</b>。</p></div>
+    <div class="box"><h4>ToF 的误差与距离无关</h4>
+      <p><code>∂d/∂t = c/2</code> —— 是个常数。<br>3.3 ns 的时间戳精度 = 全程 <b>±1 米</b>，2 米处和 30 米处一样。</p></div>
+  </div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 320" role="img" aria-label="RSSI 与 ToF 误差随距离变化对比">
+      <rect x="80" y="20" width="600" height="240" fill="#fffdfa" stroke="#efe6d9"/>
+      <g stroke="#efe6d9" stroke-width="1">
+        <line x1="80" y1="88" x2="680" y2="88"/><line x1="80" y1="156" x2="680" y2="156"/><line x1="80" y1="224" x2="680" y2="224"/>
+      </g>
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="end">
+        <text x="74" y="24">35 m</text><text x="74" y="92">26</text><text x="74" y="160">17</text><text x="74" y="228">9</text><text x="74" y="264">0</text>
+      </g>
+      <!-- RSSI 扇形带: x = 80 + d*20 ; y = 260 - err*6.857 -->
+      <path d="M80,260 L120,244.2 L180,220.4 L280,180.9 L480,101.7 L680,22.5 L680,149.8 L480,186.5 L280,223.3 L180,241.6 L120,252.7 Z"
+        fill="#d9605c" opacity=".2"/>
+      <polyline points="80,260 120,244.2 180,220.4 280,180.9 480,101.7 680,22.5" fill="none" stroke="#d9605c" stroke-width="2.5"/>
+      <polyline points="80,260 120,252.7 180,241.6 280,223.3 480,186.5 680,149.8" fill="none" stroke="#d9605c" stroke-width="2.5" opacity=".6"/>
+      <!-- ToF 水平带 -->
+      <rect x="80" y="246.3" width="600" height="13.7" fill="#6fae7c" opacity=".3"/>
+      <line x1="80" y1="253.1" x2="680" y2="253.1" stroke="#4d8a5c" stroke-width="3"/>
+      <g font-size="11.5" font-weight="800">
+        <text x="620" y="60" fill="#a8403c" text-anchor="end">RSSI（n=3, σ=10 dB）</text>
+        <text x="620" y="42" fill="#a8403c" text-anchor="end" font-size="10.5">1σ 误差随距离线性张开</text>
+        <text x="676" y="240" fill="#4d8a5c" text-anchor="end">ToF ±1 m — 全程恒定</text>
+      </g>
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="middle">
+        <text x="80" y="280">0</text><text x="280" y="280">10 m</text><text x="480" y="280">20 m</text><text x="680" y="280">30 m</text>
+      </g>
+      <text x="380" y="303" font-size="11.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">真实距离 →　　一个不断张开的喇叭　vs　一条贴地的直线</text>
+    </svg>
+    <div class="cap">图 1.5｜误差-距离对照。这是全 Part 1 想说的那件事，浓缩成一张图。</div>
+  </div>
+
+  <h3>误差预算：1 米精度到底需要多准的时间戳</h3>
+  <div class="tw"><table>
+    <thead><tr><th>时间量</th><th>光走的距离（单程）</th><th>折算测距精度（÷2）</th><th class="hi">现实中谁有这个精度</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td><b>1 μs</b></td><td>300 m</td><td><b>150 m</b></td><td class="hi"><b>标准 802.11 TSF 计时器</b></td></tr>
+      <tr><td>100 ns</td><td>30 m</td><td>15 m</td><td>—</td></tr>
+      <tr><td>10 ns</td><td>3 m</td><td>1.5 m</td><td>旧标准时间戳分辨率</td></tr>
+      <tr><td><b>6.67 ns</b></td><td>2 m</td><td><b>1 m</b></td><td>← 1 米精度的 <b>RTT</b> 预算</td></tr>
+      <tr><td><b>3.3 ns</b></td><td>1 m</td><td>0.5 m</td><td>← <b>单个时间戳</b>的精度要求</td></tr>
+      <tr><td>1 ns</td><td>30 cm</td><td>15 cm</td><td>—</td></tr>
+      <tr class="hi"><td><b>0.1 ns (100 ps)</b></td><td>3 cm</td><td><b>1.5 cm</b></td><td class="hi"><b>FTM 时间戳字段的分辨率</b></td></tr>
+    </tbody>
+  </table></div>
+  <p><b>1 μs → 0.1 ns，这是 10,000 倍的提升。FTM 就是这一万倍的名字。</b></p>
+  <div class="warn">说"1 米精度 ≈ 3 ns 时间戳精度"时，要说清是<b>单个时间戳</b>。因为要除以 2，1 米测距误差对应的是 <b>6.67 ns 的 RTT 误差</b>；四个时间戳各有独立误差 σ_t 时，RTT 误差合成为 2σ_t，所以单时间戳预算约 3.3 ns。</div>
+
+  <h3>但时钟不是唯一瓶颈 —— 带宽才是硬约束</h3>
+  <p>MobiCom'18 原话：<i>"20 MHz 信道的 Wi-Fi 信号每 50 纳秒才采样一次，这段时间里信号已经跑了 15 米。"</i></p>
+  <div class="tw"><table>
+    <thead><tr><th>信道带宽</th><th>采样间隔</th><th class="hi">原始距离分辨率（单程）</th><th>对应标准</th></tr></thead>
+    <tbody>
+      <tr><td>20 MHz</td><td>50 ns</td><td class="hi"><b>15 m</b></td><td>802.11mc 最低配置</td></tr>
+      <tr><td>40 MHz</td><td>25 ns</td><td class="hi">7.5 m</td><td></td></tr>
+      <tr><td>80 MHz</td><td>12.5 ns</td><td class="hi">3.75 m</td><td>802.11mc 常用</td></tr>
+      <tr><td>160 MHz</td><td>6.25 ns</td><td class="hi">1.88 m</td><td>802.11az</td></tr>
+      <tr class="hi"><td><b>320 MHz</b></td><td>3.125 ns</td><td class="hi"><b>0.94 m</b></td><td><b>802.11bk</b></td></tr>
+    </tbody>
+  </table></div>
+  <p>这解释了三代标准的精度阶梯：<b>1–2 m → 0.4 m → &lt;0.1 m，本质上是 20→160→320 MHz 带宽 + 超分辨算法一起推出来的。</b></p>
+
+  <h3>实测证明理论可达，也划出了边界（MobiCom'18，Intel 8260/8265 + 开源驱动）</h3>
+  <ul>
+    <li>室外开阔空间、校准后：估计距离落在真实距离 <b>±1 米</b>以内</li>
+    <li>室内 LOS、5 GHz、80 MHz：接近米级精度</li>
+    <li>室内 NLOS、距离 &gt;20 m：<b>不可靠</b></li>
+    <li>2.4 GHz、20–40 MHz：不但不准，还会给出<b>"负距离"</b> —— 光速信号不可能提前到达，出现负值说明是硬件偏置而非物理</li>
+  </ul>
+
+  <div class="insight">换尺子的关键不在于"时间比强度准"，而在于<b>误差的形状变了</b>：RSSI 的误差是一个随距离张开的喇叭（10 米处 1σ 区间就有 4.6–21.5 米），而飞行时间的误差是一条水平线（3.3 ns 的时间戳精度 = 全程 1 米）。代价是你得把 Wi-Fi 的时间戳从 1 微秒（150 米！）做到 100 皮秒（1.5 厘米）—— <b>一万倍</b>。</div>
+  <p class="srcs"><b>Part 1 主要来源：</b>ITU-R P.1238-7 · IS-GPS-200 · FCC E911 (2020) · GPS.gov · arXiv:2509.03901（AGH + Intel 综述，180+ 篇）· RADAR, INFOCOM 2000（微软）· MobiCom'18 Rutgers WINLAB · UJIIndoorLoc (2014) · PMC9698900（UJI 两年长期数据集）· SpotFi, SIGCOMM 2015 · Mappedin 2026 指南 · MDPI Sensors 24(5):1416</p>
+</section>
+
+<!-- ══════════ PART 2 ══════════ -->
+<div class="part" id="p2" data-t="FTM 的物理与数学">
+  <div class="pn">PART 2</div>
+  <h2>FTM 的物理与数学<br>四个时间戳的游戏</h2>
+  <p>一条减法算式让收发双方不需要同步时钟，这是 FTM 能在消费级设备上落地的全部秘密。但从"公式成立"到"米级精度"，中间隔着采样率、多径、硬件延迟和统计学四道关。</p>
+  <ol><li>核心方程</li><li>纳秒从哪来</li><li>多径这个敌人</li><li>硬件延迟常数</li><li>Burst 与统计</li><li>从距离到坐标</li></ol>
+</div>
+
+<!-- ── 2.1 ── -->
+<section class="slide" id="s2-1">
+  <span class="num">2.1</span>
+  <span class="kicker">Slide 2.1</span>
+  <h2>核心方程：为什么不需要时钟同步</h2>
+  <p class="sub">一条减法，消掉了整个产业级的难题</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 320" role="img" aria-label="FTM 四时间戳时序图">
+      <!-- 泳道 -->
+      <line x1="150" y1="30" x2="150" y2="280" stroke="#d8cbb8" stroke-width="2"/>
+      <line x1="570" y1="30" x2="570" y2="280" stroke="#d8cbb8" stroke-width="2"/>
+      <text x="150" y="22" font-size="12.5" font-weight="800" fill="#5c4f42" text-anchor="middle">ISTA（手机 · 发起方）</text>
+      <text x="570" y="22" font-size="12.5" font-weight="800" fill="#5c4f42" text-anchor="middle">RSTA（AP · 响应方）</text>
+
+      <!-- FTM 帧 RSTA→ISTA -->
+      <line x1="570" y1="70" x2="150" y2="118" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#ar1)"/>
+      
+      <text x="360" y="84" font-size="11.5" font-weight="700" fill="#c9603a" text-anchor="middle">FTM 帧</text>
+      <circle cx="570" cy="70" r="5.5" fill="var(--accent)"/>
+      <text x="588" y="68" font-size="13" font-weight="800" fill="var(--accent)">t₁</text>
+      <text x="588" y="82" font-size="10" fill="#8b7d6b">发出（RSTA 本地钟）</text>
+      <circle cx="150" cy="118" r="5.5" fill="var(--accent)"/>
+      <text x="132" y="116" font-size="13" font-weight="800" fill="var(--accent)" text-anchor="end">t₂</text>
+      <text x="132" y="130" font-size="10" fill="#8b7d6b" text-anchor="end">到达（需 ToA 估计）</text>
+
+      <!-- 处理时延 -->
+      <rect x="118" y="126" width="64" height="46" rx="8" fill="#f4ede3"/>
+      <text x="150" y="145" font-size="10" font-weight="800" fill="#8a5a3c" text-anchor="middle">处理时延</text>
+      <text x="150" y="160" font-size="10" font-weight="800" fill="#8a5a3c" text-anchor="middle">t₃ − t₂</text>
+
+      <!-- ACK ISTA→RSTA -->
+      <line x1="150" y1="180" x2="570" y2="228" stroke="#5b8fb9" stroke-width="2.5" marker-end="url(#ar2)"/>
+      <text x="360" y="196" font-size="11.5" font-weight="700" fill="#42708f" text-anchor="middle">ACK</text>
+      <circle cx="150" cy="180" r="5.5" fill="#5b8fb9"/>
+      <text x="132" y="178" font-size="13" font-weight="800" fill="#5b8fb9" text-anchor="end">t₃</text>
+      <text x="132" y="192" font-size="10" fill="#8b7d6b" text-anchor="end">发出（ISTA 本地钟）</text>
+      <circle cx="570" cy="228" r="5.5" fill="#5b8fb9"/>
+      <text x="588" y="226" font-size="13" font-weight="800" fill="#5b8fb9">t₄</text>
+      <text x="588" y="240" font-size="10" fill="#8b7d6b">到达（需 ToA 估计）</text>
+
+      <!-- 回传 -->
+      <line x1="570" y1="258" x2="150" y2="272" stroke="#9a9a9a" stroke-width="1.8" stroke-dasharray="5 4"/>
+      <text x="360" y="270" font-size="10.5" font-weight="700" fill="#7d7d7d" text-anchor="middle">下一帧回传 t₁, t₄ → ISTA 才算得出这次的 RTT</text>
+
+      <!-- 公式框 -->
+      <rect x="196" y="290" width="330" height="26" rx="8" fill="#fff3ea"/>
+      <text x="361" y="308" font-size="13" font-weight="800" fill="#c9603a" text-anchor="middle" font-family="ui-monospace,monospace">RTT = (t₄ − t₁) − (t₃ − t₂)</text>
+    </svg>
+    <div class="cap">图 2.1｜FTM 一次帧交换的四个时间戳。t₁/t₃ 是"计划发射时刻"，硬件可精确给出；<b>t₂/t₄ 需要 ToA 估计</b> —— 在多径叠加里找出最早到达的那一路径，这才是精度的真正瓶颈。</div>
+  </div>
+
+  <div class="eq">RTT = (t₄ − t₁) − (t₃ − t₂)　　d = RTT × c / 2</div>
+
+  <h3>精妙之处在那个减法</h3>
+  <ul>
+    <li><code>(t₄−t₁)</code> 全部由 RSTA 的钟测量；<code>(t₃−t₂)</code> 全部由 ISTA 的钟测量。<b>两个差值各自在同一个时间基准内完成，所以两只钟的绝对偏差被完全消掉。</b></li>
+    <li>减去 <code>(t₃−t₂)</code> 的物理含义是<b>扣掉响应方的处理时延</b> —— 剩下的才是纯粹的双程飞行时间。</li>
+    <li><b>结论：收发双方完全不需要同步时钟。</b>这是 FTM 相对 TDoA 的决定性优势 —— TDoA 要求所有基站纳秒级同步，那是要铺光纤、装 GPS 授时的工程；FTM 只要两台设备各有一只稳定的钟。</li>
+    <li>残余项：两端晶振各 20 ppm 独立误差，本身贡献约 <b>30 cm</b> 的底噪（FTM 协议会估钟差，但残余频偏仍在）。</li>
+  </ul>
+
+  <h3>一个容易忽略的工程细节</h3>
+  <p><b>n 次帧交换只能算出 n−1 个 RTT。</b>因为第 i 次的 t₁、t₄ 要靠第 i+1 帧带回来 —— 所以一个 burst 最少 2 帧，<code>burst size = 2</code> 实际等于"只测一次、无平均"。</p>
+
+  <div class="cols c2">
+    <div class="box"><h4>FTM（双程 RTT）</h4><p>✅ 无需时钟同步<br>✅ 只需两台设备<br>✅ 结果与天线增益、发射功率无关<br>❌ 需要对方配合应答</p></div>
+    <div class="box"><h4>TDoA / TOA（基站侧）</h4><p>❌ 要求所有基站纳秒级同步<br>❌ 铺光纤 / GPS 授时<br>✅ 终端可以只发不收<br>→ <b>在 Wi-Fi 上部署不现实</b></p></div>
+  </div>
+
+  <div class="insight">FTM 的全部聪明之处就在那个减号：它不追求"两只钟走得一样准"，而是让每只钟只测量自己身上发生的那段间隔。<b>把同步问题变成了减法问题</b> —— 这是它能跑在几十块钱的芯片上，而 TDoA 只能跑在基站机房里的原因。</div>
+</section>
+
+<!-- ── 2.2 ── -->
+<section class="slide" id="s2-2">
+  <span class="num">2.2</span>
+  <span class="kicker">Slide 2.2</span>
+  <h2>纳秒从哪里来</h2>
+  <p class="sub">时间戳打在物理层，分辨率靠信道估计，上限由带宽决定</p>
+
+  <h3>第一步：时间戳打在 PHY 层，不是 MAC 层</h3>
+  <ul>
+    <li>普通 802.11 的 TSF 计时器分辨率是 <b>1 μs</b> —— 折算成距离是 <b>150 米</b>的量化误差，比整栋楼都大。</li>
+    <li>FTM 把时间戳定义在 <b>PPDU 前导码（preamble）第一个符号的边界</b>上，由 PHY 直接打点，绕开了 MAC 层的排队和中断抖动。</li>
+    <li>FTM 时间戳字段的分辨率是 <b>0.1 ns（100 ps）</b>，折算 <b>1.5 cm</b>。<b>1 μs → 0.1 ns，一万倍。</b></li>
+  </ul>
+
+  <h3>第二步：采样率不够，靠信道估计补</h3>
+  <p>这里有个反直觉的矛盾：20 MHz 带宽的接收机<b>每 50 ns 才采样一次</b>，而我们要的是纳秒级。怎么办？</p>
+  <ul>
+    <li>不是直接读采样点，而是用<b>频域信道估计（CSI）反演时域冲激响应</b>：对各子载波的复信道系数做 IFFT，得到多径的时延谱。</li>
+    <li>再对时延谱的<b>首个峰做插值 / 超分辨</b>（抛物线插值、MUSIC、ESPRIT 等子空间方法），把峰值位置估到亚采样精度。</li>
+    <li>这就是为什么"采样间隔 50 ns"不等于"精度 15 米"——插值能把单峰的位置估得很准。<b>但它无法凭空分开两条间隔小于原始分辨率的路径</b>，这才是带宽的硬约束所在。</li>
+  </ul>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 260" role="img" aria-label="带宽与距离分辨率阶梯">
+      <g font-size="11" font-weight="700" fill="#8b7d6b">
+        <text x="20" y="30">原始距离分辨率 Δd ≈ c / (2·BW)</text>
+      </g>
+      <!-- bars: log scale 0.9..15 m → width -->
+      <g>
+        <rect x="150" y="46" width="520" height="26" rx="5" fill="#d9605c" opacity=".85"/>
+        <text x="140" y="64" font-size="12" font-weight="800" fill="#5c4f42" text-anchor="end">20 MHz</text>
+        <text x="660" y="64" font-size="12" font-weight="800" fill="#fff" text-anchor="end">15 m</text>
+        <text x="160" y="64" font-size="10.5" font-weight="700" fill="#fff">采样间隔 50 ns　802.11mc 最低配置</text>
+
+        <rect x="150" y="82" width="260" height="26" rx="5" fill="#e08b62" opacity=".85"/>
+        <text x="140" y="100" font-size="12" font-weight="800" fill="#5c4f42" text-anchor="end">40 MHz</text>
+        <text x="400" y="100" font-size="12" font-weight="800" fill="#fff" text-anchor="end">7.5 m</text>
+
+        <rect x="150" y="118" width="130" height="26" rx="5" fill="#e8a76e" opacity=".9"/>
+        <text x="140" y="136" font-size="12" font-weight="800" fill="#5c4f42" text-anchor="end">80 MHz</text>
+        <text x="292" y="136" font-size="12" font-weight="800" fill="#8a5a3c">3.75 m　802.11mc 常用</text>
+
+        <rect x="150" y="154" width="65" height="26" rx="5" fill="#6fae7c"/>
+        <text x="140" y="172" font-size="12" font-weight="800" fill="#5c4f42" text-anchor="end">160 MHz</text>
+        <text x="227" y="172" font-size="12" font-weight="800" fill="#4d8a5c">1.88 m　<tspan font-weight="800">802.11az</tspan></text>
+
+        <rect x="150" y="190" width="33" height="26" rx="5" fill="#3f7a51"/>
+        <text x="140" y="208" font-size="12" font-weight="800" fill="#5c4f42" text-anchor="end">320 MHz</text>
+        <text x="195" y="208" font-size="12" font-weight="800" fill="#3f7a51">0.94 m　<tspan font-weight="800">802.11bk</tspan>（只在 6 GHz 有）</text>
+      </g>
+      <text x="360" y="243" font-size="11.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">带宽每翻一倍，能分开的两条路径就近一半 —— 这是三代标准精度阶梯的物理原因</text>
+    </svg>
+    <div class="cap">图 2.2｜带宽决定原始距离分辨率。理论支撑是 Cramér-Rao 下界：带宽越大，ToA 估计的方差下界越低。</div>
+  </div>
+
+  <div class="warn">别把"分辨率"和"精度"混为一谈。20 MHz 的<b>分辨率</b>是 15 米（能分开两条路径的最小间隔），但配合插值，单条干净 LOS 路径的<b>测距精度</b>可以做到 1–2 米。分辨率限制的是"多径能不能分开"，不是"单峰能测多准"。</div>
+
+  <div class="insight">FTM 的纳秒来自三层叠加：PHY 层打点绕开 MAC 抖动（1 μs → 100 ps 的字段分辨率），信道估计 + 插值把峰位估到亚采样精度，而带宽决定了这套办法在多径面前的上限。<b>三代标准的演进，本质上只做了最后一件事 —— 把带宽从 80 拉到 320 MHz。</b></div>
+</section>
+
+<!-- ── 2.3 ── -->
+<section class="slide" id="s2-3">
+  <span class="num">2.3</span>
+  <span class="kicker">Slide 2.3</span>
+  <h2>多径：FTM 最大的敌人</h2>
+  <p class="sub">要找的是"最早到的"，不是"最强的" —— 而这两者经常不是同一条</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 270" role="img" aria-label="信道冲激响应中的首径与最强径">
+      <line x1="70" y1="200" x2="680" y2="200" stroke="#d8cbb8" stroke-width="2"/>
+      <text x="375" y="228" font-size="11.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">时延 →（信道冲激响应）</text>
+      <text x="40" y="110" font-size="11.5" font-weight="800" fill="#8b7d6b" text-anchor="middle" transform="rotate(-90 40 110)">幅度</text>
+      <!-- 首径（弱） -->
+      <line x1="170" y1="200" x2="170" y2="138" stroke="#6fae7c" stroke-width="5"/>
+      <circle cx="170" cy="138" r="6" fill="#6fae7c"/>
+      <text x="170" y="126" font-size="12" font-weight="800" fill="#3f7a51" text-anchor="middle">首达径 LOS</text>
+      <text x="170" y="112" font-size="10.5" font-weight="700" fill="#4d8a5c" text-anchor="middle">← 我们要的就是它</text>
+      <!-- 最强径 -->
+      <line x1="290" y1="200" x2="290" y2="62" stroke="#d9605c" stroke-width="5"/>
+      <circle cx="290" cy="62" r="6" fill="#d9605c"/>
+      <text x="290" y="50" font-size="12" font-weight="800" fill="#a8403c" text-anchor="middle">最强径（反射）</text>
+      <text x="290" y="36" font-size="10.5" font-weight="700" fill="#a8403c" text-anchor="middle">取它 = 距离偏大</text>
+      <!-- 其他反射 -->
+      <line x1="370" y1="200" x2="370" y2="110" stroke="#c9b8a0" stroke-width="4"/>
+      <line x1="440" y1="200" x2="440" y2="152" stroke="#c9b8a0" stroke-width="4"/>
+      <line x1="510" y1="200" x2="510" y2="130" stroke="#c9b8a0" stroke-width="4"/>
+      <line x1="580" y1="200" x2="580" y2="172" stroke="#c9b8a0" stroke-width="4"/>
+      <!-- 误差箭头 -->
+      <line x1="170" y1="214" x2="290" y2="214" stroke="#d9605c" stroke-width="2" marker-end="url(#ar1)"/>
+      <text x="230" y="212" font-size="11" font-weight="800" fill="#a8403c" text-anchor="middle">系统性正偏差</text>
+      <!-- NLoS 说明 -->
+      <rect x="380" y="230" width="300" height="30" rx="8" fill="#fbe6e5"/>
+      <text x="530" y="249" font-size="11" font-weight="800" fill="#a8403c" text-anchor="middle">NLoS 下首径被完全遮挡 → 只剩反射径可选</text>
+    </svg>
+    <div class="cap">图 2.3｜多径环境下的信道冲激响应。正确做法是取<b>首达峰</b>，即使它更弱。</div>
+  </div>
+
+  <h3>三个后果</h3>
+  <ul>
+    <li><b>误差是右偏的，不是高斯的。</b>反射径永远比直射径走得更远，所以多径造成的误差<b>几乎总是正的</b>。NIST 实测走廊场景平均误差 <b>+1.91 m</b>，是系统性高估而非随机噪声。</li>
+    <li><b>均值滤波会失效。</b>右偏分布下均值被长尾拽走，正确的统计量是<b>中位数或截尾均值</b>。反过来，"残差恒为正"本身就是多径正偏的诊断指纹（随机噪声的残差应当零均值）。</li>
+    <li><b>反直觉：走廊里的 LOS 比穿墙的 NLOS 还差。</b>NIST 实测 —— 室内长走廊 LOS：MAE <b>2.35 m</b>；隔 1–5 道墙 NLOS：MAE <b>1.26 m</b>；户外停车场 LOS：MAE 0.45 m。原因是走廊里有"数百条来自墙、地板、天花板、两端墙面的反射路径"，而穿一两道干墙只是衰减 + 一点延迟。</li>
+  </ul>
+  <div class="warn">所以判断难度的关键指标不是"有没有直视"，而是<b>"周围有多少强反射面"</b>。金属货架、玻璃幕墙、长走廊比一堵石膏板墙更难对付。</div>
+
+  <h3>材料导电性决定 NLoS 偏置大小（爱丁堡大学实测，三部手机 RMSE）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>遮挡材料</th><th>RMSE 范围</th><th>RSSI 变化（Pixel 2）</th><th>机理</th></tr></thead>
+    <tbody>
+      <tr><td>无遮挡 LOS</td><td>0.32–0.82 m</td><td>−74.3 dBm</td><td>基准</td></tr>
+      <tr><td>木质</td><td>0.54–1.25 m</td><td>—</td><td>低损耗介质</td></tr>
+      <tr><td>玻璃</td><td>0.50–0.90 m</td><td>—</td><td>低损耗介质</td></tr>
+      <tr class="hi"><td><b>金属</b></td><td><b>2.26–2.94 m</b></td><td><b>−84.3 dBm</b></td><td><b>趋肤效应，直射径几乎完全被反射</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">多径不是噪声，是<b>偏差</b>。噪声可以靠多测几次平均掉，偏差不行 —— 你测一万次，每一次的反射径都比直射径长同样那一截。<b>这就是为什么 FTM 的工程重点不在"测得更多"，而在"能不能把首径从一堆反射里挑出来"</b>，而这件事的能力上限由带宽决定。</div>
+</section>
+
+<!-- ── 2.4 ── -->
+<section class="slide" id="s2-4">
+  <span class="num">2.4</span>
+  <span class="kicker">Slide 2.4</span>
+  <h2>那个恼人的常数：硬件延迟偏置</h2>
+  <p class="sub">量级最大、最容易治，也最容易被跳过的一类误差</p>
+
+  <h3>误差长什么样：斜率 ≈ 1，截距 ≠ 0</h3>
+  <ul>
+    <li>射频链路（天线 → LNA → 混频 → ADC → 基带）本身有固定的传播延时，几十纳秒量级。这段延时会<b>原封不动地加进 RTT</b>。</li>
+    <li>特征是：报出的距离对真值做线性回归，<b>斜率非常接近 1，但截距显著非 0</b>。所以<b>一个常数补偿就能把 RMSE 拉到接近 0</b>。</li>
+    <li>Android 官方对"理想标定"的定义就是：回归线<b>斜率 1.0、y 轴截距 0.0 m</b>。</li>
+  </ul>
+
+  <h3>但它不是"每 AP 一个 offset"这么简单 —— 是三维的</h3>
+  <p>偏置是<b>（机型 × AP 型号 × 频段）</b>的函数。UPC 实测标定表（单位：米，✗ = 该组合根本测不出来）：</p>
+  <div class="tw"><table>
+    <thead><tr><th>设备</th><th>Google AP 5 GHz</th><th class="hi">Google AP 2.4 GHz</th><th>Linksys 5 GHz</th><th>Linksys DFS</th><th class="hi">Linksys 2.4 GHz</th></tr></thead>
+    <tbody>
+      <tr><td>Pixel 3a</td><td>−0.50</td><td class="hi"><b>+11.72</b></td><td>−1.52</td><td>−1.39</td><td class="hi"><b>+14.54</b></td></tr>
+      <tr><td>Pixel 4a</td><td>+1.94</td><td class="hi">−0.74</td><td>+1.28</td><td>+1.30</td><td class="hi">+2.35</td></tr>
+      <tr><td>Pixel 6 Pro</td><td>+1.64</td><td class="hi">✗</td><td>✗</td><td>+0.19</td><td class="hi">✗</td></tr>
+      <tr><td><b>Xiaomi Mi 10T</b></td><td>+3.24</td><td class="hi"><b>+64.91</b></td><td>+2.58</td><td>✗</td><td class="hi"><b>+67.73</b></td></tr>
+    </tbody>
+  </table></div>
+  <div class="stats">
+    <div class="stat"><div class="v">67.73 m</div><div class="l">小米 2.4 GHz 上的固定偏置 —— 不标定的 2.4 GHz FTM 等于没有</div></div>
+    <div class="stat"><div class="v">4 倍</div><div class="l">同为 5 GHz，Pixel 2 (0.45 m) 与 Redmi K20 (1.85 m) 的偏置差距</div></div>
+    <div class="stat"><div class="v">≈ 0</div><div class="l">常数补偿后各距离上的 RMSE</div></div>
+  </div>
+
+  <h3>单边 vs 双边测距</h3>
+  <div class="cols c2">
+    <div class="box"><h4>双边（标准 FTM）</h4><p>responder 把 t₂/t₃ 回传给 initiator，处理时延被精确扣除。<b>精度 1–2 m</b>（标定后）。代价：对方必须支持 FTM 并愿意应答。</p></div>
+    <div class="box"><h4>单边（非合作测距）</h4><p>只测"发出 NDP → 收到 ACK"的时间差，对方的内部处理时延 <code>t_proc</code> <b>未知，只能统计估计</b>。<b>精度 3–4 m</b>。好处：不需要对方支持 FTM。详见 Slide 4.4。</p></div>
+  </div>
+
+  <h3>互操作性：第二类"根本测不出来"</h3>
+  <ul>
+    <li><b>Pixel 6 Pro + Linksys Velop 5 GHz 室内信道：采样成功率 0.0000</b>（10 个 burst size 配置全是 0）。</li>
+    <li>Mi 10T + Linksys 5 GHz DFS：成功率在 0.47–0.91 之间剧烈波动。</li>
+    <li>Mi 10T 无论请求多少帧，<b>2.4 GHz 最多只返回 11 个 FTM</b>。</li>
+    <li>研究结论：只有 Google AP 工作在 5 GHz 室内频段时，才能对四款手机都稳定交付样本。<b>而且不是越新越贵越好 —— Pixel 6 Pro 是当时最新款，反而最不稳定。</b></li>
+  </ul>
+
+  <div class="insight">四类误差里，只有一类不需要任何算法就能治好 —— <b>系统偏差</b>，而它恰恰是量级最大的那一类（2.4 GHz 上能到 65 米）。工程队伍最常犯的错，是跳过一张标定表，直接去调卡尔曼的参数。</div>
+</section>
+
+<!-- ── 2.5 ── -->
+<section class="slide" id="s2-5">
+  <span class="num">2.5</span>
+  <span class="kicker">Slide 2.5</span>
+  <h2>Burst 与统计：为什么一次测量不够</h2>
+  <p class="sub">精度不是免费的 —— 它是用信道时间买来的</p>
+
+  <h3>Burst 是什么</h3>
+  <ul>
+    <li>一次 FTM 会话内连续做多帧测量，称为一个 <b>burst</b>；典型配置 8 或 16 帧，标准允许的 burst duration 是 <b>250 μs – 128 ms</b>。</li>
+    <li>API 返回的是这一批测量的<b>统计量</b>：距离均值 + 标准差 + 成功帧数。</li>
+    <li>注意 <code>burst size = 2</code> 实际等于"只测一次、无平均"（n 帧只产生 n−1 个 RTT）。</li>
+  </ul>
+
+  <h3>标准差是免费的质量指标 —— 别扔掉它</h3>
+  <p><code>distanceStdDevMm</code> 大 = 多径严重或信道拥塞，可直接用作定位解算的<b>置信度权重（1/σ²）</b>。这是 FTM 相对 RSSI 的一个隐性优势：<b>它会告诉你自己这次测得准不准。</b></p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 290" role="img" aria-label="burst 数量与精度、耗时的权衡曲线">
+      <rect x="80" y="20" width="560" height="200" fill="#fffdfa" stroke="#efe6d9"/>
+      <g stroke="#efe6d9"><line x1="80" y1="70" x2="640" y2="70"/><line x1="80" y1="120" x2="640" y2="120"/><line x1="80" y1="170" x2="640" y2="170"/></g>
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="end">
+        <text x="74" y="24">3.5 m</text><text x="74" y="74">2.6</text><text x="74" y="124">1.7</text><text x="74" y="174">0.9</text><text x="74" y="224">0</text>
+      </g>
+      <text x="30" y="120" font-size="11" font-weight="800" fill="#3d7ba3" text-anchor="middle" transform="rotate(-90 30 120)">测距标准差 σ</text>
+      <!-- x: BS 2..29 → 100..620 -->
+      <!-- Pixel 3a @Google 2.4G: 3.32,1.09,1.04,1.07,1.08,1.14,1.25,1.08,1.20,1.05 -->
+      <polyline points="100,30.3 158,158.1 216,161 274,160.1 332,159.8 390,158.1 448,154.9 506,159.8 564,156.4 620,160.7"
+        fill="none" stroke="#d9605c" stroke-width="2.5"/>
+      <!-- Pixel 4a @Google 5G: 1.15,0.67,0.68,0.66,0.67,0.68,0.66,0.67,0.66,0.66 -->
+      <polyline points="100,154.3 158,181.7 216,181.1 274,182.3 332,181.7 390,181.1 448,182.3 506,181.7 564,182.3 620,182.3"
+        fill="none" stroke="#3d7ba3" stroke-width="2.5"/>
+      <!-- Mi 10T @Google 5G: 1.39,1.02,1.09,0.99,0.87,0.87,0.88,0.89,1.05,0.93 -->
+      <polyline points="100,140.6 158,161.7 216,157.7 274,163.4 332,170.3 390,170.3 448,169.7 506,169.1 564,160 620,166.9"
+        fill="none" stroke="#8b7ab8" stroke-width="2.5"/>
+      <!-- BS=5 竖线 -->
+      <line x1="158" y1="20" x2="158" y2="220" stroke="#6fae7c" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="164" y="36" font-size="11" font-weight="800" fill="#3f7a51">BS=5：收益 90% 已到手</text>
+      <line x1="216" y1="20" x2="216" y2="220" stroke="#e0a942" stroke-width="1.6" stroke-dasharray="4 4"/>
+      <text x="222" y="52" font-size="10.5" font-weight="700" fill="#b8862c">BS=8：推荐上限</text>
+      <g font-size="10.5" font-weight="700" fill="#a89880" text-anchor="middle">
+        <text x="100" y="240">2</text><text x="158" y="240">5</text><text x="216" y="240">8</text><text x="274" y="240">11</text>
+        <text x="332" y="240">14</text><text x="390" y="240">17</text><text x="448" y="240">20</text><text x="506" y="240">23</text>
+        <text x="564" y="240">26</text><text x="620" y="240">29</text>
+      </g>
+      <text x="360" y="262" font-size="11.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">Burst Size →</text>
+      <g font-size="10.5" font-weight="800">
+        <text x="646" y="164" fill="#a8403c">Pixel 3a @2.4G</text>
+        <text x="646" y="186" fill="#3d7ba3">Pixel 4a @5G</text>
+        <text x="646" y="171" fill="#8b7ab8" opacity="0">Mi 10T</text>
+      </g>
+      <text x="360" y="282" font-size="10.5" fill="#a89880" text-anchor="middle">数据：Zola &amp; Martin-Escalona, Computer Communications 229 (2025) 107980，每机每 AP 5 万样本</text>
+    </svg>
+    <div class="cap">图 2.5｜burst 平均<b>只有第一步值钱</b>：BS 从 2 到 5 标准差降 30–70%，之后基本平坦。BS&gt;8 的小改善"并不总能 justify 注入网络的额外定位流量"。</div>
+  </div>
+
+  <h3>精度是用时间买的：厂商侧的同一条曲线</h3>
+  <div class="stats">
+    <div class="stat"><div class="v">135 cm</div><div class="l">1 个 burst 的 P90 测距误差</div></div>
+    <div class="stat"><div class="v">39 cm</div><div class="l">32 个 burst 平均后的 P90 —— 代价是测量时间 ×32</div></div>
+    <div class="stat"><div class="v">20–30 ms</div><div class="l">单个 burst 耗时（含最多 5 次测距）</div></div>
+    <div class="stat"><div class="v">&lt; 1 s</div><div class="l">32 个 burst 的总耗时</div></div>
+  </div>
+  <p>时间成本的另一面（实测单次测距耗时）：Pixel 3a 从 BS=2 的 212 ms 涨到 BS=29 的 333 ms；Pixel 6 Pro 380 → 587 ms；<b>Mi 10T 均值 0.86–1.70 s，且标准差高达 1.5 s</b>。</p>
+
+  <h3>Android <code>RangingResult</code> 的关键字段怎么用</h3>
+  <div class="tw"><table>
+    <thead><tr><th>字段</th><th>含义</th><th>怎么用</th></tr></thead>
+    <tbody>
+      <tr><td><code>getDistanceMm()</code></td><td>本次会话的距离估计（毫米）</td><td>主值，但<b>必须先减去标定偏置</b></td></tr>
+      <tr class="hi"><td><code>getDistanceStdDevMm()</code></td><td>距离标准差</td><td><b>解算权重 1/σ²；也是多径严重程度的诊断信号</b></td></tr>
+      <tr><td><code>getRssi()</code></td><td>本次测距的 RSSI</td><td>与路损模型距离比对 → <b>LoS/NLoS 判别、离群剔除</b></td></tr>
+      <tr><td><code>getNumAttemptedMeasurements()</code><br><code>getNumSuccessfulMeasurements()</code></td><td>尝试 / 成功帧数</td><td>成功率 &lt;90% 应报警（互操作性失效的信号）</td></tr>
+      <tr><td><code>getStatus()</code></td><td>成功 / 失败原因</td><td>区分"AP 不支持"与"信道太忙"</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">一次 FTM 会话不是"一次测量"，而是<b>几十次测量的统计平均</b> —— 把 90% 误差从 1.35 米压到 0.39 米，靠的不是更好的算法，而是把 32 个 burst 的时间从信道里买下来。<b>精度、刷新率、吞吐量三者共用同一份预算，你只能挑两个。</b></div>
+</section>
+
+<!-- ── 2.6 ── -->
+<section class="slide" id="s2-6">
+  <span class="num">2.6</span>
+  <span class="kicker">Slide 2.6</span>
+  <h2>从一个距离到一个坐标</h2>
+  <p class="sub">三边测量、加权最小二乘、GDOP —— 以及为什么 AP 不能站成一条线</p>
+
+  <h3>三边测量与加权最小二乘</h3>
+  <ul>
+    <li>最少需要 <b>3 个 AP</b> 才能在二维平面上定位（三个圆的交点），实践中<b>建议 4 个以上</b>做冗余与自检。</li>
+    <li>各次测距质量不同，所以用<b>加权最小二乘</b>，权重取 <b>1/σ²</b>（σ 就是 <code>distanceStdDevMm</code>）—— 这是把 Slide 2.5 那个"免费的质量指标"真正兑现的地方。</li>
+    <li>工程门限：<b>可见 AP &lt; 3 个的点直接丢弃</b>，而不是给一个假精确的坐标。</li>
+  </ul>
+
+  <h3>GDOP：几何精度因子 —— 布点的第一原则</h3>
+  <div class="eq">定位误差 ≈ GDOP × 测距误差　　　精度大致与响应 AP 数量的 <b>平方根</b> 成反比</div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 230" role="img" aria-label="三种 AP 布局的 GDOP 对比">
+      <!-- 好布局 -->
+      <g transform="translate(0,0)">
+        <text x="120" y="24" font-size="12" font-weight="800" fill="#3f7a51" text-anchor="middle">✓ 正三角布局</text>
+        <circle cx="120" cy="110" r="58" fill="none" stroke="#efe6d9" stroke-dasharray="3 3"/>
+        <circle cx="120" cy="62" r="7" fill="#6fae7c"/><circle cx="78" cy="140" r="7" fill="#6fae7c"/><circle cx="162" cy="140" r="7" fill="#6fae7c"/>
+        <ellipse cx="120" cy="112" rx="13" ry="12" fill="#6fae7c" opacity=".35"/>
+        <circle cx="120" cy="112" r="4" fill="#3f7a51"/>
+        <text x="120" y="192" font-size="11" font-weight="700" fill="#4d8a5c" text-anchor="middle">GDOP 小</text>
+        <text x="120" y="208" font-size="10.5" fill="#8b7d6b" text-anchor="middle">误差椭圆接近圆形</text>
+      </g>
+      <!-- 近共线 -->
+      <g transform="translate(240,0)">
+        <text x="120" y="24" font-size="12" font-weight="800" fill="#a8403c" text-anchor="middle">✗ 近共线</text>
+        <line x1="60" y1="80" x2="180" y2="80" stroke="#e8d5c0" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <circle cx="66" cy="80" r="7" fill="#d9605c"/><circle cx="120" cy="78" r="7" fill="#d9605c"/><circle cx="174" cy="80" r="7" fill="#d9605c"/>
+        <ellipse cx="120" cy="128" rx="8" ry="26" fill="#d9605c" opacity=".3"/>
+        <circle cx="120" cy="128" r="4" fill="#a8403c"/>
+        <ellipse cx="120" cy="32" rx="8" ry="26" fill="#d9605c" opacity=".18"/>
+        <circle cx="120" cy="32" r="4" fill="#d9605c" opacity=".5"/>
+        <text x="152" y="36" font-size="10" font-weight="800" fill="#d9605c">镜像解</text>
+        <text x="120" y="192" font-size="11" font-weight="700" fill="#a8403c" text-anchor="middle">出现关于该直线的镜像二义性</text>
+        <text x="120" y="208" font-size="10.5" fill="#8b7d6b" text-anchor="middle">两个解无法区分</text>
+      </g>
+      <!-- 同侧聚簇 -->
+      <g transform="translate(480,0)">
+        <text x="120" y="24" font-size="12" font-weight="800" fill="#a8403c" text-anchor="middle">✗ 同侧聚簇</text>
+        <circle cx="72" cy="66" r="7" fill="#d9605c"/><circle cx="96" cy="82" r="7" fill="#d9605c"/><circle cx="70" cy="98" r="7" fill="#d9605c"/>
+        <ellipse cx="150" cy="132" rx="46" ry="12" fill="#d9605c" opacity=".3" transform="rotate(28 150 132)"/>
+        <circle cx="150" cy="132" r="4" fill="#a8403c"/>
+        <text x="120" y="192" font-size="11" font-weight="700" fill="#a8403c" text-anchor="middle">误差椭圆被拉成长条</text>
+        <text x="120" y="208" font-size="10.5" fill="#8b7d6b" text-anchor="middle">径向准、切向差</text>
+      </g>
+    </svg>
+    <div class="cap">图 2.6｜三种 AP 布局的几何精度。好布局的特征：密度大致均匀、无死区、不聚簇；<b>凸包角落处效果变差</b>（那里拿不到各方向的约束）。</div>
+  </div>
+
+  <div class="cols c2">
+    <div class="box"><h4>好消息</h4><p>室内<b>"为覆盖优化的 AP 布局"通常也适合定位</b> —— 覆盖要求本身就倾向于均匀铺开、不聚簇。</p></div>
+    <div class="box"><h4>坏消息</h4><p><b>室外或跨楼层就不成立</b>：AP 全聚在楼内、全在用户一侧，几何条件急剧恶化。跨楼层定位的实测 MAE 是 2.34 m，比同层隔墙的 1.26 m 差近一倍。</p></div>
+  </div>
+
+  <h3>时间维度：卡尔曼 / 粒子滤波 + PDR</h3>
+  <ul>
+    <li>单次解算的点会在房间之间乱跳，必须做时间平滑。但要小心：<b>手机运动时噪声不是高斯的</b>，标准卡尔曼的假设可能不成立。</li>
+    <li>实测排名（与单历元最小二乘基线比的平均改善）：粒子滤波 32% → 粒子 + RSSI 离群检测 40% → <b>遗传滤波 + 离群检测 48%（最佳）</b>。</li>
+    <li>融合 PDR（手机计步 + 陀螺仪）提供连续相对位移，FTM 负责消除 PDR 的累积漂移。<b>这才是产品级方案的形态</b> —— 详见 Slide 4.3。</li>
+  </ul>
+
+  <div class="insight">从距离到坐标这一步，决定成败的往往不是解算算法，而是<b>那几台 AP 站在哪里</b>。GDOP 是从 GNSS 直接搬过来的概念：测距误差乘上一个由几何决定的放大系数才是最终的定位误差 —— <b>AP 排成一条线时，这个系数会趋于无穷。</b></div>
+  <p class="srcs"><b>Part 2 主要来源：</b>IEEE 802.11-2016 / 802.11az-2022 · arXiv:2509.03901 · MobiCom'18 (Rutgers WINLAB) · Zola &amp; Martin-Escalona, Computer Communications 229 (2025) · MDPI Algorithms 15(12):464（爱丁堡）· NIST RF Ranging (2024) · Qualcomm Wi-Fi Ranging 白皮书 · Horn, Appl. Sci. 14(17):7805 (MIT) · developer.android.com WifiRttManager</p>
+</section>
+
+<!-- ══════════ PART 3 ══════════ -->
+<div class="part" id="p3" data-t="三代标准演进">
+  <div class="pn">PART 3</div>
+  <h2>三代标准演进<br>802.11mc → az → bk</h2>
+  <p>mc 把测距做成了却忘了上锁，az 把锁装上了却装不进手机，bk 把精度推到 UWB 门口却卡在一道频谱审批题上。三代标准，三种不同性质的困境。</p>
+  <ol><li>mc (2016)</li><li>mc 的三个坑</li><li>az (2022)</li><li>bk (2025)</li><li>三代对照 + 三个时间点</li><li>完整会话时序</li></ol>
+</div>
+
+<!-- ── 3.1 ── -->
+<section class="slide" id="s3-1">
+  <span class="num">3.1</span>
+  <span class="kicker">Slide 3.1</span>
+  <h2>802.11mc (2016)：把测距塞进一次维护性修订</h2>
+  <p class="sub">它以"顺带"的方式进入 Wi-Fi，也就以"顺带"的方式被产业忽略了两年</p>
+
+  <h3>FTM 是搭"维护性修订"的车进标准的</h3>
+  <ul>
+    <li>802.11mc 不是一个功能修订案，而是 <b>REVmc</b> —— 把此前若干修订合并重发的 roll-up 版本，正式名 <b>IEEE 802.11-2016</b>。FTM 作为新增能力被塞在里面一起发布。</li>
+    <li>这解释了为什么 FTM 早期"没人当回事"：它<b>没有独立的市场名号</b>，没有 Wi-Fi 联盟同步的认证品牌，发布时被淹没在一次例行合并修订里。</li>
+    <li>直到 <b>2018 年 Android 9</b> 给了它 <code>WifiRttManager</code> API，FTM 才算真的存在。<b>标准发布到能写代码，隔了整整 2 年。</b></li>
+  </ul>
+
+  <h3>能力边界（权威口径：arXiv:2509.03901 Table 13，作者含 802.11az 任务组主席）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>项目</th><th>802.11mc</th></tr></thead>
+    <tbody>
+      <tr><td>正式标准编号</td><td>IEEE 802.11-2016（REVmc roll-up）</td></tr>
+      <tr><td>发布</td><td>2016 年 12 月</td></tr>
+      <tr class="hi"><td><b>带宽</b></td><td><b>20–80 MHz</b></td></tr>
+      <tr><td>频段</td><td>2.4 / 5 GHz</td></tr>
+      <tr><td>典型精度</td><td>1–2 m</td></tr>
+      <tr><td>测距模式</td><td>仅点对点（STA ↔ AP）</td></tr>
+      <tr><td>MU-MIMO / 单 TxOP 内完成</td><td>✗ / ✗</td></tr>
+      <tr class="hi"><td><b>MAC 帧保护 / PHY LTF 保护</b></td><td class="hi"><b>✗ / ✗ —— 安全机制为零</b></td></tr>
+      <tr><td>被动测距</td><td>✗</td></tr>
+      <tr><td>终端 API</td><td>Android 9 (2018) Wi-Fi RTT</td></tr>
+    </tbody>
+  </table></div>
+  <div class="warn">别给 mc 写"部分支持 160 MHz"。权威对照表口径是 <b>mc 上限 80 MHz</b>，160 MHz 是 az 才引入的 —— 写错了会和 az 的卖点冲突。</div>
+
+  <h3>这是个可以调的协议：FTM 会话参数的标准取值范围</h3>
+  <div class="cols c2">
+    <div class="box"><h4>时间参数</h4><ul style="margin:0">
+      <li>burst duration：<b>250 μs – 128 ms</b></li>
+      <li>min delta FTM（连续两帧最小间隔）：以 100 μs 为单位</li>
+      <li>burst period：以 100 ms 为单位</li>
+      <li>ASAP=1 时建议首帧 <b>≤10 ms</b> 内发出</li>
+    </ul></div>
+    <div class="box"><h4>一个工程细节</h4><p>FTM 帧走 <b>voice access category (AC_VO)</b>，以降低信道接入延迟。<br><br>测距会话的信道和带宽<b>不必等于 BSS 的工作信道</b> —— 这也是"开 FTM 会额外吃信道时间"的原因之一（可能要切信道）。</p></div>
+  </div>
+
+  <div class="insight">FTM 的第一次亮相不是发布会，是一次例行的标准合并 —— <b>它以"顺带"的方式进入 Wi-Fi，也就以"顺带"的方式被产业忽略了整整两年</b>，直到 Android 9 给了它一个 API 才算真的存在。</div>
+</section>
+
+<!-- ── 3.2 ── -->
+<section class="slide" id="s3-2">
+  <span class="num">3.2</span>
+  <span class="kicker">Slide 3.2</span>
+  <h2>mc 的三个坑</h2>
+  <p class="sub">测不到 · 测得慢 · 测得不可信</p>
+
+  <div class="cols c3">
+    <div class="box"><h4>坑 1 · 测不到</h4><p>FTM 是<b>请求-响应模型</b>，完全依赖响应方的配置。手机端有 API 不等于测得到 —— 必须有一台愿意应答的 AP。</p>
+      <p style="color:#a8403c;font-weight:800">实地普查：5 GHz Responder 开启率 <b>0.17%–1.56%</b>（主动探测约 3%）</p></div>
+    <div class="box"><h4>坑 2 · 测得慢</h4><p>CSMA/CA 规则照常适用，FTM 帧要和数据帧一样竞争信道。</p>
+      <p style="color:#a8403c;font-weight:800">单次测量 ~30 ms → <b>一个 AP 每秒最多服务约 30 个终端</b>（还没算普通流量）</p></div>
+    <div class="box"><h4>坑 3 · 不可信</h4><p>时间戳<b>明文传输</b>，管理帧不加密，LTF 训练序列采用<b>公开、确定性的结构</b>。</p>
+      <p style="color:#a8403c;font-weight:800">攻击成本：<b>只发帧开头的 LTF 就够了</b></p></div>
+  </div>
+
+  <h3>坑 1 的实证：能力"存在但不可达"</h3>
+  <div class="tw"><table>
+    <thead><tr><th>时间</th><th>地点</th><th class="hi">5 GHz Responder 开启率</th></tr></thead>
+    <tbody>
+      <tr><td>2020-10</td><td>阿布扎比</td><td class="hi">0.17%</td></tr>
+      <tr class="hi"><td>2020-10</td><td>波士顿 Back Bay</td><td class="hi"><b>1.56%</b>（最高）</td></tr>
+      <tr><td>2020-10</td><td>比利时 Hasselt</td><td class="hi">0.17%</td></tr>
+      <tr><td>2020-10</td><td>苏黎世</td><td class="hi">0.25%</td></tr>
+      <tr><td>2021-10</td><td>波士顿 Back Bay</td><td class="hi">1.36%</td></tr>
+      <tr><td>2021-12</td><td>Hasselt</td><td class="hi">0.26%</td></tr>
+    </tbody>
+  </table></div>
+  <p>2.4 GHz 几乎全为 0.00–0.01%。<b>厂商集中度极高：所有 responder 里 99.78% 是 Google 的设备</b>，initiator 里 61.11% 是三星。爱丁堡 2022 年的调查也印证：面向消费者、官方声明支持 RTT 的 AP <b>只有 Google Wi-Fi / Nest Wi-Fi Router / Nest Wi-Fi Point 三款</b>。</p>
+  <div class="warn">与其说"AP 默认关闭"，不如说 <b>"FTM 的可用性不取决于终端，而取决于对面那台 AP 有没有被人打开这个开关"</b> —— 这个说法有双重实证支撑，也更准确。</div>
+
+  <h3>坑 3 的四类攻击（无认证的直接后果）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>攻击</th><th>机制</th><th>后果</th></tr></thead>
+    <tbody>
+      <tr><td><b>窃听 / 被动追踪</b></td><td>估计多次 FTM 交换的差分 ToA，解多点定位方程组</td><td>用户被隐蔽跟踪，<b>受害者毫无察觉</b></td></tr>
+      <tr><td><b>伪造 (spoofing)</b></td><td>冒充 AP 返回假时间戳；或在会话中<b>抢先发 ACK</b></td><td>距离结果任意操纵</td></tr>
+      <tr class="hi"><td><b>LTF 前缀攻击</b></td><td><b>甚至不必发完整 ACK —— 只发帧开头的 LTF 就够了</b></td><td class="hi">攻击成本极低</td></tr>
+      <tr><td><b>重放 (replay)</b></td><td>拦截并重放合法的 FTM 响应</td><td>绕过基于距离的门禁</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">mc 把"用光速当尺子"这件事做成了，却忘了给尺子上锁 —— <b>在 mc 里，把距离改短的成本，仅仅是比合法设备早一点发出一段谁都能算出来的固定波形。</b></div>
+</section>
+
+<!-- ── 3.3 ── -->
+<section class="slide" id="s3-3">
+  <span class="num">3.3</span>
+  <span class="kicker">Slide 3.3</span>
+  <h2>802.11az：把尺子锁起来</h2>
+  <p class="sub">正式编号 <b>IEEE Std 802.11az-2022</b> —— 网上普遍写的"az-2023"是发布日期，不是编号</p>
+
+  <div class="stats">
+    <div class="stat"><div class="v">az-2022</div><div class="l">正式编号（2022-12-03 批准 / 2023-03-03 发布）</div></div>
+    <div class="stat"><div class="v">Amendment 4</div><div class="l">Enhancements for Positioning</div></div>
+    <div class="stat"><div class="v">160 MHz</div><div class="l">带宽上限（mc 是 80）</div></div>
+    <div class="stat"><div class="v">&lt; 1 m</div><div class="l">典型精度目标（LOS 口径 0.4 m）</div></div>
+  </div>
+  <div class="warn">别说 az 已"作废"。它的状态显示 <b>Superseded</b>，是因为已合并进 <b>IEEE 802.11-2024</b> roll-up —— 这是<b>转正，不是废止</b>。</div>
+
+  <h3>技术核心一：PASN —— 让"未关联也能安全测距"成立</h3>
+  <ul>
+    <li>用 <b>authentication 帧</b>派生一份新鲜的共享密钥，使包括 FTM 帧在内的管理流量在<b>尚未关联</b>时就受到保护。目标是建立 <b>PTKSA</b>，供后续 secure LTF 测量使用。</li>
+    <li><b>但有两种模式，安全性差别极大</b>（这是最值得讲的"坑中之坑"）：
+      <ul>
+        <li>跑在<b>已有的已认证连接之上</b>：复用既有安全上下文，<b>继承底层协议的双向认证</b> ✅</li>
+        <li><b>独立运行</b>（无先行认证）：仍能派生密钥、保护管理帧，但<b>标准明确声明不保证双向认证</b> → 攻击者可以分别与两端各建一份密钥，构成中间人 ⚠️</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h3>技术核心二：secure HE-LTF —— 把训练序列本身变成密文</h3>
+  <div class="fig">
+    <svg viewBox="0 0 720 300" role="img" aria-label="secure HE-LTF 密钥派生链">
+      <g font-size="11.5" font-weight="700">
+        <rect x="240" y="14" width="240" height="30" rx="8" fill="#5b8fb9"/>
+        <text x="360" y="34" fill="#fff" font-weight="800" text-anchor="middle">PTK（经 PASN 或 WPA2/WPA3 建立）</text>
+        <line x1="360" y1="44" x2="360" y2="60" stroke="#8b7d6b" stroke-width="2"/>
+        <rect x="260" y="60" width="200" height="28" rx="8" fill="#7aabcb"/>
+        <text x="360" y="79" fill="#fff" font-weight="800" text-anchor="middle">内嵌 KDK（Key Derivation Key）</text>
+        <line x1="360" y1="88" x2="360" y2="104" stroke="#8b7d6b" stroke-width="2"/>
+        <rect x="230" y="104" width="260" height="28" rx="8" fill="#9ec5dd"/>
+        <text x="360" y="123" fill="#2f4e63" font-weight="800" text-anchor="middle">secure LTF key seed（PTK 生命周期内有效）</text>
+        <line x1="360" y1="132" x2="360" y2="148" stroke="#8b7d6b" stroke-width="2"/>
+        <rect x="212" y="148" width="296" height="28" rx="8" fill="#f6a560"/>
+        <text x="360" y="167" fill="#fff" font-weight="800" text-anchor="middle">+ secure LTF counter（每次测量递增）</text>
+        <text x="524" y="160" font-size="10" fill="#c9603a" font-weight="800">保证一次性</text>
+        <text x="524" y="173" font-size="10" fill="#c9603a" font-weight="800">复用即完全失效</text>
+        <line x1="360" y1="176" x2="360" y2="192" stroke="#8b7d6b" stroke-width="2"/>
+        <rect x="180" y="192" width="360" height="28" rx="8" fill="var(--accent)"/>
+        <text x="360" y="211" fill="#fff" font-weight="800" text-anchor="middle">KDF → Validation SAC + 双方各自的 LTF 生成密钥</text>
+        <line x1="360" y1="220" x2="360" y2="236" stroke="#8b7d6b" stroke-width="2"/>
+        <rect x="196" y="236" width="328" height="30" rx="8" fill="#c9603a"/>
+        <text x="360" y="256" fill="#fff" font-weight="800" text-anchor="middle">比特映射到活跃子载波上的 64-QAM 符号 → 伪随机波形</text>
+      </g>
+      <text x="360" y="286" font-size="10.5" fill="#8b7d6b" font-weight="700" text-anchor="middle">活跃子载波数：20 MHz → 122 个　40 MHz → 242 个　80 MHz → 498 个</text>
+    </svg>
+    <div class="cap">图 3.3｜secure HE-LTF 的密钥派生链。这是 az 唯一真正的新东西。</div>
+  </div>
+  <ul>
+    <li><b>保护间隔从循环前缀改成 1.6 μs 的零功率 GI</b>：循环前缀本质是把 OFDM 符号尾部复制到头部，天然是一段确定性重复，攻击者可以利用这个结构相关性；<b>改成零功率就抹掉了这个把柄</b>。</li>
+    <li>PHY 层另一个安全特性：<b>用 64-QAM 取代 BPSK</b> —— 星座点更密，猜中更难。</li>
+  </ul>
+  <div class="warn">别写 secure LTF 的具体密钥位长。两篇论文口径不一（128-bit vs AES-256），<b>用"基于 AES 的单次性伪随机序列"最稳</b>。</div>
+
+  <h3>技术核心三：MU 测距 —— 三种新模式</h3>
+  <div class="cols c3">
+    <div class="box"><h4>TB / NTB</h4><p>触发式与非触发式测距。AP 用 802.11ax MU-MIMO <b>同时</b>为多个终端测距，最高 <b>8×8</b>。</p></div>
+    <div class="box"><h4>被动测距</h4><p>AP 广播帧，终端<b>只接收不发射</b>，基于 TDoA 做双曲定位。<b>并发终端数理论上无上限</b>，且终端无法被追踪。</p></div>
+    <div class="box"><h4>单 TxOP 内完成</h4><p>用短的 PHY 层 <b>NDP</b> 替代 mc 的较长 MAC 帧，整个协议压进一个 TxOP → 可扩展性 + 省电 + 大幅减少占用信道时间。</p></div>
+  </div>
+
+  <h3>实测：az 相对 mc 到底强在哪（Arista 等，企业级 AP，105 次 FTM 交换/会话）</h3>
+  <ul>
+    <li>LOS + 干净 RF：az 结果更一致、方差更低，<b>带宽越大改进越明显</b></li>
+    <li>NLOS + 干净 RF：绝对精度改进不显著，但 az 的<b>测量一致性</b>仍优于 mc</li>
+    <li><b>NLOS + 重度拥塞多径：40 MHz 及以上带宽时 az 明显优于 mc</b>（归因于 MIMO 有效对抗多径）</li>
+    <li>作者结论原话：<b>"sub 1 meter accuracy seems difficult to achieve in challenging RF environments"</b> —— &lt;1 m 是能力上限，不是现场常态</li>
+  </ul>
+
+  <h3>但决定成败的还是标定，不是协议版本（真值 6 m）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>配置</th><th>20 MHz</th><th>40 MHz</th><th>80 MHz</th></tr></thead>
+    <tbody>
+      <tr><td><b>未校准</b> responder</td><td>71.89 m</td><td>47.89 m</td><td>66.07 m</td></tr>
+      <tr class="hi"><td><b>已校准</b> responder</td><td>10.96 m</td><td>7.45 m</td><td class="hi"><b>6.36 m</b>（误差 0.36 m）</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">az 的关键不是把精度从 1–2 米推到 1 米以内 —— <b>而是把那把尺子的刻度本身变成了只有通信双方才知道的密码</b>：攻击者可以听到波形，却无法预先算出下一段该长什么样。</div>
+</section>
+
+<!-- ── 3.4 ── -->
+<section class="slide" id="s3-4">
+  <span class="num">3.4</span>
+  <span class="kicker">Slide 3.4</span>
+  <h2>802.11bk (2025)：320 MHz，以及一个中国式死结</h2>
+  <p class="sub">正式名 <b>Amendment 3: 320 MHz Positioning</b>（2025-05-28 批准 / 2025-09-05 发布）</p>
+
+  <h3>bk 干的事情非常单一</h3>
+  <p><b>把带宽从 160 拉到 320 MHz，其余全部继承 az</b>（包括全套安全机制）。官方 scope 原文写得很直白："enhances the Fine Timing Measurement protocol to make use of <b>320 MHz wide channels available with the IEEE 802.11be PHY and MAC</b>"。</p>
+  <p><b>bk 没有发明新机制，它是一次"把 az 接到 Wi-Fi 7 的 PHY 上"的适配。</b>理论支撑是 Cramér-Rao 下界：带宽越大，ToA 估计的方差下界越低。</p>
+
+  <h3>为什么这一步是冲着 UWB 去的</h3>
+  <div class="tw"><table>
+    <thead><tr><th></th><th>UWB</th><th>蓝牙信道探测</th><th class="hi">Wi-Fi FTM (bk)</th></tr></thead>
+    <tbody>
+      <tr><td>带宽</td><td>500 MHz / 1 GHz</td><td>40 × 2 MHz</td><td class="hi"><b>320 MHz</b></td></tr>
+      <tr class="hi"><td><b>功率谱密度</b></td><td><b>−41.3 / −31.3</b> dBm/MHz</td><td>17 dBm/MHz</td><td class="hi"><b>17 dBm/MHz（高出近 60 dB）</b></td></tr>
+      <tr><td>硬件</td><td>需专用芯片</td><td>需 BT 5.4+</td><td class="hi"><b>你家里已经有的那台路由器</b></td></tr>
+    </tbody>
+  </table></div>
+  <p>UWB 带宽更大，但<b>发射功率谱密度被压得极低</b>（比 Wi-Fi 低约 58 dB），所以作用距离有限（LOS &lt;15 m）、且需要专门硬件。Wi-Fi 到 320 MHz 时带宽已接近 UWB 的量级，<b>而功率高出近 60 dB，硬件还是现成的。</b></p>
+
+  <h3>死结：320 MHz 信道只存在于 6 GHz 频段</h3>
+  <p>5 GHz 频段物理上排不下连续 320 MHz。所以 <b>bk 的全部价值，完全押在 6 GHz 对 Wi-Fi 开放这一件事上。</b></p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 280" role="img" aria-label="全球 6GHz 频谱划分对照">
+      <g font-size="11.5" font-weight="800" fill="#5c4f42">
+        <text x="14" y="52">美 / 加 / 韩</text>
+        <text x="14" y="112">欧盟 / 英 / 日 / 印 / 澳</text>
+        <text x="14" y="172">中国</text>
+      </g>
+      <!-- 频率刻度 -->
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="middle">
+        <text x="200" y="26">5925</text><text x="400" y="26">6425</text><text x="680" y="26">7125 MHz</text>
+      </g>
+      <line x1="200" y1="32" x2="680" y2="32" stroke="#d8cbb8"/>
+      <!-- 美加韩 -->
+      <rect x="200" y="38" width="480" height="26" rx="5" fill="#6fae7c"/>
+      <text x="440" y="56" font-size="11.5" font-weight="800" fill="#fff" text-anchor="middle">全部 1200 MHz 免许可开放给 Wi-Fi</text>
+      <!-- 欧日印澳 -->
+      <rect x="200" y="98" width="200" height="26" rx="5" fill="#6fae7c"/>
+      <text x="300" y="116" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">Wi-Fi 480 MHz</text>
+      <rect x="400" y="98" width="280" height="26" rx="5" fill="#c9b8a0"/>
+      <text x="540" y="116" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">固定与卫星业务</text>
+      <!-- 中国 -->
+      <defs><pattern id="hatch" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+        <line x1="0" y1="0" x2="0" y2="8" stroke="#e0a942" stroke-width="4"/></pattern></defs>
+      <rect x="200" y="158" width="200" height="26" rx="5" fill="url(#hatch)" opacity=".55"/>
+      <rect x="200" y="158" width="200" height="26" rx="5" fill="none" stroke="#e0a942" stroke-width="2"/>
+      <text x="300" y="176" font-size="10.5" font-weight="800" fill="#8a6d1f" text-anchor="middle">未明确划分（技术试验）</text>
+      <rect x="400" y="158" width="280" height="26" rx="5" fill="#d9605c"/>
+      <text x="540" y="176" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">已划给 IMT（5G/6G）</text>
+      <text x="540" y="200" font-size="10" font-weight="700" fill="#a8403c" text-anchor="middle">2023-07 划分 · 2026-05 批复 6G 试验，事实锁定</text>
+      <!-- 320MHz 标尺 -->
+      <rect x="200" y="226" width="128" height="20" rx="4" fill="var(--accent)" opacity=".85"/>
+      <text x="264" y="240" font-size="10.5" font-weight="800" fill="#fff" text-anchor="middle">320 MHz</text>
+      <text x="340" y="240" font-size="11" font-weight="800" fill="#c9603a">← 一条 802.11bk 信道需要这么宽</text>
+      <text x="360" y="266" font-size="11" font-weight="800" fill="#a8403c" text-anchor="middle">中国那一条上，这把尺子目前放不下</text>
+    </svg>
+    <div class="cap">图 3.4｜全球 6 GHz 频谱划分对照（截至 2026-08）。<b>中国是主要经济体中唯一没有把任何 6 GHz 频谱开放给 Wi-Fi 的国家。</b></div>
+  </div>
+
+  <h3>中国 6 GHz 政策时间线（本 Part 信息量最大的一页）</h3>
+  <ul>
+    <li><b>2023-07-01</b>：新版《无线电频率划分规定》施行，<b>全球第一个</b>将 <b>6425–7125 MHz</b> 划分给 IMT（含 5G/6G）。</li>
+    <li><b>2026-05-08</b>：工信部<b>批复 IMT-2030（6G）推进组 6G 试验频率使用许可</b>，频段正是 6425–7125 MHz、带宽 700 MHz。行业解读：<b>这基本等于把该频段在事实上锁定为国内 6G 商用频段</b>。</li>
+    <li><b>5925–6425 MHz（下段）</b>：至今<b>未做明确划分</b>，处于技术试验状态。</li>
+    <li>产业界正在推动：信通院、华为、中兴、紫光展锐联合提交《关于尽快明确 5925–6425 MHz 用于 RLAN 的建议书》，观点是若 2026 年仍不开放，中国将在 Wi-Fi 8 时代失去话语权。<b>业界普遍把 2026–2027 视为最后窗口。</b></li>
+  </ul>
+
+  <div class="insight">802.11bk 把 Wi-Fi 测距推进到 UWB 的门口，代价是它把全部筹码押在了 6 GHz 上 —— <b>于是一个纯粹的物理层精度问题，在中国变成了一道频谱行政审批题。</b></div>
+</section>
+
+<!-- ── 3.5 ── -->
+<section class="slide" id="s3-5">
+  <span class="num">3.5</span>
+  <span class="kicker">Slide 3.5</span>
+  <h2>三代对照 · 以及那三个不同的时间点</h2>
+  <p class="sub">标准发布 ≠ 芯片出货 ≠ 你能买到</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>特性</th><th>802.11mc</th><th>802.11az</th><th class="hi">802.11bk</th></tr></thead>
+    <tbody>
+      <tr><td><b>正式编号</b></td><td>IEEE 802.11-2016 (REVmc)</td><td><b>IEEE 802.11az-2022</b></td><td class="hi"><b>IEEE 802.11bk-2025</b></td></tr>
+      <tr><td>修订案标题</td><td>—（维护性 roll-up）</td><td>Amendment 4: Enhancements for Positioning</td><td class="hi">Amendment 3: 320 MHz Positioning</td></tr>
+      <tr><td>批准 / 发布</td><td>2016 年</td><td>2022-12-03 / 2023-03-03</td><td class="hi">2025-05-28 / 2025-09-05</td></tr>
+      <tr class="hi"><td><b>信道带宽</b></td><td>20–80 MHz</td><td>20–160 MHz</td><td class="hi"><b>20–320 MHz</b></td></tr>
+      <tr><td>工作频段</td><td>2.4, 5 GHz</td><td>2.4, 5, 6 GHz</td><td class="hi">2.4, 5, 6 GHz</td></tr>
+      <tr class="hi"><td><b>典型精度</b></td><td><b>1–2 m</b></td><td><b>&lt;1 m</b></td><td class="hi"><b>&lt;0.1 m</b>（目标）</td></tr>
+      <tr><td>一站对多站测距</td><td>✗</td><td>✓</td><td class="hi">✓</td></tr>
+      <tr><td>MU-MIMO</td><td>✗</td><td>最高 8×8</td><td class="hi">最高 8×8</td></tr>
+      <tr><td>单 TxOP 内完成 / LTF 重复</td><td>✗ / ✗</td><td>✓ / ✓</td><td class="hi">✓ / ✓</td></tr>
+      <tr><td><b>MAC 帧保护</b></td><td>✗</td><td>✓</td><td class="hi">✓</td></tr>
+      <tr><td><b>PHY 层 LTF 保护</b></td><td>✗</td><td>✓</td><td class="hi">✓</td></tr>
+      <tr><td>被动测距</td><td>✗</td><td>✓</td><td class="hi">✓</td></tr>
+      <tr><td><b>终端 API</b></td><td>Android 9 (2018)</td><td>Android 15 (2024, NTB)<br>Android 16 (2025, secure ranging)</td><td class="hi">截至 2026-08 <b>无公开终端支持</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 230" role="img" aria-label="三代标准的三个时间点甘特图">
+      <g font-size="11.5" font-weight="800" fill="#5c4f42">
+        <text x="14" y="66">802.11mc</text><text x="14" y="126">802.11az</text><text x="14" y="186">802.11bk</text>
+      </g>
+      <!-- 时间轴 2016..2027 → 110..690 -->
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="middle">
+        <text x="110" y="26">2016</text><text x="215" y="26">2018</text><text x="320" y="26">2020</text>
+        <text x="425" y="26">2022</text><text x="530" y="26">2024</text><text x="635" y="26">2026</text>
+      </g>
+      <line x1="110" y1="32" x2="690" y2="32" stroke="#d8cbb8"/>
+      <g stroke="#f2ebe1"><line x1="215" y1="32" x2="215" y2="200"/><line x1="320" y1="32" x2="320" y2="200"/>
+        <line x1="425" y1="32" x2="425" y2="200"/><line x1="530" y1="32" x2="530" y2="200"/><line x1="635" y1="32" x2="635" y2="200"/></g>
+      <!-- mc -->
+      <rect x="110" y="48" width="22" height="24" rx="4" fill="#c9603a"/>
+      <rect x="215" y="48" width="22" height="24" rx="4" fill="#e8a76e"/>
+      <rect x="268" y="48" width="22" height="24" rx="4" fill="#f5d3b3"/>
+      <line x1="132" y1="60" x2="215" y2="60" stroke="#e8a76e" stroke-width="2" stroke-dasharray="4 3"/>
+      <line x1="237" y1="60" x2="268" y2="60" stroke="#f5d3b3" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="300" y="64" font-size="10.5" font-weight="700" fill="#8b7d6b">发布 → API +2 年 → 买得到 +3 年</text>
+      <!-- az -->
+      <rect x="452" y="108" width="22" height="24" rx="4" fill="#c9603a"/>
+      <rect x="530" y="108" width="22" height="24" rx="4" fill="#e8a76e"/>
+      <line x1="474" y1="120" x2="530" y2="120" stroke="#e8a76e" stroke-width="2" stroke-dasharray="4 3"/>
+      <line x1="552" y1="120" x2="676" y2="120" stroke="#d9605c" stroke-width="2.5" stroke-dasharray="7 5"/>
+      <text x="682" y="124" font-size="15" font-weight="800" fill="#d9605c">?</text>
+      <text x="452" y="150" font-size="10.5" font-weight="800" fill="#a8403c">发布 3 年半，「真的买得到」这一格<b>仍未闭合</b></text>
+      <!-- bk -->
+      <rect x="596" y="168" width="22" height="24" rx="4" fill="#c9603a"/>
+      <text x="628" y="184" font-size="10.5" font-weight="700" fill="#8b7d6b">2025-09 发布，后两格空白</text>
+      <!-- 图例 -->
+      <g font-size="10" font-weight="700" fill="#8b7d6b">
+        <rect x="110" y="210" width="12" height="12" rx="3" fill="#c9603a"/><text x="128" y="220">标准发布</text>
+        <rect x="196" y="210" width="12" height="12" rx="3" fill="#e8a76e"/><text x="214" y="220">OS 有 API</text>
+        <rect x="282" y="210" width="12" height="12" rx="3" fill="#f5d3b3"/><text x="300" y="220">真的买得到</text>
+      </g>
+    </svg>
+    <div class="cap">图 3.5｜虚线未闭合的那一格，就是整页的论点。</div>
+  </div>
+
+  <h3>③ 的实测证据（2026 年 3 月的一手硬件测试）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>设备</th><th>声称</th><th class="hi">实测结果</th></tr></thead>
+    <tbody>
+      <tr><td><b>Google Pixel 9a</b></td><td>Android 支持 az</td><td class="hi"><b>未发现任何 secure FTM 功能</b></td></tr>
+      <tr><td><b>Google Nest Wifi Pro</b></td><td>新一代 AP</td><td class="hi"><b>实际未对外暴露 802.11az 能力</b></td></tr>
+      <tr><td>Aruba AP-734</td><td>企业级 AP</td><td class="hi">是<b>极少数</b>公开宣称支持 secure FTM 的产品之一</td></tr>
+      <tr class="hi"><td>某开发板（NDA，未点名）</td><td><b>声称完全符合 802.11az</b></td><td class="hi"><b>只实现了 PMF，没有 secure HE-LTF，没有任何物理层保护</b>。厂商确认：受架构限制，<b>不支持也不计划支持</b></td></tr>
+    </tbody>
+  </table></div>
+  <p><b>这里有一个特别值得点破的层次 —— 三种不同程度的"不可用"：</b></p>
+  <ul>
+    <li>Pixel 9a / Nest Wifi Pro 是<b>没做</b>；</li>
+    <li>那块开发板是<b>声称做了但只做了一半</b>（做了 MAC 层的 PMF，跳过了 PHY 层的 secure HE-LTF）；</li>
+    <li>而 <b>PHY 层恰恰是 az 唯一真正防住距离缩短攻击的地方</b>。</li>
+  </ul>
+  <div class="warn">"支持 802.11az"这个说法<b>在市场上是没有约束力的</b> —— 它可以只意味着"管理帧加密了"，而距离本身依然可以被改。</div>
+
+  <div class="insight">802.11az 发布已经三年半，安全测距在纸面上完备、在 Android API 里可调用、在你手上的旗舰机里<b>测不出来</b> —— <b>标准的时间和产品的时间从来不是同一条时间轴，而 az 卡住的恰恰是它唯一真正新增的那一层：物理层。</b></div>
+</section>
+
+<!-- ── 3.6 ── -->
+<section class="slide" id="s3-6">
+  <span class="num">3.6</span>
+  <span class="kicker">Slide 3.6</span>
+  <h2>一次完整的 FTM 会话</h2>
+  <p class="sub">从扫描到上报，以及 PASN 到底插在哪一步</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 400" role="img" aria-label="FTM 完整会话时序图">
+      <line x1="150" y1="46" x2="150" y2="380" stroke="#d8cbb8" stroke-width="2"/>
+      <line x1="560" y1="46" x2="560" y2="380" stroke="#d8cbb8" stroke-width="2"/>
+      <text x="150" y="36" font-size="12" font-weight="800" fill="#5c4f42" text-anchor="middle">ISTA（手机）</text>
+      <text x="560" y="36" font-size="12" font-weight="800" fill="#5c4f42" text-anchor="middle">RSTA（AP）</text>
+      
+      <!-- ① 发现 -->
+      <rect x="16" y="52" width="688" height="42" rx="8" fill="#f4f0e8"/>
+      <text x="26" y="70" font-size="10.5" font-weight="800" fill="#8b7d6b">① 发现</text>
+      <line x1="556" y1="80" x2="154" y2="80" stroke="#8b7d6b" stroke-width="1.8" marker-end="url(#a3)"/>
+      <text x="355" y="74" font-size="10.5" font-weight="700" fill="#6b6156" text-anchor="middle">Beacon / Probe Response</text>
+      <text x="355" y="90" font-size="10" font-weight="700" fill="#a89880" text-anchor="middle">检查 Extended Capabilities 里的 FTM Responder / Initiator 能力位</text>
+      <!-- ② PASN -->
+      <rect x="16" y="100" width="688" height="52" rx="8" fill="#fbe6e5" stroke="#d9605c" stroke-width="1.8"/>
+      <text x="26" y="118" font-size="10.5" font-weight="800" fill="#a8403c">② PASN</text>
+      <text x="26" y="132" font-size="9" font-weight="800" fill="#a8403c">az 新增</text>
+      <text x="26" y="144" font-size="9" font-weight="800" fill="#a8403c">mc 无此段</text>
+      <line x1="154" y1="122" x2="556" y2="122" stroke="#d9605c" stroke-width="1.8" marker-end="url(#a5)"/>
+      <line x1="556" y1="140" x2="154" y2="140" stroke="#d9605c" stroke-width="1.8" marker-end="url(#a5)"/>
+      <text x="355" y="117" font-size="10.5" font-weight="800" fill="#a8403c" text-anchor="middle">authentication 帧交换 ⇄</text>
+      <text x="355" y="136" font-size="10" font-weight="700" fill="#a8403c" text-anchor="middle">🔑 建立 PTKSA → PTK → 内含 KDK</text>
+      <!-- ③ 协商 -->
+      <rect x="16" y="158" width="688" height="76" rx="8" fill="#eaf2f8"/>
+      <text x="26" y="176" font-size="10.5" font-weight="800" fill="#42708f">③ 协商</text>
+      <line x1="154" y1="178" x2="556" y2="178" stroke="#5b8fb9" stroke-width="1.8" marker-end="url(#a3)"/>
+      <text x="355" y="173" font-size="10.5" font-weight="700" fill="#42708f" text-anchor="middle">Initial FTM Request（携带 Ranging Parameters）</text>
+      <line x1="556" y1="194" x2="154" y2="194" stroke="#9ec5dd" stroke-width="1.5"/>
+      <text x="355" y="190" font-size="10" fill="#7aabcb" text-anchor="middle">ACK</text>
+      <line x1="556" y1="212" x2="154" y2="212" stroke="#5b8fb9" stroke-width="1.8" marker-end="url(#a3)"/>
+      <text x="355" y="208" font-size="10.5" font-weight="700" fill="#42708f" text-anchor="middle">Initial FTM_1（responder 可修改参数）</text>
+      <text x="355" y="228" font-size="9.5" fill="#7d8fa0" text-anchor="middle">burst 数 · burst size · duration 250μs–128ms · min delta FTM · 信道与带宽（可与 BSS 不同）· ASAP</text>
+      <!-- ④ 测量 -->
+      <rect x="16" y="240" width="688" height="92" rx="8" fill="#fff3ea"/>
+      <text x="26" y="258" font-size="10.5" font-weight="800" fill="#c9603a">④ 测量</text>
+      <line x1="556" y1="262" x2="154" y2="262" stroke="var(--accent)" stroke-width="2" marker-end="url(#a4)"/>
+      <text x="355" y="257" font-size="10.5" font-weight="700" fill="#c9603a" text-anchor="middle">FTM_2 (回传 t₁,₁ 和 t₄,₁)　→ ISTA 此时才算得出第 1 个 RTT</text>
+      <line x1="154" y1="280" x2="556" y2="280" stroke="#f6a560" stroke-width="1.5"/>
+      <text x="355" y="276" font-size="10" fill="#e08b62" text-anchor="middle">ACK</text>
+      <line x1="556" y1="298" x2="154" y2="298" stroke="var(--accent)" stroke-width="2" marker-end="url(#a4)"/>
+      <text x="355" y="294" font-size="10.5" font-weight="700" fill="#c9603a" text-anchor="middle">FTM_3 (t₁,₂, t₄,₂)　…　共 n 帧 → n−1 个 RTT</text>
+      <text x="355" y="318" font-size="10" font-weight="800" fill="#8a5a3c" text-anchor="middle">az 场景：NDP 里的 HE-LTF 由 KDK 派生的密钥生成（secure HE-LTF）</text>
+      <!-- ⑤ 上报 -->
+      <rect x="16" y="338" width="688" height="34" rx="8" fill="#fdf6e8"/>
+      <text x="26" y="358" font-size="10.5" font-weight="800" fill="#b8862c">⑤ 上报</text>
+      <line x1="556" y1="358" x2="154" y2="358" stroke="#e0a942" stroke-width="1.8" marker-end="url(#a3)"/>
+      <text x="355" y="354" font-size="10.5" font-weight="700" fill="#b8862c" text-anchor="middle">LMR（Location Measurement Report）</text>
+    </svg>
+    <div class="cap">图 3.6｜完整会话时序。<b>PASN 位于阶段 ① 与 ③ 之间，是一次独立的 authentication 帧交换，不属于 FTM 帧序列本身。</b></div>
+  </div>
+
+  <h3>这个位置正是攻击面所在</h3>
+  <ul>
+    <li>若 ② 被跳过（部署配置允许非认证测距），或用的是<b>独立 PASN</b>（无先行认证），则<b>双向认证不成立</b>，中间人可与两端各建一份密钥。</li>
+    <li>若攻击者阻断 ③ 中受保护的 FTM Request 并伪造一份未受保护的请求，就能<b>降级</b>到 legacy 测距或抹掉 "Secure HE-LTF Required" 标志 → ④ 里跑的仍是确定性 legacy HE-LTF，<b>MAC 层看起来是保护的，PHY 层已经裸奔</b>。</li>
+    <li>若阻断 ② 或 ③ 的初始帧，整个安全会话根本建立不起来 → <b>最简单的 DoS</b>。而且<b>配置越严格（拒绝不安全回落）反而越容易被简单干扰打瘫</b>。</li>
+  </ul>
+
+  <h3>时间开销与刷新率</h3>
+  <div class="stats">
+    <div class="stat"><div class="v">~30 ms</div><div class="l">单次测量典型耗时</div></div>
+    <div class="stat"><div class="v">~30 个</div><div class="l">一个 AP 每秒最多服务的终端数（还没算数据流量）</div></div>
+    <div class="stat"><div class="v">20–30 ms</div><div class="l">单 burst 实测（含最多 5 次测距）</div></div>
+    <div class="stat"><div class="v">&lt; 1 s</div><div class="l">32 个 burst 的总耗时</div></div>
+  </div>
+  <p>这正是 az 引入 MU 测距和被动测距的动机：<b>mc 的点对点模型在密集部署下会先撞上信道时间的墙，而不是精度的墙。</b></p>
+
+  <h3>精度 ↔ 开销的权衡（Qualcomm 实测，2×2、5 GHz、80 MHz）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>平均的 burst 数</th><th class="hi">90% 分位测距误差</th><th>叠加 Kalman 跟踪后</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td class="hi"><b>135 cm</b></td><td rowspan="2">不到 0.5 秒即可压到 <b>5 cm (P90) / 7 cm (P99)</b></td></tr>
+      <tr class="hi"><td><b>32</b></td><td class="hi"><b>39 cm</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>功耗</h3>
+  <ul>
+    <li>az 官方 scope 明确写入 <b>"reduces wireless medium utilization and power consumption"</b>。</li>
+    <li>机制：用短的 PHY 层 NDP 替代 mc 的较长 MAC 帧；整个协议压进<b>单个 TxOP</b>；被动测距进一步把功耗降到近乎为零（<b>终端全程只收不发</b>）。</li>
+  </ul>
+  <div class="warn">别编 FTM 的绝对功耗数字（mJ / mW）。目前没有可引用的一手实测，用"短 NDP / 单 TxOP / 可完全被动"这类机制性表述最稳。</div>
+
+  <div class="insight">一次 FTM 会话不是"一次测量"，而是几十次测量的统计平均 —— 把 90% 误差从 1.35 米压到 0.39 米，靠的不是更好的算法，而是把 32 个 burst 的时间<b>从信道里买下来</b>。精度、刷新率、吞吐量三者共用同一份预算，<b>你只能挑两个。</b></div>
+  <p class="srcs"><b>Part 3 主要来源：</b>IEEE SA 官方页面（802.11az/7226、802.11bk/11117）· arXiv:2603.18687（KU Leuven COSIC + JKU Linz，2026-03，含商用设备实测）· arXiv:2511.17935（Arista，mc vs az 实测）· arXiv:2509.03901（AGH + Intel，含 az 任务组主席 Jonathan Segev）· arXiv:2303.03766（TII）· Qualcomm Wi-Fi Ranging 白皮书 · 工信部 2026-05-08 批复 ·《无线电频率划分规定》2023-07-01 施行 · source.android.com/docs/core/connect/wifi-rtt</p>
+</section>
+
+<!-- ══════════ PART 4 ══════════ -->
+<div class="part" id="p4" data-t="工程现实与误差治理">
+  <div class="pn">PART 4</div>
+  <h2>从实验室到现场<br>工程现实与误差治理</h2>
+  <p>厂商说 21 厘米，学术说亚米，第三方实测说 3 米 —— 三个数字都没撒谎，因为它们回答的根本不是同一个问题。这一部分讲清楚：误差从哪来、怎么治、以及测距这件事的伦理边界在哪。</p>
+  <ol><li>真实精度三档</li><li>误差解剖与治理</li><li>混合定位</li><li>非合作定位</li><li>隐私与安全</li></ol>
+</div>
+
+<!-- ── 4.1 ── -->
+<section class="slide" id="s4-1">
+  <span class="num">4.1</span>
+  <span class="kicker">Slide 4.1</span>
+  <h2>真实精度到底是多少</h2>
+  <p class="sub">三档精度差了一个数量级，而且每一档的口径都不一样</p>
+
+  <div class="cols c3">
+    <div class="box" style="border-color:#b8d4e8"><h4><span class="tag t-v">厂商宣称</span></h4>
+      <p>受控条件、自家参考设计、P90 口径。<br><b>21 cm</b>（室内 LoS，5 GHz/80 MHz，32 burst）<br><b>11 cm</b>（点对点）<br><b>&lt;10 cm</b>（加 Kalman）</p>
+      <p style="font-size:.8rem;color:var(--soft)">回答的是："芯片能做多好"</p></div>
+    <div class="box" style="border-color:#f0dfa8"><h4><span class="tag t-a">学术实测</span></h4>
+      <p>标定后、算法处理后、静态为主。<br><b>67% 亚米级</b>，90.5% RMSE&lt;2 m<br>前提：<i>"只要 AP 偏置做过标定"</i></p>
+      <p style="font-size:.8rem;color:var(--soft)">回答的是："标定之后能做多好"</p></div>
+    <div class="box" style="border-color:#f0c0be"><h4><span class="tag t-r">消费级实测</span></h4>
+      <p>未标定、含运动、含遮挡。<br><b>MAE 3.04 m</b>，RMS 4.96 m<br>同期 UWB-A 整体 MAE 0.27 m —— <b>差 11 倍</b></p>
+      <p style="font-size:.8rem;color:var(--soft)">回答的是："用户口袋里真实发生了什么"</p></div>
+  </div>
+
+  <h3>把学术那档拆开看，才是真相</h3>
+  <div class="tw"><table>
+    <thead><tr><th>条件</th><th class="hi">亚米级比例</th><th>样本</th></tr></thead>
+    <tbody>
+      <tr><td><b>全 LoS 环境</b></td><td class="hi"><b>95.2%</b></td><td>21 组试验</td></tr>
+      <tr><td>整体（静态，已标定）</td><td class="hi">67%</td><td>42 组试验</td></tr>
+      <tr><td><b>含 NLoS 的环境</b></td><td class="hi"><b>38%</b></td><td>21 组里 7 组</td></tr>
+      <tr class="hi"><td><b>一旦人走动起来</b></td><td class="hi"><b>22.2%</b></td><td>全部动态试验</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>NIST 分场景实测：本 Part 最硬的一张表</h3>
+  <div class="fig">
+    <svg viewBox="0 0 720 280" role="img" aria-label="NIST 分场景 WiFi RTT 与 UWB 精度对比">
+      <g stroke="#efe6d9"><line x1="70" y1="40" x2="700" y2="40"/><line x1="70" y1="90" x2="700" y2="90"/>
+        <line x1="70" y1="140" x2="700" y2="140"/><line x1="70" y1="190" x2="700" y2="190"/></g>
+      <g font-size="10.5" fill="#a89880" font-weight="700" text-anchor="end">
+        <text x="64" y="44">9 m</text><text x="64" y="94">6</text><text x="64" y="144">3</text><text x="64" y="194">0</text>
+      </g>
+      <!-- 7 scenarios, x from 90 step 86 ; bar h = v * 16.67 -->
+      <!-- WiFi: 2.35,0.45,1.26,2.34,8.66,1.02,1.32  UWB: .33,.08,.08,.80,.84,.25,.21 -->
+      <g>
+        <rect x="90" y="150.8" width="26" height="39.2" fill="#e08b62"/><rect x="118" y="184.5" width="26" height="5.5" fill="#8b7ab8"/>
+        <rect x="176" y="182.5" width="26" height="7.5" fill="#e08b62"/><rect x="204" y="188.7" width="26" height="1.3" fill="#8b7ab8"/>
+        <rect x="262" y="169" width="26" height="21" fill="#e08b62"/><rect x="290" y="188.7" width="26" height="1.3" fill="#8b7ab8"/>
+        <rect x="348" y="151" width="26" height="39" fill="#e08b62"/><rect x="376" y="176.7" width="26" height="13.3" fill="#8b7ab8"/>
+        <rect x="434" y="45.6" width="26" height="144.4" fill="#d9605c"/><rect x="462" y="176" width="26" height="14" fill="#8b7ab8"/>
+        <rect x="520" y="173" width="26" height="17" fill="#e08b62"/><rect x="548" y="185.8" width="26" height="4.2" fill="#8b7ab8"/>
+        <rect x="606" y="168" width="26" height="22" fill="#e08b62"/><rect x="634" y="186.5" width="26" height="3.5" fill="#8b7ab8"/>
+      </g>
+      <g font-size="10" font-weight="800" fill="#8a5a3c" text-anchor="middle">
+        <text x="103" y="146">2.35</text><text x="189" y="178">0.45</text><text x="275" y="164">1.26</text>
+        <text x="361" y="146">2.34</text><text x="447" y="41" fill="#a8403c" font-size="11">8.66</text><text x="533" y="168">1.02</text><text x="619" y="163">1.32</text>
+      </g>
+      <g font-size="9.5" font-weight="700" fill="#8b7d6b" text-anchor="middle">
+        <text x="117" y="206">LoS 走廊</text><text x="203" y="206">LoS 户外</text><text x="289" y="206">隔墙</text>
+        <text x="375" y="206">跨楼层</text><text x="461" y="206">办公覆盖</text><text x="547" y="206">住宅覆盖</text><text x="633" y="206">住宅极限</text>
+      </g>
+      <!-- 反直觉标注 -->
+      <path d="M117,132 Q160,110 262,152" fill="none" stroke="#d9605c" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#a5)"/>
+      <text x="190" y="106" font-size="11" font-weight="800" fill="#a8403c" text-anchor="middle">LoS 走廊反而比隔墙 NLoS 差 1.9 倍</text>
+      <!-- 图例 -->
+      <g font-size="10.5" font-weight="700">
+        <rect x="90" y="228" width="14" height="14" rx="3" fill="#e08b62"/><text x="110" y="240" fill="#8b7d6b">Wi-Fi RTT (MAE)</text>
+        <rect x="240" y="228" width="14" height="14" rx="3" fill="#8b7ab8"/><text x="260" y="240" fill="#8b7d6b">UWB-A (MAE)</text>
+      </g>
+      <text x="380" y="266" font-size="10.5" fill="#a89880" text-anchor="middle">NIST《A Performance Comparison of Wi-Fi RTT and UWB for RF Ranging》(2024-03)　测距 1–100 m，10 Hz，三脚架 1.55 m</text>
+    </svg>
+    <div class="cap">图 4.1｜<b>整体口径：Wi-Fi RTT MAE 3.04 m / RMS 4.96 m；UWB-A MAE 0.27 m。</b>但下面那个覆盖率反转更重要。</div>
+  </div>
+
+  <div class="cols c2">
+    <div class="box" style="background:#eaf5ec;border-color:#b5d9bd"><h4>覆盖率反转 —— FTM 真正的工程位置</h4>
+      <p>住宅极限对角 16 组测点：<b>Wi-Fi RTT 全部 16 组出结果，UWB-A 和 UWB-B 只有 6 组能测出来</b>。车库 9 个点，也只有 Wi-Fi RTT 全部给出估计。</p>
+      <p style="font-weight:800;color:#3f7a51">精度输、覆盖赢。</p></div>
+    <div class="box"><h4>最反直觉的一条</h4>
+      <p>真正排第二的影响变量不是"LoS/NLoS"，是<b>多径环境类型</b>。NIST 的解释：走廊里"有数百条来自墙、地板、天花板、两端墙面的反射路径"，而穿一两道干墙只是衰减 + 一点延迟。</p>
+      <p style="font-weight:800;color:#a8403c">"有没有直视"不如"周围有多少强反射面"重要。</p></div>
+  </div>
+
+  <h3>为什么 90 分位比均值更有意义</h3>
+  <ul>
+    <li>误差分布<b>不是高斯的</b>。爱丁堡实测明确指出：手机运动时的噪声"可能不是高斯的，因此某些假设高斯误差的补偿算法（如卡尔曼滤波）<b>可能不适用</b>"。</li>
+    <li>在"距离变、位置变"场景，<b>主导误差从波动变成离群点</b> —— 少量野值虽是少数，"对平均误差的影响是巨大的"。</li>
+    <li>佐证：金属遮挡下 Pixel 2 的 RMSE 从 0.822 涨到 2.487 m，但<b>标准差只从 2.724 微增到 3.303</b>。<b>均值被尾巴拽走了，方差没怎么动</b> —— 这是长尾不是整体展宽。</li>
+    <li>厂商也只报 P90（Qualcomm、Android 平台 KPI 都是 90 分位），<b>这本身就是行业承认均值不可用的证据</b>。</li>
+  </ul>
+
+  <h3>六变量影响排序（按量级与可控性重排）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>变量</th><th>量级证据</th><th class="hi">是否可工程控制</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>带宽</b></td><td>带宽每翻倍误差约减半；平台 KPI 20→80 MHz 从 8 m 收到 2 m</td><td class="hi">可（选 5 GHz / 80 MHz）</td></tr>
+      <tr><td>2</td><td><b>多径环境</b>（走廊/金属/开阔）</td><td>同为 LoS，走廊 2.35 vs 户外 0.45；金属遮挡 RMSE 涨 3 倍</td><td class="hi">部分（布点避金属长廊）</td></tr>
+      <tr class="hi"><td>3</td><td><b>AP / 机型标定</b></td><td>未标定偏置最高 <b>67.73 m</b></td><td class="hi"><b>完全可控，收益最大</b></td></tr>
+      <tr><td>4</td><td>机型 × AP × 频段组合</td><td>Pixel 6 Pro 配 Linksys 5 GHz 采样成功率 <b>0.00%</b></td><td class="hi">可（选型验证）</td></tr>
+      <tr><td>5</td><td>用户运动</td><td>静态 σ 0.038–0.205 m → 行走 σ 0.367–1.135 m</td><td class="hi">不可控，只能靠融合</td></tr>
+      <tr><td>6</td><td>burst 数</td><td>BS 2→5 标准差降 30–70%，BS&gt;8 几乎无收益</td><td class="hi">可，但收益早饱和</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">FTM 的三档精度不是同一个东西的三种测法，而是<b>三个不同的问题</b>：厂商测的是"芯片能做多好"，学术测的是"标定之后能做多好"，消费级测的是"用户口袋里真实发生了什么"。<b>工程上你只能拿到第三档，除非你自己动手把它拉到第二档。</b></div>
+</section>
+
+<!-- ── 4.2 ── -->
+<section class="slide" id="s4-2">
+  <span class="num">4.2</span>
+  <span class="kicker">Slide 4.2</span>
+  <h2>误差解剖：四类误差、四种药、四个诊断信号</h2>
+  <p class="sub">先学会判断自己遇到的是哪一类，再谈治理</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 340" role="img" aria-label="误差四象限解剖图">
+      <line x1="360" y1="24" x2="360" y2="300" stroke="#d8cbb8" stroke-width="2"/>
+      <line x1="60" y1="162" x2="668" y2="162" stroke="#d8cbb8" stroke-width="2"/>
+      <text x="668" y="156" font-size="11" font-weight="800" fill="#8b7d6b" text-anchor="end">随距离增长 →</text>
+      <text x="368" y="34" font-size="11" font-weight="800" fill="#8b7d6b">↑ 零均值</text>
+      <text x="368" y="298" font-size="11" font-weight="800" fill="#8b7d6b">↓ 非零均值</text>
+      <!-- 左上 随机噪声 -->
+      <rect x="70" y="36" width="270" height="112" rx="12" fill="#eaf2f8"/>
+      <text x="86" y="60" font-size="13" font-weight="800" fill="#42708f">随机噪声</text>
+      <text x="86" y="80" font-size="10.5" fill="#5c7a8f">静态 σ 0.04–0.21 m｜行走 σ 0.37–1.14 m</text>
+      <text x="86" y="99" font-size="11" font-weight="800" fill="#2f4e63">药：burst 平均（2→5）+ 滤波</text>
+      <text x="86" y="118" font-size="10" fill="#7d8fa0">诊断：stdDevMm、滑窗方差、成功率</text>
+      <text x="86" y="138" font-size="10" font-weight="800" fill="#42708f">σ 降 30–70%；P90 135→39 cm（32 burst）</text>
+      <!-- 右上 离群点 -->
+      <rect x="380" y="36" width="272" height="112" rx="12" fill="#f0eef7"/>
+      <text x="396" y="60" font-size="13" font-weight="800" fill="#5d5478">离群点</text>
+      <text x="396" y="80" font-size="10.5" fill="#6f6689">NLoS × 运动｜拽走均值、方差不动</text>
+      <text x="396" y="99" font-size="11" font-weight="800" fill="#453d5e">药：先剔除，后滤波</text>
+      <text x="396" y="118" font-size="10" fill="#847c9b">诊断：残差峰度、与 PDR 预测的马氏距离</text>
+      <text x="396" y="138" font-size="10" font-weight="800" fill="#5d5478">遗传滤波+离群检测：静态 49.2% / 动态 47%</text>
+      <!-- 左下 系统偏差 -->
+      <rect x="70" y="176" width="270" height="112" rx="12" fill="#fdf2ea"/>
+      <text x="86" y="200" font-size="13" font-weight="800" fill="#c9603a">系统偏差</text>
+      <text x="86" y="220" font-size="10.5" fill="#a87856">5 GHz 0.24–1.85 m｜<tspan font-weight="800" fill="#a8403c">2.4 GHz 11.7–67.7 m</tspan></text>
+      <text x="86" y="239" font-size="11" font-weight="800" fill="#8a5a3c">药：（机型×AP×频段）标定表</text>
+      <text x="86" y="258" font-size="10" fill="#b08a6e">诊断：回归截距≠0 且斜率≈1</text>
+      <text x="86" y="278" font-size="10" font-weight="800" fill="#c9603a">补偿后各距离 RMSE ≈ 0　← 收益最大</text>
+      <!-- 右下 多径正偏 -->
+      <rect x="380" y="176" width="272" height="112" rx="12" fill="#fbe6e5"/>
+      <text x="396" y="200" font-size="13" font-weight="800" fill="#a8403c">多径正偏</text>
+      <text x="396" y="220" font-size="10.5" fill="#b0605c">走廊 LoS 平均误差 +1.91 m｜金属 2.26–2.94 m</text>
+      <text x="396" y="239" font-size="11" font-weight="800" fill="#8f3532">药：首径检测 / 中位数 / 截尾均值</text>
+      <text x="396" y="258" font-size="10" fill="#bd7b78">诊断：RTT−RSSI 模型距离；残差恒正</text>
+      <text x="396" y="278" font-size="10" font-weight="800" fill="#a8403c">RSSI 离群检测：NLoS 静态 +41.3%</text>
+      <text x="360" y="326" font-size="11" font-weight="800" fill="#8b7d6b" text-anchor="middle">第五类在定位层：几何劣化 GDOP —— 药是布点优化 + 门限剔除，诊断是可见 AP 数与方位圆方差</text>
+    </svg>
+    <div class="cap">图 4.2｜误差四象限。横轴"是否随距离增长"，纵轴"是否零均值" —— <b>两个问题就能定位到象限，象限决定用哪种药。</b></div>
+  </div>
+
+  <h3>为什么标定表是第一优先级</h3>
+  <p>偏置是<b>（机型 × AP × 频段）三维</b>的，不是"每 AP 一个 offset"。Xiaomi Mi 10T 在 2.4 GHz 上的固定偏置是 <b>64.91 / 67.73 米</b> —— <b>不标定的 2.4 GHz FTM 等于没有</b>。（完整标定表见 Slide 2.4）</p>
+  <p>而这一项<b>完全可控、成本最低、收益最大</b>：一次线性回归、一张查找表，就能把 RMSE 拉到接近 0。</p>
+
+  <h3>burst 平均的收益天花板</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Burst Size</th><th>2</th><th class="hi">5</th><th>8</th><th>14</th><th>20</th><th>29</th></tr></thead>
+    <tbody>
+      <tr><td>Pixel 4a @Google 5G</td><td>1.15</td><td class="hi"><b>0.67</b></td><td>0.68</td><td>0.67</td><td>0.66</td><td>0.66</td></tr>
+      <tr><td>Pixel 3a @Google 2.4G</td><td>3.32</td><td class="hi"><b>1.09</b></td><td>1.04</td><td>1.08</td><td>1.25</td><td>1.05</td></tr>
+      <tr><td>Pixel 3a @Linksys 5G</td><td>0.92</td><td class="hi">0.62</td><td>0.60</td><td>0.59</td><td>0.57</td><td>0.59</td></tr>
+      <tr><td colspan="7" style="font-size:.8rem;color:var(--soft)">单位：测距标准差 (m)。配套时间成本：Pixel 3a 212→333 ms，Pixel 6 Pro 380→587 ms</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>BS=5 时收益的 90% 已经到手，BS&gt;8 的小改善"并不总能 justify 注入网络的额外定位流量"。</b></p>
+
+  <h3>第六类"误差"：根本测不出来</h3>
+  <p>互操作性失效在论文里罕见但工程上致命 —— <b>Pixel 6 Pro + Linksys Velop 5 GHz 的采样成功率是 0.0000</b>（10 个 burst size 配置全是 0）。而且<b>不是越新越贵越好</b>：Pixel 6 Pro 是当时最新款，反而最不稳定。<b>选型必须做交叉验证矩阵，成功率 &lt;90% 就该报警。</b></p>
+
+  <div class="insight">四类误差里，只有一类不需要任何算法就能治好 —— <b>系统偏差</b>，而它恰恰是量级最大的那一类（2.4 GHz 上能到 65 米）。<b>工程队伍最常犯的错，是跳过一张标定表，直接去调卡尔曼的参数。</b></div>
+</section>
+
+<!-- ── 4.3 ── -->
+<section class="slide" id="s4-3">
+  <span class="num">4.3</span>
+  <span class="kicker">Slide 4.3</span>
+  <h2>混合定位：工程价值 80% 在融合层</h2>
+  <p class="sub">测距是原料，融合才是产品</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>源</th><th>提供什么</th><th>致命短板</th></tr></thead>
+    <tbody>
+      <tr><td><b>FTM / RTT</b></td><td><b>绝对</b>距离约束，与天线增益、发射功率无关</td><td>单点噪声大、NLoS 正偏、需 ≥3 AP、耗电与信令开销</td></tr>
+      <tr><td><b>RSSI</b></td><td>免费、无需 AP 配合、密集可用</td><td>分辨率粗；<b>但特别适合当 LoS/NLoS 判别器</b></td></tr>
+      <tr><td><b>PDR</b></td><td><b>连续相对位移</b>，高频率、零基础设施</td><td>误差随时间累积漂移（超过约 70 m 行进距离即不可靠）</td></tr>
+      <tr><td><b>地图</b></td><td><b>硬约束</b>（墙不能穿）</td><td>需要底图 —— 但这是零硬件成本的一刀</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 250" role="img" aria-label="融合阶梯瀑布图">
+      <g font-size="11" font-weight="700" fill="#8b7d6b"><text x="20" y="26">平均定位误差</text></g>
+      <!-- bars: 2.58, 1.21, 0.41 ; h = v*62 -->
+      <rect x="120" y="40" width="110" height="160" rx="6" fill="#d9605c"/>
+      <text x="175" y="30" font-size="16" font-weight="800" fill="#a8403c" text-anchor="middle">2.58 m</text>
+      <text x="175" y="126" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">纯 RTT 指纹</text>
+      <text x="175" y="144" font-size="10" fill="#fff" text-anchor="middle" opacity=".9">CNN</text>
+      <text x="175" y="220" font-size="10.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">59.4% &lt; 3 m</text>
+
+      <rect x="300" y="125" width="110" height="75" rx="6" fill="#e0a942"/>
+      <text x="355" y="115" font-size="16" font-weight="800" fill="#b8862c" text-anchor="middle">1.21 m</text>
+      <text x="355" y="160" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">+ 粒子滤波</text>
+      <text x="355" y="220" font-size="10.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">81.2% &lt; 2 m</text>
+
+      <rect x="480" y="175" width="110" height="25" rx="6" fill="#3f7a51"/>
+      <text x="535" y="165" font-size="16" font-weight="800" fill="#3f7a51" text-anchor="middle">0.41 m</text>
+      <text x="535" y="192" font-size="10.5" font-weight="800" fill="#fff" text-anchor="middle">+ PDR + 地图</text>
+      <text x="535" y="220" font-size="10.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">94.2% &lt; 1 m</text>
+
+      <!-- 箭头 -->
+      <path d="M236,100 L294,100" stroke="#8b7d6b" stroke-width="2" marker-end="url(#a3)"/>
+      <text x="265" y="92" font-size="12" font-weight="800" fill="#8b7d6b" text-anchor="middle">÷2.1</text>
+      <path d="M416,150 L474,150" stroke="#8b7d6b" stroke-width="2" marker-end="url(#a3)"/>
+      <text x="445" y="142" font-size="12" font-weight="800" fill="#8b7d6b" text-anchor="middle">÷3.0</text>
+      <rect x="610" y="86" width="96" height="40" rx="10" fill="#eaf5ec"/>
+      <text x="658" y="102" font-size="11" font-weight="800" fill="#3f7a51" text-anchor="middle">总计</text>
+      <text x="658" y="119" font-size="16" font-weight="800" fill="#3f7a51" text-anchor="middle">÷6.3</text>
+      <text x="360" y="243" font-size="10.5" fill="#a89880" text-anchor="middle">HPIPS, Sensors 2020, 20, 6795　约 800 m² 场地、8 个 AP、毫米级光学动捕做真值</text>
+    </svg>
+    <div class="cap">图 4.3｜融合阶梯。<b>总提升 6.3 倍，其中滤波贡献 2.1 倍，PDR + 地图再贡献 3.0 倍</b> —— 四倍的提升出自不产生任何一次测距的那一层。</div>
+  </div>
+
+  <h3>RSSI 融进来的两条独立价值</h3>
+  <div class="cols c2">
+    <div class="box"><h4>① 当离群检测器（不参与解算，只判真伪）</h4>
+      <p>把 RSSI 路损模型推的距离和 RTT 距离对比，差太多就丢掉这次测量。<br><b>NLoS 环境静态改善 41.3%、动态 14%。</b></p></div>
+    <div class="box"><h4>② 当互补特征（真正参与解算）</h4>
+      <p>不确定性区间宽度对比（90% 置信）：<b>混合最紧</b>；纯 RTT 比混合宽 <b>4–50%</b>；纯 RSS 比混合宽 <b>100–200%</b>。<br><b>融合不只提精度，更提"置信度可信"。</b></p></div>
+  </div>
+
+  <h3>滤波器选择的实测排名（与单历元最小二乘基线比）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>算法</th><th>静态平均改善</th><th>动态平均改善</th></tr></thead>
+    <tbody>
+      <tr><td>粒子滤波</td><td>32%</td><td>—</td></tr>
+      <tr><td>粒子滤波 + RSSI 离群检测</td><td>40%</td><td>—</td></tr>
+      <tr><td>网格滤波 + RSSI 离群检测</td><td>40%</td><td>—</td></tr>
+      <tr class="hi"><td><b>遗传滤波 + RSSI 离群检测</b></td><td class="hi"><b>49.2%（最佳）</b></td><td class="hi"><b>47%</b></td></tr>
+    </tbody>
+  </table></div>
+  <p><b>动态场景的关键证据：</b>单历元最小二乘平均 RMSE 2.79 m，且<i>"位置估计不能正确跟随行人路径，多数情况下把行人放进了错误的房间"</i>。作者由此直接得出"PDR 模型在定位算法中的重要性"。<b>这句话就是"80% 价值在融合层"的最佳注脚。</b></p>
+
+  <h3>工程分工建议</h3>
+  <div class="tw"><table>
+    <thead><tr><th>角色</th><th>技术</th><th>更新率</th><th>职责</th></tr></thead>
+    <tbody>
+      <tr><td><b>绝对锚</b></td><td>FTM / RTT</td><td>低（0.2–1 Hz，受 burst 耗时 212 ms–1.7 s 限制）</td><td><b>消除 PDR 漂移，给全局坐标</b></td></tr>
+      <tr><td><b>相对连续</b></td><td>PDR / IMU</td><td>高（50–100 Hz）</td><td>提供轨迹连续性与航向</td></tr>
+      <tr><td><b>真伪判别</b></td><td>RSSI</td><td>与 RTT 同步</td><td>LoS/NLoS 判定、离群剔除</td></tr>
+      <tr><td><b>硬约束</b></td><td>室内地图</td><td>静态</td><td>禁止穿墙、吸附到通道</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">把 FTM 当主定位源，会得到一串在房间之间乱跳的点；把 FTM 当 PDR 的<b>锚</b>，才会得到一条能用的轨迹 —— <b>从 2.58 m 到 0.41 m 的六倍提升里，有四倍出自不产生任何一次测距的那一层。</b></div>
+</section>
+
+<!-- ── 4.4 ── -->
+<section class="slide" id="s4-4">
+  <span class="num">4.4</span>
+  <span class="kicker">Slide 4.4</span>
+  <h2>非合作定位：AP 不开 FTM 的时候怎么办</h2>
+  <p class="sub">一个不需要任何 AP 配合的系统，打败了楼里已经装了企业级 FTM AP 的官方服务</p>
+
+  <h3>不用 FTM，用"数据帧 + ACK"</h3>
+  <ul>
+    <li>设备 A 向 B 发一个 <b>Null Data Packet</b>，B 按 802.11 规定<b>必须在 SIFS 后回 ACK</b> —— 这是协议强制的，<b>不需要 B 支持 FTM，也不需要 B 同意</b>。</li>
+    <li>A 测 NDP 发出到 ACK 收到的时间差 = 2d/c + t_proc。</li>
+    <li>难点：<b>t_proc（接收方内部处理延时）不上报</b>。FTM 之所以精确，就是因为 responder 会把 t₂/t₃ 告诉你；非合作模式下这一项是未知数 —— 只能用众包学一个 per-AP 的测距模型。</li>
+    <li>硬件门槛低到离谱：嗅探器就是一块 <b>ESP32</b>，240 MHz 时钟 → 时间分辨率约 <b>4.16 ns（0.625 m 的距离量化步长）</b>，对每个可见 AP 每秒约 30 次单向测距。</li>
+  </ul>
+
+  <h3>众包轨迹反推 AP 位置：两阶段设计</h3>
+  <div class="cols c2">
+    <div class="box"><h4>阶段一 · AP 发现与定位</h4>
+      <p>行人在户外用 GPS 定位；进楼后 GPS 丢失，改用<b>惯性航迹推算（PDR）</b>继续维持位置，沿途持续对所有可见 AP 做单向测距。多条轨迹的测距集合 → 反解 AP 坐标 → 存为锚点。</p>
+      <p>每楼层收 <b>10 条行人轨迹</b>，<b>行进估计里程超过 70 m 就截断</b>（超过这个距离 PDR 已不可靠）。</p>
+      <p style="font-weight:800;color:#c9603a">AP 定位误差中位数 1.43 m</p></div>
+    <div class="box"><h4>阶段二 · 客户端定位</h4>
+      <p>新用户进楼，从数据库取锚点，只靠单向测距做多边定位。<b>检测到 AP &lt;3 个的点直接丢弃</b>（欠定）。</p>
+      <p style="font-weight:800;color:#c9603a">跨 4 栋校园楼实测：均值 3.41 m、中位数 3.06 m、标准差 1.63 m</p>
+      <p style="font-size:.82rem;color:var(--soft)">MIT 的平行路线给出同一条线：单边 RTT 对非合作 AP，"典型 3–4 m"。<b>两个独立来源重合。</b></p></div>
+  </div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 240" role="img" aria-label="四种定位系统精度对比">
+      <g font-size="11" font-weight="700" fill="#8b7d6b"><text x="20" y="24">平均定位误差（含标准差误差棒）</text></g>
+      <!-- 4 bars: 13.33, 11.01, 7.71, 3.41 ; scale 11 px/m -->
+      <g>
+        <rect x="70" y="43" width="120" height="147" rx="5" fill="#c9b8a0"/>
+        <text x="130" y="34" font-size="15" font-weight="800" fill="#8b7d6b" text-anchor="middle">13.33 m</text>
+        <line x1="130" y1="43" x2="130" y2="98" stroke="#8b7d6b" stroke-width="2"/>
+        <line x1="120" y1="43" x2="140" y2="43" stroke="#8b7d6b" stroke-width="2"/>
+        <text x="130" y="208" font-size="10.5" font-weight="700" fill="#8b7d6b" text-anchor="middle">iOS Core Location</text>
+
+        <rect x="230" y="69" width="120" height="121" rx="5" fill="#c9b8a0"/>
+        <text x="290" y="60" font-size="15" font-weight="800" fill="#8b7d6b" text-anchor="middle">11.01 m</text>
+        <line x1="290" y1="69" x2="290" y2="143" stroke="#8b7d6b" stroke-width="2"/>
+        <line x1="280" y1="69" x2="300" y2="69" stroke="#8b7d6b" stroke-width="2"/>
+        <text x="290" y="208" font-size="10.5" font-weight="700" fill="#8b7d6b" text-anchor="middle">RSSI 指纹 SOTA</text>
+        <text x="290" y="222" font-size="9.5" fill="#a89880" text-anchor="middle">(XGBoost / RF)</text>
+
+        <rect x="390" y="105" width="120" height="85" rx="5" fill="#e08b62"/>
+        <text x="450" y="96" font-size="15" font-weight="800" fill="#c9603a" text-anchor="middle">7.71 m</text>
+        <line x1="450" y1="105" x2="450" y2="149" stroke="#c9603a" stroke-width="2"/>
+        <line x1="440" y1="105" x2="460" y2="105" stroke="#c9603a" stroke-width="2"/>
+        <text x="450" y="208" font-size="10.5" font-weight="700" fill="#c9603a" text-anchor="middle">Android FLP + Aruba</text>
+        <text x="450" y="222" font-size="9.5" font-weight="800" fill="#a8403c" text-anchor="middle">楼里真装了 FTM AP</text>
+
+        <rect x="550" y="152" width="120" height="38" rx="5" fill="#3f7a51"/>
+        <text x="610" y="143" font-size="15" font-weight="800" fill="#3f7a51" text-anchor="middle">3.41 m</text>
+        <line x1="610" y1="152" x2="610" y2="170" stroke="#3f7a51" stroke-width="2"/>
+        <line x1="600" y1="152" x2="620" y2="152" stroke="#3f7a51" stroke-width="2"/>
+        <text x="610" y="208" font-size="10.5" font-weight="800" fill="#3f7a51" text-anchor="middle">PeepLoc 非合作</text>
+        <text x="610" y="222" font-size="9.5" font-weight="800" fill="#3f7a51" text-anchor="middle">不需要任何 AP 配合</text>
+      </g>
+      <line x1="60" y1="190" x2="690" y2="190" stroke="#d8cbb8" stroke-width="1.5"/>
+    </svg>
+    <div class="cap">图 4.4｜同一批测试点上的四系统对比。<b>PeepLoc 归因于官方方案的两个缺陷：客户端与 AP 之间未校正的设备异质性（= Slide 4.2 的标定问题），以及 AP 坐标本身有误差。</b></div>
+  </div>
+
+  <h3>精度上限从哪来（可诚实讲的天花板）</h3>
+  <ul>
+    <li>ESP32 时钟量化 <b>0.625 m/tick</b>；t_proc 只能统计估计</li>
+    <li>PDR 在 70 m 后失效 → AP 锚点标注精度受限（<b>中位数 1.43 m 已经进了客户端误差预算</b>）</li>
+    <li>依赖两个外生条件：<b>足够的 AP 密度 + 足够的人流</b></li>
+    <li>只做了<b>单层</b>；AP 被搬动会失效（可用"PDR 与定位结果发散"检测并触发重建）</li>
+  </ul>
+
+  <h3>隐私争议 —— 这一页必须点破的一层</h3>
+  <div class="cols c2">
+    <div class="box" style="background:#fbe6e5;border-color:#f0c0be"><h4>同一个原语，两种伦理后果</h4>
+      <p>同样的"NDP → ACK"测距，可以让<b>手机定位自己</b>，也可以让第三方<b>定位屋里任何一台开着 Wi-Fi 的设备</b>。Wi-Peep 的原始设定就是用一架带 GPS 的无人机绕楼飞，定位楼里的设备。</p></div>
+    <div class="box"><h4>四条争议</h4><ul style="margin:0">
+      <li><b>AP 主人从未同意</b>成为定位锚点，也没有退出机制</li>
+      <li>众包出的 AP 坐标数据库本身是<b>建筑内部结构的敏感测绘</b></li>
+      <li>同一原语可用于<b>被动定位屋内设备</b>（无人机 / 隔墙）</li>
+      <li><b>802.11az 的到来并不解决它</b> —— az AP 部署后其位置反而可以被众包模型推断或精化</li>
+    </ul></div>
+  </div>
+
+  <div class="insight">非合作定位最刺眼的地方不是它只有 3.41 米，而是它在一栋<b>已经部署了企业级 FTM AP 的楼里，比官方定位服务还准一倍多</b> —— 这说明合作式定位真正的瓶颈从来不是协议，<b>而是没人去做标定和 AP 测绘</b>；而它最刺眼的伦理后果是，让 AP"配合"这件事，从此变成了可选项。</div>
+</section>
+
+<!-- ── 4.5 ── -->
+<section class="slide" id="s4-5">
+  <span class="num">4.5</span>
+  <span class="kicker">Slide 4.5</span>
+  <h2>隐私与安全：能被测量的距离，就能被伪造</h2>
+  <p class="sub">今天任何把 FTM 距离当作信任凭证的设计，都是错的</p>
+
+  <h3>攻击面一：伪造距离 —— 三个层次，加密都拦不住</h3>
+  <div class="tw"><table>
+    <thead><tr><th>层</th><th>手法</th><th>时间粒度</th><th class="hi">实测效果</th><th>加密能防住吗</th></tr></thead>
+    <tbody>
+      <tr><td>逻辑层</td><td>注入伪造 response 帧</td><td><b>1 ps</b></td><td class="hi">目标 15 m，实得 14.20–15.26 m（1000 次会话）</td><td>❌ 否</td></tr>
+      <tr><td>逻辑层</td><td>重放整个会话</td><td>1 ps</td><td class="hi">4 m → 1.72 m；20 m → 19.40 m</td><td>❌ 否</td></tr>
+      <tr class="hi"><td><b>混合层</b></td><td><b>重放 + 改 PHY 参数</b>（不改任何时间戳）</td><td>100 ns</td><td class="hi"><b>20 MHz：−3877 m；16-QAM：+916 m；组合可把 20.24 m 压到 2.40 m</b></td><td>❌ 否</td></tr>
+      <tr class="hi"><td><b>物理层</b></td><td><b>ACK 欺骗</b></td><td>—</td><td class="hi"><b>把受害者"搬"到攻击者位置，误差 ≤1.47 m</b>；副作用 σ 飙至 11.58 m</td><td>❌ 否</td></tr>
+      <tr><td>物理层</td><td>Overshadow 重放 / 提前径注入</td><td>1 ps</td><td class="hi">需功率高于合法信号</td><td>❌ 否</td></tr>
+      <tr><td>信令层</td><td>Cicada（预测前导码 / 载荷）</td><td>—</td><td class="hi">预测准确率 <b>99%</b></td><td>❌ 否</td></tr>
+    </tbody>
+  </table></div>
+  <div class="warn">这些攻击<b>在帧被加密保护时依然成功</b> —— WPA3-Personal 也无济于事，因为共享口令可推出密钥；且重放 / 物理层攻击不依赖解密。伪造 2–20 m 的距离，<b>平均偏差不超过 75 cm</b>：攻击者不仅能骗，还骗得很精准。</div>
+
+  <h3>混合层最精彩的一击：不改时间戳，只改物理层参数</h3>
+  <div class="fig">
+    <svg viewBox="0 0 720 200" role="img" aria-label="PHY 参数杠杆对距离的影响">
+      <line x1="360" y1="24" x2="360" y2="160" stroke="#8b7d6b" stroke-width="2"/>
+      <text x="360" y="18" font-size="10.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">真值 15.61 m</text>
+      <!-- 对数发散条 -->
+      <g font-size="11" font-weight="700">
+        <rect x="80" y="34" width="280" height="17" rx="3" fill="#d9605c"/>
+        <text x="72" y="47" fill="#a8403c" text-anchor="end">20 MHz 带宽</text>
+        <text x="88" y="47" fill="#fff" font-weight="800">−3877.20 m</text>
+
+        <rect x="150" y="57" width="210" height="17" rx="3" fill="#e0716d"/>
+        <text x="142" y="70" fill="#a8403c" text-anchor="end">40 MHz 带宽</text>
+        <text x="158" y="70" fill="#fff" font-weight="800">−1476.09 m</text>
+
+        <rect x="360" y="80" width="90" height="17" rx="3" fill="#e8a76e"/>
+        <text x="352" y="93" fill="#8a5a3c" text-anchor="end">短保护间隔</text>
+        <text x="458" y="93" fill="#c9603a" font-weight="800">+138.14 m</text>
+
+        <rect x="360" y="103" width="180" height="17" rx="3" fill="#e08b62"/>
+        <text x="352" y="116" fill="#8a5a3c" text-anchor="end">QPSK 1/2</text>
+        <text x="548" y="116" fill="#c9603a" font-weight="800">+616.92 m</text>
+
+        <rect x="360" y="126" width="230" height="17" rx="3" fill="#d9605c"/>
+        <text x="352" y="139" fill="#8a5a3c" text-anchor="end">16-QAM 1/2</text>
+        <text x="598" y="139" fill="#a8403c" font-weight="800">+915.73 m</text>
+      </g>
+      <text x="360" y="180" font-size="11.5" font-weight="800" fill="#a8403c" text-anchor="middle">一个不改时间戳的重放，能让 15.6 米变成 −3877 米</text>
+      <text x="360" y="196" font-size="10" fill="#a89880" text-anchor="middle">机理：改变帧的 OFDM 符号数，从而改变 t₃　注入窗口约 1.5 ms，反复重发即可命中</text>
+    </svg>
+  </div>
+
+  <h3>厂商固件的"防线"参差不齐</h3>
+  <div class="tw"><table>
+    <thead><tr><th>网卡</th><th>接受的距离范围</th><th>会话终止</th><th class="hi">PHY 校验</th><th>Min-Delta 校验</th></tr></thead>
+    <tbody>
+      <tr><td>Qualcomm Snapdragon 855</td><td>[−22.5, +∞]</td><td>否</td><td class="hi">否</td><td>否</td></tr>
+      <tr><td>Intel AC-8260 v31</td><td>[−∞, +∞]</td><td>否</td><td class="hi">否</td><td>否</td></tr>
+      <tr><td>Intel AX-200 v55</td><td>[−∞, +∞]</td><td>否</td><td class="hi">否</td><td>否</td></tr>
+      <tr class="hi"><td>Intel AX-200 v57/58</td><td>[0, +100]</td><td>否</td><td class="hi"><b>否</b></td><td class="hi"><b>是</b></td></tr>
+    </tbody>
+  </table></div>
+  <p><b>没有一款做物理层校验，全部允许重传</b>；只有最新的 Intel 固件做 Min Delta FTM 窗口校验。作者的定性判断：这暴露的是<b>协议设计的根本缺陷</b> —— 能代答 ACK 的对手就能随意改距离，<b>根本解法必须保护 ACK 帧本身</b>。</p>
+
+  <h3>攻击面二：位置追踪 —— MAC 随机化是漏的</h3>
+  <ul>
+    <li><b>序列号侧信道</b>：802.11 头里的序列号计数器在做地址随机化时<b>没有被正确管理</b> —— "测量请求帧使用连续的序列号"，把匿名会话关联回同一个客户端因此变得很容易。</li>
+    <li><b>能力位指纹</b>：不同发起端支持的 FTM 参数集（ASAP、Min Delta FTM 等）不同，可用来<b>指纹识别设备型号与固件版本</b>。</li>
+    <li><b>旁观者拿到的精度和参与者一样好</b>：因为 mc 不对 FTM 帧提供任何机密性，t₁/t₄ 是明文广播的。被动测距实测：Pixel 4 XL + Google AP 组合<b>平均高估仅 0.06 m</b>；Intel AX-200 + WILD AP 组合平均高估 0.49 m。</li>
+    <li>现实限制：商用网卡<b>拿不到纳秒级到达时间戳</b> —— 不是硬件不行，是驱动不暴露。<b>一次固件更新就能把这个能力普及。</b></li>
+  </ul>
+
+  <h3>产业侧：从"探针盒子"到"被动 FTM 观察者"</h3>
+  <div class="cols c2">
+    <div class="box"><h4>上一代：Wi-Fi 探针</h4>
+      <p>手机 Wi-Fi 开着就会发 probe request，探针盒子据此拿到 MAC。<b>央视 3·15 曾曝光</b>：商场、超市、写字楼在用户毫不知情下抓取 MAC，有厂商将其转为 IMEI 进而关联手机号。</p>
+      <p style="color:#3f7a51;font-weight:800">MAC 随机化普及后这条路基本被打断，行业大规模转向计算机视觉。</p></div>
+    <div class="box" style="background:#fbe6e5;border-color:#f0c0be"><h4>FTM 把这件事升级了一个维度</h4>
+      <p>探针盒子只能知道"<b>有一台设备在附近</b>"，而被动 FTM 观察者能知道"<b>这台设备在哪个坐标</b>"，精度到米级。</p>
+      <p style="color:#a8403c;font-weight:800">而且 MAC 随机化在 FTM 场景下本来就是漏的（序列号可关联）。</p></div>
+  </div>
+
+  <h3>802.11az 的防护现状：设计得对，落地得糟</h3>
+  <div class="tw"><table>
+    <thead><tr><th>机制</th><th>解决什么</th><th>弱点</th><th class="hi">2026 年落地</th></tr></thead>
+    <tbody>
+      <tr><td>PMF 受保护管理帧</td><td>MAC 层时间戳伪造</td><td>完全依赖前置密钥；<b>Personal 模式下同口令设备可推出 PTK</b></td><td class="hi">开发板有实现</td></tr>
+      <tr><td>PASN 预关联协商</td><td>免关联建密钥</td><td><b>独立模式不保证双向认证</b> → 中间人</td><td class="hi">部分</td></tr>
+      <tr class="hi"><td><b>Secure HE-LTF</b></td><td><b>物理层距离缩短</b></td><td>计数器复用即失效；零功率 GI 射频难做；<b>仿真显示波形贴近甚至超出发射频谱模板</b></td><td class="hi"><b>几乎无</b>（连"全兼容"开发板都缺）</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>落地障碍是硬的，不是懒</b>：零功率 GI 要求发射链在单个 OFDM 符号内快速受控开关，与围绕循环前缀设计的传统射频不兼容；加 secure HE-LTF 要<b>新的基带硅片</b>，是数年设计周期，而高保障用例太少，厂商没有商业动机。</p>
+  <p><b>降级攻击</b>：模式级 —— 阻断 secure FTM 请求，逼对方回落到传统 EDCA 测距；波形级 —— 转发未受保护的变体，使 responder 改用确定性训练序列。<b>而配置越严格（拒绝不安全回落），反而越容易被简单干扰打瘫（DoS）。</b></p>
+
+  <div class="cols c2">
+    <div class="box" style="background:#fdf6e8;border-color:#ecd9a8"><h4>结论建议（可直接引用）</h4>
+      <p>secure FTM <b>"更适合中低风险应用，而非高保障的访问控制"</b> —— 适合室内导航与分析，<b>不适合作为无钥匙进入或基于距离的授权的主要安全锚</b>。高风险场景必须用 802.1X 企业网做双向认证，并强制要求 PTK 与 secure HE-LTF。</p></div>
+    <div class="box"><h4>合规速查</h4>
+      <p><b>中国</b>：《个人信息保护法》把<b>行踪轨迹</b>列入敏感个人信息；<b>GB/T 45574-2025</b> 明确把"连续精准定位轨迹信息"列入。米级 FTM 轨迹 → <b>单独同意 + PIA + 最小必要 + 加密存储</b>。<br>
+      <b>欧盟</b>：位置数据属 GDPR 个人数据，需合法性基础（通常是同意），高风险需 DPIA。</p></div>
+  </div>
+
+  <div class="insight">802.11az 把安全做对了 —— 但对 2026 年货架上的手机来说它约等于不存在：Pixel 9a 上测不到任何 secure FTM，唯一公开宣称支持的是企业级 AP。<b>所以今天任何把 FTM 距离当作信任凭证的设计（开锁、支付、门禁）都是错的</b>；而反过来，任何以为"关掉定位就不会被定位"的用户也是错的 —— <b>明文时间戳让旁观者拿到的精度和参与者一模一样。</b></div>
+  <p class="srcs"><b>Part 4 主要来源：</b>arXiv:2509.03901（综述）· MDPI Algorithms 15(12):464（爱丁堡，消费级实测）· NIST RF Ranging (2024-03) · Raja &amp; Groves, J. Navigation (UCL, 2025-12) · Zola &amp; Martin-Escalona, Computer Communications 229 (2025) · HPIPS, Sensors 2020, 20, 6795 · arXiv:2506.18317（UIUC PeepLoc）· Schepers et al., ACM WiSec'21（攻击实证）· Schepers &amp; Ranganathan, PoPETs 2022(2)（隐私）· arXiv:2603.18687（az 安全与落地）· Sensors 2026, 26, 284 · Horn, Appl. Sci. 14(17):7805 (MIT) · GB/T 45574-2025 ·《个人信息保护法》第 28/29 条</p>
+</section>
+
+<!-- ══════════ PART 5 ══════════ -->
+<div class="part" id="p5" data-t="产业格局">
+  <div class="pn">PART 5</div>
+  <h2>产业格局<br>WiFi FTM 在定位战争中的位置</h2>
+  <p>基础设施侧已经就绪，瓶颈全部在终端侧。而占据高价值场景的那一半终端，压根不在牌桌上 —— 这决定了 FTM 会先在哪里跑通。</p>
+  <ol><li>芯片与 AP 侧</li><li>终端侧的结构性问题</li><li>四方对比</li><li>bk 会终结战争吗</li><li>落地场景盘点</li></ol>
+</div>
+
+<!-- ── 5.1 ── -->
+<section class="slide" id="s5-1">
+  <span class="num">5.1</span>
+  <span class="kicker">Slide 5.1</span>
+  <h2>芯片与 AP 侧：基础设施已经就绪</h2>
+  <p class="sub">墙上那台路由器早就能测距了，问题从来不在这一侧</p>
+
+  <h3>芯片侧</h3>
+  <ul>
+    <li><b>高通</b>是最积极的推动者，有公开的 Wi-Fi Ranging 白皮书，给出完整的精度-开销曲线（32 burst 平均后室内 LoS <b>21 cm @P90</b>、点对点 <b>11 cm @P90</b>、叠加 Kalman <b>&lt;10 cm</b>）。这也是全篇引用最多的厂商数据来源。</li>
+    <li>Intel 的网卡（AC-8260/8265、AX-200 系列）有<b>开源 Linux 驱动支持</b>，是学术界做 FTM 实验的主力平台 —— MobiCom'18 那篇奠基性评测就是在 Intel 8260/8265 上做的。</li>
+    <li>博通、联发科的芯片进入了 Android 生态的 RTT 支持列表，但公开的技术材料远少于高通。</li>
+  </ul>
+
+  <h3>企业级 AP 侧</h3>
+  <ul>
+    <li><b>HPE Aruba</b> 是唯一公开宣称支持 <b>802.11az secure FTM</b> 的主流 AP 厂商 —— 2026 年 3 月的第三方安全研究里，<b>Aruba AP-734 是"极少数公开宣称支持 secure FTM 的产品之一"</b>。Aruba 也把 FTM 打包成 OpenLocate 定位方案来卖。</li>
+    <li><b>Juniper Mist</b> 是重要的<b>对照组</b>：它没有押 FTM，走的是 <b>BLE AoA</b> 路线（AP 内置蓝牙天线阵列）。这条路线成熟、精度 1–3 米、且不依赖终端支持 —— 是 FTM 最现实的对手。</li>
+    <li>消费级方面，实地普查显示所有开启 FTM Responder 的设备里 <b>99.78% 是 Google 的</b>（Google Wi-Fi / Nest Wi-Fi Router / Nest Wi-Fi Point）。<b>但 Nest Wifi Pro 实测并未对外暴露 802.11az 能力。</b></li>
+  </ul>
+
+  <div class="cols c2">
+    <div class="box" style="background:#eaf5ec;border-color:#b5d9bd"><h4>已经就绪的部分</h4>
+      <p>芯片能力有了，企业级 AP 有了，标准有了，Android API 有了。<b>边际部署成本接近零 —— 复用已经装在天花板上的 Wi-Fi。</b></p></div>
+    <div class="box" style="background:#fbe6e5;border-color:#f0c0be"><h4>没就绪的部分</h4>
+      <p>存量 AP 绝大多数没打开 responder（实地普查 5 GHz 开启率 <b>0.17%–1.56%</b>）；而更根本的问题在下一页 —— <b>终端</b>。</p></div>
+  </div>
+
+  <div class="insight">FTM 的产业困境很少见：<b>它不缺技术，不缺标准，甚至不缺硬件 —— 它缺的是有人去把那个开关打开。</b>而愿意打开开关的前提，是终端侧有足够多的设备真的会用它。</div>
+</section>
+
+<!-- ── 5.2 ── -->
+<section class="slide" id="s5-2">
+  <span class="num">5.2</span>
+  <span class="kicker">Slide 5.2</span>
+  <h2>终端侧：Android 有，iOS 没有</h2>
+  <p class="sub">这是 FTM 生态最大的结构性问题</p>
+
+  <div class="cols c2">
+    <div class="box"><h4>🤖 Android —— 有 API，但支持面窄</h4>
+      <ul style="margin:0">
+        <li><b>Android 9 (2018)</b>：<code>WifiRttManager</code>，支持 802.11mc</li>
+        <li><b>Android 15 (2024)</b>：支持 802.11az <b>NTB</b> 测距（API 35）；<code>CHARACTERISTICS_KEY_BOOLEAN_NTB_INITIATOR</code> 查询能力</li>
+        <li><b>Android 16 (2025)</b>：加入 <b>secure ranging</b>，并推出统一的 <b>Ranging 模块</b> —— 把 UWB、蓝牙信道探测、蓝牙 RSSI 测距、Wi-Fi RTT 收进同一套 API</li>
+        <li>现实骨感：支持 RTT 的机型比例仍然不高，<b>Pixel 系列最可靠</b></li>
+      </ul></div>
+    <div class="box" style="background:#fbe6e5;border-color:#f0c0be"><h4>🍎 Apple —— 不在牌桌上</h4>
+      <p>Apple <b>至今未开放 FTM API</b>，走的是自家 <b>UWB 路线</b>（U1/U2 芯片 + Nearby Interaction 框架）。</p>
+      <p>这不是疏忽，是战略选择：UWB 精度更高、Apple 能完全控制生态（AirTag、数字车钥匙、精确查找）。</p>
+      <p style="font-weight:800;color:#a8403c">占据高价值场景的一半终端，压根不参与 FTM。</p></div>
+  </div>
+
+  <h3>而"支持"这个词在 Android 上也是打折的</h3>
+  <p>2026 年 3 月的一手硬件测试（详见 Slide 3.5）：<b>Pixel 9a 实测未发现任何 secure FTM 功能</b>；某开发板声称"完全符合 802.11az"，实测只做了 MAC 层 PMF，跳过了 PHY 层 secure HE-LTF，厂商确认<b>因架构限制不做也不计划做</b>。</p>
+
+  <h3>由此推出一个重要判断</h3>
+  <div class="box" style="background:#fdf6e8;border-color:#ecd9a8">
+    <p style="font-size:1rem;font-weight:700;margin:0">FTM 更可能在 <b>B 端</b>先跑通，而不是 C 端手机导航。</p>
+    <p style="margin-top:10px;margin-bottom:0">因为 B 端场景（资产追踪、AGV、工牌、巡检终端）有三个 C 端没有的条件：<b>终端型号可控</b>（可以只采购支持 RTT 的设备）、<b>AP 可控</b>（自己的场地，想开就开）、<b>可以做标定和测绘</b>（有专人、有预算）。而这三件事恰恰是 Part 4 证明的、决定精度的全部要素。</p>
+  </div>
+
+  <div class="insight">FTM 的技术曲线和它的商业曲线是脱节的：技术上它已经能做到亚米级，但商业上它卡在"<b>iOS 不玩、Android 支持面窄、AP 开关默认关</b>"这三件互为因果的事情上。<b>谁都不愿意先动</b> —— 这是典型的双边市场冷启动问题，而 B 端是唯一可以绕开它的地方。</div>
+</section>
+
+<!-- ── 5.3 ── -->
+<section class="slide" id="s5-3">
+  <span class="num">5.3</span>
+  <span class="kicker">Slide 5.3</span>
+  <h2>竞争格局：FTM vs UWB vs BLE vs 5G</h2>
+  <p class="sub">四条路线，各有一块别人抢不走的地盘</p>
+
+  <div class="tw"><table>
+    <thead><tr><th></th><th class="hi">Wi-Fi FTM</th><th>UWB</th><th>BLE AoA</th><th>5G 定位</th></tr></thead>
+    <tbody>
+      <tr><td><b>典型精度</b></td><td class="hi">1–2 m (mc)<br>&lt;1 m (az)<br>&lt;0.1 m (bk 目标)</td><td><b>&lt;0.1 m</b>（LOS）</td><td>0.3–1 m（办公室）<br>1–3 m（一般商用）</td><td>1–3 m（室内需密集部署）</td></tr>
+      <tr class="hi"><td><b>现有基础设施</b></td><td class="hi"><b>✅ 已装在天花板上</b></td><td>❌ 需专用锚点</td><td>⚠️ 需带阵列的 AP/信标</td><td>⚠️ 室内需 small cell</td></tr>
+      <tr><td><b>终端渗透率</b></td><td class="hi">Android 部分机型<br><b>iOS 完全没有</b></td><td>高端机（iPhone 11+、部分安卓旗舰）</td><td><b>几乎所有手机</b>（只需能收 BLE）</td><td>所有手机（但需网络侧支持）</td></tr>
+      <tr><td><b>作用距离（LOS）</b></td><td class="hi"><b>50+ m</b></td><td><b>&lt;15 m</b></td><td>10–30 m</td><td>蜂窝级</td></tr>
+      <tr><td><b>功率谱密度</b></td><td class="hi">17 dBm/MHz</td><td><b>−41.3 dBm/MHz</b>（低 58 dB）</td><td>17 dBm/MHz</td><td>高</td></tr>
+      <tr><td><b>单锚点成本</b></td><td class="hi"><b>≈ 0（复用）</b></td><td>高（专用硬件）</td><td>中</td><td>很高</td></tr>
+      <tr><td><b>功耗（终端侧）</b></td><td class="hi">中（Wi-Fi 收发）</td><td>低（脉冲）</td><td><b>极低</b></td><td>高</td></tr>
+      <tr><td><b>典型场景</b></td><td class="hi">室内导航、资产盘点、楼宇</td><td>数字车钥匙、精确查找、工业高精</td><td>客流分析、人员/资产追踪</td><td>广域室内外连续定位</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>三个必须点破的取舍</h3>
+  <ul>
+    <li><b>UWB 的护城河不是精度，是功耗和安全。</b>CCC（Car Connectivity Consortium）数字钥匙标准<b>已经锁定 UWB</b> —— 因为 UWB 的测距在物理层就有抗中继攻击的设计，而 FTM 的 secure HE-LTF 在 2026 年"几乎无落地"（Slide 4.5）。<b>在需要用距离做授权的场景，UWB 是唯一选项。</b></li>
+    <li><b>BLE AoA 是 FTM 最现实的对手，不是 UWB。</b>它便宜、生态成熟、精度 1–3 米，而且最关键的一点是<b>不依赖终端支持</b> —— 终端只要发 BLE 广播就行，AP 侧负责测角。Mist / Quuppa 已经在楼宇市场跑通了这条路。</li>
+    <li><b>FTM 的独特卖点只有一个，但足够强：复用已经装好的 Wi-Fi，边际部署成本接近零。</b>还有一条被低估的优势 —— NIST 实测的<b>覆盖率反转</b>：住宅极限对角 16 组测点，Wi-Fi RTT 全部出结果，UWB 只有 6 组能测出来。<b>精度输、覆盖赢。</b></li>
+  </ul>
+
+  <div class="insight">这不是一场"谁精度更高"的竞赛。UWB 赢在<b>能当信任凭证</b>，BLE 赢在<b>不需要终端配合</b>，FTM 赢在<b>不需要新硬件</b>。三条护城河互不重叠 —— 所以最终格局大概率是分层共存，而不是谁替代谁。</div>
+</section>
+
+<!-- ── 5.4 ── -->
+<section class="slide" id="s5-4">
+  <span class="num">5.4</span>
+  <span class="kicker">Slide 5.4</span>
+  <h2>802.11bk 会终结这场战争吗</h2>
+  <p class="sub">短答案：不会。但它会重画分界线</p>
+
+  <div class="cols c2">
+    <div class="box"><h4>如果 bk 的 0.1 m 兑现</h4>
+      <p>UWB 的<b>精度</b>护城河消失 —— 两者都进入分米级，而 FTM 的作用距离长 3 倍以上、功率谱密度高 58 dB、硬件是现成的。</p>
+      <p>在纯"我想知道东西在哪"的场景里，<b>UWB 就没有理由了</b>。</p></div>
+    <div class="box"><h4>但 UWB 短期无法被替代的地方</h4>
+      <p><b>数字钥匙</b>：CCC 标准已锁定 UWB，汽车厂商的设计周期以年计。<br>
+      <b>安全测距</b>：UWB 的抗中继攻击是物理层设计，而 FTM 的 secure HE-LTF <b>连"全兼容"开发板都没实现</b>。<br>
+      <b>功耗</b>：UWB 脉冲式收发比 Wi-Fi 省电得多，无源标签场景无解。</p></div>
+  </div>
+
+  <h3>更有用的预测框架：按"是否需要专用标签"分层</h3>
+  <div class="fig">
+    <svg viewBox="0 0 720 220" role="img" aria-label="按是否需要专用标签的分层框架">
+      <rect x="40" y="30" width="300" height="150" rx="14" fill="#eaf5ec" stroke="#b5d9bd" stroke-width="2"/>
+      <text x="190" y="58" font-size="14" font-weight="800" fill="#3f7a51" text-anchor="middle">被定位物<b>自带 Wi-Fi</b></text>
+      <text x="190" y="82" font-size="11.5" font-weight="700" fill="#4d8a5c" text-anchor="middle">手机 · 平板 · AGV · 巡检终端 · 工牌</text>
+      <rect x="80" y="98" width="220" height="34" rx="8" fill="#3f7a51"/>
+      <text x="190" y="120" font-size="13" font-weight="800" fill="#fff" text-anchor="middle">→ 用 Wi-Fi FTM</text>
+      <text x="190" y="152" font-size="10.5" font-weight="700" fill="#4d8a5c" text-anchor="middle">边际成本 ≈ 0，只要 AP 开了 responder</text>
+      <text x="190" y="169" font-size="10.5" fill="#7da88a" text-anchor="middle">bk 落地后精度进分米级</text>
+
+      <rect x="380" y="30" width="300" height="150" rx="14" fill="#f0eef7" stroke="#c3bbdd" stroke-width="2"/>
+      <text x="530" y="58" font-size="14" font-weight="800" fill="#5d5478" text-anchor="middle">被定位物<b>无源 / 无 Wi-Fi</b></text>
+      <text x="530" y="82" font-size="11.5" font-weight="700" fill="#6f6689" text-anchor="middle">托盘 · 工具 · 商品 · 车钥匙 · 行李</text>
+      <rect x="420" y="98" width="220" height="34" rx="8" fill="#5d5478"/>
+      <text x="530" y="120" font-size="13" font-weight="800" fill="#fff" text-anchor="middle">→ 用 UWB / BLE 标签</text>
+      <text x="530" y="152" font-size="10.5" font-weight="700" fill="#6f6689" text-anchor="middle">必须贴一个东西上去，那就选最优的那个</text>
+      <text x="530" y="169" font-size="10.5" fill="#948cab" text-anchor="middle">数字钥匙场景 UWB 已被标准锁定</text>
+
+      <text x="360" y="208" font-size="11.5" font-weight="800" fill="#8b7d6b" text-anchor="middle">分界线不是精度，是「有没有必要额外贴一个标签」</text>
+    </svg>
+  </div>
+
+  <h3>真正该盯的三个变量（而不是精度数字）</h3>
+  <div class="cols c3">
+    <div class="box"><h4>① 6 GHz 频谱政策</h4><p>320 MHz 信道<b>只存在于 6 GHz</b>。中国 6425–7125 已划给 IMT，5925–6425 未定 —— <b>bk 的 0.1 m 在中国目前没有落脚点</b>。业界视 2026–2027 为最后窗口。</p></div>
+    <div class="box"><h4>② iOS 是否开放 FTM</h4><p>这是<b>最大的单一变量</b>。一旦开放，FTM 的终端渗透率一夜之间翻倍，AP 厂商打开开关的动机随之出现。Apple 目前没有任何迹象要这么做。</p></div>
+    <div class="box"><h4>③ az 芯片真实出货量</h4><p>不是"宣称支持"，而是<b>PHY 层 secure HE-LTF 真的做进硅片</b>的出货量。这需要新的基带设计，数年周期。</p></div>
+  </div>
+
+  <div class="warn">一个反向风险：如果 UWB 因数字钥匙普及而<b>边际成本趋近于零</b>（每台手机、每辆车都标配），FTM"不用新硬件"的成本优势会被侵蚀 —— 那时 UWB 也变成了"已经装好的东西"。</div>
+
+  <div class="insight">bk 不会终结战争，因为战争的分界线从来不在精度那条轴上。<b>真正的分界线是"被定位的那个东西，自己会不会说话"</b> —— 会说话的（有 Wi-Fi 的）用 FTM，不会说话的贴标签，而贴什么标签取决于你要不要用这个距离去开锁。</div>
+</section>
+
+<!-- ── 5.5 ── -->
+<section class="slide" id="s5-5">
+  <span class="num">5.5</span>
+  <span class="kicker">Slide 5.5</span>
+  <h2>谁在真的用它：落地场景盘点</h2>
+  <p class="sub">按"需要什么精度、能接受什么成本、当前用什么方案"三问，找 FTM 的真实切入点</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>场景</th><th>精度需求</th><th>成本容忍度</th><th>当前主流方案</th><th class="hi">FTM 的机会</th></tr></thead>
+    <tbody>
+      <tr><td><b>仓储物流</b><br>AGV / 叉车定位、库位核验</td><td>0.1–0.5 m<br>（库位级）</td><td>高</td><td>UWB、二维码地标、SLAM</td><td class="hi">⚠️ 精度暂不够，<b>bk 落地后是最佳场景</b>（AGV 都带 Wi-Fi）</td></tr>
+      <tr class="hi"><td><b>办公楼宇</b><br>工位/会议室占用、访客引导、应急疏散</td><td>1–3 m<br>（房间级）</td><td>中</td><td>BLE 信标、Mist BLE AoA、人工</td><td class="hi"><b>✅ 最现实的切入点</b> —— 精度够、AP 自己的、终端可控</td></tr>
+      <tr><td><b>零售</b><br>商品级导航、客流热力</td><td>货架级 &lt;0.5 m<br>（导航 1–2 m）</td><td>低（要算 ROI）</td><td>Wi-Fi 探针（已被 MAC 随机化打断）、计算机视觉</td><td class="hi">⚠️ 客流分析有隐私红线；<b>商品级导航要等 bk</b></td></tr>
+      <tr><td><b>制造业</b><br>工具与在制品追踪</td><td>0.3–1 m</td><td>高</td><td>UWB、RFID</td><td class="hi">⚠️ 多为无源资产，<b>属于"要贴标签"那一侧</b></td></tr>
+      <tr><td><b>医院</b><br>设备/病床/人员定位</td><td>1–3 m<br>（房间级）</td><td>中高</td><td>BLE 信标、RTLS 专用系统</td><td class="hi">✅ 房间级够用，且医院 Wi-Fi 覆盖本来就密</td></tr>
+      <tr><td><b>C 端室内导航</b><br>商场 / 机场找路</td><td>1–3 m</td><td>极低</td><td>地图 App 的 Wi-Fi 指纹 + PDR</td><td class="hi">❌ <b>iOS 缺席使其无法成为主方案</b></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>三条选择场景的经验规则</h3>
+  <ol style="list-style:none;margin-left:0">
+    <li style="margin-bottom:12px"><b>1️⃣ 先看终端型号能不能控。</b>能控（企业采购、自有设备）→ FTM 可行；不能控（面向公众的 C 端）→ FTM 只能当辅助源，不能当主方案。</li>
+    <li style="margin-bottom:12px"><b>2️⃣ 再看精度需求落在哪一档。</b>房间级（1–3 m）→ 今天的 mc 就够；亚米级 → 需要标定 + 融合 + LoS 环境；分米级 → 等 bk 和 6 GHz。</li>
+    <li><b>3️⃣ 最后看被定位的东西有没有 Wi-Fi。</b>没有 → 这个场景根本不属于 FTM，别硬上。</li>
+  </ol>
+
+  <div class="insight">FTM 最真实的切入点不是那些精度要求最高的场景（那些是 UWB 的），也不是用户最多的场景（那些卡在 iOS 上），<b>而是"终端可控 + 精度要求房间级 + AP 是自己的"这个交集</b> —— 办公楼宇和医院。听起来不性感，但那是唯一三个条件同时成立的地方。</div>
+  <p class="srcs"><b>Part 5 主要来源：</b>Qualcomm Wi-Fi Ranging 白皮书 · arXiv:2603.18687（Aruba AP-734 / Pixel 9a 实测）· NIST RF Ranging (2024)（UWB 对比与覆盖率反转）· arXiv:2509.03901 Table 2（四方带宽/PSD/精度对比）· source.android.com/docs/core/connect/wifi-rtt · Android 15/16 发布说明 · Car Connectivity Consortium 数字钥匙标准 · Schepers FTM 无线普查数据集（AP 开启率）</p>
+</section>
+
+<!-- ══════════ PART 6 ══════════ -->
+<div class="part" id="p6" data-t="动手玩起来">
+  <div class="pn">PART 6</div>
+  <h2>动手玩起来<br>从一台手机到一套系统</h2>
+  <p>几十块钱、两块开发板，一个下午就能把 FTM 的噪声量级摸清楚。而从这个 Demo 到能用的系统，中间隔着的 80% 工作量既不是算法也不是协议。</p>
+  <ol><li>最低成本实验</li><li>ESP-IDF 跑通</li><li>Android Demo</li><li>Demo 到系统</li><li>未来三主线</li><li>三句话总结</li></ol>
+</div>
+
+<!-- ── 6.1 ── -->
+<section class="slide" id="s6-1">
+  <span class="num">6.1</span>
+  <span class="kicker">Slide 6.1</span>
+  <h2>最低成本的第一次实验</h2>
+  <p class="sub">先建立对噪声量级的直觉，再决定要不要押注</p>
+
+  <div class="cols c2">
+    <div class="box"><h4>方案 A · 手机 + AP（最快）</h4>
+      <ul style="margin:0">
+        <li>一台支持 RTT 的 Android 手机 —— <b>Pixel 系列最可靠</b>（Pixel 3a/4a 在文献里表现最稳）</li>
+        <li>一台开启 FTM Responder 的 AP —— <b>Google Wi-Fi / Nest Wi-Fi Router / Nest Wi-Fi Point</b> 是官方声明支持 RTT 的消费级选择</li>
+        <li>App：<b>WifiRttScan</b>（Google 官方示例）</li>
+        <li>⚠️ 优先用 <b>5 GHz</b>。2.4 GHz 的偏置可能有几十米（见 Slide 2.4）</li>
+      </ul></div>
+    <div class="box"><h4>方案 B · 两块 ESP32（最省钱）</h4>
+      <ul style="margin:0">
+        <li>两块支持 FTM 的 ESP32 系列开发板，<b>成本几十元</b></li>
+        <li>一块配成 AP（FTM responder），一块配成 station（FTM initiator）</li>
+        <li>跑 ESP-IDF 自带的 <code>examples/wifi/ftm</code></li>
+        <li>好处：<b>ESP 之间互测比 ESP ↔ 手机稳定得多</b> —— 跨厂商互操作性是主要的坑</li>
+      </ul></div>
+  </div>
+  <div class="warn">ESP32 系列里<b>不是每一款都支持 FTM</b>（初代 ESP32 不支持），且 initiator / responder 角色的支持情况因型号而异。下单前务必核对 ESP-IDF 当前版本的芯片能力表。</div>
+
+  <h3>第一步要看的三个数字</h3>
+  <div class="stats">
+    <div class="stat"><div class="v">distance</div><div class="l">距离本身 —— 先在已知真距下看它<b>偏了多少</b>（这就是你的标定常数）</div></div>
+    <div class="stat"><div class="v">stdDev</div><div class="l">标准差 —— 静止时应在 0.04–0.21 m，行走时会涨到 0.37–1.14 m</div></div>
+    <div class="stat"><div class="v">成功率</div><div class="l">成功/尝试帧数比 —— <b>低于 90% 说明这个机型×AP 组合有问题</b></div></div>
+  </div>
+  <p>先别急着写定位算法。<b>把手机放在距 AP 1 米、3 米、5 米、10 米的地方各采一组，画一张"报出距离 vs 真实距离"的散点图</b> —— 你会立刻看到那条斜率≈1、截距≠0 的直线，那就是 Part 2 讲的系统偏差。</p>
+
+  <div class="insight">这个实验的价值不在于得到什么数字，而在于<b>亲眼看到误差的结构</b>：一条平移的直线（可标定）、一片抖动（可平均）、几个野值（要剔除）。看过一次之后，Part 4 讲的所有治理手段都会变得显而易见。</div>
+</section>
+
+<!-- ── 6.2 ── -->
+<section class="slide" id="s6-2">
+  <span class="num">6.2</span>
+  <span class="kicker">Slide 6.2</span>
+  <h2>用 ESP-IDF 跑通 FTM</h2>
+  <p class="sub">官方示例就在 <code>examples/wifi/ftm</code></p>
+
+  <h3>核心 API 骨架</h3>
+  <div class="eq" style="text-align:left;font-size:.82rem;line-height:1.7">
+<b>// 1. 注册 FTM 报告事件</b><br>
+esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_FTM_REPORT, &amp;ftm_report_handler, NULL);<br><br>
+<b>// 2. 配置并发起一次 FTM 会话</b><br>
+wifi_ftm_initiator_cfg_t ftmi_cfg = {<br>
+&nbsp;&nbsp;.resp_mac   = { /* responder 的 MAC */ },<br>
+&nbsp;&nbsp;.channel    = 6,<br>
+&nbsp;&nbsp;.frm_count  = 32,&nbsp;&nbsp;<b>// burst 内的帧数：0/8/16/24/32/64</b><br>
+&nbsp;&nbsp;.burst_period = 2,&nbsp;<b>// 单位 100 ms</b><br>
+};<br>
+esp_wifi_ftm_initiate_session(&amp;ftmi_cfg);<br><br>
+<b>// 3. 在事件回调里读结果</b><br>
+wifi_event_ftm_report_t *e = (wifi_event_ftm_report_t *) event_data;<br>
+e-&gt;rtt_raw / e-&gt;rtt_est&nbsp;&nbsp;<b>// 往返时延（ns）</b><br>
+e-&gt;dist_est&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>// 估计距离（cm）</b><br>
+e-&gt;ftm_report_data&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>// 每帧的详细数据</b>
+  </div>
+  <p style="font-size:.82rem;color:var(--soft)">※ API 签名以你安装的 ESP-IDF 版本为准（近几个大版本有过字段调整），务必对照本地 <code>esp_wifi.h</code> 与示例 README。</p>
+
+  <h3>参数怎么调</h3>
+  <div class="tw"><table>
+    <thead><tr><th>参数</th><th>作用</th><th class="hi">建议</th></tr></thead>
+    <tbody>
+      <tr><td><code>frm_count</code></td><td>一个 burst 里的 FTM 帧数</td><td class="hi"><b>先试 8 或 16</b>。Part 2 已证明收益在 5 帧左右就饱和，32 帧只是把时间成本翻倍</td></tr>
+      <tr><td><code>burst_period</code></td><td>burst 之间的周期（100 ms 为单位）</td><td class="hi">按你的刷新率需求定；连续测距对功耗和信道都是负担</td></tr>
+      <tr><td><code>channel</code></td><td>测距使用的信道</td><td class="hi"><b>优先 5 GHz</b>，带宽越大分辨率越好</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>标定流程（这一步不能省）</h3>
+  <ol style="list-style:none;margin-left:0">
+    <li style="margin-bottom:10px"><b>1️⃣</b> 在空旷处、LOS 条件下，把两块板固定在 <b>1 / 3 / 5 / 10 米</b>四个已知距离上</li>
+    <li style="margin-bottom:10px"><b>2️⃣</b> 每个点采一组（至少几十次会话），记录 <code>dist_est</code> 的<b>中位数</b>（不是均值 —— 分布右偏）</li>
+    <li style="margin-bottom:10px"><b>3️⃣</b> 对"报出距离 vs 真实距离"做线性回归，<b>斜率应接近 1，截距就是你的标定常数</b></li>
+    <li><b>4️⃣</b> 把这个常数存进查找表，<b>按（设备型号 × 对端型号 × 频段）三维索引</b></li>
+  </ol>
+
+  <div class="warn">跨厂商互操作性是最大的坑。ESP ↔ ESP 通常很稳，ESP ↔ 手机、手机 ↔ 第三方 AP 就可能出现"成功率 0%"这种情况（Part 4 有实测：Pixel 6 Pro + Linksys Velop 5 GHz 完全测不出来）。<b>换组合之前先测成功率，别先写算法。</b></div>
+
+  <div class="insight">把两块 ESP32 放在桌上互测一小时，你会得到比读十篇论文更扎实的直觉：<b>原来那个"距离"是会跳的，原来它天生偏了 1.5 米，原来换个信道数字就全变了。</b>这些都是文档不会告诉你的东西。</div>
+</section>
+
+<!-- ── 6.3 ── -->
+<section class="slide" id="s6-3">
+  <span class="num">6.3</span>
+  <span class="kicker">Slide 6.3</span>
+  <h2>写一个最小的 Android 定位 Demo</h2>
+  <p class="sub">从 N 个距离解算一个坐标，代码不到 100 行</p>
+
+  <h3>前置检查与权限</h3>
+  <div class="eq" style="text-align:left;font-size:.82rem;line-height:1.7">
+<b>// AndroidManifest.xml</b><br>
+&lt;uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /&gt;<br>
+&lt;uses-feature android:name="android.hardware.wifi.rtt" /&gt;<br><br>
+<b>// 运行时检查设备是否真的支持</b><br>
+val ok = packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_RTT)<br>
+val rtt = getSystemService(Context.WIFI_RTT_RANGING_SERVICE) as WifiRttManager<br>
+if (!rtt.isAvailable) { /* 用户可能关了定位开关 */ }
+  </div>
+
+  <h3>发起测距</h3>
+  <div class="eq" style="text-align:left;font-size:.82rem;line-height:1.7">
+<b>// scanResults 来自 WifiManager.scanResults，先筛出支持 RTT 的 AP</b><br>
+val aps = scanResults.filter { it.is80211mcResponder }<br><br>
+val req = RangingRequest.Builder()<br>
+&nbsp;&nbsp;&nbsp;&nbsp;.addAccessPoints(aps)&nbsp;&nbsp;<b>// 一次最多 RangingRequest.getMaxPeers() 个</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;.build()<br><br>
+rtt.startRanging(req, mainExecutor, object : RangingResultCallback() {<br>
+&nbsp;&nbsp;override fun onRangingResults(results: List&lt;RangingResult&gt;) {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;val good = results.filter { it.status == RangingResult.STATUS_SUCCESS }<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.map { r -&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>// ① 减掉标定偏置　② 用 stdDev 当权重</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Measure(<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d = r.distanceMm / 1000.0 - biasOf(r.macAddress),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;w = 1.0 / (r.distanceStdDevMm / 1000.0).pow(2),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ap = apCoordOf(r.macAddress))<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;if (good.size &gt;= 3) solve(good)&nbsp;&nbsp;<b>// 少于 3 个直接丢弃，别硬解</b><br>
+&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;override fun onRangingFailure(code: Int) { /* 区分 AP 不支持 vs 信道太忙 */ }<br>
+})
+  </div>
+  <p style="font-size:.82rem;color:var(--soft)">※ Android 15+ 若要用 802.11az NTB，需查询 <code>CHARACTERISTICS_KEY_BOOLEAN_NTB_INITIATOR</code>；Android 16 起有统一的 Ranging 模块。API 细节以官方文档当前版本为准。</p>
+
+  <h3>加权最小二乘解算的思路（30 行）</h3>
+  <ul>
+    <li>已知 N 个 AP 坐标 <code>(xᵢ, yᵢ)</code> 和测距 <code>dᵢ</code>，求 <code>(x, y)</code> 使 <code>Σ wᵢ·(√((x−xᵢ)²+(y−yᵢ)²) − dᵢ)²</code> 最小。</li>
+    <li>做法：把第一个 AP 作为参考做<b>线性化</b>（两两相减消掉二次项），得到超定线性方程组 <code>A·p = b</code>，用加权最小二乘 <code>p = (AᵀWA)⁻¹AᵀWb</code> 求解。</li>
+    <li>权重 <code>W = diag(1/σᵢ²)</code> —— 这就是把 <code>distanceStdDevMm</code> 兑现成精度的地方。</li>
+    <li>拿到初值后可以再做几步 Gauss-Newton 迭代收敛。</li>
+  </ul>
+
+  <h3>可视化：把误差看出来</h3>
+  <p>把 AP 位置和解算点画在楼层平面图上，<b>再画出误差椭圆</b>（协方差矩阵的特征向量）。你会立刻看到 Slide 2.6 讲的 GDOP 效应 —— 走到 AP 凸包的角落，椭圆就会被拉成长条。</p>
+
+  <div class="insight">这个 Demo 会给你一个残酷但有用的第一印象：<b>点在房间之间乱跳。</b>这不是你写错了，这是 Part 4 说的"单历元最小二乘平均 RMSE 2.79 m，多数情况下把行人放进了错误的房间"。<b>看到这个跳动，你才会真正理解为什么融合层占 80% 的工程价值。</b></div>
+</section>
+
+<!-- ── 6.4 ── -->
+<section class="slide" id="s6-4">
+  <span class="num">6.4</span>
+  <span class="kicker">Slide 6.4</span>
+  <h2>从 Demo 到可用系统还差什么</h2>
+  <p class="sub">算法只占工作量的 20%，测绘与运维占 80%</p>
+
+  <h3>最贵的一步：AP 位置的高精度测绘</h3>
+  <ul>
+    <li><b>测绘误差直接进入定位误差</b>，而且是不可消除的系统性误差 —— 你的定位精度<b>不可能优于 AP 坐标的精度</b>。</li>
+    <li>这往往是全项目最贵的一步：需要人工逐台测量、对齐到统一坐标系、录入数据库。一栋楼几百台 AP，就是几百次测量。</li>
+    <li><b>反例证据</b>：Part 4 里 PeepLoc 打败 Aruba 官方方案的两个归因之一，就是"<b>OpenLocate 给出的 AP 坐标本身有误差</b>"。连企业级方案都栽在这一步。</li>
+    <li>替代路线：众包反推 AP 坐标（中位误差 1.43 m）—— 省了人力，但精度天花板也就到这儿了。</li>
+  </ul>
+
+  <h3>运维层：三件必须做的事</h3>
+  <div class="cols c3">
+    <div class="box"><h4>标定表管理</h4><p>（机型 × AP × 频段）三维查找表。新机型上市要补，新 AP 型号要补。<b>这张表就是你的核心资产。</b></p></div>
+    <div class="box"><h4>AP 变更检测</h4><p>AP 被搬动 / 更换 / 改功率 → 定位结果会与 PDR 预测发散。<b>用这个发散量当监控信号，自动触发重测。</b></p></div>
+    <div class="box"><h4>坐标系统一</h4><p>楼层平面图、AP 坐标、地图约束、PDR 轨迹必须在同一个坐标系里。<b>多楼层还要处理层高与楼层判定。</b></p></div>
+  </div>
+
+  <h3>产品级权衡：刷新率 / 功耗 / 精度</h3>
+  <div class="tw"><table>
+    <thead><tr><th>用途</th><th>需要的刷新率</th><th>可接受的精度</th><th class="hi">工程含义</th></tr></thead>
+    <tbody>
+      <tr><td>实时步行导航</td><td>~1 Hz</td><td>1–3 m</td><td class="hi">必须融合 PDR，FTM 只做低频锚点（<b>单次测距 212 ms–1.7 s</b>，硬顶在这里）</td></tr>
+      <tr><td>房间级占用检测</td><td>0.1 Hz</td><td>3–5 m</td><td class="hi">mc + 简单三边即可，功耗很低</td></tr>
+      <tr><td>资产盘点</td><td>0.01 Hz</td><td>1–3 m</td><td class="hi">可以慢慢测、多 burst 平均，<b>精度换时间在这里最划算</b></td></tr>
+      <tr><td>安全授权（开锁）</td><td>按需</td><td>—</td><td class="hi"><b>❌ 别做</b> —— 见 Slide 4.5，FTM 距离可被任意伪造</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="insight">一句话结论：<b>算法只占工作量的 20%，测绘与运维占 80%。</b>这不是贬低算法，而是说 —— 如果你的团队把时间全花在调滤波器上，而没有一张标定表和一份准确的 AP 坐标，那么再好的算法也救不了这个系统。<b>而这恰恰是 PeepLoc 那个"非合作系统打败官方方案"的案例想说的全部。</b></div>
+</section>
+
+<!-- ── 6.5 ── -->
+<section class="slide" id="s6-5">
+  <span class="num">6.5</span>
+  <span class="kicker">Slide 6.5</span>
+  <h2>未来五年的三条主线</h2>
+  <p class="sub">以及一个反向风险</p>
+
+  <div class="cols c3">
+    <div class="box"><h4>主线一 · bk + 6 GHz</h4>
+      <p>802.11bk 已于 2025 年发布，320 MHz 带宽把精度目标推到 <b>&lt;0.1 m</b>。</p>
+      <p><b>但完全取决于 6 GHz 频谱政策。</b>中国已把 6425–7125 划给 IMT、5925–6425 未定 —— <b>这一条在国内目前没有落脚点</b>，业界视 2026–2027 为最后窗口。</p>
+      <p style="font-weight:800;color:#c9603a">该盯的不是芯片，是工信部的文件。</p></div>
+    <div class="box"><h4>主线二 · 感知与定位合流</h4>
+      <p><b>802.11bf（WLAN Sensing）</b>让同一套 Wi-Fi 硬件既能定位、又能感知 —— 呼吸检测、跌倒告警、房间内人数统计、手势识别。</p>
+      <p>技术底座是同一个：都靠 CSI（信道状态信息）。<b>FTM 测的是"你在哪"，bf 测的是"你在干什么"。</b></p>
+      <p style="font-weight:800;color:#c9603a">这可能比精度提升更能打开市场。</p></div>
+    <div class="box"><h4>主线三 · 终端生态破局</h4>
+      <p><b>iOS 是否开放 FTM，是最大的单一变量。</b></p>
+      <p>一旦开放，终端渗透率一夜翻倍，AP 厂商才有动机打开那个开关，整个双边市场才能启动。</p>
+      <p>Apple 目前没有任何迹象要这么做 —— 它在 UWB 上的投入（U 系列芯片、Nearby Interaction、数字车钥匙）都指向相反方向。</p></div>
+  </div>
+
+  <div class="warn"><b>反向风险</b>：如果 UWB 因数字钥匙普及而边际成本归零 —— 每台手机、每辆车、每个门锁都标配 UWB —— 那么 FTM"不用新硬件"的核心优势就被侵蚀了，因为那时 UWB 也变成了"已经装好的东西"。<b>CCC 数字钥匙标准锁定 UWB 这件事，长期看比任何精度指标都重要。</b></div>
+
+  <h3>如果只跟踪三个指标</h3>
+  <ol style="list-style:none;margin-left:0">
+    <li style="margin-bottom:10px"><b>①</b> 工信部对 <b>5925–6425 MHz</b> 的划分决定 —— 决定 bk 在中国有没有戏</li>
+    <li style="margin-bottom:10px"><b>②</b> Apple 是否在某个 iOS 版本里出现 FTM 相关 API —— 决定 C 端有没有戏</li>
+    <li><b>③</b> 真正把 <b>PHY 层 secure HE-LTF</b> 做进硅片的芯片出货量（不是"宣称支持 az"）—— 决定 FTM 能不能进安全场景</li>
+  </ol>
+
+  <div class="insight">这三条主线里，只有第二条（802.11bf 感知）是纯技术演进，另外两条都是<b>政策和商业决策</b>。这很说明问题：<b>FTM 的天花板已经不是物理问题了。</b>光速这把尺子早就够用，卡住它的是频谱审批表和一家公司的产品路线图。</div>
+</section>
+
+<!-- ── 6.6 ── -->
+<section class="slide" id="s6-6">
+  <span class="num">6.6</span>
+  <span class="kicker">Slide 6.6</span>
+  <h2>三句话记住 WiFi FTM</h2>
+
+  <div style="margin:30px 0">
+    <div class="box" style="background:linear-gradient(135deg,#fff4ec,#fffaf5);border-color:#f6d5bd;margin-bottom:18px;padding:24px 26px">
+      <h4 style="color:var(--accent);font-size:1.05rem">① 它的本质是</h4>
+      <p style="font-size:1.08rem;font-weight:700;margin:0">把每一颗 Wi-Fi 芯片变成一把<b>纳秒级的尺子</b>，用光速做刻度。<br>
+      <span style="font-size:.92rem;font-weight:600;color:var(--soft)">四个时间戳、一条减法，让收发双方不需要同步时钟 —— 这是它能跑在几十块钱芯片上的全部秘密。</span></p>
+    </div>
+    <div class="box" style="background:linear-gradient(135deg,#fff4ec,#fffaf5);border-color:#f6d5bd;margin-bottom:18px;padding:24px 26px">
+      <h4 style="color:var(--accent);font-size:1.05rem">② 它赢在 / 输在</h4>
+      <p style="font-size:1.08rem;font-weight:700;margin:0">赢在<b>不用新硬件</b>；输在<b>终端支持不全、多径难缠、AP 要配合</b>。<br>
+      <span style="font-size:.92rem;font-weight:600;color:var(--soft)">而这三个"输"里，只有多径是技术问题 —— 另外两个是商业问题，且互为因果。</span></p>
+    </div>
+    <div class="box" style="background:linear-gradient(135deg,#eaf5ec,#f6fbf7);border-color:#b5d9bd;padding:24px 26px">
+      <h4 style="color:#3f7a51;font-size:1.05rem">③ 现在该做的</h4>
+      <p style="font-size:1.08rem;font-weight:700;margin:0">如果你在做室内空间相关的产品 —— <b>买一台 Pixel 和两块 ESP32，先把噪声量级摸清楚，再决定要不要押注。</b><br>
+      <span style="font-size:.92rem;font-weight:600;color:var(--soft)">一个下午的实验，胜过读十篇论文。你需要亲眼看到那条平移的直线、那片抖动和那几个野值。</span></p>
+    </div>
+  </div>
+
+  <h3>如果只带走一个判断</h3>
+  <div class="insight" style="font-size:1.02rem">FTM 已经不是一个技术问题了。<b>光速这把尺子早就够用</b> —— 1 纳秒 30 厘米，802.11bk 的标准写得明明白白。真正卡住它的是三件跟物理无关的事：一家公司不开放 API，一份频谱划分文件，以及成千上万台从没被人打开过那个开关的路由器。<br><br><b>所以判断 FTM 前景的正确方式，不是看下一代标准能到多少厘米，而是看这三件事有没有松动。</b></div>
+
+  <p class="srcs"><b>Part 6 主要来源：</b>ESP-IDF <code>examples/wifi/ftm</code> 与 <code>esp_wifi.h</code> · developer.android.com WifiRttManager / RangingRequest / RangingResult · source.android.com/docs/core/connect/wifi-rtt · Google WifiRttScan 示例 App · IEEE 802.11bf (WLAN Sensing) · Car Connectivity Consortium · arXiv:2506.18317（AP 测绘成本的反例证据）</p>
+</section>
+
+<!-- ══════════ 附录 ══════════ -->
+<section class="slide" id="s-app1">
+  <span class="num">附 A</span>
+  <span class="kicker">附录 A</span>
+  <h2>术语速查表</h2>
+  <div class="tw"><table>
+    <thead><tr><th>缩写</th><th>全称</th><th>一句话解释</th></tr></thead>
+    <tbody>
+      <tr><td><b>FTM</b></td><td>Fine Timing Measurement</td><td>802.11mc 引入的精细时间测量协议，本篇主角</td></tr>
+      <tr><td><b>RTT</b></td><td>Round-Trip Time</td><td>往返时延；Android 把 FTM 能力叫做 Wi-Fi RTT</td></tr>
+      <tr><td><b>ToF</b></td><td>Time of Flight</td><td>飞行时间（单程）；RTT 是双程，两者差一个 ÷2</td></tr>
+      <tr><td><b>ToA / ToD</b></td><td>Time of Arrival / Departure</td><td>到达 / 发出时刻。t₂、t₄ 需要 ToA 估计</td></tr>
+      <tr><td><b>TDoA</b></td><td>Time Difference of Arrival</td><td>到达时间差定位，需基站间同步 —— FTM 正是为了绕开它</td></tr>
+      <tr><td><b>AoA / AoD</b></td><td>Angle of Arrival / Departure</td><td>测角度定位，需天线阵列（BLE 5.1、SpotFi 走这条路）</td></tr>
+      <tr><td><b>CSI</b></td><td>Channel State Information</td><td>信道状态信息，各子载波的复系数；ToA 超分辨和 WLAN Sensing 的共同底座</td></tr>
+      <tr><td><b>LTF</b></td><td>Long Training Field</td><td>前导码里的长训练字段，ToA 估计所依赖的已知波形</td></tr>
+      <tr><td><b>HE-LTF</b></td><td>High Efficiency LTF</td><td>802.11ax 的 LTF；az 的 <b>secure HE-LTF</b> 把它变成伪随机的</td></tr>
+      <tr><td><b>NDP</b></td><td>Null Data Packet</td><td>空数据包；az 用它替代较长的 MAC 帧以省时省电</td></tr>
+      <tr><td><b>PASN</b></td><td>Pre-Association Security Negotiation</td><td>预关联安全协商，让"未关联也能安全测距"成立</td></tr>
+      <tr><td><b>PMF</b></td><td>Protected Management Frames</td><td>受保护管理帧（802.11w），az 安全的第一层</td></tr>
+      <tr><td><b>PTK / KDK</b></td><td>Pairwise Transient Key / Key Derivation Key</td><td>成对临时密钥 / 密钥派生密钥，secure LTF 密钥链的起点</td></tr>
+      <tr><td><b>LMR</b></td><td>Location Measurement Report</td><td>测量结果上报帧</td></tr>
+      <tr><td><b>GDOP</b></td><td>Geometric Dilution of Precision</td><td>几何精度因子；定位误差 ≈ GDOP × 测距误差</td></tr>
+      <tr><td><b>LoS / NLoS</b></td><td>Line of Sight / Non-Line of Sight</td><td>视距 / 非视距</td></tr>
+      <tr><td><b>PDR</b></td><td>Pedestrian Dead Reckoning</td><td>行人航迹推算（计步 + 陀螺仪），FTM 的黄金搭档</td></tr>
+      <tr><td><b>TSF</b></td><td>Timing Synchronization Function</td><td>802.11 的标准计时器，分辨率 1 μs = 150 米</td></tr>
+      <tr><td><b>TxOP</b></td><td>Transmission Opportunity</td><td>传输机会；az 把整个测距协议压进单个 TxOP</td></tr>
+      <tr><td><b>UWB</b></td><td>Ultra-Wideband</td><td>超宽带，FTM 在精度上的主要对手</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="slide" id="s-app2">
+  <span class="num">附 B</span>
+  <span class="kicker">附录 B</span>
+  <h2>关键文献与标准清单</h2>
+
+  <h3>标准</h3>
+  <ul>
+    <li><b>IEEE 802.11-2016</b>（REVmc）—— FTM 首次引入</li>
+    <li><b>IEEE Std 802.11az-2022</b>, <i>Amendment 4: Enhancements for Positioning</i> —— 2022-12-03 批准 / 2023-03-03 发布（现已并入 802.11-2024）</li>
+    <li><b>IEEE Std 802.11bk-2025</b>, <i>Amendment 3: 320 MHz Positioning</i> —— 2025-05-28 批准 / 2025-09-05 发布</li>
+    <li><b>ITU-R P.1238-7</b> —— 室内传播模型（路径损耗系数 N、阴影衰落 σ 的权威出处）</li>
+    <li><b>IS-GPS-200</b> —— GPS L1 C/A 最小接收功率规范</li>
+  </ul>
+
+  <h3>核心论文（按重要性）</h3>
+  <div class="tw"><table>
+    <thead><tr><th>文献</th><th>贡献</th></tr></thead>
+    <tbody>
+      <tr class="hi"><td><b>arXiv:2509.03901</b><br>Kosek-Szott 等（AGH）+ Jonathan Segev（Intel，802.11az 任务组主席）</td><td class="hi"><b>最权威的综述</b>，30 页覆盖 180+ 篇；三代能力对照表、UWB/BTCS/Wi-Fi 横向对比的原始出处</td></tr>
+      <tr class="hi"><td><b>arXiv:2603.18687</b><br>Antonijević 等（KU Leuven COSIC + JKU Linz），2026-03</td><td class="hi"><b>最新、最有信息量的一手实测</b>：az/bk 安全机制细节 + 商用设备实测（Pixel 9a 无 secure FTM、开发板只做 PMF）</td></tr>
+      <tr><td><b>arXiv:2511.17935</b><br>Rajendran 等（Arista Networks），2025-11</td><td>mc vs az 定量对比；校准前后的 71.89 m → 6.36 m</td></tr>
+      <tr><td><b>Schepers et al., ACM WiSec'21</b></td><td>FTM 安全奠基性工作：距离可任意伪造，加密拦不住</td></tr>
+      <tr><td><b>Schepers &amp; Ranganathan, PoPETs 2022(2)</b></td><td>隐私分析：MAC 随机化被序列号侧信道击穿；被动观察者精度等同参与者</td></tr>
+      <tr><td><b>arXiv:2506.18317</b>（UIUC PeepLoc）</td><td>非合作测距 + 众包 AP 定位，3.41 m 打败楼里的企业级 FTM 方案</td></tr>
+      <tr><td><b>NIST, 2024-03</b><br><i>A Performance Comparison of Wi-Fi RTT and UWB for RF Ranging</i></td><td>权威中立的分场景对比；覆盖率反转的证据</td></tr>
+      <tr><td><b>MDPI Algorithms 15(12):464</b>（爱丁堡大学）</td><td>消费级设备四类误差分解、机型差异、材料遮挡实测</td></tr>
+      <tr><td><b>Computer Communications 229 (2025) 107980</b>（UPC）</td><td>burst size 收益曲线、（机型×AP×频段）标定表、互操作性失效</td></tr>
+      <tr><td><b>MobiCom'18</b>（Rutgers WINLAB + GM）</td><td>开源平台上的 FTM 精度评测，"1 ns = 1 foot"的经典表述</td></tr>
+      <tr><td><b>RADAR, INFOCOM 2000</b>（微软研究院）</td><td>指纹定位开山之作，中位 2.94 m 的原始出处</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>工具链与文档</h3>
+  <ul>
+    <li><b>Android</b>：<code>source.android.com/docs/core/connect/wifi-rtt</code>（平台 KPI）· <code>developer.android.com</code> 的 <code>WifiRttManager</code> / <code>RangingRequest</code> / <code>RangingResult</code></li>
+    <li><b>ESP-IDF</b>：<code>examples/wifi/ftm</code> · <code>esp_wifi_ftm_initiate_session()</code> · <code>WIFI_EVENT_FTM_REPORT</code></li>
+    <li><b>Linux</b>：<code>wpa_supplicant</code> 的 FTM 支持 · Intel 网卡开源驱动（学术实验主力平台）</li>
+    <li><b>厂商</b>：Qualcomm Wi-Fi Ranging 白皮书（精度-开销曲线的原始出处）</li>
+  </ul>
+
+  <div class="insight" style="margin-top:26px">写这份 PPT 时最重要的一条纪律：<b>所有精度数字都必须带来源、测试条件（带宽、LoS/NLoS、设备型号）和统计口径（均值 / 中位数 / 90 分位）。</b>不接受无条件的"精度 1 米"这类说法 —— 因为正如 Part 4 证明的，同一个"精度"词在厂商、学术和消费级三种语境下指的<b>根本不是同一件事</b>。</div>
+</section>
+
+</div>
+
+<footer>
+  <p>王建硕 · 用 Claude Code 生成 · <a href="/a/">返回 /a 归档</a></p>
+</footer>
+
+<script>
+// 目录
+const titles=[...document.querySelectorAll('.slide,.part')];
+const list=document.getElementById('toc-list');
+titles.forEach(el=>{
+  const li=document.createElement('li');
+  if(el.classList.contains('part')){
+    li.className='pt'; li.textContent=el.querySelector('.pn').textContent+' · '+(el.dataset.t||'');
+    li.style.cursor='pointer'; li.onclick=()=>{el.scrollIntoView();tg();};
+  }else{
+    const a=document.createElement('a'); a.href='#'+el.id;
+    a.textContent=el.querySelector('.num').textContent+'　'+el.querySelector('h2').textContent;
+    a.onclick=()=>setTimeout(tg,60); li.appendChild(a);
+  }
+  list.appendChild(li);
+});
+function tg(){document.getElementById('toc').classList.toggle('on')}
+document.getElementById('toc-btn').onclick=tg;
+// 进度条
+addEventListener('scroll',()=>{
+  const h=document.documentElement;
+  document.getElementById('bar').style.width=(h.scrollTop/(h.scrollHeight-h.clientHeight)*100)+'%';
+},{passive:true});
+// 键盘翻页
+const secs=[...document.querySelectorAll('.slide,.part,.cover')];
+addEventListener('keydown',e=>{
+  if(e.key==='Escape')document.getElementById('toc').classList.remove('on');
+  if(!['ArrowDown','ArrowUp','PageDown','PageUp',' '].includes(e.key))return;
+  if(e.target.tagName==='INPUT')return;
+  e.preventDefault();
+  const y=scrollY+10, fwd=['ArrowDown','PageDown',' '].includes(e.key);
+  let t=fwd?secs.find(s=>s.offsetTop>y+40):[...secs].reverse().find(s=>s.offsetTop<y-40);
+  if(t)scrollTo({top:t.offsetTop-20,behavior:'smooth'});
+});
+</script>
+</body>
+</html>
