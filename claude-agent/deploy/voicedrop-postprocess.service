@@ -1,0 +1,14 @@
+[Unit]
+Description=VoiceDrop article post-processing poller (claude -p)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=claude-agent
+Group=claude-agent
+# 固定工作目录：claude 的会话 transcript 会按 cwd 归档到
+# /opt/claude-agent/.claude/projects/-opt-claude-agent-postprocess/，好找
+WorkingDirectory=/opt/claude-agent/postprocess
+Environment=HOME=/opt/claude-agent
+ExecStart=/usr/bin/bash /opt/claude-agent/bin/voicedrop-postprocess.sh
