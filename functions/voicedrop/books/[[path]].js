@@ -11,7 +11,8 @@
 // key 钉死在该 scope 的 books/ 尾段下，桶里其他东西（articles/、WECHAT.json…）
 // 够不着，所以不需要 photo 那样的文件类型白名单。
 //
-// GET /books/        → 简单的 HTML 索引页（可直接点开）
+// GET /books/        → 书架索引：一行一本书（= 一个 <slug>/ 文件夹），显示书名
+//                      （取自 <slug>/index.html 的 <title>），不平铺夹内文件。
 // GET /books/<name>  → 文件本体，inline 展示；html/md/txt 只缓存 5 分钟（书会
 //                      反复重发迭代），其余（pdf/图片等大文件）缓存一天。
 
@@ -62,22 +63,34 @@ function notFound() {
 }
 
 async function index(env) {
-  const files = [];
+  // 一个 delimiter listing 拿书的文件夹（delimitedPrefixes）。必须 cursor 翻页：
+  // R2 的 delimited list 按「扫过的 key 数」截断，不是按返回的前缀数
+  // （admin/llm 页曾因此冻在 2026-07-13，同一个坑）。
+  const slugs = [];
   let cursor;
   do {
-    const listed = await env.FILES.list({ prefix: PUBLISHER, limit: 1000, ...(cursor ? { cursor } : {}) });
-    for (const o of listed.objects) {
-      const name = o.key.slice(PUBLISHER.length);
-      if (name && !name.endsWith('/')) files.push({ name, size: o.size });
-    }
+    const listed = await env.FILES.list({ prefix: PUBLISHER, delimiter: '/', limit: 1000, ...(cursor ? { cursor } : {}) });
+    slugs.push(...(listed.delimitedPrefixes || []).map((p) => p.slice(PUBLISHER.length).replace(/\/$/, '')).filter(Boolean));
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
-  files.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
 
-  const fmtSize = (n) => n >= 1 << 20 ? (n / (1 << 20)).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n + ' B';
+  // 书名 = <slug>/index.html 的 <title>；没有 index.html 或没有 <title> 就退回 slug。
+  const books = await Promise.all(slugs.map(async (slug) => {
+    let title = slug;
+    try {
+      const obj = await env.FILES.get(`${PUBLISHER}${slug}/index.html`);
+      if (obj) {
+        const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(await obj.text());
+        if (m && m[1].trim()) title = m[1].trim();
+      }
+    } catch {}
+    return { slug, title };
+  }));
+  books.sort((a, b) => String(a.title).localeCompare(String(b.title), 'zh'));
+
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const rows = files.map((f) =>
-    `<li><a href="/books/${encodeURI(f.name)}">${esc(f.name)}</a><span>${fmtSize(f.size)}</span></li>`).join('\n');
+  const rows = books.map((b) =>
+    `<li><a href="/books/${encodeURI(b.slug)}/index.html">${esc(b.title)}</a></li>`).join('\n');
   const html = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Books</title>
@@ -86,14 +99,13 @@ async function index(env) {
   main{max-width:640px;margin:0 auto;padding:40px 20px}
   h1{font-size:22px;margin:0 0 20px}
   ul{list-style:none;margin:0;padding:0}
-  li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #eee}
+  li{padding:12px 0;border-bottom:1px solid #eee}
   a{color:#0a58ca;text-decoration:none;word-break:break-all}
   a:hover{text-decoration:underline}
-  span{color:#999;font-size:13px;white-space:nowrap}
   p.empty{color:#999}
 </style></head>
 <body><main><h1>📚 Books</h1>
-${files.length ? `<ul>${rows}</ul>` : '<p class="empty">还没有文件。</p>'}
+${books.length ? `<ul>${rows}</ul>` : '<p class="empty">还没有书。</p>'}
 </main></body></html>`;
   return new Response(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },
