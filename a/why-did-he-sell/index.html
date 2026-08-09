@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>他为什么卖给你？—— 关于股票市场，你只需要想清楚一个问题</title>
+<meta name="description" content="你买的每一股股票，不是从货架上拿下来的，而是从另一个人手里买回来的。所以要想一想：他为什么卖给你？">
+<style>
+:root{
+  --bg:#fbf6ee; --paper:#fffdf8; --ink:#3d3529; --soft:#8a7a64; --faint:#b5a68f;
+  --accent:#a5402d; --tint:#f3e6d4; --line:#e8dcc8;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:"Songti SC","Noto Serif SC",Georgia,serif;line-height:1.95;font-size:17px}
+.wrap{max-width:720px;margin:0 auto;padding:0 24px 120px}
+a{color:var(--accent)}
+
+/* cover */
+.cover{padding:110px 0 70px;text-align:center}
+.cover .kicker{font-family:-apple-system,"PingFang SC",sans-serif;font-size:.8rem;letter-spacing:.35em;color:var(--faint);margin-bottom:28px}
+.cover h1{font-size:2.9rem;font-weight:900;letter-spacing:.06em;line-height:1.3}
+.cover .sub{margin-top:22px;color:var(--soft);font-size:1.02rem}
+.cover .q{margin:52px auto 0;max-width:560px;background:var(--paper);border:1.5px solid var(--line);border-radius:18px;padding:30px 34px;text-align:left;box-shadow:0 12px 34px rgba(74,63,53,.07)}
+.cover .q p{font-size:1.08rem}
+.cover .q .mark{color:var(--accent);font-weight:700}
+.byline{margin-top:30px;font-family:-apple-system,"PingFang SC",sans-serif;font-size:.85rem;color:var(--faint)}
+.byline a{color:var(--soft);text-decoration:none}
+
+/* toc */
+.toc{margin:40px 0 80px;background:var(--paper);border:1.5px solid var(--line);border-radius:18px;padding:34px 38px;box-shadow:0 12px 34px rgba(74,63,53,.06)}
+.toc h2{font-size:1.15rem;letter-spacing:.3em;color:var(--soft);margin-bottom:18px;font-weight:700}
+.toc .part{margin-top:18px;font-weight:900;letter-spacing:.12em;color:var(--accent);font-size:.95rem}
+.toc ol{list-style:none;margin-top:6px}
+.toc li{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.toc li:last-child{border-bottom:none}
+.toc li a{flex:1;text-decoration:none;color:var(--ink)}
+.toc li a:hover{color:var(--accent)}
+.toc .no{font-family:Georgia,serif;color:var(--faint);width:1.6em;text-align:right}
+.toc .st{font-family:-apple-system,"PingFang SC",sans-serif;font-size:.72rem;color:var(--faint);border:1px solid var(--line);border-radius:99px;padding:1px 9px;white-space:nowrap}
+.toc .st.done{color:#0b6e4f;border-color:#bcd8c9;background:#eef6f0}
+
+/* chapters */
+.chapter{margin-top:96px}
+.chapter .chno{font-family:Georgia,serif;color:var(--faint);font-size:.95rem;letter-spacing:.2em}
+.chapter h2{font-size:1.75rem;font-weight:900;margin:8px 0 34px;letter-spacing:.03em}
+.chapter h3{font-size:1.18rem;font-weight:800;margin:44px 0 14px}
+.chapter p{margin:0 0 22px;text-align:justify}
+.chapter ul,.chapter ol{margin:0 0 22px 1.6em}
+.chapter li{margin-bottom:8px}
+.chapter blockquote{margin:28px 0;padding:18px 26px;background:var(--tint);border-left:3px solid var(--accent);border-radius:0 12px 12px 0;color:#6d5540}
+.chapter table{width:100%;border-collapse:collapse;margin:26px 0;font-size:.92em;font-family:-apple-system,"PingFang SC",sans-serif}
+.chapter th{text-align:left;padding:9px 12px;border-bottom:2px solid var(--ink);font-weight:700}
+.chapter td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.chapter .pending{background:var(--paper);border:1.5px dashed var(--line);border-radius:14px;padding:26px 30px;color:var(--faint);font-family:-apple-system,"PingFang SC",sans-serif;font-size:.92rem}
+.chapter .brief{color:var(--soft);font-style:normal}
+.partmark{margin-top:120px;text-align:center}
+.partmark .pt{display:inline-block;font-weight:900;letter-spacing:.4em;color:var(--accent);border-top:1.5px solid var(--line);border-bottom:1.5px solid var(--line);padding:10px 6px 10px 12px;font-size:1.05rem}
+.divider{text-align:center;color:var(--faint);letter-spacing:1em;margin:60px 0 0;padding-left:1em}
+footer{margin-top:130px;text-align:center;font-family:-apple-system,"PingFang SC",sans-serif;font-size:.8rem;color:var(--faint)}
+footer a{color:var(--soft)}
+@media(max-width:600px){.cover h1{font-size:2.1rem}.wrap{padding:0 18px 90px}.toc{padding:26px 22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<section class="cover">
+  <div class="kicker">一 本 小 书</div>
+  <h1>他为什么<br>卖给你？</h1>
+  <p class="sub">关于股票市场，你只需要想清楚一个问题</p>
+  <div class="q">
+    <p>你买的每一股股票，不是从货架上拿下来的，而是从<span class="mark">另一个人</span>手里买回来的。</p>
+    <p style="margin-top:10px">所以要想一想：<span class="mark">他为什么卖给你？</span></p>
+  </div>
+  <div class="byline">王建硕 · 2026 年 8 月 · <a href="/a/">jianshuo.dev/a</a> · 本书由多个 AI 代理协作写成：每章由写作代理起草，独立评审代理核查准确性并评估新颖与有趣程度，不达标则重写</div>
+</section>
+
+<nav class="toc" id="toc">
+  <h2>目 录</h2>
+  <ol>
+    <li><span class="no">〇</span><a href="#ch0">引子：一句话</a><span class="st done" data-st="ch0">已完成</span></li>
+  </ol>
+  <div class="part">第一部 · 货架的错觉</div>
+  <ol>
+    <li><span class="no">一</span><a href="#ch1">超市与桌子：两种买东西的心智模型</a><span class="st" data-st="ch1">写作中</span></li>
+    <li><span class="no">二</span><a href="#ch2">卖家的清单：他到底为什么卖</a><span class="st" data-st="ch2">写作中</span></li>
+    <li><span class="no">三</span><a href="#ch3">反归纳的机器：规律为什么会自杀</a><span class="st" data-st="ch3">写作中</span></li>
+  </ol>
+  <div class="part">第二部 · 桌子对面的人</div>
+  <ol>
+    <li><span class="no">四</span><a href="#ch4">逆向选择：你最容易成交的那一刻</a><span class="st" data-st="ch4">写作中</span></li>
+    <li><span class="no">五</span><a href="#ch5">聪明钱的装备清单</a><span class="st" data-st="ch5">写作中</span></li>
+    <li><span class="no">六</span><a href="#ch6">市场的电费：为什么必须有人亏钱</a><span class="st" data-st="ch6">写作中</span></li>
+    <li><span class="no">七</span><a href="#ch7">草原上的大脑</a><span class="st" data-st="ch7">写作中</span></li>
+    <li><span class="no">八</span><a href="#ch8">五千万个账户：来自上交所的账本</a><span class="st" data-st="ch8">写作中</span></li>
+  </ol>
+  <div class="part">第三部 · 想明白之后</div>
+  <ol>
+    <li><span class="no">九</span><a href="#ch9">什么时候货架是真的</a><span class="st" data-st="ch9">写作中</span></li>
+    <li><span class="no">十</span><a href="#ch10">下单前的三个问题</a><span class="st" data-st="ch10">写作中</span></li>
+    <li><span class="no">十一</span><a href="#ch11">换到收电费的一边</a><span class="st" data-st="ch11">写作中</span></li>
+    <li><span class="no">十二</span><a href="#ch12">对面没有人的游戏</a><span class="st" data-st="ch12">写作中</span></li>
+  </ol>
+  <ol style="margin-top:14px">
+    <li><span class="no">末</span><a href="#chend">结语：再问一次</a><span class="st" data-st="chend">写作中</span></li>
+  </ol>
+</nav>
+
+<section class="chapter" id="ch0">
+  <div class="chno">引 子</div>
+  <h2>一句话</h2>
+  <p>这本小书从一句话长出来。这句话是：</p>
+  <blockquote>你买的每一股股票，不是从货架上拿下来的，而是从另一个人手里买回来的。所以要想一想，他为什么卖给你？</blockquote>
+  <p>我见过很多人研究 K 线，研究财报，研究政策，研究别人的研究。但我很少见到有人在点下「买入」之前，认真问过这个问题。这个问题的奇妙之处在于：它不需要任何金融知识就能听懂，但把它想到底，需要穿过经济学近五十年里好几个拿了诺贝尔奖的想法。</p>
+  <p>更奇妙的是，一旦真的想通了，你对股票市场能做的最重要的几个决定，就已经自动做完了。剩下的都是细节。</p>
+  <p>市场上关于投资的书，绝大多数在教你怎么赢。这本小书不教怎么赢，它只做一件事：把桌子对面那个人请到灯光底下，让你看清楚你在跟谁做交易。看清楚之后怎么选，是你自己的事。我的经验是，看清楚的人，选择都惊人地一致。</p>
+  <p>全书十二章，分三部分。第一部拆掉「买股票像逛超市」这个错觉；第二部挨个介绍桌子对面坐着的人；第三部回答「既然如此，那怎么办」。每一章都很短，加起来一个下午能读完。但我建议你读慢一点——这里面没有一个结论是让人舒服的。</p>
+</section>
+
+<div class="partmark"><span class="pt">第一部 · 货架的错觉</span></div>
+
+<section class="chapter" id="ch1">
+  <div class="chno">第 一 章</div>
+  <h2>超市与桌子：两种买东西的心智模型</h2>
+  <div class="pending"><span class="brief">本章要点：人类熟悉的交易是「货架模式」——价格标好，货源充足，买完商家高兴。股票是「桌子模式」——你买入的前提是另一个人主动决定在此刻、此价卖出。股价不是标价，是最近一次成交留下的痕迹。两种模式的混淆，是几乎所有散户亏损的第一块多米诺骨牌。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch2">
+  <div class="chno">第 二 章</div>
+  <h2>卖家的清单：他到底为什么卖</h2>
+  <div class="pending"><span class="brief">本章要点：穷举卖方的全部动机——他知道你不知道的事、他急需用钱、他在做组合再平衡、他在恐慌、他在避税、他在行权套现、他是做市商在调库存。这张清单里只有少数几项对你无害，而你在成交那一刻无法分辨对面是哪一种。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch3">
+  <div class="chno">第 三 章</div>
+  <h2>反归纳的机器：规律为什么会自杀</h2>
+  <div class="pending"><span class="brief">本章要点：物理世界对归纳友好——太阳明天照常升起。市场刚好相反：任何规律一旦被足够多人发现，就会因为被使用而失效。你能轻易学会的招，恰恰是已经死掉的招。这是市场和自然界最深刻的不同，也是一切「技术分析速成」注定落空的原因。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<div class="partmark"><span class="pt">第二部 · 桌子对面的人</span></div>
+
+<section class="chapter" id="ch4">
+  <div class="chno">第 四 章</div>
+  <h2>逆向选择：你最容易成交的那一刻</h2>
+  <div class="pending"><span class="brief">本章要点：从 Akerlof 的二手车「柠檬市场」讲起——信息不对称下，最积极想卖给你的，往往是最不该买的。股票市场把这个机制推到极致：你最容易买到的那一刻，正是聪明钱最想出手的那一刻。买卖价差，本质上是全市场为逆向选择标出的价格。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch5">
+  <div class="chno">第 五 章</div>
+  <h2>聪明钱的装备清单</h2>
+  <div class="pending"><span class="brief">本章要点：把「机构投资者」具体化——他们有什么你没有的：行业专家网络、另类数据、卫星图像、以毫秒计的速度、风控纪律、以及最重要的——不动手的耐心。这不是为了吓唬你，是为了让「对手盘」三个字从抽象名词变成具体的人和机器。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch6">
+  <div class="chno">第 六 章</div>
+  <h2>市场的电费：为什么必须有人亏钱</h2>
+  <div class="pending"><span class="brief">本章要点：Grossman-Stiglitz 悖论——如果价格完全有效，就没人有动力做研究；研究要有回报，回报只能来自别人的亏损。噪音交易者不是市场的 bug，是市场的电费。指数基金能「躺赢」，恰恰是搭了主动交易者烧钱的便车。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch7">
+  <div class="chno">第 七 章</div>
+  <h2>草原上的大脑</h2>
+  <div class="pending"><span class="brief">本章要点：为几万年物理世界优化的大脑，进了市场就是一台精确的反向指标机：注意力驱动买入（Barber-Odean）、趋势外推、处置效应（赚小钱就跑、亏大钱死拿）、彩票偏好。这些偏差的可怕之处不在于「错」，在于几千万人同方向地错。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch8">
+  <div class="chno">第 八 章</div>
+  <h2>五千万个账户：来自上交所的账本</h2>
+  <div class="pending"><span class="brief">本章要点：实证章。上交所账户数据研究（按市值分组的择时/选股贡献测算）、台湾全市场散户交易记录研究、SPIVA 主动基金长期战绩、行为差距统计。数据的形状高度一致：账户越小，主动操作的贡献越负；做得越多，亏得越多。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<div class="partmark"><span class="pt">第三部 · 想明白之后</span></div>
+
+<section class="chapter" id="ch9">
+  <div class="chno">第 九 章</div>
+  <h2>什么时候货架是真的</h2>
+  <div class="pending"><span class="brief">本章要点：市场里确实存在「货架」——指数基金申购、国债发行、货币基金。但要小心伪货架：IPO 和增发看起来像从货架买新货，实际上发行方是全市场择时能力最强的卖家。识别真货架的标准只有一条：对面是否存在一个会因为你买入而获得信息优势收益的人。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch10">
+  <div class="chno">第 十 章</div>
+  <h2>下单前的三个问题</h2>
+  <div class="pending"><span class="brief">本章要点：一张可以抄在手机备忘录里的自查清单。问题一：这一单的对面最可能是谁？问题二：我知道什么他不知道的？问题三：我凭什么恰好在此刻知道？三个问题任何一个答不上来，这一单的期望收益就是负的手续费。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch11">
+  <div class="chno">第 十 一 章</div>
+  <h2>换到收电费的一边</h2>
+  <div class="pending"><span class="brief">本章要点：不玩，是一种玩法，而且是唯一正期望的玩法。指数基金的本质：从「和聪明钱对赌的人」变成「所有上市公司的股东」，从付电费的一方换到收电费的一方。长期持有的数学、定投的纪律意义、以及为什么这个答案听起来无聊——无聊正是它有效的原因。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="ch12">
+  <div class="chno">第 十 二 章</div>
+  <h2>对面没有人的游戏</h2>
+  <div class="pending"><span class="brief">本章要点：股票市场是零和减去成本的游戏，但世界上大多数游戏不是。工作、生意、写作、创造——这些游戏的对面没有对手盘，只有你和你交付的价值。把钱放进市场吃全市场的平均增长，把精力放回正和游戏，这是这本小书真正想说的那句话。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<section class="chapter" id="chend">
+  <div class="chno">结 语</div>
+  <h2>再问一次</h2>
+  <div class="pending"><span class="brief">回到那句话，把全书十二章收拢成一次完整的回答。</span><br><br>✍️ 写作代理起草中，评审代理待命……</div>
+</section>
+
+<div class="divider">· · ·</div>
+<footer>《他为什么卖给你？》 · 王建硕 · <a href="/a/">更多</a><br>本页内容不构成投资建议</footer>
+</div>
+</body>
+</html>
