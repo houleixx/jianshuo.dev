@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>用户反馈 · VoiceDrop</title>
+<link rel="stylesheet" href="./theme.css"/>
+<script>
+window.$=window.$||function(s,r){return (r||document).querySelector(s);};
+window.esc=window.esc||function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');};
+</script>
+<style>
+.wrap{max-width:860px;margin:0 auto;padding:22px 22px 60px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);box-shadow:var(--shadow);
+  padding:15px 18px;margin-bottom:12px}
+.card .hd{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin-bottom:8px}
+.card .who{font-weight:700}
+.card .sub{font-family:var(--fm);font-size:.74rem;color:var(--muted)}
+.card .ver{font-size:.72rem;color:var(--muted);background:var(--bg-sunk);border-radius:6px;padding:2px 7px}
+.card .t{font-family:var(--fm);font-size:.76rem;color:var(--muted);margin-left:auto}
+.card .tx{white-space:pre-wrap;font-size:.92rem;line-height:1.75;color:var(--ink-2);word-break:break-word}
+.loading{color:var(--muted);font-size:.85rem;padding:16px}
+.errbox{background:var(--err-bg);border-radius:9px;padding:11px 13px;color:var(--err);white-space:pre-wrap;font:12px/1.55 var(--fm)}
+</style>
+</head>
+<body>
+
+<div id="gate" hidden style="max-width:430px">
+  <svg class="gate-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdGate" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdGate)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+  <h1>用户反馈</h1>
+  <p>粘贴你的访问令牌（App「账户 → 访问令牌」复制的 anon_…）查看用户提交的意见反馈。token 只存在本机浏览器，不上传。</p>
+  <input id="tok" type="password" placeholder="anon_… 访问令牌" autocomplete="off" spellcheck="false"/>
+  <div class="err" id="gateErr"></div>
+  <button class="btn primary block" id="enter">进入</button>
+</div>
+
+<div id="app" hidden>
+  <nav class="appbar">
+    <div class="appbar-in">
+      <a class="brand" href="./">
+        <svg class="mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="vdNav" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8714F"/><stop offset="1" stop-color="#C5431F"/></linearGradient></defs><path d="M16 2.5C16 2.5 6 13 6 20.2 6 25.9 10.5 30 16 30s10-4.1 10-9.8C26 13 16 2.5 16 2.5Z" fill="url(#vdNav)"/><circle cx="12.2" cy="20.6" r="3" fill="#fff" opacity="0.34"/></svg>
+        <span class="name">VoiceDrop</span><span class="sub">控制台</span>
+      </a>
+      <div class="nav-tabs">
+        <a class="nav-tab" href="./">概览</a>
+        <a class="nav-tab" href="./reports.html">举报审核</a>
+        <a class="nav-tab" href="./usage.html">算力账本</a>
+        <a class="nav-tab" href="./feed.html">投喂账本</a>
+        <a class="nav-tab" href="./mine.html">挖文日志</a>
+        <a class="nav-tab" href="./llm.html">LLM 日志</a>
+        <a class="nav-tab active" href="./feedback.html">用户反馈</a>
+        <a class="nav-tab" href="./refhits.html">访客 IP</a>
+      </div>
+      <div class="nav-actions">
+        <button class="btn ghost" id="refresh">刷新</button>
+        <button class="btn ghost" id="logout">退出</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <div class="pagehead">
+      <h1>用户反馈</h1>
+      <span class="tag" id="count"></span>
+      <span class="grow"></span>
+      <div class="tools">
+        <select id="date" title="按日期"></select>
+      </div>
+    </div>
+    <div id="list"><div class="loading">载入中…</div></div>
+  </div>
+</div>
+
+<script src="/voicedrop/shared.js"></script>
+<script>
+const API = '/files/api';
+const TKEY = 'vd_admin_sess';   // 与其它控制台页共用：用户 session token（换 FILES_TOKEN 用）
+let TOKEN = '';
+
+async function api(path){
+  const r = await fetch(`${API}/${path}`, { headers:{ Authorization:`Bearer ${TOKEN}` }});
+  if(!r.ok){ let m='';try{m=(await r.json()).error||'';}catch{} throw new Error(m||`HTTP ${r.status}`); }
+  return r.json();
+}
+
+function fmtTime(iso){ const d=new Date(iso); const p=(n)=>String(n).padStart(2,'0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`; }
+function shortSub(scope){ return String(scope||'').replace(/^users\//,'').replace(/\/$/,'').slice(0,16); }
+
+async function loadDay(date){
+  $('#list').innerHTML = '<div class="loading">载入中…</div>';
+  const { items } = await api(`feedback/list?date=${date}`);
+  $('#count').textContent = `${items.length} 条`;
+  if(!items.length){ $('#list').innerHTML = '<div class="loading">这天没有反馈</div>'; return; }
+  $('#list').innerHTML = items.map((it)=>`
+    <div class="card">
+      <div class="hd">
+        <span class="who">${esc(it.name||'（未署名）')}</span>
+        <span class="sub">${esc(shortSub(it.scope))}</span>
+        ${it.version?`<span class="ver">${esc(it.version)}</span>`:''}
+        <span class="t">${esc(fmtTime(it.ts))}</span>
+      </div>
+      <div class="tx">${esc(it.text)}</div>
+    </div>`).join('');
+}
+
+async function loadDates(){
+  const { dates } = await api('feedback/dates');
+  const sel = $('#date');
+  if(!dates.length){ sel.innerHTML='<option>无数据</option>'; $('#list').innerHTML='<div class="loading">还没有任何反馈</div>'; $('#count').textContent=''; return; }
+  sel.innerHTML = dates.map((d)=>`<option value="${d}">${d}</option>`).join('');
+  sel.value = dates[0];
+  await loadDay(dates[0]);
+}
+
+function showGate(msg){ $('#app').hidden=true; $('#gate').hidden=false; $('#gateErr').textContent=msg||''; $('#tok').focus(); }
+function logout(msg){ TOKEN=''; localStorage.removeItem(TKEY); showGate(msg); }
+async function boot(){
+  $('#gate').hidden=true; $('#app').hidden=false;
+  try{ await loadDates(); }
+  catch(e){ if(String(e.message).match(/unauthorized|admin only|HTTP 401|HTTP 403/)){ logout('token 无效'); } else { $('#list').innerHTML=`<div class="errbox">${esc(e.message)}</div>`; } }
+}
+async function enter(){
+  const v=$('#tok').value.trim();
+  if(!v){ $('#gateErr').textContent='请粘贴你的 session token'; return; }
+  $('#gateErr').textContent='校验中…';
+  let ft; try{ ft=await vdAdminExchange(v); }
+  catch(e){ $('#gateErr').textContent=e.message; return; }
+  TOKEN=ft; localStorage.setItem(TKEY,v); boot();
+}
+
+$('#enter').addEventListener('click', enter);
+$('#tok').addEventListener('keydown',(e)=>{ if(e.key==='Enter') enter(); });
+$('#logout').addEventListener('click',()=>logout());
+$('#refresh').addEventListener('click',()=>{ const d=$('#date').value; if(d&&d!=='无数据') loadDay(d).catch((e)=>$('#list').innerHTML=`<div class="errbox">${esc(e.message)}</div>`); });
+$('#date').addEventListener('change',(e)=>{ const d=e.target.value; if(d&&d!=='无数据') loadDay(d).catch((er)=>$('#list').innerHTML=`<div class="errbox">${esc(er.message)}</div>`); });
+
+(async()=>{
+  const sess=localStorage.getItem(TKEY)||'';
+  if(!sess){ showGate(); return; }
+  try{ TOKEN=await vdAdminExchange(sess); }
+  catch(e){ localStorage.removeItem(TKEY); showGate(e.message||''); return; }
+  boot();
+})();
+</script>
+</body>
+</html>
