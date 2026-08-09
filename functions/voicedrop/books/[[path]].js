@@ -1,17 +1,25 @@
-// 公开书架：voicedrop.cn/books/<name> → R2 (bucket jianshuo-dev-files) 的 books/ 前缀。
+// 公开书架：voicedrop.cn/books/<name> → R2 (bucket jianshuo-dev-files)。
 //
 // EdgeOne 边缘函数把非 /files|/agent|/reco 路径补 /voicedrop 前缀送到 Pages
 // （infra/voicedrop-cn-edgeone/edge-function.js），所以这个函数同时服务：
 //   https://voicedrop.cn/books/<name>            （干净路径，对外分享用这个）
 //   https://jianshuo.dev/voicedrop/books/<name>  （同一函数的原始路径）
-// 与 /files/api/photo/ 同款「公开只读直出 R2」，但 key 被钉死在 books/ 前缀下，
-// 桶里其他任何东西（users/、shares/、WECHAT.json…）都够不着，所以不需要
-// photo 那样的文件类型白名单。写入只有 admin 能做：
-//   PUT /files/api/upload/books/<name>   （Bearer FILES_TOKEN，name 仅限 ASCII）
-//   npx wrangler r2 object put jianshuo-dev-files/books/<name> --file <本地文件> --remote
 //
-// GET /books/        → 简单的 HTML 索引页（列出全部文件，可直接点开）
-// GET /books/<name>  → 文件本体，inline 展示（PDF 浏览器直接打开），边缘/浏览器可缓存
+// 读两个前缀（发布 agent 的 scope 优先，同名以它为准）：
+//   1. users/<PUBLISHER>/books/  —— 写书的 cloud agent 用它自己的用户 token 走
+//      PUT /files/api/upload/books/<slug>/<file> 落到这里（upload 路由把 key 锁进
+//      调用者 scope，agent 拿不到也不该拿 FILES_TOKEN，所以公开路由来迁就写端）。
+//   2. books/（bucket 根）        —— admin 直写：
+//      npx wrangler r2 object put jianshuo-dev-files/books/<name> --file <本地文件> --remote
+// 两个前缀都钉死在 books/ 尾段下，桶里其他东西（articles/、WECHAT.json…）够不着，
+// 所以不需要 photo 那样的文件类型白名单。
+//
+// GET /books/        → 简单的 HTML 索引页（两个前缀合并列出，可直接点开）
+// GET /books/<name>  → 文件本体，inline 展示；html/md/txt 只缓存 5 分钟（书会
+//                      反复重发迭代），其余（pdf/图片等大文件）缓存一天。
+
+const PUBLISHER = 'users/anon-ae209ac53499d51d513425503bd134b0/books/';
+const ROOT = 'books/';
 
 const TYPES = {
   pdf: 'application/pdf', epub: 'application/epub+zip', mobi: 'application/x-mobipocket-ebook',
@@ -19,6 +27,7 @@ const TYPES = {
   html: 'text/html; charset=utf-8', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
   webp: 'image/webp', gif: 'image/gif', zip: 'application/zip', cbz: 'application/vnd.comicbook+zip',
 };
+const SHORT_CACHE = new Set(['html', 'htm', 'md', 'txt']);
 
 export async function onRequest({ request, env, params }) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -31,8 +40,8 @@ export async function onRequest({ request, env, params }) {
   // 索引页：/books 或 /books/
   if (!rel) return index(env);
 
-  const key = 'books/' + rel;
-  const obj = request.method === 'HEAD' ? await env.FILES.head(key) : await env.FILES.get(key);
+  const get = (key) => request.method === 'HEAD' ? env.FILES.head(key) : env.FILES.get(key);
+  const obj = (await get(PUBLISHER + rel)) || (await get(ROOT + rel));
   if (!obj) return notFound();
 
   const ext = (rel.split('.').pop() || '').toLowerCase();
@@ -41,10 +50,9 @@ export async function onRequest({ request, env, params }) {
     headers: {
       'Content-Type': obj.httpMetadata?.contentType || TYPES[ext] || 'application/octet-stream',
       'Content-Length': String(obj.size),
-      // inline：PDF/图片浏览器里直接打开；filename* 让「另存为」得到原名（含中文）。
+      // inline：PDF/图片/HTML 浏览器里直接打开；filename* 让「另存为」得到原名（含中文）。
       'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(leaf)}`,
-      // 书会被覆盖式更新（同名重传），所以只缓存一天，不像照片那样 immutable 一年。
-      'Cache-Control': 'public, max-age=86400',
+      'Cache-Control': SHORT_CACHE.has(ext) ? 'public, max-age=300' : 'public, max-age=86400',
       'Access-Control-Allow-Origin': '*',
     },
   });
@@ -57,18 +65,26 @@ function notFound() {
   });
 }
 
-async function index(env) {
-  const files = [];
+async function listPrefix(env, prefix) {
+  const out = [];
   let cursor;
   do {
-    const listed = await env.FILES.list({ prefix: 'books/', limit: 1000, ...(cursor ? { cursor } : {}) });
+    const listed = await env.FILES.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
     for (const o of listed.objects) {
-      const name = o.key.slice('books/'.length);
-      if (name && !name.endsWith('/')) files.push({ name, size: o.size, uploaded: o.uploaded });
+      const name = o.key.slice(prefix.length);
+      if (name && !name.endsWith('/')) out.push({ name, size: o.size });
     }
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
-  files.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
+  return out;
+}
+
+async function index(env) {
+  // 合并两个前缀，同名以 PUBLISHER 为准（后写入 map 的 ROOT 条目不覆盖）。
+  const [pub, root] = await Promise.all([listPrefix(env, PUBLISHER), listPrefix(env, ROOT)]);
+  const byName = new Map();
+  for (const f of [...pub, ...root]) if (!byName.has(f.name)) byName.set(f.name, f);
+  const files = [...byName.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
 
   const fmtSize = (n) => n >= 1 << 20 ? (n / (1 << 20)).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n + ' B';
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
