@@ -1172,6 +1172,42 @@ export default {
       return J({ byItem });
     }
 
+    // ── /agent/feedback ── 用户意见反馈（设置→帮助与反馈）。任意有效用户 token；
+    // 身份 = resolveScope 解析的 scope（服务端权威，客户端只补 name/version 展示字段）。
+    // 落 R2 feedback/<日期>/<ts>-<rand>.json 存档 + APNs 直推管理员（每 scope 60s 内
+    // 只推第一条防轰炸，存档不受节流影响，永不丢反馈）。
+    if (url.pathname === "/agent/feedback" && request.method === "POST") {
+      const scope = await resolveScope(bearerToken(request), env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      let body = {};
+      try { body = await request.json(); } catch (_) {}
+      const text = String(body.text || "").trim().slice(0, 2000);
+      if (!text) return J({ error: "empty" }, 400);
+      const name = String(body.name || "").slice(0, 40);
+      const version = String(body.version || "").slice(0, 40);
+      const now = new Date();
+      const day = now.toISOString().slice(0, 10);
+      const key = `feedback/${day}/${now.getTime()}-${Math.random().toString(36).slice(2, 8)}.json`;
+      await env.FILES.put(key, JSON.stringify({ ts: now.toISOString(), scope, name, version, text }));
+      ctx.waitUntil((async () => {
+        const sub = scope.replace(/^users\//, "").replace(/\/$/, "");
+        const markKey = `ops/feedback-last/${sub}.json`;
+        const prev = await env.FILES.get(markKey).catch(() => null);
+        let at = 0;
+        if (prev) { try { at = Number(JSON.parse(await prev.text())?.at) || 0; } catch (_) {} }
+        if (Date.now() - at < 60_000) return;
+        await env.FILES.put(markKey, JSON.stringify({ at: Date.now() })).catch(() => {});
+        if (!env.ADMIN_SCOPE) return;
+        const who = name ? `${name}（${sub.slice(0, 11)}）` : sub.slice(0, 11);
+        await sendPush(env, env.ADMIN_SCOPE, {
+          title: `VoiceDrop 反馈 · ${who}`,
+          body: text.slice(0, 180),
+          threadId: "user-feedback",
+        });
+      })());
+      return J({ ok: true });
+    }
+
     // ── /agent/ops/tick ── 服务端错误打点（Pages Functions 4xx/5xx 时 fire-and-forget）──
     // 无鉴权：只累加计数、无副作用；载荷截断，恶意灌水最多触发一条报警。
     if (url.pathname === "/agent/ops/tick" && request.method === "POST") {
