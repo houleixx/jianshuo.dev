@@ -31,6 +31,9 @@
   .wrap { max-width: 920px; margin: 0 auto; }
   h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
   .sub { color: var(--ink-2); margin-top: 8px; font-size: 15px; max-width: 720px; }
+  .section-head { margin-top: 40px; }
+  .section-head h2 { font-size: 19px; font-weight: 700; }
+  .section-head p { color: var(--ink-2); font-size: 14px; margin-top: 4px; max-width: 720px; }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -45,16 +48,16 @@
   .panel-latest { font-size: 13px; color: var(--ink-2); margin-left: auto; }
   .panel-latest b { color: var(--ink); font-weight: 600; }
   svg { display: block; width: 100%; height: auto; }
-  #charts { position: relative; }
-  #tip {
+  .charts { position: relative; }
+  .tipbox {
     position: absolute; pointer-events: none; display: none; z-index: 10;
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
     box-shadow: 0 4px 16px rgba(11,11,11,0.10);
     padding: 8px 12px; font-size: 12.5px; white-space: nowrap;
   }
-  #tip .t-date { font-weight: 600; margin-bottom: 4px; }
-  #tip .t-row { display: flex; align-items: center; gap: 6px; color: var(--ink-2); }
-  #tip .t-row b { color: var(--ink); font-weight: 600; margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
+  .tipbox .t-date { font-weight: 600; margin-bottom: 4px; }
+  .tipbox .t-row { display: flex; align-items: center; gap: 6px; color: var(--ink-2); }
+  .tipbox .t-row b { color: var(--ink); font-weight: 600; margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
   .note { color: var(--muted); font-size: 12.5px; margin-top: 16px; }
   .note a { color: var(--ink-2); }
   details { margin-top: 20px; }
@@ -71,10 +74,19 @@
 <body>
 <div class="wrap">
   <h1>A股三大情绪指标：峰值都在指数高位</h1>
-  <p class="sub">新增开户数、成交额、融资余额是三个「市场热度」指标。把它们和上证指数放在同一条时间轴上（2024年9月 – 2026年8月），可以看到：三个指标的峰值全部出现在指数高位——最多人跑步进场、借钱加仓的时候，恰恰是顶部而不是底部。</p>
+  <p class="sub">新增开户数、成交额、融资余额是三个「市场热度」指标。把它们和上证指数放在同一条时间轴上，可以看到：三个指标的峰值全部出现在指数高位——最多人跑步进场、借钱加仓的时候，恰恰是顶部而不是底部。下面是本轮行情，以及 2015 年杠杆牛的历史对照。</p>
 
-  <div id="charts"></div>
-  <div id="tip"></div>
+  <div class="section-head">
+    <h2>本轮 · 2024.9 – 2026.8</h2>
+    <p>924 行情启动，2026-05-13 上证指数 4242.57 点创十一年新高，此后回落震荡。</p>
+  </div>
+  <div class="charts" id="secNow"></div>
+
+  <div class="section-head">
+    <h2>历史对照 · 2015 杠杆牛（2014.6 – 2016.6）</h2>
+    <p>2015-06-12 上证指数盘中 5178 点见顶；成交额峰值提前两周（5/28 单日 2.36 万亿），融资余额峰值滞后四个交易日（6/18 的 2.27 万亿）——杠杆资金把第一波下跌当成了抄底机会。随后强平螺旋，两个月内融资余额蒸发 1 万亿，指数最终跌到 2016-01 的 2656 点。</p>
+  </div>
+  <div class="charts" id="sec2015"></div>
 
   <details>
     <summary>数据表（按月）</summary>
@@ -82,8 +94,8 @@
   </details>
 
   <p class="note">
-    数据说明：上证指数收盘价与沪深两市成交额（沪=上证全市场、深=深证综指口径）、融资余额（全市场，含北交所）来自东方财富数据接口，日度，截至 2026-08-07（融资余额至 2026-08-06）；新增开户数为上交所公布的 A 股月度新开户数（万户），来自
-    <a href="https://www.cls.cn/detail/2249723">财联社</a>、<a href="https://www.stcn.com/article/detail/4058355.html">证券时报</a> 等公开报道汇总，其中 2025-05、2026-06 两个月为按年度累计数倒推值。2026-08 的日均成交额仅含 8/3–8/7 五个交易日。本页仅为数据观察，不构成投资建议。
+    数据说明：上证指数收盘价、沪深两市成交额（沪=上证全市场、深=深证综指口径）与融资余额（全市场）来自东方财富数据接口与 baostock，日度；本轮数据截至 2026-08-07（融资余额至 2026-08-06）。本轮新增开户数为上交所公布的 A 股月度新开户数（万户，账户口径，一人最多 3 户），来自
+    <a href="https://www.cls.cn/detail/2249723">财联社</a>、<a href="https://www.stcn.com/article/detail/4058355.html">证券时报</a> 等公开报道汇总，其中 2025-05、2026-06 两个月为按年度累计数倒推值，2026-08 的日均成交额仅含 8/3–8/7 五个交易日。2015 段的开户数为中国结算「月度新增投资者」（万人，人头口径），该统计自 2015-04 起才发布（当月「一人一户」限制放开并切换口径），此前月份无数据；2015-05 下旬还创下单周新增投资者 164 万人的历史纪录。本页仅为数据观察，不构成投资建议。
   </p>
 </div>
 
@@ -92,202 +104,238 @@
 const C = getComputedStyle(document.documentElement);
 const col = n => C.getPropertyValue(n).trim();
 
-// ---------- data prep ----------
-const daily = DATA.daily.map(r => ({ d: r[0], t: Date.parse(r[0]), idx: r[1], amt: r[2], rz: r[3] }));
-const accounts = DATA.accounts;
-const turnover = DATA.turnoverMonthly;
-const rzDays = daily.filter(r => r.rz != null);
-
-const T0 = Date.parse('2024-09-01'), T1 = Date.parse('2026-08-31');
-const monthMid = m => (Date.parse(m + '-01') + Date.parse(m + '-28')) / 2;
+const W = 920, ML = 52, MR = 14, MT = 26, MB = 22;
 const monthStart = m => Date.parse(m + '-01');
+const monthMid = m => (Date.parse(m + '-01') + Date.parse(m + '-28')) / 2;
 const monthEnd = m => { const [y, mo] = m.split('-').map(Number); return Date.parse((mo === 12 ? (y+1)+'-01' : y+'-'+String(mo+1).padStart(2,'0')) + '-01'); };
 
-// peaks
-const pkIdx  = daily.reduce((a,b) => b.idx > a.idx ? b : a);
-const pkRz   = rzDays.reduce((a,b) => b.rz  > a.rz  ? b : a);
-const pkAcct = accounts.reduce((a,b) => b[1] > a[1] ? b : a);
-const pkTurn = turnover.reduce((a,b) => b[1] > a[1] ? b : a);
-const last = daily[daily.length-1], lastRz = rzDays[rzDays.length-1];
+function renderSection(cfg) {
+  const daily = cfg.daily.map(r => ({ d: r[0], t: Date.parse(r[0]), idx: r[1], amt: r[2], rz: r[3] }));
+  const rzDays = daily.filter(r => r.rz != null);
+  const T0 = Date.parse(cfg.t0), T1 = Date.parse(cfg.t1);
+  const x = t => ML + (t - T0) / (T1 - T0) * (W - ML - MR);
 
-// reference verticals: the two index tops
-const refs = [
-  { t: Date.parse('2024-10-08'), label: '2024-10-08 阶段顶' },
-  { t: Date.parse(pkIdx.d),      label: pkIdx.d + ' 十一年新高' }
-];
-
-// ---------- layout ----------
-const W = 920, ML = 52, MR = 14, MT = 26, MB = 22;
-const x = t => ML + (t - T0) / (T1 - T0) * (W - ML - MR);
-
-const fmtM = m => { const [y,mo] = m.split('-'); return (mo==='01' ? y+'.' : '') + Number(mo) + '月'; };
-const xTicks = [];
-for (let y = 2024; y <= 2026; y++) for (const mo of [1,4,7,10]) {
-  const t = Date.parse(y + '-' + String(mo).padStart(2,'0') + '-01');
-  if (t >= T0 && t <= T1) xTicks.push({ t, label: mo === 1 ? y + '年' : mo + '月' });
-}
-
-function svgOpen(h) { return `<svg viewBox="0 0 ${W} ${h}" preserveAspectRatio="xMidYMid meet">`; }
-
-function gridAndAxis(h, yTicks, yScale, fmt) {
-  let s = '';
-  for (const v of yTicks) {
-    const yy = yScale(v);
-    s += `<line x1="${ML}" y1="${yy}" x2="${W-MR}" y2="${yy}" stroke="${col('--grid')}" stroke-width="1"/>`;
-    s += `<text class="svg-label" x="${ML-8}" y="${yy+4}" text-anchor="end">${fmt(v)}</text>`;
+  const xTicks = [];
+  for (let y = 2014; y <= 2026; y++) for (const mo of [1, 4, 7, 10]) {
+    const t = Date.parse(y + '-' + String(mo).padStart(2, '0') + '-01');
+    if (t >= T0 && t <= T1) xTicks.push({ t, label: mo === 1 ? y + '年' : mo + '月' });
   }
-  for (const tk of xTicks)
-    s += `<text class="svg-label" x="${x(tk.t)}" y="${h-6}" text-anchor="middle">${tk.label}</text>`;
-  s += `<line x1="${ML}" y1="${h-MB}" x2="${W-MR}" y2="${h-MB}" stroke="${col('--axis')}" stroke-width="1"/>`;
-  for (const r of refs)
-    s += `<line x1="${x(r.t)}" y1="${MT-14}" x2="${x(r.t)}" y2="${h-MB}" stroke="${col('--axis')}" stroke-width="1"/>`;
-  return s;
-}
 
-function linePanel(id, h, pts, val, color, yTicks, yFmt, annos) {
-  const lo = yTicks[0], hi = yTicks[yTicks.length-1];
-  const y = v => MT + (hi - v) / (hi - lo) * (h - MT - MB);
-  let s = svgOpen(h) + gridAndAxis(h, yTicks, y, yFmt);
-  let path = '', area = '';
-  pts.forEach((p, i) => {
-    const px = x(p.t).toFixed(1), py = y(val(p)).toFixed(1);
-    path += (i ? 'L' : 'M') + px + ',' + py;
+  function gridAndAxis(h, yTicks, yScale, fmt) {
+    let s = '';
+    for (const v of yTicks) {
+      const yy = yScale(v);
+      s += `<line x1="${ML}" y1="${yy}" x2="${W-MR}" y2="${yy}" stroke="${col('--grid')}" stroke-width="1"/>`;
+      s += `<text class="svg-label" x="${ML-8}" y="${yy+4}" text-anchor="end">${fmt(v)}</text>`;
+    }
+    for (const tk of xTicks)
+      s += `<text class="svg-label" x="${x(tk.t)}" y="${h-6}" text-anchor="middle">${tk.label}</text>`;
+    s += `<line x1="${ML}" y1="${h-MB}" x2="${W-MR}" y2="${h-MB}" stroke="${col('--axis')}" stroke-width="1"/>`;
+    for (const r of cfg.refs)
+      s += `<line x1="${x(r.t)}" y1="${MT-14}" x2="${x(r.t)}" y2="${h-MB}" stroke="${col('--axis')}" stroke-width="1"/>`;
+    return s;
+  }
+
+  function annoText(s0, ax, ay, a) {
+    let s = `<text class="svg-anno" x="${ax}" y="${ay}" text-anchor="${a.anchor||'middle'}">${a.text}</text>`;
+    if (a.sub) s += `<text class="svg-anno-sub" x="${ax}" y="${ay + 14}" text-anchor="${a.anchor||'middle'}">${a.sub}</text>`;
+    return s0 + s;
+  }
+
+  function linePanel(id, h, pts, val, color, yTicks, annos) {
+    const lo = yTicks[0], hi = yTicks[yTicks.length-1];
+    const y = v => MT + (hi - v) / (hi - lo) * (h - MT - MB);
+    let s = `<svg viewBox="0 0 ${W} ${h}" preserveAspectRatio="xMidYMid meet">` + gridAndAxis(h, yTicks, y, v => v);
+    let path = '';
+    pts.forEach((p, i) => { path += (i ? 'L' : 'M') + x(p.t).toFixed(1) + ',' + y(val(p)).toFixed(1); });
+    const x0 = x(pts[0].t).toFixed(1), x1 = x(pts[pts.length-1].t).toFixed(1);
+    s += `<path d="${path}L${x1},${h-MB}L${x0},${h-MB}Z" fill="${color}" opacity="0.1"/>`;
+    s += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    for (const a of annos) {
+      s += `<circle cx="${x(a.t)}" cy="${y(a.v)}" r="4.5" fill="${color}" stroke="${col('--surface')}" stroke-width="2"/>`;
+      s = annoText(s, x(a.t) + (a.dx||0), y(a.v) + (a.dy||-10), a);
+    }
+    s += `<line id="${id}-cross" x1="0" y1="${MT-8}" x2="0" y2="${h-MB}" stroke="${col('--ink-2')}" stroke-width="1" visibility="hidden"/>`;
+    return s + '</svg>';
+  }
+
+  function barPanel(id, h, rows, color, yTicks, annos) {
+    const hi = yTicks[yTicks.length-1];
+    const y = v => MT + (hi - v) / hi * (h - MT - MB);
+    let s = `<svg viewBox="0 0 ${W} ${h}" preserveAspectRatio="xMidYMid meet">` + gridAndAxis(h, yTicks, y, v => v || '');
+    for (const [m, v] of rows) {
+      const xs = x(monthStart(m)) + 1, xe = x(monthEnd(m)) - 1;
+      const bw = Math.min(24, xe - xs);
+      const bx = (xs + xe - bw) / 2;
+      const by = y(v), bh = (h - MB) - by, r = Math.min(4, bh);
+      s += `<path d="M${bx},${h-MB}V${by+r}Q${bx},${by} ${bx+r},${by}H${bx+bw-r}Q${bx+bw},${by} ${bx+bw},${by+r}V${h-MB}Z" fill="${color}"/>`;
+    }
+    for (const a of annos) s = annoText(s, x(monthMid(a.m)) + (a.dx||0), y(a.v) - 16, a);
+    s += `<line id="${id}-cross" x1="0" y1="${MT-8}" x2="0" y2="${h-MB}" stroke="${col('--ink-2')}" stroke-width="1" visibility="hidden"/>`;
+    return s + '</svg>';
+  }
+
+  const root = document.getElementById(cfg.el);
+  const ids = [];
+  function card(title, colorVar, latestHtml, svg) {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `<div class="panel-head"><span class="key-dot" style="background:${col(colorVar)}"></span><span class="panel-title">${title}</span><span class="panel-latest">${latestHtml}</span></div>` + svg;
+    root.appendChild(div);
+  }
+
+  const p = cfg.panels;
+  ids.push(cfg.el + '-p1');
+  card(p.index.title, '--c-index', p.index.latest,
+    linePanel(cfg.el + '-p1', 240, daily, r => r.idx, col('--c-index'), p.index.ticks, p.index.annos));
+  ids.push(cfg.el + '-p2');
+  card(p.acct.title, '--c-acct', p.acct.latest,
+    barPanel(cfg.el + '-p2', 210, cfg.accounts, col('--c-acct'), p.acct.ticks, p.acct.annos));
+  ids.push(cfg.el + '-p3');
+  card(p.turn.title, '--c-turn', p.turn.latest,
+    barPanel(cfg.el + '-p3', 210, cfg.turnover, col('--c-turn'), p.turn.ticks, p.turn.annos));
+  ids.push(cfg.el + '-p4');
+  card(p.margin.title, '--c-margin', p.margin.latest,
+    linePanel(cfg.el + '-p4', 210, rzDays, r => r.rz, col('--c-margin'), p.margin.ticks, p.margin.annos));
+
+  // ref labels on first panel
+  {
+    const svg1 = root.querySelector('svg');
+    let extra = '';
+    cfg.refs.forEach((r, i) => {
+      extra += `<text class="svg-anno-sub" x="${x(r.t) + (r.side === 'left' ? -5 : 5)}" y="${MT - 4 - (i ? 12 : 0)}" text-anchor="${r.side === 'left' ? 'end' : 'start'}">${r.label}</text>`;
+    });
+    svg1.insertAdjacentHTML('beforeend', extra);
+  }
+
+  // crosshair + tooltip
+  const tip = document.createElement('div');
+  tip.className = 'tipbox';
+  root.appendChild(tip);
+  const bisect = t => {
+    let lo = 0, hi = daily.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; daily[mid].t < t ? lo = mid + 1 : hi = mid; }
+    if (lo > 0 && Math.abs(daily[lo-1].t - t) < Math.abs(daily[lo].t - t)) lo--;
+    return daily[lo];
+  };
+  const row = (color, name, val) => `<div class="t-row"><span class="key-dot" style="background:${color}"></span>${name}<b>${val}</b></div>`;
+  root.addEventListener('mousemove', e => {
+    const box = root.querySelector('svg').getBoundingClientRect();
+    const vx = (e.clientX - box.left) * W / box.width;
+    if (vx < ML || vx > W - MR) { hide(); return; }
+    const pt = bisect(T0 + (vx - ML) / (W - ML - MR) * (T1 - T0));
+    const m = pt.d.slice(0, 7);
+    const acct = cfg.accounts.find(a => a[0] === m);
+    const turn = cfg.turnover.find(a => a[0] === m);
+    for (const id of ids) {
+      const ln = document.getElementById(id + '-cross');
+      if (ln) { ln.setAttribute('x1', x(pt.t)); ln.setAttribute('x2', x(pt.t)); ln.setAttribute('visibility', 'visible'); }
+    }
+    tip.innerHTML = `<div class="t-date">${pt.d}</div>` +
+      row(col('--c-index'), '上证指数', pt.idx.toFixed(0) + ' 点') +
+      (acct ? row(col('--c-acct'), cfg.acctTipLabel, acct[1].toFixed(0) + ' ' + cfg.acctUnit) : '') +
+      (turn ? row(col('--c-turn'), '当月日均成交', turn[1].toFixed(2) + ' 万亿') : '') +
+      (pt.rz != null ? row(col('--c-margin'), '融资余额', pt.rz.toFixed(2) + ' 万亿') : '');
+    tip.style.display = 'block';
+    const wrapBox = root.getBoundingClientRect();
+    let left = e.clientX - wrapBox.left + 16;
+    if (left + 230 > wrapBox.width) left = e.clientX - wrapBox.left - 240;
+    tip.style.left = left + 'px';
+    tip.style.top = (e.clientY - wrapBox.top + 12) + 'px';
   });
-  const x0 = x(pts[0].t).toFixed(1), x1 = x(pts[pts.length-1].t).toFixed(1);
-  area = path + `L${x1},${h-MB}L${x0},${h-MB}Z`;
-  s += `<path d="${area}" fill="${color}" opacity="0.1"/>`;
-  s += `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-  for (const a of annos) {
-    s += `<circle cx="${x(a.t)}" cy="${y(a.v)}" r="4.5" fill="${color}" stroke="${col('--surface')}" stroke-width="2"/>`;
-    s += `<text class="svg-anno" x="${x(a.t) + (a.dx||0)}" y="${y(a.v) + (a.dy||-10)}" text-anchor="${a.anchor||'middle'}">${a.text}</text>`;
-    if (a.sub) s += `<text class="svg-anno-sub" x="${x(a.t) + (a.dx||0)}" y="${y(a.v) + (a.dy||-10) + 14}" text-anchor="${a.anchor||'middle'}">${a.sub}</text>`;
+  function hide() {
+    tip.style.display = 'none';
+    for (const id of ids) {
+      const ln = document.getElementById(id + '-cross');
+      if (ln) ln.setAttribute('visibility', 'hidden');
+    }
   }
-  s += `<line id="${id}-cross" x1="0" y1="${MT-8}" x2="0" y2="${h-MB}" stroke="${col('--ink-2')}" stroke-width="1" visibility="hidden"/>`;
-  return s + '</svg>';
+  root.addEventListener('mouseleave', hide);
+  return { daily, rzDays };
 }
 
-function barPanel(id, h, rows, color, yTicks, yFmt, annos) {
-  const lo = 0, hi = yTicks[yTicks.length-1];
-  const y = v => MT + (hi - v) / (hi - lo) * (h - MT - MB);
-  let s = svgOpen(h) + gridAndAxis(h, yTicks, y, yFmt);
-  for (const [m, v] of rows) {
-    const xs = x(monthStart(m)) + 1, xe = x(monthEnd(m)) - 1;
-    const bw = Math.min(24, xe - xs);
-    const bx = (xs + xe - bw) / 2;
-    const by = y(v), bh = (h - MB) - by, r = Math.min(4, bh);
-    s += `<path d="M${bx},${h-MB}V${by+r}Q${bx},${by} ${bx+r},${by}H${bx+bw-r}Q${bx+bw},${by} ${bx+bw},${by+r}V${h-MB}Z" fill="${color}"/>`;
+// ---------- section: current cycle ----------
+const secNow = renderSection({
+  el: 'secNow',
+  daily: DATA.daily, accounts: DATA.accounts, turnover: DATA.turnoverMonthly,
+  t0: '2024-09-01', t1: '2026-08-31',
+  acctTipLabel: '当月新开户', acctUnit: '万户',
+  refs: [
+    { t: Date.parse('2024-10-08'), label: '2024-10-08 阶段顶' },
+    { t: Date.parse('2026-05-13'), label: '2026-05-13 十一年新高', side: 'left' }
+  ],
+  panels: {
+    index: { title: '上证指数（日收盘）', latest: '最新 2026-08-07 · <b>3940 点</b>',
+      ticks: [2600, 3000, 3400, 3800, 4200],
+      annos: [{ t: Date.parse('2026-05-13'), v: 4242.57, text: '4243', anchor: 'end', dx: -8, dy: 4 },
+              { t: Date.parse('2024-10-08'), v: 3489.78, text: '3490', anchor: 'start', dx: 8, dy: 0 },
+              { t: Date.parse('2024-09-13'), v: 2704.09, text: '2704 · 起点', anchor: 'start', dx: 6, dy: 16 }] },
+    acct: { title: '新增开户数（月度，万户）', latest: '最新 2026-07 · <b>265.5 万户</b>',
+      ticks: [0, 200, 400, 600, 700],
+      annos: [{ m: '2024-10', v: 684.68, text: '685万 · 峰值', sub: '924行情冲顶当月', anchor: 'start', dx: -12 },
+              { m: '2026-01', v: 491.58, text: '492万' }] },
+    turn: { title: '沪深两市日均成交额（月度，万亿元）', latest: '最新 2026-08 · <b>2.41 万亿/日</b>',
+      ticks: [0, 1, 2, 3, 3.5],
+      annos: [{ m: '2026-05', v: 3.18, text: '3.18万亿 · 峰值', anchor: 'end', dx: 14 },
+              { m: '2024-09', v: 0.793, text: '0.79万亿' }] },
+    margin: { title: '融资余额（日度，万亿元）', latest: '最新 2026-08-06 · <b>2.62 万亿</b>',
+      ticks: [1, 1.5, 2, 2.5, 3, 3.2],
+      annos: [{ t: Date.parse('2026-06-25'), v: 3.0102, text: '3.01万亿 · 峰值', anchor: 'end', dx: -10, dy: 4 },
+              { t: Date.parse('2024-09-13'), v: 1.3668, text: '1.37万亿', anchor: 'start', dx: 6, dy: -8 }] }
   }
-  for (const a of annos) {
-    s += `<text class="svg-anno" x="${x(monthMid(a.m)) + (a.dx||0)}" y="${y(a.v)-16}" text-anchor="${a.anchor||'middle'}">${a.text}</text>`;
-    if (a.sub) s += `<text class="svg-anno-sub" x="${x(monthMid(a.m)) + (a.dx||0)}" y="${y(a.v)-2 - (a.subUp?18:0)}" text-anchor="${a.anchor||'middle'}">${a.sub}</text>`;
-  }
-  s += `<line id="${id}-cross" x1="0" y1="${MT-8}" x2="0" y2="${h-MB}" stroke="${col('--ink-2')}" stroke-width="1" visibility="hidden"/>`;
-  return s + '</svg>';
-}
-
-// ---------- build panels ----------
-const chartsEl = document.getElementById('charts');
-function card(title, colorVar, latestHtml, svg) {
-  const div = document.createElement('div');
-  div.className = 'card';
-  div.innerHTML = `<div class="panel-head"><span class="key-dot" style="background:${col(colorVar)}"></span><span class="panel-title">${title}</span><span class="panel-latest">${latestHtml}</span></div>` + svg;
-  chartsEl.appendChild(div);
-}
-
-card('上证指数（日收盘）', '--c-index',
-  `最新 ${last.d} · <b>${last.idx.toFixed(0)} 点</b>`,
-  linePanel('p1', 240, daily, p => p.idx, col('--c-index'), [2600, 3000, 3400, 3800, 4200], v => v,
-    [{ t: Date.parse(pkIdx.d), v: pkIdx.idx, text: '4243', anchor: 'end', dx: -8, dy: 4 },
-     { t: Date.parse('2024-10-08'), v: 3489.78, text: '3490', anchor: 'start', dx: 8, dy: 0 },
-     { t: Date.parse('2024-09-13'), v: 2704.09, text: '2704 · 起点', anchor: 'start', dx: 6, dy: 16 }]));
-
-card('新增开户数（月度，万户）', '--c-acct',
-  `最新 2026-07 · <b>265.5 万户</b>`,
-  barPanel('p2', 210, accounts, col('--c-acct'), [0, 200, 400, 600, 700], v => v || '',
-    [{ m: '2024-10', v: 684.68, text: '685万 · 峰值', sub: '924行情冲顶当月', anchor: 'start', dx: -12 },
-     { m: '2026-01', v: 491.58, text: '492万', anchor: 'middle' }]));
-
-card('沪深两市日均成交额（月度，万亿元）', '--c-turn',
-  `最新 2026-08 · <b>2.41 万亿/日</b>`,
-  barPanel('p3', 210, turnover, col('--c-turn'), [0, 1, 2, 3, 3.5], v => v || '',
-    [{ m: '2026-05', v: 3.18, text: '3.18万亿 · 峰值', anchor: 'end', dx: 14 },
-     { m: '2024-09', v: 0.793, text: '0.79万亿', anchor: 'middle' }]));
-
-card('融资余额（日度，万亿元）', '--c-margin',
-  `最新 ${lastRz.d} · <b>${lastRz.rz.toFixed(2)} 万亿</b>`,
-  linePanel('p4', 210, rzDays, p => p.rz, col('--c-margin'), [1, 1.5, 2, 2.5, 3, 3.2], v => v,
-    [{ t: Date.parse(pkRz.d), v: pkRz.rz, text: '3.01万亿 · 峰值', anchor: 'end', dx: -10, dy: 4 },
-     { t: Date.parse('2024-09-13'), v: rzDays.find(r => r.d === '2024-09-13').rz, text: '1.37万亿', anchor: 'start', dx: 6, dy: -8 }]));
-
-// ref line labels on first panel only
-{
-  const svg1 = chartsEl.querySelector('svg');
-  let extra = '';
-  extra += `<text class="svg-anno-sub" x="${x(refs[0].t) + 5}" y="${MT-4}" text-anchor="start">${refs[0].label}</text>`;
-  extra += `<text class="svg-anno-sub" x="${x(refs[1].t) - 5}" y="${MT-16}" text-anchor="end">${refs[1].label}</text>`;
-  svg1.insertAdjacentHTML('beforeend', extra);
-}
-
-// ---------- crosshair + tooltip ----------
-const tip = document.getElementById('tip');
-const bisect = t => {
-  let lo = 0, hi = daily.length - 1;
-  while (lo < hi) { const mid = (lo + hi) >> 1; daily[mid].t < t ? lo = mid + 1 : hi = mid; }
-  if (lo > 0 && Math.abs(daily[lo-1].t - t) < Math.abs(daily[lo].t - t)) lo--;
-  return daily[lo];
-};
-function row(color, name, val) {
-  return `<div class="t-row"><span class="key-dot" style="background:${color}"></span>${name}<b>${val}</b></div>`;
-}
-chartsEl.addEventListener('mousemove', e => {
-  const anySvg = chartsEl.querySelector('svg');
-  const box = anySvg.getBoundingClientRect();
-  const scale = W / box.width;
-  const vx = (e.clientX - box.left) * scale;
-  if (vx < ML || vx > W - MR) { hide(); return; }
-  const t = T0 + (vx - ML) / (W - ML - MR) * (T1 - T0);
-  const p = bisect(t);
-  const m = p.d.slice(0, 7);
-  const acct = accounts.find(a => a[0] === m);
-  const turn = turnover.find(a => a[0] === m);
-  for (const id of ['p1','p2','p3','p4']) {
-    const ln = document.getElementById(id + '-cross');
-    if (ln) { ln.setAttribute('x1', x(p.t)); ln.setAttribute('x2', x(p.t)); ln.setAttribute('visibility', 'visible'); }
-  }
-  tip.innerHTML = `<div class="t-date">${p.d}</div>` +
-    row(col('--c-index'), '上证指数', p.idx.toFixed(0) + ' 点') +
-    (acct ? row(col('--c-acct'), '当月新开户', acct[1].toFixed(0) + ' 万户') : '') +
-    (turn ? row(col('--c-turn'), '当月日均成交', turn[1].toFixed(2) + ' 万亿') : '') +
-    (p.rz != null ? row(col('--c-margin'), '融资余额', p.rz.toFixed(2) + ' 万亿') : '');
-  tip.style.display = 'block';
-  const wrapBox = chartsEl.getBoundingClientRect();
-  let left = e.clientX - wrapBox.left + 16;
-  if (left + 230 > wrapBox.width) left = e.clientX - wrapBox.left - 240;
-  tip.style.left = left + 'px';
-  tip.style.top = (e.clientY - wrapBox.top + 12) + 'px';
 });
-function hide() {
-  tip.style.display = 'none';
-  for (const id of ['p1','p2','p3','p4']) {
-    const ln = document.getElementById(id + '-cross');
-    if (ln) ln.setAttribute('visibility', 'hidden');
-  }
-}
-chartsEl.addEventListener('mouseleave', hide);
 
-// ---------- table ----------
-{
-  const months = turnover.map(r => r[0]);
-  const monthClose = {};
-  for (const p of daily) monthClose[p.d.slice(0,7)] = p.idx;
-  const monthRz = {};
-  for (const p of rzDays) monthRz[p.d.slice(0,7)] = p.rz;
-  let html = '<table><tr><th>月份</th><th>上证指数月末收盘</th><th>新开户（万户）</th><th>日均成交（万亿）</th><th>月末融资余额（万亿）</th></tr>';
-  for (const m of months) {
-    const a = accounts.find(r => r[0] === m), tv = turnover.find(r => r[0] === m);
-    html += `<tr><td>${m}</td><td>${monthClose[m] ? monthClose[m].toFixed(0) : '–'}</td><td>${a ? a[1].toFixed(1) : '–'}</td><td>${tv ? tv[1].toFixed(2) : '–'}</td><td>${monthRz[m] ? monthRz[m].toFixed(2) : '–'}</td></tr>`;
+// ---------- section: 2015 ----------
+renderSection({
+  el: 'sec2015',
+  daily: DATA2015.daily, accounts: DATA2015.accounts, turnover: DATA2015.turnoverMonthly,
+  t0: '2014-06-01', t1: '2016-06-30',
+  acctTipLabel: '当月新增投资者', acctUnit: '万人',
+  refs: [
+    { t: Date.parse('2015-06-12'), label: '2015-06-12 见顶 5178（盘中）' },
+    { t: Date.parse('2016-01-28'), label: '熔断底', side: 'left' }
+  ],
+  panels: {
+    index: { title: '上证指数（日收盘）', latest: '区间 2016-06-30 · <b>2930 点</b>',
+      ticks: [2000, 3000, 4000, 5000, 5400],
+      annos: [{ t: Date.parse('2015-06-12'), v: 5166.35, text: '5166 收盘', anchor: 'end', dx: -8, dy: 4 },
+              { t: Date.parse('2014-06-03'), v: 2038.31, text: '2038 · 起点', anchor: 'start', dx: 6, dy: -8 },
+              { t: Date.parse('2016-01-28'), v: 2655.66, text: '2656', anchor: 'start', dx: 8, dy: 16 }] },
+    acct: { title: '新增投资者（月度，万人 · 2015-04 起有统计）', latest: '区间末 2016-06 · <b>142 万人</b>',
+      ticks: [0, 200, 400, 500],
+      annos: [{ m: '2015-04', v: 497.53, text: '498万人 · 峰值', sub: '一人多户放开 + 冲顶前夕', anchor: 'start', dx: -12 },
+              { m: '2015-09', v: 108.32, text: '108万', dx: 6 }] },
+    turn: { title: '沪深两市日均成交额（月度，万亿元）', latest: '区间末 2016-06 · <b>0.57 万亿/日</b>',
+      ticks: [0, 0.5, 1, 1.5, 2],
+      annos: [{ m: '2015-06', v: 1.74, text: '日均1.74万亿 · 峰值', sub: '5/28 单日 2.36 万亿纪录', anchor: 'end', dx: 14 },
+              { m: '2014-06', v: 0.16, text: '0.16万亿' }] },
+    margin: { title: '融资余额（日度，万亿元）', latest: '区间末 2016-06-16 · <b>0.84 万亿</b>',
+      ticks: [0, 0.5, 1, 1.5, 2, 2.4],
+      annos: [{ t: Date.parse('2015-06-18'), v: 2.2666, text: '2.27万亿 · 峰值（顶后4天）', anchor: 'end', dx: -10, dy: 0 },
+              { t: Date.parse('2014-06-03'), v: 0.3913, text: '0.39万亿', anchor: 'start', dx: 6, dy: -8 }] }
   }
-  document.getElementById('tableBox').innerHTML = html + '</table>';
+});
+
+// ---------- tables ----------
+{
+  function buildTable(daily, rzDays, accounts, turnover, acctHead) {
+    const monthClose = {}, monthRz = {};
+    for (const p of daily) monthClose[p.d.slice(0,7)] = p.idx;
+    for (const p of rzDays) monthRz[p.d.slice(0,7)] = p.rz;
+    let html = `<table><tr><th>月份</th><th>上证指数月末收盘</th><th>${acctHead}</th><th>日均成交（万亿）</th><th>月末融资余额（万亿）</th></tr>`;
+    for (const [m] of turnover) {
+      const a = accounts.find(r => r[0] === m), tv = turnover.find(r => r[0] === m);
+      html += `<tr><td>${m}</td><td>${monthClose[m] ? monthClose[m].toFixed(0) : '–'}</td><td>${a ? a[1].toFixed(1) : '–'}</td><td>${tv ? tv[1].toFixed(2) : '–'}</td><td>${monthRz[m] ? monthRz[m].toFixed(2) : '–'}</td></tr>`;
+    }
+    return html + '</table>';
+  }
+  const d15 = DATA2015.daily.map(r => ({ d: r[0], idx: r[1], rz: r[3] }));
+  const d15rz = d15.filter(r => r.rz != null);
+  document.getElementById('tableBox').innerHTML =
+    '<p style="margin-top:12px;font-size:13px;color:var(--muted)">本轮（2024.9–2026.8）</p>' +
+    buildTable(secNow.daily, secNow.rzDays, DATA.accounts, DATA.turnoverMonthly, '新开户（万户）') +
+    '<p style="margin-top:20px;font-size:13px;color:var(--muted)">2015 杠杆牛（2014.6–2016.6）</p>' +
+    buildTable(d15, d15rz, DATA2015.accounts, DATA2015.turnoverMonthly, '新增投资者（万人）');
 }
 </script>
 </body>
