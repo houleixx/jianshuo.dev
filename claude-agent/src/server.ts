@@ -184,6 +184,84 @@ async function getSessionMessages(id: string) {
   return msgs;
 }
 
+// --- 写书 jobs (VoiceDrop app 实验功能「写书」) ---
+//
+// POST /api/book — fire-and-forget：验完 token 立刻 202，agent 在本进程后台跑完
+// 整本书（skill 边写边发到 R2 books/，所以进程重启也只丢未过稿章节）。与 /api/chat
+// 的「断线即中止」相反——app 提交完种子就可以关掉。
+// 认证不走 Caddy basic_auth（Caddyfile 对此路径豁免）：客户端带 VoiceDrop 用户
+// bearer（anon_*/session JWT），这里拿它去 jianshuo.dev whoami 验真——app 里零内置密钥。
+const BOOK_MAX_TURNS = Number(process.env.BOOK_MAX_TURNS ?? 80);
+const WHOAMI_URL = process.env.WHOAMI_URL ?? "https://jianshuo.dev/files/api/whoami";
+let bookJobRunning = false;
+
+async function verifyVoiceDropToken(auth: string | undefined): Promise<string | null> {
+  if (!auth?.startsWith("Bearer ")) return null;
+  try {
+    const r = await fetch(WHOAMI_URL, { headers: { Authorization: auth } });
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    return typeof j?.scope === "string" ? j.scope : null;
+  } catch {
+    return null;
+  }
+}
+
+function runBookJob(seed: string, scope: string) {
+  bookJobRunning = true;
+  console.log(`[book] start scope=${scope} seed=${seed.slice(0, 120).replace(/\n/g, " ")}`);
+  const q = query({
+    prompt: `用 wjs-voicedrop-writing-book skill 写一本书。种子：\n${seed}`,
+    options: {
+      cwd: WORKSPACE,
+      model: MODEL,
+      maxTurns: BOOK_MAX_TURNS,
+      permissionMode: "bypassPermissions",
+      systemPrompt: { type: "preset", preset: "claude_code" },
+    },
+  });
+  (async () => {
+    try {
+      for await (const msg of q as AsyncIterable<any>) {
+        if (msg.type === "result")
+          console.log(
+            `[book] done scope=${scope} turns=${msg.num_turns} cost=${msg.total_cost_usd}` +
+              (msg.subtype !== "success" ? ` ERROR=${msg.subtype}` : ""),
+          );
+      }
+    } catch (e) {
+      console.error("[book] job failed", e);
+    } finally {
+      bookJobRunning = false;
+    }
+  })();
+}
+
+async function handleBook(req: IncomingMessage, res: ServerResponse, payload: any) {
+  const json = { "Content-Type": "application/json" };
+  const seed = String(payload?.seed ?? "").trim().slice(0, 20000);
+  if (!seed) {
+    res.writeHead(400, json).end(JSON.stringify({ error: "empty seed" }));
+    return;
+  }
+  const scope = await verifyVoiceDropToken(req.headers.authorization);
+  if (!scope) {
+    res.writeHead(401, json).end(JSON.stringify({ error: "bad token" }));
+    return;
+  }
+  if (payload?.dry) {
+    // 认证链路探活，不起 job（部署冒烟用）
+    res.writeHead(200, json).end(JSON.stringify({ ok: true, dry: true, scope }));
+    return;
+  }
+  if (bookJobRunning) {
+    res.writeHead(409, json).end(JSON.stringify({ error: "busy" }));
+    return;
+  }
+  runBookJob(seed, scope);
+  res.writeHead(202, json).end(JSON.stringify({ ok: true }));
+}
+
 async function handleChat(req: IncomingMessage, res: ServerResponse, payload: any) {
   const message = String(payload?.message ?? "").trim();
   const sessionId = payload?.sessionId ? String(payload.sessionId) : undefined;
@@ -355,6 +433,23 @@ const server = createServer((req, res) => {
         .catch((err) => res.writeHead(500).end(String(err?.message ?? err)));
       return;
     }
+  }
+  if (req.method === "POST" && req.url === "/api/book") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      let payload: any;
+      try {
+        payload = JSON.parse(body || "{}");
+      } catch {
+        res.writeHead(400).end("bad json");
+        return;
+      }
+      handleBook(req, res, payload).catch((err) => {
+        res.writeHead(500).end(String(err?.message ?? err));
+      });
+    });
+    return;
   }
   if (req.method === "POST" && req.url === "/api/chat") {
     let body = "";
