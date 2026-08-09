@@ -19,7 +19,8 @@ const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? "127.0.0.1";
 const WORKSPACE = process.env.WORKSPACE ?? join(__dirname, "..", "workspace");
 const MODEL = process.env.MODEL ?? "claude-opus-4-8";
-const MAX_TURNS = Number(process.env.MAX_TURNS ?? 30);
+const MAX_TURNS = Number(process.env.MAX_TURNS ?? 100);
+const MAX_CONCURRENT_RUNS = Number(process.env.MAX_CONCURRENT_RUNS ?? 2);
 const MAX_RESULT_CHARS = 8000;
 
 // The SDK persists each conversation as <session_id>.jsonl under HOME/.claude/projects/<cwd-slug>/.
@@ -104,7 +105,7 @@ async function summarize(path: string, id: string) {
     }
   }
   const st = await stat(path);
-  return { id, title: title.slice(0, 80) || "(无标题)", updatedAt: st.mtimeMs, turns };
+  return { id, title: title.slice(0, 80) || "(无标题)", updatedAt: st.mtimeMs, turns, running: isRunning(id) };
 }
 
 async function listSessions() {
@@ -293,33 +294,110 @@ async function handleBook(req: IncomingMessage, res: ServerResponse, payload: an
   res.writeHead(202, json).end(JSON.stringify({ ok: true }));
 }
 
-async function handleChat(req: IncomingMessage, res: ServerResponse, payload: any) {
-  const message = String(payload?.message ?? "").trim();
-  const sessionId = payload?.sessionId ? String(payload.sessionId) : undefined;
-  if (!message) {
-    res.writeHead(400).end("empty message");
-    return;
-  }
+// --- chat runs（断线不中止） ---
+//
+// 每条用户消息起一个后台 Run：agent 事件先进内存缓冲，SSE 连接只是订阅者。
+// 浏览器断开（锁屏/切后台/网络抖动）只是退订，agent 继续跑到完；重新打开
+// 会话用 GET /api/chat/attach 回放缓冲 + 续看直播。显式停止走 POST /api/chat/stop。
+type Run = {
+  keys: Set<string>; // registry 键：起始 sessionId（resume 时）+ init 后的新 sessionId
+  events: { event: string; data: any }[];
+  listeners: Set<ServerResponse>;
+  done: boolean;
+  ac: AbortController;
+};
+const runs = new Map<string, Run>();
+let pendingSeq = 0;
+const RUN_LINGER_MS = 5 * 60 * 1000; // done 后保留一会儿，晚到的 attach 还能回放
+const MAX_BUFFERED_EVENTS = 20000;
 
+function isRunning(id: string): boolean {
+  const r = runs.get(id);
+  return !!r && !r.done;
+}
+
+function activeRunCount(): number {
+  let n = 0;
+  const seen = new Set<Run>();
+  for (const r of runs.values())
+    if (!r.done && !seen.has(r)) {
+      seen.add(r);
+      n++;
+    }
+  return n;
+}
+
+function emit(run: Run, event: string, data: any) {
+  // 相邻 text delta 合并存储，几小时的长任务缓冲也不至于膨胀
+  const last = run.events[run.events.length - 1];
+  if (event === "text" && last?.event === "text") last.data.delta += data.delta;
+  else {
+    run.events.push({ event, data });
+    if (run.events.length > MAX_BUFFERED_EVENTS)
+      run.events.splice(0, run.events.length - MAX_BUFFERED_EVENTS);
+  }
+  for (const res of run.listeners) sse(res, event, data);
+}
+
+function sseHead(res: ServerResponse) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
+}
 
+// 一条只发错误就收尾的 SSE 响应（并发满 / 会话已在跑）
+function sseReject(res: ServerResponse, message: string) {
+  sseHead(res);
+  sse(res, "error", { message });
+  sse(res, "done", {});
+  res.end();
+}
+
+function subscribe(run: Run, res: ServerResponse, replay: boolean) {
+  sseHead(res);
+  if (replay) for (const e of run.events) sse(res, e.event, e.data);
+  if (run.done) {
+    sse(res, "done", {});
+    res.end();
+    return;
+  }
+  run.listeners.add(res);
   // Heartbeat keeps the proxied connection from idling out during quiet
   // stretches (e.g. a long-running Bash tool).
   const heartbeat = setInterval(() => {
     if (!res.writableEnded && !res.destroyed) res.write(": ping\n\n");
   }, 15000);
+  // 断开只退订，不 abort——run 在服务端继续
+  res.on("close", () => {
+    clearInterval(heartbeat);
+    run.listeners.delete(res);
+  });
+}
 
-  let aborted = false;
-  const ac = new AbortController();
+function finishRun(run: Run) {
+  run.done = true;
+  for (const res of run.listeners) {
+    sse(res, "done", {});
+    res.end();
+  }
+  run.listeners.clear();
+  const t = setTimeout(() => {
+    for (const k of run.keys) if (runs.get(k) === run) runs.delete(k);
+  }, RUN_LINGER_MS);
+  t.unref?.();
+}
+
+function startRun(message: string, sessionId: string | undefined): Run {
+  const key = sessionId ?? `pending-${++pendingSeq}`;
+  const run: Run = { keys: new Set([key]), events: [], listeners: new Set(), done: false, ac: new AbortController() };
+  runs.set(key, run);
   const q = query({
     prompt: message,
     options: {
-      abortController: ac,
+      abortController: run.ac,
       cwd: WORKSPACE,
       model: MODEL,
       maxTurns: MAX_TURNS,
@@ -341,74 +419,88 @@ async function handleChat(req: IncomingMessage, res: ServerResponse, payload: an
       ...(sessionId ? { resume: sessionId } : {}),
     },
   });
+  (async () => {
+    try {
+      for await (const msg of q as AsyncIterable<any>) {
+        switch (msg.type) {
+          case "system":
+            if (msg.subtype === "init" && msg.session_id) {
+              // resume 会派发新 session_id——两个键都指向本 run，attach 用哪个都行
+              if (!run.keys.has(msg.session_id)) {
+                run.keys.add(msg.session_id);
+                runs.set(msg.session_id, run);
+              }
+              emit(run, "session", { sessionId: msg.session_id });
+            }
+            break;
 
-  // Client navigated away / closed the tab → stop the agent. Listen on the
-  // RESPONSE (not req: req 'close' fires as soon as the POST body is consumed),
-  // and only abort if we hadn't already finished writing. String-prompt mode
-  // doesn't support interrupt(); aborting the controller is the supported path.
-  res.on("close", () => {
-    if (!res.writableEnded) {
-      aborted = true;
-      ac.abort();
-    }
-  });
+          case "stream_event": {
+            // Live text typing only — tool calls come from the complete
+            // assistant message below (so we get full, parsed tool input).
+            const ev = msg.event;
+            if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta")
+              emit(run, "text", { delta: ev.delta.text });
+            break;
+          }
 
-  try {
-    for await (const msg of q as AsyncIterable<any>) {
-      if (aborted) break;
-      switch (msg.type) {
-        case "system":
-          if (msg.subtype === "init" && msg.session_id)
-            sse(res, "session", { sessionId: msg.session_id });
-          break;
+          case "assistant": {
+            for (const block of msg.message?.content ?? [])
+              if (block.type === "tool_use")
+                emit(run, "tool_use", { id: block.id, name: block.name, input: block.input });
+            break;
+          }
 
-        case "stream_event": {
-          // Live text typing only — tool calls come from the complete
-          // assistant message below (so we get full, parsed tool input).
-          const ev = msg.event;
-          if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta")
-            sse(res, "text", { delta: ev.delta.text });
-          break;
+          case "user": {
+            const content = msg.message?.content;
+            if (Array.isArray(content))
+              for (const block of content)
+                if (block.type === "tool_result")
+                  emit(run, "tool_result", {
+                    id: block.tool_use_id,
+                    isError: !!block.is_error,
+                    content: renderToolResult(block.content),
+                  });
+            break;
+          }
+
+          case "result":
+            emit(run, "result", {
+              costUsd: msg.total_cost_usd,
+              numTurns: msg.num_turns,
+              durationMs: msg.duration_ms,
+              isError: msg.subtype !== "success",
+              ...(msg.subtype !== "success" ? { error: msg.subtype } : {}),
+            });
+            break;
         }
-
-        case "assistant": {
-          for (const block of msg.message?.content ?? [])
-            if (block.type === "tool_use")
-              sse(res, "tool_use", { id: block.id, name: block.name, input: block.input });
-          break;
-        }
-
-        case "user": {
-          const content = msg.message?.content;
-          if (Array.isArray(content))
-            for (const block of content)
-              if (block.type === "tool_result")
-                sse(res, "tool_result", {
-                  id: block.tool_use_id,
-                  isError: !!block.is_error,
-                  content: renderToolResult(block.content),
-                });
-          break;
-        }
-
-        case "result":
-          sse(res, "result", {
-            costUsd: msg.total_cost_usd,
-            numTurns: msg.num_turns,
-            durationMs: msg.duration_ms,
-            isError: msg.subtype !== "success",
-            ...(msg.subtype !== "success" ? { error: msg.subtype } : {}),
-          });
-          break;
       }
+    } catch (err: any) {
+      emit(run, "error", {
+        message: run.ac.signal.aborted ? "已手动停止" : (err?.message ?? String(err)),
+      });
+    } finally {
+      finishRun(run);
     }
-  } catch (err: any) {
-    sse(res, "error", { message: err?.message ?? String(err) });
-  } finally {
-    clearInterval(heartbeat);
-    if (!aborted) sse(res, "done", {});
-    res.end();
+  })();
+  return run;
+}
+
+async function handleChat(req: IncomingMessage, res: ServerResponse, payload: any) {
+  const message = String(payload?.message ?? "").trim();
+  const sessionId = payload?.sessionId ? String(payload.sessionId) : undefined;
+  if (!message) {
+    res.writeHead(400).end("empty message");
+    return;
   }
+  if (sessionId && isRunning(sessionId)) {
+    sseReject(res, "该会话已有任务在运行，可先停止或等它完成");
+    return;
+  }
+  if (activeRunCount() >= MAX_CONCURRENT_RUNS) {
+    sseReject(res, `同时最多运行 ${MAX_CONCURRENT_RUNS} 个任务，稍后再试`);
+    return;
+  }
+  subscribe(startRun(message, sessionId), res, true);
 }
 
 const server = createServer((req, res) => {
@@ -464,6 +556,38 @@ const server = createServer((req, res) => {
         .catch((err) => res.writeHead(500).end(String(err?.message ?? err)));
       return;
     }
+  }
+  // 重连续看：回放该 run 已缓冲的事件，然后跟着直播到结束
+  const am = req.url?.match(/^\/api\/chat\/attach\?session=([^&]+)$/);
+  if (req.method === "GET" && am) {
+    const id = decodeURIComponent(am[1]);
+    const run = runs.get(id);
+    if (!run) {
+      res.writeHead(404, { "Content-Type": "text/plain" }).end("no run");
+      return;
+    }
+    subscribe(run, res, true);
+    return;
+  }
+  if (req.method === "POST" && req.url === "/api/chat/stop") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      let id = "";
+      try {
+        id = String(JSON.parse(body || "{}").sessionId ?? "");
+      } catch {
+        /* fall through to 404 */
+      }
+      const run = runs.get(id);
+      if (run && !run.done) {
+        run.ac.abort();
+        res.writeHead(200, { "Content-Type": "application/json" }).end('{"ok":true}');
+      } else {
+        res.writeHead(404, { "Content-Type": "application/json" }).end('{"error":"no active run"}');
+      }
+    });
+    return;
   }
   if (req.method === "POST" && req.url === "/api/book") {
     let body = "";

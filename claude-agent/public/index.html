@@ -51,6 +51,7 @@
       .sitem.active { background: #e2e0d8; }
       .sitem .t { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .sitem .ts { font-size: 11px; color: var(--muted); margin-top: 1px; }
+      .sitem .run { color: var(--accent); font-weight: 600; }
       .sitem .del {
         position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
         border: none; background: none; color: var(--muted); cursor: pointer;
@@ -136,7 +137,7 @@
           <textarea id="input" placeholder="让 agent 干点活…（Enter 发送，Shift+Enter 换行）" rows="1"></textarea>
           <button class="send" id="send">发送</button>
         </div>
-        <div class="hint">工具在 VPS 沙箱目录里运行，能读写文件 / 跑 bash / 联网。点工具卡片可展开看输入与结果。</div>
+        <div class="hint">任务在服务端运行——关掉页面 / 断网也会继续跑完，回来点开会话就能续看直播。点工具卡片可展开看输入与结果。</div>
       </footer>
     </div>
 
@@ -210,7 +211,7 @@
         for (const s of list) {
           const el = document.createElement("div");
           el.className = "sitem" + (s.id === currentId ? " active" : "");
-          el.innerHTML = `<div class="t">${esc(s.title)}</div><div class="ts">${relTime(s.updatedAt)} · ${s.turns} 轮</div>` +
+          el.innerHTML = `<div class="t">${esc(s.title)}</div><div class="ts">${s.running ? '<span class="run">⚡ 运行中</span> · ' : ""}${relTime(s.updatedAt)} · ${s.turns} 轮</div>` +
             `<button class="del" title="删除">×</button>`;
           el.addEventListener("click", (e) => {
             if (e.target.classList.contains("del")) return;
@@ -240,19 +241,22 @@
       }
 
       async function openSession(id) {
-        if (busy) return;
+        detach();
         currentId = id;
         localStorage.setItem("agentSession", id);
         meta.textContent = "";
         thread.innerHTML = '<div class="sb-empty">载入中…</div>';
         try {
           const msgs = await (await fetch("/api/sessions/" + id)).json();
+          if (currentId !== id) return; // 载入期间切走了
           renderHistory(msgs);
         } catch { thread.innerHTML = '<div class="err">载入失败</div>'; }
         loadSessions();
+        tryAttach(id);
       }
 
       function newChat() {
+        detach();
         currentId = null;
         localStorage.removeItem("agentSession");
         thread.innerHTML = ""; meta.textContent = "";
@@ -268,69 +272,114 @@
         else loadSessions();
       }
 
-      // ---- send ----
+      // ---- live stream (send + reattach 共用) ----
+      // 任务在服务端跑，断线不中止：liveCtl 只断本地订阅，停止要走 /api/chat/stop。
+      let liveCtl = null;
+
+      function setBusy(on) {
+        busy = on;
+        sendBtn.textContent = on ? "停止" : "发送";
+      }
+
+      function detach() {
+        if (liveCtl) { liveCtl.abort(); liveCtl = null; }
+        setBusy(false);
+      }
+
+      async function pump(res, bubble) {
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "", textNode = null;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const frames = buf.split("\n\n");
+          buf = frames.pop();
+          for (const f of frames) {
+            const ev = (f.match(/^event: (.*)$/m) || [])[1];
+            const dataLine = (f.match(/^data: (.*)$/m) || [])[1];
+            if (!ev || dataLine === undefined) continue;
+            const d = JSON.parse(dataLine);
+            if (ev === "session") {
+              currentId = d.sessionId;
+              localStorage.setItem("agentSession", currentId);
+            } else if (ev === "text") {
+              if (!textNode) { textNode = document.createElement("span"); bubble.appendChild(textNode); }
+              textNode.textContent += d.delta; scroll();
+            } else if (ev === "tool_use") {
+              addTool(bubble, d); textNode = null;
+            } else if (ev === "tool_result") {
+              fillTool(d);
+            } else if (ev === "result") {
+              meta.textContent = `${d.numTurns} 步 · ${(d.durationMs / 1000).toFixed(1)}s` +
+                (d.costUsd ? ` · $${d.costUsd.toFixed(4)}` : "");
+            } else if (ev === "error") {
+              const e = document.createElement("div");
+              e.className = "err"; e.textContent = "出错：" + d.message;
+              bubble.appendChild(e); scroll();
+            }
+          }
+        }
+      }
+
+      // 会话有正在跑的任务 → 回放 + 续看直播（没有就 404，静默跳过）
+      async function tryAttach(id) {
+        const ctl = new AbortController();
+        let res;
+        try {
+          res = await fetch("/api/chat/attach?session=" + encodeURIComponent(id), { signal: ctl.signal });
+        } catch { return; }
+        if (!res.ok || !res.body || currentId !== id) { ctl.abort(); return; }
+        // 回放会完整重演本轮，去掉历史里渲染的半截 assistant 消息避免重复
+        const tail = thread.lastElementChild;
+        if (tail && tail.classList.contains("assistant")) tail.remove();
+        liveCtl = ctl;
+        const bubble = addMsg("assistant");
+        setBusy(true);
+        try { await pump(res, bubble); } catch {}
+        if (liveCtl === ctl) { setBusy(false); liveCtl = null; loadSessions(); }
+      }
+
       async function send() {
         const text = input.value.trim();
         if (!text || busy) return;
-        busy = true; sendBtn.disabled = true;
-        const wasNew = !currentId;
+        const ctl = new AbortController();
+        liveCtl = ctl;
+        setBusy(true);
         addMsg("user").textContent = text;
         input.value = ""; input.style.height = "auto";
         const bubble = addMsg("assistant");
-        let textNode = null;
 
         try {
           const res = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ message: text, sessionId: currentId }),
+            signal: ctl.signal,
           });
           if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
-          const reader = res.body.getReader();
-          const dec = new TextDecoder();
-          let buf = "";
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            buf += dec.decode(value, { stream: true });
-            const frames = buf.split("\n\n");
-            buf = frames.pop();
-            for (const f of frames) {
-              const ev = (f.match(/^event: (.*)$/m) || [])[1];
-              const dataLine = (f.match(/^data: (.*)$/m) || [])[1];
-              if (!ev || dataLine === undefined) continue;
-              const d = JSON.parse(dataLine);
-              if (ev === "session") {
-                currentId = d.sessionId;
-                localStorage.setItem("agentSession", currentId);
-              } else if (ev === "text") {
-                if (!textNode) { textNode = document.createElement("span"); bubble.appendChild(textNode); }
-                textNode.textContent += d.delta; scroll();
-              } else if (ev === "tool_use") {
-                addTool(bubble, d); textNode = null;
-              } else if (ev === "tool_result") {
-                fillTool(d);
-              } else if (ev === "result") {
-                meta.textContent = `${d.numTurns} 步 · ${(d.durationMs / 1000).toFixed(1)}s` +
-                  (d.costUsd ? ` · $${d.costUsd.toFixed(4)}` : "");
-              } else if (ev === "error") {
-                const e = document.createElement("div");
-                e.className = "err"; e.textContent = "出错：" + d.message;
-                bubble.appendChild(e); scroll();
-              }
-            }
-          }
+          await pump(res, bubble);
         } catch (err) {
-          const e = document.createElement("div");
-          e.className = "err"; e.textContent = "连接出错：" + err.message;
-          bubble.appendChild(e);
+          if (err?.name !== "AbortError") {
+            const e = document.createElement("div");
+            e.className = "err"; e.textContent = "连接断了（任务仍在服务端继续，点开会话可续看）：" + err.message;
+            bubble.appendChild(e);
+          }
         } finally {
-          busy = false; sendBtn.disabled = false; input.focus();
-          loadSessions(); // refresh list (new convo appears / order + time update)
+          if (liveCtl === ctl) {
+            setBusy(false); liveCtl = null; input.focus();
+            loadSessions(); // refresh list (new convo appears / order + time update)
+          }
         }
       }
 
-      sendBtn.addEventListener("click", send);
+      async function stop() {
+        if (!currentId) return;
+        try { await fetch("/api/chat/stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: currentId }) }); } catch {}
+      }
+
+      sendBtn.addEventListener("click", () => (busy ? stop() : send()));
       input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
       input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 180) + "px"; });
       $("#new").addEventListener("click", newChat);
