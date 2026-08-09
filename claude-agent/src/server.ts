@@ -192,19 +192,45 @@ async function getSessionMessages(id: string) {
 // 认证不走 Caddy basic_auth（Caddyfile 对此路径豁免）：客户端带 VoiceDrop 用户
 // bearer（anon_*/session JWT），这里拿它去 jianshuo.dev whoami 验真——app 里零内置密钥。
 const BOOK_MAX_TURNS = Number(process.env.BOOK_MAX_TURNS ?? 80);
+const BOOK_DAILY_LIMIT = Number(process.env.BOOK_DAILY_LIMIT ?? 2);
 const WHOAMI_URL = process.env.WHOAMI_URL ?? "https://jianshuo.dev/files/api/whoami";
+const ARTICLES_URL = process.env.ARTICLES_URL ?? "https://jianshuo.dev/files/api/articles";
 let bookJobRunning = false;
+// per-scope 当日已写本数（进程内存，重启清零——1 核小机够用）
+const bookQuota = new Map<string, { day: string; count: number }>();
 
+// ⚠️ anon token 是客户端自造随机数，whoami 对任何格式正确的 token 都散列出
+// scope 返回 200——所以 whoami 只提供归因，不是门槛。真门槛 = 该 scope 必须
+// 已有成文文章（GET /articles 非空）：伪造 token 散列出的 scope 永远是空的，
+// 全被挡掉；真用户得先录音成文才能写书。
 async function verifyVoiceDropToken(auth: string | undefined): Promise<string | null> {
   if (!auth?.startsWith("Bearer ")) return null;
   try {
-    const r = await fetch(WHOAMI_URL, { headers: { Authorization: auth } });
-    if (!r.ok) return null;
-    const j: any = await r.json();
-    return typeof j?.scope === "string" ? j.scope : null;
+    const [who, arts] = await Promise.all([
+      fetch(WHOAMI_URL, { headers: { Authorization: auth } }),
+      fetch(ARTICLES_URL, { headers: { Authorization: auth } }),
+    ]);
+    if (!who.ok || !arts.ok) return null;
+    const scope = (await who.json() as any)?.scope;
+    const articles = (await arts.json() as any)?.articles;
+    if (typeof scope !== "string" || !Array.isArray(articles) || articles.length < 1) return null;
+    return scope;
   } catch {
     return null;
   }
+}
+
+function underDailyQuota(scope: string): boolean {
+  const day = new Date().toISOString().slice(0, 10);
+  const q = bookQuota.get(scope);
+  return !q || q.day !== day || q.count < BOOK_DAILY_LIMIT;
+}
+
+function countBook(scope: string) {
+  const day = new Date().toISOString().slice(0, 10);
+  const q = bookQuota.get(scope);
+  if (q && q.day === day) q.count += 1;
+  else bookQuota.set(scope, { day, count: 1 });
 }
 
 function runBookJob(seed: string, scope: string) {
@@ -250,14 +276,19 @@ async function handleBook(req: IncomingMessage, res: ServerResponse, payload: an
     return;
   }
   if (payload?.dry) {
-    // 认证链路探活，不起 job（部署冒烟用）
+    // 认证链路探活，不起 job、不计额度（部署冒烟用）
     res.writeHead(200, json).end(JSON.stringify({ ok: true, dry: true, scope }));
+    return;
+  }
+  if (!underDailyQuota(scope)) {
+    res.writeHead(429, json).end(JSON.stringify({ error: "quota" }));
     return;
   }
   if (bookJobRunning) {
     res.writeHead(409, json).end(JSON.stringify({ error: "busy" }));
     return;
   }
+  countBook(scope);
   runBookJob(seed, scope);
   res.writeHead(202, json).end(JSON.stringify({ ok: true }));
 }
