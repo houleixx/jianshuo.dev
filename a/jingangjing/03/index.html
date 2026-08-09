@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第三品 大乘正宗分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第3品「大乘正宗分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal">三</span>
+  <h1>大乘正宗分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第三品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>佛告须菩提：“诸菩萨摩诃萨，应如是降伏其心：所有一切众生之类，若卵生、若胎生、若湿生、若化生；若有色、若无色；若有想、若无想、若非有想非无想，我皆令入无余涅槃而灭度之。如是灭度无量无数无边众生，实无众生得灭度者。何以故？须菩提！若菩萨有我相、人相、众生相、寿者相，即非菩萨。”</p></div>
+<h2>白话</h2>
+<p>佛告诉须菩提：诸位大菩萨，应当这样降伏自己的心：一切种类的众生——卵生的、胎生的、湿气中生的、变化而生的；有形体的、无形体的；有心识活动的、没有心识活动的、说不上有心识也说不上没有心识的——我都要使他们进入无余涅槃，得到彻底的度脱。像这样度脱了无量、无数、无边的众生，实际上却没有一个众生被度脱。为什么？须菩提，如果菩萨心里还有我相、人相、众生相、寿者相，他就不是菩萨。</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>上一品须菩提问了两个问题：发了菩提心的人「应云何住、云何降伏其心」。本品是佛的第一段正式回答，先答「降伏其心」。</li>
+<li>佛先立愿：菩萨的发心对象是全部众生，用三组分类（出生方式、有无形体、有无心识）穷举九类，一个不漏。</li>
+<li>目标定到最高档：不是让众生过得好一点，而是「皆令入无余涅槃」——彻底、不留残余的解脱。</li>
+<li>随即翻转：度了无量无边众生，「实无众生得灭度者」——做了这件事，但不存在「被度的众生」这个对象。</li>
+<li>最后给出判据：若菩萨心中还持有我相、人相、众生相、寿者相这四种概念执取，他就不配称为菩萨。这是全经第一次亮出「四相」这把尺子。</li>
+</ol>
+<h2>深度解读</h2>
+<p>《金刚经》全经的骨架是须菩提在第 2 品提出的两问：发了菩提心的人，心应该安放在哪里（应云何住），妄念纷飞时如何降伏（云何降伏其心）。第 3 品是佛给出的第一个正面回答，而且答得出人意料——他没有先讲「住」，而是先讲「降伏」，并且给出的降伏方法不是压制念头，而是发一个大到极限的愿，再当场把这个愿的执取拆掉。印顺法师在《金刚般若波罗蜜经讲记》中把这一段科判为般若道的「发心」阶段：大乘的路从发菩提心开始，而发心从第一步起就必须与般若（空慧）相应，否则发的不是菩提心，是放大版的我执。</p>
+<p>先看愿有多大。「菩萨摩诃萨」，梵文 bodhisattva-mahāsattva，「觉悟的众生」加上「大众生」，指发大心的修行者。愿的对象用三组维度穷举：按出生方式分四类——卵生（aṇḍaja）、胎生（jarāyuja）、湿生（saṃsvedaja，古人认为虫类从湿气中生）、化生（upapāduka，不经母体、凭业力直接现身，如天人）；按有无形体分有色、无色；按心识状态分有想、无想、非有想非无想——最后这一类对应无色界最高处的「非想非非想天」。三组加起来俗称「九类众生」，这是古印度对「一切生命形态」的一次完备分类，相当于把定义域取到全集：欲界、色界、无色界，无一遗漏。</p>
+<p>目标也取到上确界。「无余涅槃」，梵文 anupadhiśeṣa-nirvāṇa，「没有残余所依的涅槃」，与「有余涅槃」相对：后者是烦恼已断但五蕴之身还在的状态，前者连这个残余也不剩，是彻底的解脱。南怀瑾在《金刚经说什么》里说，有余依涅槃是罗汉境界，不彻底；无余依涅槃才是彻底的。「灭度」是「令入涅槃」的动词形式，对应梵文 parinirvāpayitavyāḥ——不是消灭众生，而是使其烦恼永灭、度脱生死。所以这个愿的完整表述是：对全集中的每一个元素，都送达最高目标。</p>
+<p>然后是全经第一次出现的标志性翻转：「如是灭度无量无数无边众生，实无众生得灭度者。」这不是修辞，是《金刚经》的核心论证结构首次登场。为什么度了却没有众生被度？经文自己给了理由：若菩萨有我相、人相、众生相、寿者相，即非菩萨。</p>
+<p>「相」这个字需要校准。鸠摩罗什译作「相」，容易被读成外在形象；玄奘译本作「想」，更贴近梵文原词 saṃjñā——心里生起的概念认定、打上的标签。四相的梵文分别是 ātma-saṃjñā（我：常一自主的主体）、pudgala-saṃjñā（人：轮回中前后同一的「补特伽罗」）、sattva-saṃjñā（众生：五蕴和合而成的生命体）、jīva-saṃjñā（寿者：从生到死持续存在的命体）。这四个词在古印度各派哲学里，本是对「有一个恒常自我」这一主张的不同表述；佛陀把它们并列否定，等于把「自我实在论」的所有版本一次性拒绝。所以「实无众生得灭度者」的第一层解释是般若空观：众生是五蕴因缘和合的暂时聚合，没有独立自性，「能度的我」与「所度的众生」都只是概念，执著任何一头，慈悲就变质为居高临下的施予。</p>
+<p>注家对四相的关系有不同处理。江味农《金刚经讲义》一系的讲法认为四相并非四个平行的东西，而是「四相由执我相而起」——我执是根，其余三相是同一执取在不同角度上的投影（见张泰隆《金刚经讲义精要择录》）。禅宗的读法则更向内：六祖惠能的《金刚经口诀》把四相解为修行人自心的四种病——恃己凌人是我相，恃己有德是人相等等，四相都是「自心众生」，度众生首先是度自心。义理一系与禅门一系并不冲突，但侧重点确实不同：前者拆的是形而上学命题，后者拆的是当下的心理姿态。</p>
+<p>这一品之所以叫「大乘正宗」，在于它把大乘的两根支柱同时立起又同时校验：愿力要大到覆盖一切众生，空慧要利到连「众生」这个概念都不残留。只有愿没有慧，是带着我执做慈善；只有慧没有愿，是自了汉。两者同时成立——度尽一切而不见有一可度——才是大乘的正宗。这也回答了「云何降伏其心」：心不是被压伏的，是在「无对象可执」处自己平息的。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>这一品可以用「指针与所指」加「无状态服务」搭一个脚手架。</p>
+<p>第一层：saṃjñā（相/想）是指针，不是对象。「众生」「我」这些词，是心智为了处理世界而分配的句柄（handle）。凡夫的默认 bug 是把句柄当实体：以为 <code>self</code> 这个指针后面真有一块叫「我」的、独立分配、永不回收的内存。四相就是四个悬空指针（dangling pointer）——ātman、pudgala、sattva、jīva 各自声称指向一个常存主体，而佛陀的断言是：解引用下去，那块内存从未被分配过。众生是五蕴的临时聚合，相当于一个由多个组件动态组装的对象，只有组合关系，没有那个「本体字段」。</p>
+<p>第二层：菩萨是无状态服务（stateless service）。一个理想的 service 处理每个请求都全力以赴，但不在会话里保存「我是谁、我服务过谁、总共服务了多少个」这些状态变量。本品描述的菩萨正是如此：请求空间是全集（九类众生），SLA 是最高档（无余涅槃），但执行完不留任何记账——没有 <code>served_count++</code>，没有「施者—受者」的会话记录。「灭度无量无数无边众生，实无众生得灭度者」翻译过来就是：吞吐量无穷大，状态表为空。一旦服务开始记账——「我度了他」——它就持有了我相与众生相，行为立刻退化：产生优越感、期待回报、区分亲疏，这正是「即非菩萨」的判定条件。</p>
+<p>类比在哪里失效，值得说清楚。无状态服务是工程上的设计选择：状态其实存在，只是被有意外置或丢弃，为的是可扩展和容错。佛学的主张更强：那些状态变量的所指从一开始就不存在——不是「选择不存」，而是「无可存者」。换句话说，工程师做的是 <code>state = null</code>，佛陀说的是这个类型本身为空集。另外，无状态是冷的架构属性，而菩萨的「无我而度生」是愿力与智慧的同时运行：既要无限投入（这不是任何服务的自然属性），又要零执取。类比失效的这一点，恰好就是本品超出工程直觉的地方——它要求你在删除「做事的人」这个变量之后，把事做到无穷大。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>四相</td>
+<td>ātma-saṃjñā / pudgala-saṃjñā / sattva-saṃjñā / jīva-saṃjñā</td>
+<td>对「我、人、众生、寿者」四种常存主体的概念执取；saṃjñā 义为「想、概念认定」，玄奘即译作「想」</td>
+</tr>
+<tr>
+<td>无余涅槃</td>
+<td>anupadhiśeṣa-nirvāṇa</td>
+<td>不留任何残余所依的彻底涅槃，与烦恼已断而身体尚存的「有余涅槃」相对</td>
+</tr>
+<tr>
+<td>灭度</td>
+<td>parinirvāṇa</td>
+<td>使入究竟涅槃、度脱生死，「灭」的是烦恼而非众生</td>
+</tr>
+<tr>
+<td>九类众生</td>
+<td>四生：aṇḍaja / jarāyuja / saṃsvedaja / upapāduka</td>
+<td>按出生方式（卵胎湿化）、形体有无（有色无色）、心识状态（有想无想非有想非无想）对三界一切生命的穷举分类</td>
+</tr>
+<tr>
+<td>菩萨摩诃萨</td>
+<td>bodhisattva-mahāsattva</td>
+<td>发大菩提心、以度尽众生为愿的修行者，「觉有情」中的大心者</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>如是灭度无量无数无边众生，实无众生得灭度者。</p>
+<p>若菩萨有我相、人相、众生相、寿者相，即非菩萨。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>南怀瑾《金刚经说什么》第三品 大乘正宗分 — http://www.shixiu.net/nanshi/zhuzuo/jgjssm/4359.html</li>
+<li>印顺《金刚般若波罗蜜经讲记》（般若道次第科判）— https://www.putiguang.org/proimage/control_page/%E9%87%91%E5%89%9B%E8%88%AC%E8%8B%A5%E6%B3%A2%E7%BE%85%E8%9C%9C%E5%A4%9A%E7%B6%93%E8%AC%9B%E8%A8%98.pdf</li>
+<li>张泰隆《〈金刚经讲义〉精要择录（三）》（江味农《金刚经讲义》摘录，台大佛学数位图书馆）— https://buddhism.lib.ntu.edu.tw/FULLTEXT/JR-AN/an383893.pdf</li>
+<li>Edward Conze 译《The Diamond Sutra in Sanskrit and English》（梵本第 3 节及四相梵文术语）— https://lienchungbacluchoaky.wordpress.com/2017/06/06/the-diamond-sutra-in-sanskrit-and-english-translated-from-the-sanskrit-by-edward-conze/</li>
+<li>《金刚经》梵汉对照（anupadhiśeṣe nirvāṇadhātau 等原文对勘）— https://www.ldbj.com/jingangjing/jingangjingfanhanduizhao.htm</li>
+<li>Thubten Chodron，nirvāṇa without remainder（anupadhiśeṣa-nirvāṇa）词条 — https://thubtenchodron.org/glossary/nirva%E1%B9%87a-without-remainder-anupadhise%E1%B9%A3a-nirva%E1%B9%87a-anupadisesa-nibbana-nirupadhise%E1%B9%A3anirva%E1%B9%87a/</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/02/"><span class="lbl">← 上一品</span><span>善现启请分</span></a><a class="next" href="/a/jingangjing/04/"><span class="lbl">下一品 →</span><span>妙行无住分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

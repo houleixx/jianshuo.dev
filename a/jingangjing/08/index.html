@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第八品 依法出生分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第8品「依法出生分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal">八</span>
+  <h1>依法出生分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第八品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>“须菩提！于意云何？若人满三千大千世界七宝以用布施，是人所得福德，宁为多不？”</p>
+<p>须菩提言：“甚多，世尊！何以故？是福德即非福德性，是故如来说福德多。”</p>
+<p>“若复有人，于此经中受持，乃至四句偈等，为他人说，其福胜彼。何以故？须菩提！一切诸佛，及诸佛阿耨多罗三藐三菩提法，皆从此经出。须菩提！所谓佛法者，即非佛法，是名佛法。”</p></div>
+<h2>白话</h2>
+<p>“须菩提，你怎么看？假如有人用装满三千大千世界的七种珍宝来做布施，这个人由此获得的福德，多不多？”</p>
+<p>须菩提回答：“很多，世尊。为什么这么说？因为这种福德并不是福德的本性，正因如此，如来才说这福德多。”</p>
+<p>“如果另有一个人，能接受并奉持这部经，哪怕只是其中四句偈，并且为别人讲说，他的福报就超过前面那个人。为什么？须菩提，一切诸佛，以及诸佛所证的无上正等正觉之法，都是从这部经出生的。须菩提，所谓的佛法，其实并不是佛法，只是称它为佛法。”</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>佛设一个可量化的问题：用充满三千大千世界（十亿个世界）的珍宝做布施，得到的福德多不多？这是全经第一次「校量功德」。</li>
+<li>须菩提答「甚多」，但先拆掉问题的地基：福德只是现象层面的量，不是福德的本性——正因为福德没有实体，才可以随缘说它「多」。</li>
+<li>佛给出对比项：受持这部经、哪怕只有四句偈、并为他人讲说，福报胜过前者。法布施压倒任何规模的财布施。</li>
+<li>给出理由：一切诸佛以及诸佛的觉悟之法，都从此经（般若）出生——般若是「诸佛之母」，是产生一切觉悟的源头。</li>
+<li>随说随扫：刚把「此经」推到至高位置，立刻声明「所谓佛法者，即非佛法」，防止听者把经文本身当成新的执着对象。</li>
+</ol>
+<h2>深度解读</h2>
+<p>第 7 品刚刚说完「无有定法名阿耨多罗三藐三菩提，亦无有定法如来可说」。这立刻制造出一个问题：如果法不可取、不可说，那这部经本身还有什么价值？还持它做什么？第 8 品就是对这个问题的回答，而且回答得很极端：这部经不但有价值，而且是一切价值的源头——同时，你仍然不能执着它。全品就在这两个方向之间完成一次精确的走钢丝。</p>
+<p>先看佛设的量级。「三千大千世界」（梵文 tri-sāhasra-mahāsāhasra-lokadhātu）是古印度宇宙论的计量单位：一千个世界为小千世界，一千个小千为中千，一千个中千为大千，共约十亿个世界。「七宝」指金、银、琉璃、玻璃、砗磲、赤珠、玛瑙等珍宝。用十亿个世界体积的珍宝做布施，这是把「财布施的福德」这个变量直接拉到想象力的上限，为后面的比较做铺垫。</p>
+<p>须菩提的回答是本品第一个转折。他说「甚多」，但给的理由出人意料：「是福德即非福德性，是故如来说福德多。」这里有一个重要的翻译史细节：鸠摩罗什译文中的「福德性」，梵本原文是 puṇya-skandha（福德聚，「聚」即堆积之意），原句的意思是「这个福德之聚，如来说为非聚，所以说福德多」；玄奘译本作「福德聚即非福德聚」。「性」字是罗什的解释性翻译，后世注家由此发展出一整套「性与相」的辨析——这是需要如实交代的分歧点。六祖惠能《金刚经口诀》顺着「性」字讲：七宝布施虽多，「于性上一无利益」，心有能取所取即非福德性，「心依佛教，行同佛行」才是福德性。江味农《金刚经讲义》同样在性、相二层上展开。而若按梵本直读，则义理更接近第 13 品「微尘即非微尘」的句式：福德没有自性、不是一个实体的堆积物，正因为它性空、不可执取，才能在世俗层面随缘安立地说「多」。两条注释路线结论相通：福德是有限的、有条件的量，本性为空。</p>
+<p>接着是校量：受持此经「乃至四句偈等」并为他人说，福胜前者。「四句偈」（catuṣpādikā gāthā）指四个音步构成的一节诗颂，是佛经文本的最小计量单位——意思是哪怕只掌握经中最小的一个单元并传给别人，也胜过天文数字的财布施。至于具体是哪四句，历代注家没有定论，多数认为这里本来就是虚指「极少的一部分」。这个校量在全经还会反复出现并逐级加码（后文用恒河沙数身命布施来比），构成《金刚经》特有的论证节奏。</p>
+<p>为什么法布施有这种压倒性优势？佛给出的理由是全品的核心命题：「一切诸佛，及诸佛阿耨多罗三藐三菩提法，皆从此经出。」「阿耨多罗三藐三菩提」（anuttarā samyaksaṃbodhi）即「无上正等正觉」，佛的圆满觉悟。这句话是般若经系统的标志性主张：般若波罗蜜是「诸佛之母」——一切觉悟者都由般若智慧出生。这也是本品得名「依法出生」的原因。注意「此经」不是指手上这卷纸。惠能说得很直接：经文只是「如标如指」——像路标、像指月之指；「经文则肉眼可见，法则慧眼能见」。财布施给人资源，法布施给人生成一切资源的那个源头，两者不在同一个层级上，所以福德不可比。</p>
+<p>最后一句是本品最陡的一个急转弯：「所谓佛法者，即非佛法，是名佛法。」这是全经「A，即非 A，是名 A」公式较早的完整出现（现存梵本此处确有对应的三段结构：buddhadharmāḥ……abuddhadharmāḥ……tenocyante buddhadharmā iti）。铃木大拙后来把这个句式概括为「即非的逻辑」。它在此处的功能非常具体：前一句刚把「此经」抬到诸佛之母的地位，如果就此打住，听者会立刻把经典实体化、神圣化，制造出一个新的执着对象——这恰恰违背此经自己的教导。所以必须当场声明：被称为「佛法」的东西，并没有一个叫「佛法」的自性实体，「佛法」只是一个安立的名字。抬高与拆除在同一口气里完成，系统才自洽。南怀瑾为本品作的偈颂收束得干脆：「锦绣乾坤似奕棋，人天福德枉成痴。原来佛法无多子，脱缚离黏说向谁。」</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>本品的结构，用软件工程的语言可以搭一个相当精确的脚手架。</p>
+<p>第一层类比：<strong>规格（spec）与实现（implementation）</strong>。「一切诸佛皆从此经出」很像「一切编译器都实现自同一份语言规格」——般若是 spec，每一位佛是一个通过验收的实现。而「所谓佛法者，即非佛法」对应一条工程铁律：打印在纸上的 spec 文档不等于语言本身；把某一份 PDF 当成语言来崇拜，是初级错误。惠能的「如标如指」就是指针与所指的关系：持有指针不等于持有对象，解引用之后就应该放下指针。</p>
+<p>第二层类比：<strong>量的累积与度量本身</strong>。七宝布施是在一个固定度量下累积标量——好比给一个 O(2^n) 的算法不断加服务器。「受持四句偈为他人说」则是换算法：般若不在原度量下和你比大小，它改写度量本身。任何有限标量在「换度量」这个操作面前都不构成对比项，这就是「其福胜彼」为什么不是 1000 倍或 10^9 倍、而是范畴性胜出的原因。须菩提说「福德即非福德性」，等于先声明：你问的那个「多」只在世俗度量内有定义。</p>
+<p>类比在哪里失效？失效点有两处，而且都正是佛学越出工程学的地方。其一，工程里的 spec 仍然是一个确定的、可最终引用的对象，系统有 ground truth 这一层；般若却宣称连「spec」自身也无自性——「佛法即非佛法」意味着不存在一个可以停靠的最底层文档，这更接近哥德尔式的处境：系统无法在自身内部把自己奠基为实体。其二，spec-实现关系是静态的知识传递，而「受持、为他人说」要求的是把自己变成实现并跑通全部测试——佛教叫「行同佛行」，这一步没有任何文档阅读可以替代。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>七宝布施</td>
+<td>sapta-ratna, dāna</td>
+<td>用金、银、琉璃等七种珍宝行财布施；本品中财布施规模的上限意象</td>
+</tr>
+<tr>
+<td>三千大千世界</td>
+<td>tri-sāhasra-mahāsāhasra-lokadhātu</td>
+<td>古印度宇宙论单位，约十亿个世界，一佛教化的范围</td>
+</tr>
+<tr>
+<td>福德 / 福德聚</td>
+<td>puṇya / puṇya-skandha</td>
+<td>善行积累的果报之「堆」；梵本谓其「非聚」（askandha），罗什译作「非福德性」</td>
+</tr>
+<tr>
+<td>四句偈</td>
+<td>catuṣpādikā gāthā</td>
+<td>四音步一节的诗颂，佛经文本最小计量单位，此处虚指经中极少一部分</td>
+</tr>
+<tr>
+<td>阿耨多罗三藐三菩提</td>
+<td>anuttarā samyaksaṃbodhi</td>
+<td>无上正等正觉，佛的圆满觉悟；本品称其与诸佛皆「从此经出」</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>一切诸佛，及诸佛阿耨多罗三藐三菩提法，皆从此经出。</p>
+<p>所谓佛法者，即非佛法，是名佛法。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>慧能《金刚经口诀》（圆觉禅网站全文）：https://www.yuanjuechan.com/2020-10-20-金刚经六祖口诀-慧能大师.html</li>
+<li>江味农《金刚经讲义》依法出生分（地藏孤儿院网站）：https://m.dizang.org/jj/jgj/p13.htm</li>
+<li>南怀瑾《金刚经说什么》第八品偈颂（劝学网）：https://www.quanxue.cn/ct_nanhuaijin/jingang/jingang74.html</li>
+<li>百度百科「第八品依法出生分」：https://baike.baidu.com/item/第八品依法出生分/5490640</li>
+<li>Diamond Sutra Chapter 8（英译与简注）：https://diamond-sutra.com/read-the-diamond-sutra-here/diamond-sutra-chapter-8/</li>
+<li>《金刚经》梵藏汉对照（Scribd）：https://www.scribd.com/doc/54073782/金刚经梵藏汉对照V1-5</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/07/"><span class="lbl">← 上一品</span><span>无得无说分</span></a><a class="next" href="/a/jingangjing/09/"><span class="lbl">下一品 →</span><span>一相无相分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第二十二品 无法可得分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第22品「无法可得分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal three">二十二</span>
+  <h1>无法可得分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第二十二品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>须菩提白佛言："世尊！佛得阿耨多罗三藐三菩提。为无所得耶？"</p>
+<p>佛言："如是，如是。须菩提！我于阿耨多罗三藐三菩提乃至无有少法可得，是名阿耨多罗三藐三菩提。"</p></div>
+<h2>白话</h2>
+<p>须菩提对佛说："世尊！佛证得无上正等正觉，其实是无所得吗？"</p>
+<p>佛说："正是这样，正是这样。须菩提！我对于无上正等正觉，乃至没有一丝一毫的法可以得到，这才叫作无上正等正觉。"</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>须菩提主动发问，把前面各品反复暗示的结论挑明：佛所证的无上正等正觉，是不是根本"无所得"？</li>
+<li>佛罕见地连说两个"如是"，全盘印可——这是全经中佛对弟子判断最干脆的一次肯定。</li>
+<li>佛随即把结论推到极限：不是"所得很少"，而是"乃至无有少法可得"——连最微小的一点法也不存在、不可得。</li>
+<li>最后用全经标志性的"是名"句式收尾：正因为无一法可得，才配称为"阿耨多罗三藐三菩提"。无所得不是正觉的缺陷，而是正觉的定义。</li>
+</ol>
+<h2>深度解读</h2>
+<p>这一品只有两句对话，却是《金刚经》后半部论证的收束点之一。</p>
+<p>先解释名词。"阿耨多罗三藐三菩提"是梵文 anuttarā samyaksaṃbodhi 的音译：anuttarā 意为"无上"（没有更高的），samyak 意为"正、遍"，saṃbodhi 意为"觉悟"，合起来即"无上正等正觉"——佛所证得的、圆满无缺的觉悟，是全部佛教修行的终点。而"无所得"对应梵文的 na upalabhyate（不可得、不可把捉），是般若系经典的核心术语：不是"找了没找到"，而是"那里根本不存在一个可以被抓取的对象"。</p>
+<p>本品要回答的问题，全经其实早已铺垫。第 7 品佛已说"无有定法名阿耨多罗三藐三菩提"；第 17 品佛又自述在燃灯佛处"实无有法得阿耨多罗三藐三菩提"。到了第 22 品，轮到须菩提把这条线索收拢成一个总结性的判断句抛回给佛：您证得正觉，是否本来就无所得？佛的回答不留任何余地——"乃至无有少法可得"。梵本此处用的是 aṇur api tatra dharmo na saṃvidyate nopalabhyate：aṇu 本义是"极微"，物质可分割到的最小单位，鸠摩罗什译作"少法"，隋代笈多直译作"微小彼中法"。也就是说，佛用了一个物理量级上最小的单位来做全称否定：在正觉之中，连一个"极微"那么小的法也找不到、得不到。孔兹（Edward Conze）的英译是 "not even the least dharma is there found or got at"，忠实保留了这个量级修辞。</p>
+<p>为什么"无所得"反而是正觉的定义？历代注家的解释高度一致。六祖惠能《金刚经口诀》说得最短："所得心尽，即是菩提"——把"想要得到什么"的那个心耗尽了，剩下的就是菩提。宋代《金刚经集注》里，颜丙的对仗最清楚："有法可得，是名法缚；无法可得，方名解脱"——只要还有一个东西可以抓在手里，抓取本身就是绑缚；李文会补充："若有少法可得，亦是著相"——哪怕只剩一点点"我得到了"的感觉，也还是执著于相。王日休则从性体上说："性中无有少法可得，无有所得，则荡然空空，不可以形相求，不可以言说求也。"换句话说，正觉不是一个可以从外部取回的物件，它是心把一切抓取都放下之后自然呈现的状态；若它是可得之物，就必然是有条件、有生灭的，恰恰不配称"无上"。</p>
+<p>近代注家把这一品放进全经结构里看。江味农《金刚经讲义》依校勘判定全经分前后两周：前周破粗执，教人"离相"；后周破细执，教人"离念"。第 22 品正处后周深处——此时要破的已不是对身外之相的执著，而是对"证悟"这件事本身最细的一念执取：连"我证得了菩提"这个念头也要放掉。南怀瑾《金刚经说什么》为本品作的偈颂是："多年行脚觅归途，入室知为道路愚。检点旧时新衣钵，了无一物可提扶。"他的白话解释是禅宗式的："本来无一物，没有一个境界可得的，这就是无法可得"——修行者最后发现，连一路依赖的方法本身也是要放下的拐杖。</p>
+<p>需要如实说明的一处分歧：本品与第 7 品、第 17 品文义高度重叠，梵本与诸汉译在此处的分章、详略也不尽相同（罗什译最简，笈多译保留了"极微"的字面）。传统判教倾向于把重复解释为"破执逐层加细"（江味农的前周后周说是代表），而现代文献学者更倾向于视之为经文层累编纂的痕迹。两种读法并不互斥：无论文本如何形成，第 22 品在现行结构中承担的功能是明确的——把"无所得"从阶段性的论点升格为对正觉的最终定义，并直接引出第 23 品"是法平等，无有高下"。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>本品的逻辑可以用一个程序设计里的区分来搭脚手架：<strong>返回值与副作用的区分——证悟不是一个可返回的值。</strong></p>
+<p>"得"这个动词预设了一套接口：存在一个调用方（我），调用某个函数（修行），函数返回一个对象（菩提），调用方把它绑定到变量上（我得到了菩提）。须菩提的问题相当于在问：<code>attain()</code> 的返回类型是什么？佛的回答是：这个函数的返回类型是 void。它不返回任何对象——"乃至无有少法可得"，连一个字节都不返回。它的全部作用是副作用：清空调用方持有的所有错误引用。</p>
+<p>更准确的类比是数组的"有序性"。你对一个乱序数组执行排序，完成后数组"获得"了有序性——但你无法在数组里指出哪个元素是"有序"，它不占下标、不占内存，不是数组中的一项，而是整个排列的全局属性。菩提同理：它不是心中新增的一个内容项，而是一切颠倒执取被移除后，心整体呈现的性质。正因为它不是"其中一项"，所以"无有少法可得"；也正因为如此，它才能"无上"——任何作为对象存在的东西都可以被比较、被超越，唯独不作为对象存在的全局属性没有更高一级。这就是"是名"句式的逻辑：不可得，恰恰是它成立的方式。</p>
+<p>类比在哪里失效？失效在调用方。在程序的图景里，排序完成后，那个观察"数组已有序"的程序员还站在系统外面；副作用清空了数据，却没有清空操作者。而本品的锋刃恰恰指向这里：六祖说"所得心尽，即是菩提"——要清空的不只是"所得之物"，还包括"能得之心"。佛学称之为"能所双泯"：能抓取的主体和被抓取的客体一起消解。工程语言里没有对应物，因为任何工程描述都默认保留一个在系统外做验收的观察者。类比失效的这一点，正是《金刚经》超出一切对象化思维的地方——它不是宣布返回值为空，而是连"等着接收返回值的那个人"也一并解构了。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阿耨多罗三藐三菩提</td>
+<td>anuttarā samyaksaṃbodhi</td>
+<td>无上正等正觉；anuttarā（无上）+ samyak（正、遍）+ saṃbodhi（觉悟），佛所证的圆满觉悟</td>
+</tr>
+<tr>
+<td>无所得</td>
+<td>na upalabhyate / anupalambha</td>
+<td>不可把捉；并非"没找到"，而是根本不存在一个可被抓取的对象，般若系经典的核心立场</td>
+</tr>
+<tr>
+<td>少法</td>
+<td>aṇur api dharmaḥ</td>
+<td>梵文 aṇu 意为"极微"（物质最小单位），"乃至无有少法可得"即连极微量的法也不可得</td>
+</tr>
+<tr>
+<td>是名</td>
+<td>—</td>
+<td>全经标志性句式"（无）A，是名 A"：正因不执取其为实有对象，才如实成立其名</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>我于阿耨多罗三藐三菩提乃至无有少法可得，是名阿耨多罗三藐三菩提。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>南怀瑾《金刚经说什么》第二十二品 无法可得分 — https://www.quanxue.cn/ct_nanhuaijin/jingang/jingang164.html</li>
+<li>《金刚经集注》无法可得分第二十二（王日休、颜丙、李文会等注） — https://skqs.dazhishi.com/show_gryorregda.html</li>
+<li>六祖惠能《金刚般若波罗蜜经口诀》（西园戒幢律寺辑） — https://www.jcedu.org/201708/1778.html</li>
+<li>《金刚经》梵英汉对照（含 Conze 英译、Müller 梵本） — https://ldbj.com/jingangjing/jingangjingfanyinghan.htm</li>
+<li>江味农《金刚经讲义》 — https://www.dizang.org/jj/jgj/index.htm</li>
+<li>第二十二品无法可得分（百度百科） — https://baike.baidu.com/item/%E7%AC%AC%E4%BA%8C%E5%8D%81%E4%BA%8C%E5%93%81%E6%97%A0%E6%B3%95%E5%8F%AF%E5%BE%97%E5%88%86/5493493</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/21/"><span class="lbl">← 上一品</span><span>非说所说分</span></a><a class="next" href="/a/jingangjing/23/"><span class="lbl">下一品 →</span><span>净心行善分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

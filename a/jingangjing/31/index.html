@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第三十一品 知见不生分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第31品「知见不生分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal three">三十一</span>
+  <h1>知见不生分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第三十一品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>“须菩提！若人言：佛说我见、人见、众生见、寿者见。须菩提！于意云何？是人解我所说义不？”</p>
+<p>“不也，世尊！是人不解如来所说义。何以故？世尊说我见、人见、众生见、寿者见，即非我见、人见、众生见、寿者见，是名我见、人见、众生见、寿者见。”</p>
+<p>“须菩提！发阿耨多罗三藐三菩提心者，于一切法，应如是知，如是见，如是信解，不生法相。须菩提！所言法相者，如来说即非法相，是名法相。”</p></div>
+<h2>白话</h2>
+<p>“须菩提，如果有人说：佛宣讲了我见、人见、众生见、寿者见。须菩提，你怎么看？这个人理解我所说的义理吗？”</p>
+<p>“不理解，世尊。这个人没有理解如来所说的义理。为什么？世尊所说的我见、人见、众生见、寿者见，并不是实有的我见、人见、众生见、寿者见，只是假借名字称为我见、人见、众生见、寿者见。”</p>
+<p>“须菩提，发起无上正等正觉之心的人，对于一切法，应当这样去知，这样去见，这样去信解：不生起法相。须菩提，所谓法相，如来说它并非实有的法相，只是假名叫做法相。”</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>佛先设一个陷阱式的问题：既然佛四十九年说法里反复提到「我见、人见、众生见、寿者见」这些词，那么说「佛宣说了这四种见」的人，算不算理解了佛的意思？</li>
+<li>须菩提回答：不算。佛提到四见，是为了破除四见，不是为了确立四见。把「佛谈论过 X」理解成「佛主张 X 实有」，是把药方当成了病。</li>
+<li>于是四见本身也被套进全经反复出现的三段式：四见，即非四见，是名四见——名字保留，实体性取消。</li>
+<li>佛随即给出正面的行动指令：发菩提心的人，对一切法要「如是知、如是见、如是信解」，同时「不生法相」——认知照常运行，但不把认知结果固化为实体。</li>
+<li>最后一刀砍向这条指令自身：连「法相」这个概念也是「即非法相，是名法相」。规则对规则本身同样适用，防止「不生法相」变成一个新的法相。</li>
+</ol>
+<h2>深度解读</h2>
+<p>这一品位于全经收官处。第 30 品刚刚拆完物质世界——「一合相」（把微尘聚合成的世界执为一个整体）不可得；第 31 品掉转枪口，对准认知本身。此后第 32 品只剩下著名的六如偈和流通分。也就是说，这是《金刚经》最后一次系统性的否定操作，砍的是最难砍的一层：不是对象，而是关于对象的理论。</p>
+<p>要看懂这一层，先要分清两个词：「相」和「见」。全经前面（如第 3 品）反复破的是「我相、人相、众生相、寿者相」，梵本用的是 saṃjñā（想、知觉表征），指心里当下浮现的「有一个我」的表象。而本品破的是「我见、人见、众生见、寿者见」，梵本换了一个词：dṛṣṭi（见，如 ātma-dṛṣṭi 我见、pudgala-dṛṣṭi 人见、sattva-dṛṣṭi 众生见、jīva-dṛṣṭi 寿者见）。dṛṣṭi 在佛教术语里专指固化成理论立场的见解——不是一闪而过的念头，而是一套被持有、被辩护的主张。英译普遍以 perception 对译 saṃjñā、以 view 对译 dṛṣṭi，两个英文词的落差直观呈现了这一升级。鸠摩罗什译文从前面的「相」换成此处的「见」，忠实保留了梵本的用词变化：破完了知觉层面的执取，还要破理论层面的执取。</p>
+<p>本品要回答的问题因此非常尖锐：佛说法几十年，「无我」讲了无数遍，那么「佛宣说了我见（这个概念）」这一命题，算不算对佛法的正确理解？须菩提的回答是否定的。惠能在《金刚经口诀》中对此的解释是：如来所说的我人等见，不同于凡夫的我人等见——如来提及它们，是教学人用智慧除却妄心，是治病的方便，不是立论的主张。把方便当主张，就是「不解如来所说义」。这和禅宗「指月之指非月」的讲法一脉相承：佛语是指月的手指，盯着手指研究，恰好错过了月亮。</p>
+<p>接下来是全经少见的正面修行指令：「于一切法，应如是知，如是见，如是信解，不生法相。」三个动词在梵本中是三个动名词：jñātavya（应知）、draṣṭavya（应见）、adhimoktavya（应信解、确信悟入），汉传注家常以闻、思、修或信、解、行的次第来配这三步。值得注意的是，佛没有说「应无知、无见、无信解」——认知活动照常进行，被否定的只是最后那个动作：生起并持有「法相」。</p>
+<p>「法相」这个词藏着本品最重要的一处学术争议。罗什译「法相」，容易被读成客观外境的相状；但梵本此处是 dharma-saṃjñā（法想），玄奘译本即作「法想」——指的是主观上对法形成的概念表征。也就是说，「不生法相」不是要求世界不呈现任何样子，而是要求心不把自己的概念构造物钉死为实在。近代学术的梵汉对勘（如对罗什、玄奘、笈多诸译本的比较研究）普遍指出：罗什以「相」译 saṃjñā 是全经一贯的译例，读经时须把这些「相」还原为「想」来理解，否则会把一个认识论命题误读为存在论命题。</p>
+<p>最后一句是全经方法论的封顶之作：「所言法相者，如来说即非法相，是名法相。」「X，即非 X，是名 X」这个三段式在经中出现了几十次，此处被应用到「法相」——也就是这条规则自己所操作的对象类型——之上。这是一个自指结构：如果「不生法相」被持有为一个法相，它就违背了自己；所以连它也必须被「即非」掉。南怀瑾在《金刚经说什么》里讲此品时，引了《楞严经》「知见立知，即无明本；知见无见，斯即涅槃」，并举宋代遇安禅师改动句读而悟道的公案（读作「知见立，知即无明本」）：在清净知见之上再立一个「知」，那个「知」本身就是无明的根。这正是本品的义理：见性不在于获得一个正确的见，而在于不把任何见——包括「无见」——立为实体。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>用软件工程的语言，前面各品和本品破的是两个不同层级的东西：第 3 品破的是数据（「有一个叫『我』的对象」），本品破的是 schema（「关于『我』这类对象的理论定义」）。删掉几条错误记录容易，难的是意识到表结构本身也是人为设计、随时可废弃的约定——而不是世界自带的格式。</p>
+<p>「X，即非 X，是名 X」精确对应指针与所指的分离：「是名」保留标识符（identifier），「即非」删除的是「这个标识符必然钉住一个实体」的信念。名字照常使用，解引用（dereference）时不再假定后面挂着一个不变的对象。这也是「地图不是疆域」的元版本：本品的特别之处在于它多走了一步——连「地图不是疆域」这句话本身也是一张地图，也要贴上同样的标签。</p>
+<p>「不生法相」而又「如是知、如是见、如是信解」，很像一个无状态服务（stateless service）的设计约束：每个请求照常被完整处理——解析、计算、响应，一样不少——但处理完不把中间表征持久化为全局状态。心照常运行表征（认知系统不可能不用表征，正如服务不可能不用内存），被禁止的只是把表征写盘、当成 ground truth 长期锁定。</p>
+<p>最精彩的是末句的自指。「所言法相者，即非法相，是名法相」是把规则应用于规则自身，结构上类似哥德尔式的自指或程序里的不动点：一个对所有概念做「去实体化」操作的算子，最后必须能吃掉自己，否则它就成了唯一的例外——一个新的、更顽固的实体。《金刚经》在这里完成了闭包：算子作用于自身而不崩溃，说明这套否定不是又一个理论，而是一个对任何理论（包括自身）都生效的操作。</p>
+<p>类比的失效处也要说清楚。工程师抛弃一个模型，是为了换一个拟合更好的模型，目标函数是预测精度，动作是迭代；本品不是让你换模型，而是止息「执模型为实」的抓取动作本身，目标是解脱而非精度。统计学家 Box 说「所有模型都是错的，但有些有用」，工程师听完继续调参；《金刚经》关心的是那个「非用模型不可、并暗中相信模型为真」的抓取惯性——这一层没有工程对应物，正是佛学越出类比的地方。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>四见（我见、人见、众生见、寿者见）</td>
+<td>ātma-dṛṣṭi、pudgala-dṛṣṭi、sattva-dṛṣṭi、jīva-dṛṣṭi</td>
+<td>把「我」「补特伽罗（个体）」「众生」「命者（寿命主体）」执为实有的固化理论立场；dṛṣṭi（见）比 saṃjñā（想/相）更深一层，指已成体系、被持有的见解</td>
+</tr>
+<tr>
+<td>法相</td>
+<td>dharma-saṃjñā</td>
+<td>对法（教法及一切现象）形成的概念表征；罗什译「相」，玄奘译「法想」，梵本原义偏于主观概念而非客观相状</td>
+</tr>
+<tr>
+<td>知、见、信解</td>
+<td>jñātavya、draṣṭavya、adhimoktavya</td>
+<td>应知、应见、应信解悟入，三个递进的认知动词；汉传注家常配闻思修次第</td>
+</tr>
+<tr>
+<td>阿耨多罗三藐三菩提</td>
+<td>anuttarā samyak-saṃbodhi</td>
+<td>无上正等正觉，佛所证的圆满觉悟</td>
+</tr>
+<tr>
+<td>不生</td>
+<td>—</td>
+<td>不令生起、不启动；此处指认知照常运行而不将概念固化为实体</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>于一切法，应如是知，如是见，如是信解，不生法相。</p>
+<p>所言法相者，如来说即非法相，是名法相。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>六祖惠能《金刚般若波罗蜜经口诀》，西园戒幢律寺 — https://www.jcedu.org/201708/1778.html</li>
+<li>南怀瑾《金刚经说什么》知见不生分（知即无明本），劝学网 — https://www.quanxue.cn/ct_nanhuaijin/jingang/jingang202.html</li>
+<li>《金刚经》梵文注解（中国人民大学国际佛学研究中心·沈阳北塔翻译组） — http://www.tbmgar.com/admin/kindeditor/attached/file/20140831/20140831124164086408.pdf</li>
+<li>《金刚经》梵英汉对照 — https://ldbj.com/jingangjing/jingangjingfanyinghan.htm</li>
+<li>印顺《般若经讲记·金刚般若波罗蜜经讲记》，显密文库 — http://fowap.goodweb.net.cn/news/news_view.asp?newsid=9475</li>
+<li>Kalyanamittas: The Diamond Sutra — Chapter 31 &amp; 32 — http://buddhistinspiration.blogspot.com/2012/01/diamond-sutra-chapter-31-32-final.html</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/30/"><span class="lbl">← 上一品</span><span>一合理相分</span></a><a class="next" href="/a/jingangjing/32/"><span class="lbl">下一品 →</span><span>应化非真分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

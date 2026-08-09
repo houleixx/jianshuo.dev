@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第二十七品 无断无灭分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第27品「无断无灭分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal three">二十七</span>
+  <h1>无断无灭分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第二十七品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>“须菩提！汝若作是念：‘如来不以具足相故，得阿耨多罗三藐三菩提。’须菩提！莫作是念：‘如来不以具足相故，得阿耨多罗三藐三菩提。’”</p>
+<p>“须菩提！汝若作是念，发阿耨多罗三藐三菩提心者，说诸法断灭。莫作是念！何以故？发阿耨多罗三藐三菩提心者。于法不说断灭相。”</p></div>
+<h2>白话</h2>
+<p>“须菩提！你如果生起这样的念头：‘如来不是凭着圆满具足的身相，才证得无上正等正觉的。’须菩提！不要生起这样的念头：‘如来不是凭着圆满具足的身相，才证得无上正等正觉的。’”</p>
+<p>“须菩提！你如果生起这样的念头：发无上正等正觉之心的人，会主张一切法归于断灭。不要生起这样的念头！为什么？发无上正等正觉之心的人，对于诸法，从不主张断灭之相。”</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>上一品刚刚说完「若以色见我，以音声求我，是人行邪道」，把「以相见佛」否定到了极处。本品立刻掉头，堵住由此产生的新错误。</li>
+<li>佛先假设须菩提可能生起的推论：既然不能以相见佛，那么如来大概「不以具足相」而得觉悟——相是可以整个丢掉的。</li>
+<li>佛明确制止：莫作是念。否定「执相」不等于肯定「弃相」，觉悟既不由相而得，也不在相之外。</li>
+<li>佛把这个错误推到底：如果丢掉一切相，就等于主张「诸法断灭」——万法归于空无，因果修行全部作废。</li>
+<li>结论：真正发菩提心的人，「于法不说断灭相」。扫相是扫除对相的执取，不是消灭法本身。空与断灭，是两回事。</li>
+</ol>
+<h2>深度解读</h2>
+<p>这一品在全经论证结构中的位置极为关键：它是一个刹车。《金刚经》从头到尾都在做减法——无我相、无人相、无众生相、无寿者相，乃至第 26 品的「若以色见我，以音声求我，是人行邪道，不能见如来」，否定的力度一路加码。一个逻辑严密的听者走到这里，几乎必然得出一个推论：相既然完全靠不住，那就把相全部抛弃，觉悟大概与相毫无关系，甚至一切法都不存在。第 27 品要拦下的，正是这个「过度修正」。</p>
+<p>先解释几个术语。「具足相」，梵文 lakṣaṇa-saṃpad，指佛陀圆满具备三十二种殊胜身相，是累劫修福的果报，古印度传统认为这是大人物的标志。「阿耨多罗三藐三菩提」，梵文 anuttarā samyaksaṃbodhi 的音译，意为「无上正等正觉」，即佛的圆满觉悟。「断灭」，梵文 uccheda，是印度思想史上的一个专门立场：认为事物（尤其是生命）终将彻底灭绝、不留后续，人死如灯灭，因果不相续。它与「常见」（śāśvata-dṛṣṭi，认为有永恒不变的实体）相对，构成佛教一贯拒斥的两个极端。佛法自称中道，正是「非常非断」。</p>
+<p>本品的论证分两步。第一步针对「相」：佛主动替须菩提把错误想法说出来——「如来不以具足相故，得阿耨多罗三藐三菩提」——然后禁止他这样想。这句话初读令人困惑：上一品不是刚说不能以相见如来吗？传统注家的解法是区分两个命题：「不执著相」与「相不存在、修相无用」。前者是《金刚经》的立场，后者是断灭。六祖惠能在《金刚经口诀》里说得最直接：「须菩提闻说真身离相，便谓不修三十二净行，而得菩提。佛语须菩提：莫言如来不修三十二净行而得菩提。汝若言不修三十二净行得阿耨菩提者，即是断佛种性，无有是处。」在惠能看来，此处的要害是修行本身：听了「离相」就废弃修福修行，等于断掉成佛的种子。</p>
+<p>第二步把问题从「相」推广到「法」：如果发菩提心的人主张「诸法断灭」，那就全盘错误。「于法不说断灭相」是全经中语气最重的正面断言之一。南怀瑾在《金刚经说什么》里反复强调这一点：《金刚经》讲的空不是「空得一无所有」，把空理解成断灭，就是「拨无因果」——把因果规律整个否定掉；他认为现代「人死如灯灭」的流俗唯物论，在见地上正属此类。印顺法师《般若经讲记》的路数则更理论化：性空与缘起是一体两面，正因为诸法无自性，缘起因果才能成立；断灭见恰恰是不懂性空，才把空误认成「什么都没有」。</p>
+<p>值得一提的还有一个文本问题。鸠摩罗什译本中，佛两次重复同一句否定——「汝若作是念：如来不以具足相……莫作是念：如来不以具足相……」——历代注家对这个双重结构多有讨论。对勘梵本（Gilgit 写本）会发现，梵文的结构更简单：先问「你认为如来是凭具足相而觉悟的吗」，答「不应这样看」；随后直接说「也不应认为发趣菩萨乘者施设了任何法的毁灭（vināśa）或断灭（uccheda）」。孔兹（Edward Conze）的英译在此处译作「no-possession of no-marks」（无相之无得），试图把两边意思都保住，被后来重新翻译梵本的学者 Paul Harrison 批评为「站不住脚的两头讨好」。译本之间的出入，恰好说明这一段在义理上有多容易滑向两边——译者自己也在钢丝上。</p>
+<p>放回全经看，本品回答的问题是：般若的「空」到底否定了什么？答案是：只否定「自性」——事物独立、恒常、不依条件的实体性——而不否定缘起的显现和因果的相续。扫相扫到尽头，法界不减一分。这就是「无断无灭」四个字的分量。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>用编程语言的语义来搭这个脚手架相当精确：<strong>空不是 0，也不是 null，而是「未绑定的自由变量」</strong>。</p>
+<p>说一个变量「没有固定的内在值」，是一个关于绑定方式的陈述：它的值永远依赖于调用时传入的环境，随上下文而定。这对应「缘起性空」——诸法没有自性，是说它们的存在方式是依条件而起的函数 f(conditions)，而不是一个写死的常量。断灭见的错误，在类型系统里看得很清楚：它把「没有内在值」（unbound）偷换成了「值等于零」（value = 0）或「变量不存在」（undefined），这是三个完全不同的语义。程序员都知道，把 null 当 0 用会出 bug，把「依赖注入」理解成「什么都不注入」则整个系统直接崩溃。第 26 品说的是「不要把函数的某次输出当成函数本身」（以色见我是邪道）；第 27 品说的是「但也别因此宣布这个函数不存在」（于法不说断灭相）。</p>
+<p>另一个贴合的类比是控制系统里的<strong>过冲修正</strong>。第 1 到 26 品持续施加一个方向的修正力——破执著相。任何反馈系统在强修正之后都有过冲风险：矫枉过正，冲到反方向的错误区。第 27 品就是那个反向的阻尼项，在系统冲向「一切皆无」之前把它拉回来。佛教说的中道，在这个意义上不是折中主义的「取中间值」，而是一个动态稳定：两个吸引子（常见与断见）都是错误状态，正见是在两者都不落入的轨道上运行。</p>
+<p>类比的失效处也要讲清楚。第一，「自由变量」的类比是纯描述性的语义学，而本品的断灭见首先是一个伦理事故：否定因果相续，修行与善恶就都失去了意义——lambda 演算里没有任何东西对应「断佛种性」的严重性。第二，程序语义中总有一个站在系统之外的解释器在做求值，而般若的空是自返的：分析者、分析工具、分析行为本身同样无自性，没有一个免检的元层级。类比失效的这两处，恰恰是佛学从语义分析走向修行实践的地方——《金刚经》不满足于给出正确的类型标注，它要求你在每一次求值中不落两边。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>断灭相</td>
+<td>uccheda / vināśa</td>
+<td>认为诸法（尤其因果相续）终归彻底灭绝、空无所有的见解；佛教两大边见之一，与「常见」相对</td>
+</tr>
+<tr>
+<td>具足相</td>
+<td>lakṣaṇa-saṃpad</td>
+<td>圆满具备三十二种殊胜身相；佛累劫修福的果报，古印度视为圣者标志</td>
+</tr>
+<tr>
+<td>阿耨多罗三藐三菩提</td>
+<td>anuttarā samyaksaṃbodhi</td>
+<td>无上正等正觉，佛的圆满觉悟</td>
+</tr>
+<tr>
+<td>断见 / 常见</td>
+<td>uccheda-dṛṣṭi / śāśvata-dṛṣṭi</td>
+<td>两个极端见解：一切归于灭绝 vs 有恒常不变的实体；中道即不落此二边</td>
+</tr>
+<tr>
+<td>不落断灭</td>
+<td>—</td>
+<td>本品核心立场：扫除对相的执取，但不否定缘起显现与因果相续</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>发阿耨多罗三藐三菩提心者。于法不说断灭相。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>南怀瑾《金刚经说什么》二十七品 无断无灭分：https://fojiaowang.com.cn/plus/view.php?aid=10827</li>
+<li>六祖惠能《金刚经口诀》无断无灭分第二十七：https://www.quanxue.cn/ct_fojia/jingangkj/jingangkj28.html</li>
+<li>Paul Harrison 英译梵本《Vajracchedikā Prajñāpāramitā》（Schøyen Collection, Buddhist Manuscripts Vol. III）：https://static1.squarespace.com/static/5c03ced75ffd204418037b7a/t/5c5306ce575d1f9230da8a6a/1548945103490/Diamond+Sutra-Paul+Harrison+tr.pdf</li>
+<li>梵文 Gilgit 写本《Vajracchedikā Prajñāpāramitā》（GRETIL 电子文本）：https://gretil.sub.uni-goettingen.de/gretil/corpustei/transformations/html/sa_vajracchedikA-prajJApAramitA-gilgit.htm</li>
+<li>印顺《般若经讲记·金刚般若波罗蜜经讲记》：http://fowap.goodweb.net.cn/news/news_view.asp?newsid=9475</li>
+<li>金刚经网：第二十七品讲解：https://www.jingangjing.net/jiangjie/27.htm</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/26/"><span class="lbl">← 上一品</span><span>法身非相分</span></a><a class="next" href="/a/jingangjing/28/"><span class="lbl">下一品 →</span><span>不受不贪分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>总导读 · 金刚经理工男读本</title>
+<meta name="description" content="金刚经的版本源流、全经论证结构与「即非—是名」核心句式，写给理工男的阅读说明书。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal three">导读</span>
+  <h1>总导读</h1>
+  <div class="ch-sub">给理工男的《金刚经》说明书</div>
+</header>
+<main class="wrap content">
+<h2>这是一本什么书</h2>
+<p>《金刚经》全名《金刚般若波罗蜜经》，梵文 Vajracchedikā Prajñāpāramitā Sūtra，直译是「能断金刚的智慧到彼岸经」——金刚是最硬的东西，而这部经讲的智慧连金刚都能切断。它属于大乘佛教般若经系，成书年代学界尚无定论，主流估计在公元 2 至 5 世纪之间，有学者认为不晚于公元 150 至 200 年，是般若文献较早期的作品。全文五千余字，是佛陀与弟子须菩提的一场对话实录。</p>
+<p>它在东亚的地位极高：禅宗六祖惠能因为在街市上听人诵读此经而走上求法之路；世界上现存最早有明确纪年的雕版印刷品，就是一卷 868 年的《金刚经》。一部经同时占住了思想史和技术史的两个坐标，这在人类文献里不多见。</p>
+<p>一个理工男值得读它，理由很直接：这部经处理的是一个工程师每天都在打交道的问题——<strong>概念和实在的关系</strong>。我们写代码时清楚变量名不是内存本身，画地图时清楚地图不是疆域，但一到日常生活，就默认「成功」「自我」「福报」这些标签背后都有个实体存在，然后被这些标签驱动着焦虑。《金刚经》干的事情，是用一套高度形式化、反复出现的句式，系统性地拆掉「名字 = 实体」这个默认绑定。它不提供新知识，它做的是给认知系统打补丁。整部经逻辑结构清晰、论证模式可复用、甚至可以当一篇论文来读——这正是本书采用的读法。</p>
+<h2>版本与源流</h2>
+<p>《金刚经》原典是梵文。现存最早的梵文写本出自阿富汗巴米扬地区和巴基斯坦北部吉尔吉特，年代在公元 5 至 7 世纪之间，比多数佛经的实物证据链都完整。</p>
+<p>汉译史上，此经先后有六个译本，均收入大藏经：</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>译者</th>
+<th>朝代</th>
+<th>经名</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>鸠摩罗什</td>
+<td>后秦（约 402 年）</td>
+<td>金刚般若波罗蜜经</td>
+</tr>
+<tr>
+<td>菩提流支</td>
+<td>北魏</td>
+<td>金刚般若波罗蜜经</td>
+</tr>
+<tr>
+<td>真谛</td>
+<td>南朝梁陈之际</td>
+<td>金刚般若波罗蜜经</td>
+</tr>
+<tr>
+<td>笈多</td>
+<td>隋（590 年，洛阳）</td>
+<td>金刚能断般若波罗蜜经</td>
+</tr>
+<tr>
+<td>玄奘</td>
+<td>唐</td>
+<td>能断金刚般若波罗蜜经</td>
+</tr>
+<tr>
+<td>义净</td>
+<td>唐（武周）</td>
+<td>佛说能断金刚般若波罗蜜多经</td>
+</tr>
+</tbody>
+</table></div>
+<p>六本各有定位：玄奘本、笈多本与出土梵本对应最严密，义净本最晚出、参考了前译而最完备，但流传最广的始终是鸠摩罗什本——本书用的也是它。鸠摩罗什（344–413）生于龟兹（今新疆库车），父亲是天竺人。后秦弘始三年（401 年）姚兴迎他入长安，尊为国师，在逍遥园设译场，后建草堂寺供其居住。据《出三藏记集》，他十余年间译出经论 35 部 294 卷，《金刚经》《法华经》《维摩经》《阿弥陀经》皆出其手。罗什的译笔在「信」与「达」之间偏向达——不逐字硬译，而是重铸为流畅的汉语。这个取舍让他的译本赢了一千六百年的用户留存。</p>
+<p>今天通行的「三十二分」分品，相传是南朝梁昭明太子萧统所加，每品拟一个四字标题（「法会因由」「善现启请」等）。需要说明：这个归属最早见于明代宗泐、如玘的《金刚经注解》，且原文只说「相传」；敦煌写本显示分品在 7 至 8 世纪逐步定型，托名昭明太子可能是元末明初的事。分品不改一字经文，只做了分段和加小标题——性质上是给源代码加注释，本书沿用这套编号。</p>
+<p>1900 年敦煌莫高窟藏经洞打开，其中一卷《金刚经》卷末刻着「咸通九年四月十五日王玠为二亲敬造普施」——公元 868 年 5 月 11 日，一个叫王玠的人为父母出资刻印。全卷由 7 张纸粘成，长近 4.88 米，卷首是一幅祇树给孤独园说法图，刀法纯熟、墨色均匀。它是世界上现存最早的有明确纪年的雕版印刷品，早于古腾堡圣经近六百年，1907 年被斯坦因带走，现藏大英图书馆。</p>
+<h2>全经的论证结构</h2>
+<p>把三十二品当一篇论文拆，骨架是清楚的：</p>
+<ul>
+<li><strong>第 1 品：实验环境说明（序分）</strong>。佛穿衣、乞食、吃饭、洗脚、坐下。零神迹，全是日常。这是全经的第一个论点，只是用行为而非语言陈述：最高的智慧运行在最平常的生活里。</li>
+<li><strong>第 2 品：提出问题</strong>。须菩提问出全经唯一的问题：发心求最高觉悟的人，「应云何住？云何降伏其心？」——心应该安放在哪里，念头怎么管理。这是问题定义（problem statement）。</li>
+<li><strong>第 3–4 品：给出核心答案</strong>。降伏其心：度尽一切众生，而不认为有众生被我度（做事，但不给自己记功）。应云何住：「应无所住」——答案是不住，无处安放就是安放。主定理在第 4 品就给完了。</li>
+<li><strong>第 5–16 品：反复破执的展开</strong>。剩下的篇幅是对主定理在各个变量上的代入验证：对佛的身相不能执（第 5 品）、对福德不能执（第 8、11 品）、对修行果位不能执（第 9 品）、对庄严净土不能执（第 10 品，「应无所住而生其心」在此出现）、对这部经本身也不能执（第 13 品「佛说般若波罗蜜，即非般若波罗蜜」）。第 14 品是第一个高潮，须菩提「涕泪悲泣」，佛给出「离一切诸相，则名诸佛」。</li>
+<li><strong>第 17 品：同一个问题，第二遍问</strong>。须菩提把第 2 品的原话原封不动再问一遍。这不是编辑事故。印顺法师依龙树的科判指出：初问初答讲「般若道」——从发心到见道，破的是对外境的执著；再问再答讲「方便道」——悟后起修到成佛，破的是对「能发心的我」和「所证的法」这些更深一层的执著。同一个 API，第二次调用时输入的自省深度不同。</li>
+<li><strong>第 18–31 品：更深一层的展开</strong>。前半破「所」（对象），后半破「能」（主体）：佛不认为自己在说法（第 21 品）、不认为自己有所得（第 22 品）、不认为自己在度众生（第 25 品）、甚至「无我」这个见解本身也不能执（第 31 品「知见不生」）。第 26 品的偈「若以色见我，以音声求我，是人行邪道，不能见如来」和第 27 品「于法不说断灭相」构成一对护栏：既不能执有，也不能滑向虚无主义——空不等于什么都没有。</li>
+<li><strong>第 32 品：结论与发布（流通分）</strong>。六如偈总结全经：「一切有为法，如梦幻泡影，如露亦如电，应作如是观。」然后是标准结尾：大家听完，皆大欢喜，信受奉行。</li>
+</ul>
+<p>前半和后半的深浅差异值得记住：前半是「你看到的对象不实在」，后半是「那个在看的你也不实在」。第一遍读经容易觉得后半在重复前半，其实是同一把刀，第二遍砍向了持刀的手。</p>
+<h2>核心算法：「所言 X，即非 X，是名 X」</h2>
+<p>全经出现频率最高的句式是一个三段结构：「如来说 X，即非 X，是名 X。」X 可以代入世界、微尘、身相、福德、般若波罗蜜、善法、凡夫——经中反复实例化了几十次。日本学者铃木大拙称之为「即非的论理」，给了极高评价；也有学者（谷口富士夫、立川武藏、末木文美士等）批评它反逻辑。要判断它是不是诡辩，先把它拆开。</p>
+<p>这个句式区分了三个层面：<strong>名字、名字所指的现象、现象背后被默认存在的实体</strong>。</p>
+<ul>
+<li>「所言 X」：承认名字。世俗层面我们用「世界」「福德」这些词交流，这个约定有效，不废除。</li>
+<li>「即非 X」：否认实体。名字让人产生一个错觉——以为它背后有个独立、恒常、有自性的东西。这一段砍掉的正是这个错觉：「世界」只是无数条件临时聚合的一个快照，没有一个叫「世界」的实体在那里。</li>
+<li>「是名 X」：恢复名字的使用许可。破掉实体执之后，名字照用——但此时你清楚它只是个标签、一个接口约定，不再附带本体论承诺。</li>
+</ul>
+<p>用工程语言说：X 是指针，「即非 X」告诉你解引用之后没有一个固定不变的对象，只有随时在变的内存状态；「是名 X」告诉你指针仍然可以用，只要别把指针当对象本身。它破的是「概念实在论」——把地图当疆域、把变量名当内存、把 model 当 reality。它立的是一种可以继续正常使用语言、但不再被语言绑架的姿态。</p>
+<p>所以这不是「X 既是 X 又不是 X」的逻辑矛盾——三段各自作用在不同层面，不构成同一层面上的自相矛盾，形式逻辑并没有被违反。它更像一个去引用（dereference）检查：每当你要对一个概念投入真实的情绪和执著之前，先运行一遍这个三段式，确认你执著的是实体还是标签。整部《金刚经》可以看作这个算法在几十个输入上的单元测试。学会这一个模式，全经的大部分段落都能自己读通。</p>
+<h2>怎么读这本书</h2>
+<p>建议按品的顺序通读。全经本身就是一场连续对话，论证是递进的，跳读会丢上下文——尤其第 17 品之后的深度依赖前半铺垫。</p>
+<p>每一品的结构相同：原文、白话疏解、关键词解释、理工男视角。原文建议出声读一遍，罗什译本的节奏本身是内容的一部分。「理工男视角」栏目用工程和科学的类比搭桥，但类比是脚手架，不是结论——指针、接口、地图这些比喻帮你越过第一道理解门槛，越过之后应该拆掉，否则就成了新的执著，恰好违背这部经本身的教导。「所言类比，即非类比，是名类比」，这个句式对本书自己同样适用。</p>
+<p>读完三十二品大约需要十个小时。第 2、4、5、10、14、17、26、32 品是主干，时间紧可以先读这八品。</p>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li><a href="https://en.wikipedia.org/wiki/Diamond_Sutra">Diamond Sutra — Wikipedia</a></li>
+<li><a href="https://zh.wikipedia.org/zh-hans/%E9%87%91%E5%89%9B%E7%B6%93">金刚经 — 维基百科</a></li>
+<li><a href="https://www.cabinet.ox.ac.uk/worlds-earliest-dated-printed-book-diamond-sutra-868-ce">The world's earliest dated printed book: The Diamond Sutra, 868 CE — Oxford Cabinet</a></li>
+<li><a href="https://idp.bl.uk/discover/learning/buddhism-on-the-silk-roads/articles/buddhism-on-the-ground/buddhist-texts-the-diamond-sutra/">Buddhist texts: The Diamond Sutra — International Dunhuang Programme, British Library</a></li>
+<li><a href="https://m.thepaper.cn/newsDetail_forward_7199528">世界上最早的印刷品——敦煌《金刚经》 — 澎湃新闻</a></li>
+<li><a href="https://m.douban.com/book/review/12367653/">《金刚般若波罗蜜经》六个版本及鸠摩罗什译本 — 豆瓣</a></li>
+<li><a href="https://www.aisixiang.com/data/148735.html">李利安：《金刚经》玄奘译本对罗什译本的补正作用 — 爱思想</a></li>
+<li><a href="https://www.fjdh.cn/wumin/2011/05/102823170666.html">《金刚经》及其不同译本研究 — 史原朋，佛教导航</a></li>
+<li><a href="https://www.neac.gov.cn/seac/c103391/202211/1159594.shtml">一切有为法，如梦幻泡影：龟兹高僧鸠摩罗什的大美佛经汉译 — 国家民委「道中华」</a></li>
+<li><a href="https://www.sxlib.org.cn/dfzy/sczl/whkjp/lwjl/201808/t20180808_953765.html">从鸠摩罗什的生平活动和译经来看佛教在中土的弘传 — 陕西省图书馆</a></li>
+<li><a href="https://zh.wikipedia.org/zh-hans/%E6%83%A0%E8%83%BD">惠能 — 维基百科</a></li>
+<li><a href="https://buddhism.lib.ntu.edu.tw/FULLTEXT/JR-BM054/bm054395967.pdf">「應無所住而生其心」——从梵文原义到禅学新诠 — 萧玫，台大佛学数位图书馆</a></li>
+<li><a href="https://www.yinshun.org/docs/2021/SummerDharmaRetreat/Chinese/2021%E8%B2%AB%E8%97%8F%E6%B3%95%E5%B8%AB-%E3%80%8A%E9%87%91%E5%89%9B%E7%B6%93%E8%AC%9B%E8%A8%98%E3%80%8B%E8%88%AC%E8%8B%A5%E9%81%93%E6%AC%A1%E7%AC%AC_%E9%96%8B%E7%A4%BA%E6%AC%A1%E7%AC%AC.pdf">印顺《金刚般若波罗蜜经讲记》般若道次第 — 印顺文教基金会</a></li>
+<li><a href="https://blog.sina.com.cn/s/blog_510871460102uxiy.html">昭明太子对《金刚经》分品无过有功 — 月悟法师</a></li>
+<li><a href="https://static1.squarespace.com/static/5c03ced75ffd204418037b7a/t/5c5306ce575d1f9230da8a6a/1548945103490/Diamond+Sutra-Paul+Harrison+tr.pdf">Paul Harrison (tr.), Vajracchedikā Prajñāpāramitā — Manuscripts in the Schøyen Collection, Buddhist Manuscripts Vol. III</a></li>
+<li><a href="https://www.abebooks.com/first-edition/Diamond-Sutra-Heart-Edward-Conze-Dev/21643935598/bd">Edward Conze, The Diamond Sutra and The Heart Sutra — AbeBooks 版本信息</a></li>
+<li><a href="https://www.sohu.com/a/319104315_467442">「佛说…即非…是名…」三段论该如何理解 — 搜狐/凤凰网</a></li>
+<li><a href="https://www.hanspub.org/journal/paperinformation?paperid=62166">基于经文对金刚经空观的梳理与分析 — 汉斯出版社</a></li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/" ><span class="lbl">目录</span><span>全书目录</span></a><a class="next" href="/a/jingangjing/01/"><span class="lbl">开始阅读 →</span><span>第一品 法会因由分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>
