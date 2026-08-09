@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -184,6 +198,43 @@ footer a{color:var(--ink-soft)}
 <p>「即非……是名……」句式也有一个干净的对应：<strong>指针与所指</strong>。「具足色身」这个词是一个指针，它有用、可以传递、可以解引用，但指针本身不包含对象；而《金刚经》更进一步说，解引用之后你以为拿到的那个「实体对象」，本身也是缓存出来的临时构造，没有一块恒常的内存真正属于它。名字照常使用（是名），但对名字背后「有个不变实体」的假设被删除（即非）。</p>
 <p>这一品与第 13 品的重复，用工程语言说就是<strong>在不同层级跑同一条测试</strong>。第 13 品在「应用层」破执：别把眼前这位老师的肉身当作佛。第 20 品在「架构层」破执：别把修行的最终产出——那个理想中圆满的报身——当作佛。同一个断言（不可以相见如来），在凡夫身上成立，在佛身上同样成立，这才证明它是不变量，而不是对某个特例的补丁。</p>
 <p>类比的失效处要标清楚。在工程类比里，截图背后总还有一个「真正的进程」，指针背后总还有一段「真正的实现」——抽象层是实存的，只是不该用错层次去访问。但般若学走得更远：它不承认在色身背后还站着一个可以被抓取的「法身实体」。法身不是「更高一层的对象」，而是「一切对象皆无自性」这件事本身。如果你把法身理解成藏在实现后面的真正实现，那只是把执著上移了一层——恰好是本品要破的动作。类比能带你到「不要用表示层认对象」，之后的那一步——连「对象」这个范畴也放下——是类比覆盖不到的地方，也正是这部经与工程思维分道之处。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>类型系统给资深工程师留下的最深一课，是名字和运行时实体不是一回事。TypeScript 的类型在编译后全部擦除：一个类型名在源码里随处可用、可检查、可传递，但产物 JavaScript 里不存在任何携带这个标签的东西。名字真实有用，名字背后却没有一个对应的运行时对象。这正是「即非……是名……」的精确语义：是名——标签照常参与类型检查与沟通；即非——删除「标签背后有个实体」这条假设。承认现象，拆除实体，保留名言，和类型擦除是同一个操作的两种写法。</p>
+<p>本品的两问，是两种判定策略在同一个值域里的先后失败。第一问「以具足色身见」，相当于对整个快照做深比较：把眼前这个 body 和理想 body 逐位对齐。第二问「以具足诸相见」，相当于逐字段跑谓词：三十二个特征全部命中就算认出。须菩提两次说不可以，理由不是检查不够严——再加一百条断言也没用——而是参数的定义域整个错了。如来被定义为不在可观测值域之内的那个所指，任何以快照为入参的函数，返回值描述的都只是快照自身的性质。这不是精度问题，是收敛问题：在错误的域上迭代，逼近的极限仍然落在错误的域里。</p>
+<p>那么第 5、13 品问过的问题，为什么要在这里问第三遍？因为这一品针对的是一个更隐蔽的 bug。它的工程师版本是这样的：你早已学会不信任一个凑合能跑的实例，于是转而构造理想实例——每个字段推到上限、测试全绿、指标拉满，也就是「报身」。但把 perfection 从 0.7 改成无穷大，得到的仍是同一类型里的另一个值。执著的对象从劣质实例升级成了完美实例，而那行写错了定义域的谓词原封不动。升级实例，永远修不好一个域错误。这一品做的，是把同一个错误在「最完美的实例」上再触发一次，让你亲眼确认：它与实例的质量无关，与判定的方式有关。</p>
+<pre><code class="language-typescript">type Mark = string
+declare const THIRTY_TWO_MARKS: ReadonlyArray&lt;Mark&gt;
+declare function deepEqual(a: unknown, b: unknown): boolean
+
+interface BodySnapshot {
+  readonly marks: ReadonlyArray&lt;Mark&gt; // 三十二相：可枚举的特征
+  readonly perfection: number // 圆满程度：可以推到上限
+}
+
+// 「是名具足色身」：名字只活在类型层，编译后被擦除，
+// 运行时没有任何实体携带这个标签——「即非具足色身」
+declare const brand: unique symbol
+type PerfectedBody = BodySnapshot &amp; { readonly [brand]: &quot;具足色身&quot; }
+declare const idealBody: PerfectedBody
+
+// 第一问：以整体快照判定——比较的仍是快照与快照
+const byBody = (b: PerfectedBody) =&gt; deepEqual(b, idealBody)
+
+// 第二问：逐相检查——检查的仍是字段
+const byMarks = (b: PerfectedBody) =&gt;
+  THIRTY_TWO_MARKS.every((m) =&gt; b.marks.includes(m))
+
+// 报身：把实例推到极限，得到的仍是同一类型里的另一个值
+const rewardBody = {
+  marks: [...THIRTY_TWO_MARKS],
+  perfection: Number.POSITIVE_INFINITY,
+} as PerfectedBody
+
+// 「如来不应以具足色身见」：错的不是断言数量，而是定义域——
+// 任何 (b: PerfectedBody) =&gt; boolean 都够不到它要指认的对象
+type SeeTathagata = (b: PerfectedBody) =&gt; never
+</code></pre>
+<p>这个映射在哪里失效：类型擦除之后，运行时仍然剩下一个确定的值和一台真实的机器——擦除只是把实体下移了一层，而般若的「即非」不是下移，是彻底不设底层，色身背后没有一个「真正的运行时」等着被访问。同样，<code>never</code> 容易被读成「如来不存在」或「不可达」，经文说的却不是存在与否，而是：见，不发生在谓词求值这条路径上。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

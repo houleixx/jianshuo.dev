@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -181,6 +195,40 @@ footer a{color:var(--ink-soft)}
 <p>先看六如偈。「有为法」的定义是「因缘和合而生」，翻译成工程语言：凡是由依赖项计算出来的东西。缓存、物化视图、编译产物、渲染帧——它们都「存在」，都能被观察和使用，但没有独立的生命：依赖一变，它们即刻失效。梦幻泡影露电，六个比喻描述的正是派生状态的六种失效方式——有的在「醒来」（上下文切换）时消失，有的依附于别的对象（影之于形），有的存活时间极短（泡、露、电）。「应作如是观」相当于一条工程纪律：永远不要把缓存当作真源（source of truth），不要在派生数据上建立持久依赖。「不取于相」就是不持有对临时对象的强引用；「如如不动」就是不随派生状态的变动而变动的那个不变量。</p>
 <p>但类比在真源处失效，而失效点正是般若的锋刃所在。工程系统里，派生状态背后总有一个持久数据库、一份权威数据；而《金刚经》的主张是：找遍整个系统，没有任何一个「有为」的层次可以充当真源——每一层都是从别的层派生的，依赖图没有根节点。「如如」不是藏在最底层的那个数据库，它不是一个更硬的实体，而是对「无根可执」这件事本身的如实安住。把真如想象成终极存储，恰恰是又取了一个相。</p>
 <p>再看自指。本品把「一切有为法如梦幻」这个命题应用到了命题自身：说这话的佛、载这话的经，也是有为法，也非真——这是「应化非真」的题眼。一个形式系统对自身做断言，理工男会立刻想到哥德尔：自指通常制造悖论或不完备。但《金刚经》的自指没有让系统崩溃，反而以「皆大欢喜，信受奉行」正常收尾。差别在于：哥德尔句是在系统内部寻求真值判定，而「不取于相」根本放弃了对命题（包括本命题）的执取——不是解决了自指悖论，而是不在悖论所要求的层面上持有任何东西。这一步没有工程对应物，它不是更聪明的算法，而是换了运行方式。类比到此为止，剩下的是实践。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>本品做了两件事，每一件都能在系统设计里找到对应的肌肉记忆。</p>
+<p>第一件是全经最后一次福德较量：满无量阿僧祇世界的七宝布施，不敌一个发菩提心者受持四句偈。工程师对这种不等式并不陌生——资源的数量与设计的层级不可通约。给一个一致性模型有缺陷的系统加机器，加到无穷，它还是那个系统；而一次四行的接口签名修改，可能让整类故障从此不再可能发生。七宝是容量，四句偈是规格层面的变更；「发菩提心」是这次变更生效的前提——它必须出自意图的改变，而不是从别处抄来的模式。福胜彼，不是因为数量更大，而是因为根本不在同一个维度上。</p>
+<p>第二件是回答「云何为人演说」，答案八个字：不取于相，如如不动。这是本品真正可以移植的部分。把「演说」看成一个长期运行的服务：接收此经，转发给听者。「取相」在这个服务里有三个精确的对应物。会话：记住「谁在听」，这是人相、众生相；计数器：记住「我说了多少次」，这是我相，即「我在说法」；私藏副本：把转发的内容落成自己拥有的持久状态，这是法相，即「有法可说」。资深工程师知道这三样东西各自引入什么代价——会话引入亲和性，进程一死用户就丢了；计数器引入需要加锁保护的共享状态；私藏副本引入一致性负担。三样全部去掉之后，得到的是一个无状态、幂等、crash-only 的服务：在任何一条指令上被 kill -9，都没有任何东西损失，因为它从未持有需要幸存的东西。「如如不动」由此获得一个操作性定义：不动不是坚固——坚固意味着还有一个要守住的状态——而是没有可被破坏的状态。可以在任意瞬间被打断而无损的进程，才是真正打不动的进程。</p>
+<p>六如偈是这套设计的本体论依据。梦、幻、泡、影、露、电，说的是运行时的诚实事实：栈帧、连接、在途请求、进程本身，一切在制品都会在某个瞬间消失，区别只是存活时长。「应作如是观」的语气值得注意：不是「应作如是想」——不是要你培养某种情绪，而是像混沌工程一样，把「一切都会被杀掉」这个前提注入设计并反复验证。观是可执行的：随机杀进程，重放请求，检查结果是否不变。信心不来自「相信它不会挂」，而来自「挂了也无所谓」被测试覆盖。</p>
+<p>最后，本品把这部经自身也标进了回收范围：说法的佛、载法的经，同样是有为法，同样带着自己的下线计划。听者「皆大欢喜」——那是一个系统里没有任何组件需要永生时，特有的平静。</p>
+<pre><code class="language-python">from dataclasses import dataclass
+from typing import Callable
+
+@dataclass(frozen=True)
+class Gatha:
+    &quot;&quot;&quot;四句偈：不可变值。没有谁拥有它，任何人都可以转发它。&quot;&quot;&quot;
+    text: str
+
+def expound(gatha: Gatha, emit: Callable[[str], None]) -&gt; None:
+    &quot;&quot;&quot;为人演说。「不取于相」的三条不变式：
+
+    1. 无会话——不记「谁在听」（无人相、众生相）
+    2. 无计数——不记「我说了几次」（无我相，「我在说法」）
+    3. 无私藏——除入参外不持有任何引用，不落任何盘（无法相）
+
+    推论：本函数无状态且幂等，可在任意一行被 kill -9
+    而不损失任何东西——「如如不动」：没有可被破坏的状态。
+    &quot;&quot;&quot;
+    emit(gatha.text)
+
+def test_interrupt_anywhere_loses_nothing() -&gt; None:
+    heard: list[str] = []
+    verse = Gatha(&quot;一切有为法，如梦幻泡影&quot;)
+    expound(verse, heard.append)          # 第一次演说
+    expound(verse, heard.append)          # 崩溃重启后的重放
+    assert heard[0] == heard[1]           # 应作如是观：重放与首说无差别
+</code></pre>
+<p>这个映射的失效点在于：工程里的无状态从来不是真的无状态，只是状态的搬运——服务不持有，是因为数据库替它持有，架构整体仍然有一个「别处」在执取。般若的「不取」没有这个别处：它不是把执取外包给更可靠的一层，而是看见没有任何一层可供外包，也没有任何一物需要存放。并且，无状态是服务于可用性指标的手段，而「不取于相」不服务于任何指标——一旦把它当作高可用的心法来持有，它就又成了一个相。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

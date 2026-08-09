@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -189,6 +203,40 @@ footer a{color:var(--ink-soft)}
 <p>"应无所住而生其心"则非常像<strong>无状态服务（stateless service）</strong>的设计原则。一个 stateless 的服务照常接收每个请求、照常计算、照常返回——功能一点不少（"生其心"），但它不在本地积累会话状态，不与任何一个客户端产生粘性（"无所住"）。为什么工程上要这样设计？因为一旦服务器持有粘性状态，它就无法水平扩展、无法容错、一崩全崩。凡夫的心就是一台粘性会话服务器：每个经验（色声香味触法）进来都被缓存、被执取，缓存从不失效，最后整个系统被陈旧状态拖垮——佛学叫烦恼。</p>
 <p>"于法实无所得"可以类比<strong>幂等与不变量</strong>：真正的收敛点不是一次"获得事件"。佛在燃灯佛所悟的不是新增了一条数据，而是确认了一个本来就成立的不变量（invariant）——好比数学家"得到"勾股定理，其实定理在被证明之前就一直为真，证明只是消除了无知，没有生产任何新的真。所以"得"这个动词从一开始就用错了类型。</p>
 <p>但要标出类比失效的地方，那正是佛学超出工程的地方。第一，stateless 服务只是把状态搬到了数据库里——状态还在，只是换了存放位置；而"无所住"不是状态外移，是对任何状态（包括"空"这个状态本身）都不执取，没有一个隐藏的后端在替你持有"我"。第二，工程上的无状态是为了可扩展性这个功利目标做的权衡，是众多设计选项之一；本品说的无住不是选项，而是对心的实际工作方式的如实描述——心本来就无处可住，执着"有住"才是那个 bug。第三，指针类比会让人以为"找到真正的所指"是目标，而般若的回答是：所指处本来就没有实体，放下寻找本身，指针系统反而第一次真正流畅地运转起来。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>在带 GC 的语言里工作足够久的人都知道：内存泄漏几乎从来不是「忘了 free」，而是「还有人引用」。对象早就完成了使命，却因为某个长生命周期的容器仍然持有它的强引用，垃圾回收器一遍遍扫过，判定 reachable，永远不回收。泄漏的不是对象，是引用。本品诊断的正是这个结构：心是那个长生命周期的容器，色、声、香、味、触、法是流经它的对象。「住」就是把流经的对象 push 进「我」这个全局单例——从此每个经验都被 root 住，可达但无用，堆只增不减。佛学叫烦恼，工程叫 leak。</p>
+<p>沿着所有权语义，本品的三个靶子可以逐一重写。第一个靶子是「得」。「如来昔在燃灯佛所，于法实无所得」——「得」在类型上是一次 move：某个值的所有权从外部移入「我」，我的资产负债表多了一行。佛说那次授记里没有发生任何 move：没有值被移入，心在认证前后的堆快照 diff 为空。就像通过资格认证不会往你脑子里新增一条真理，它只是确认了本来的状态。「得」这个动词从一开始就类型不匹配。第二个靶子是「庄严佛土」，也就是功业。工程照做，副作用照常写入世界——寺照建、经照写、人照度；但「我」不持有指向「功业」的引用。一旦持有，麻烦是双向的：「我」引用「我的庄严」，「我的庄严」反过来定义「我」，一个 retain cycle 成形，两个对象互相钉死，谁也无法释放。「即非庄严，是名庄严」拆的就是这个环：事件发生过，日志里有记录，但没有任何 owner。</p>
+<p>破完之后立的东西，是一条引用纪律：借用而不占有。「应无所住而生其心」——每个所缘进来，完整地借用它：看、听、判断、行动，功能一行代码都不少，这是「生其心」；函数返回，借用到期，不延长任何对象的生命周期，「我」不做任何东西的 owner，这是「无所住」。注意它不是断灭：不是把对象 delete 掉，也不是拒绝处理请求，而是处理完就让引用自然出作用域。放下从来不是销毁数据，只是停止 root 它。结尾的「大身」之喻，是同一条纪律在类型层面的表达：凡是能被持有的值必须有边界、有大小——用 Rust 的话说，必须 Sized；真正无量的东西无法作为值被拥有，只能作为名字被使用。「佛说非身，是名大身」——它之所以大，恰恰因为它通不过「身」这个类型的检查。</p>
+<pre><code class="language-typescript">type Dust = &quot;色&quot; | &quot;声&quot; | &quot;香&quot; | &quot;味&quot; | &quot;触&quot; | &quot;法&quot;;
+
+interface Experience { readonly dust: Dust; readonly payload: unknown }
+interface Response { readonly action: string }
+
+declare function act(e: Experience): Response;
+
+/** 凡夫心：长生命周期的容器，root 住一切流经的对象 */
+class AbidingMind {
+  private readonly attachments: Experience[] = [];
+  respond(e: Experience): Response {
+    this.attachments.push(e); // 「住色生心」：从此 e 永远可达，GC 无能为力
+    return act(e);
+  }
+}
+
+/** 「应无所住而生其心」：借用而不占有 */
+class NonAbidingMind {
+  respond(e: Experience): Response {
+    return act(e); // 完整起用；返回即出作用域，不做 e 的 owner
+  }
+  // 没有任何字段。不是没有功能，是没有资产。
+}
+
+/** 「于法实无所得」：授记不是 move，没有任何值被移入 */
+function receiveCertification(mind: NonAbidingMind): NonAbidingMind {
+  return mind; // 恒等函数：认证前后，心的堆快照 diff 为空
+}
+</code></pre>
+<p>这个映射在两处失效。其一，GC 的世界里始终有一个站在堆外的 mutator，由它决定持有还是放手；般若里没有这个特权线程——那个要「放下引用」的「我」，自身也只是一束引用，无住走到底，连「放下者」也不被 root。其二，对象图模型默认节点实有、只是不该被引用；空性说得更彻底：「即非庄严」否定的是节点本身有自性，而不只是劝你别指向它——引用清空了，图还在，那还不是这一品说的事。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

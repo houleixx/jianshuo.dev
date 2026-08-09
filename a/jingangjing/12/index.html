@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -176,6 +190,46 @@ footer a{color:var(--ink-soft)}
 <p>舍利塔崇拜是实体寻址：神圣性绑定在一个唯一的物理对象上（佛的遗骨），有确定的地址（某座塔），访问它必须物理前往，而且它是竞争性资源——舍利分给八王，分完就没有了。本品把寻址方式换掉了：神圣性绑定在<strong>信息本身</strong>（法）上。信息和遗骨不同，它可以无损复制，每一份副本都是全量的。「随说是经，乃至四句偈等，当知此处……如佛塔庙」——任何一个节点，只要在本地完整地跑起这段「代码」，哪怕只是核心的四行，这个节点就与「中心」等价，因为根本没有中心。这非常像一个设计良好的分布式协议：比特币的创造者从系统中消失了，但任何一台运行完整协议的全节点，就是比特币网络本身的全量临在，没有哪个节点比另一个更「正宗」。「经典所在之处，即为有佛」——协议在哪里被忠实执行，系统就在哪里完整存在，不需要创始人的物理出席。</p>
 <p>类比可以再推一步：佛的色身相当于<strong>参考实现</strong>（reference implementation），会退役；法身相当于<strong>协议规范</strong>本身，规范不随某台机器的下线而消失。第 26 品的「若以色见我……是人行邪道」，就是在警告不要把参考实现误当成规范。</p>
 <p>但要诚实地标出类比失效的地方，而失效处正是佛学的深度所在。第一，「受持」不等于「存储加执行」。一台服务器缓存了全部经文，不构成「受持读诵」；六祖的限定条件——「心无所得心」说经才算数，「为名声利益而说」反堕三途——说明这里要求的不是语法层面的复制（syntactic replication），而是语义层面的实现（semantic realization）。协议验证只看输出对不对，本品却要检查「运行者的心」，这是任何图灵机模型里没有的检查项。第二，也是更微妙的：一个协议被复制得再多，协议本身仍是一个「有所指」的实体；而《金刚经》马上要在下一品说「佛说般若波罗蜜，即非般若波罗蜜」——这部被抬到「如佛塔庙」高度的经，自己也不许被当成实体来抓取。一个会主动否认自身实在性的协议，在工程世界里没有对应物。类比把你送到门口，进门要靠别的东西。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>舍利塔崇拜的神圣性模型，是名义类型（nominal typing）：一个地点是不是圣地，取决于它的出处链——这块遗骨是否真的来自佛的色身，这座塔是否真的安放了那份遗骨。认证靠 provenance，实例全局唯一，不可复制，访问要专程朝圣。它还是一个竞争性的 singleton：舍利分给八王，分完即尽。</p>
+<p>本品做的事，是把这个类型判定从名义改成结构（structural typing）。「随说是经，乃至四句偈等，当知此处……如佛塔庙」——判定一个地点是否为圣地，不再查它的出处链，只查它此刻是否满足一个行为谓词：有人在这里讲说此法。满足，即通过类型检查，与舍利塔同型。写 TypeScript 的人对此毫无心理障碍：两个类型只要形状相同就可互换，编译器从不问你这个值是从哪个包 import 来的。</p>
+<p>第二步更激进，是替换原则。「若是经典所在之处，即为有佛，若尊重弟子」——梵本里对应的词是 vijñaguru-sthānīya，「居于师位者」。翻成工程语言：任何真正持法的人，可以出现在类型签名要求「佛」的位置上，调用方无须、也无法区分。这正是 Liskov 替换：子类型可以替换基类型出现在一切上下文中，程序的正确性不变。佛入灭，相当于基类型的那个唯一实例下线了；但只要还有满足契约的子类型实例在运行，所有依赖「佛在」的调用点都不需要改一行。</p>
+<p>而 Liskov 原则的全名是行为子类型（behavioral subtyping），它的重点从来不是签名匹配——签名匹配编译器就能查——而是契约保持：子类型不得加强前置条件，不得削弱后置条件。惠能给本品加的限定正是这样一份契约：以「心无所得」说经者，方为持法；「为名声利益而说是经者，死堕三涂」。一个能一字不差背诵全经的人，签名完全匹配；但若契约违背，他不是佛的子类型，而是工程里最危险的那类东西——通过了编译、却在运行时破坏所有调用方假设的实现。类型检查器对此无能为力，这也是为什么 LSP 是设计原则而非编译器特性：契约靠自律与审计来守，不靠检查器。</p>
+<p>本品的递进论证（说四句偈已如是，何况受持全经）也顺此可读：哪怕只实现接口的最小核心方法，即已同型；完整实现并守住全部契约的人，是「最上第一希有」——在工程里同样稀有。</p>
+<pre><code class="language-typescript">interface Shrine {
+  // 一切世间，天、人、阿修罗，皆应供养
+  receiveVeneration(offering: Offering): void;
+}
+
+interface Teacher {
+  expound(passage: Passage): Dharma;
+}
+
+// 旧模型（名义）：圣地由出处链认证，全局唯一，不可复制
+declare const stupaWithRelics: Shrine;
+
+// 新模型（结构）：&quot;随说是经，乃至四句偈等，当知此处……如佛塔庙&quot;
+function asShrine(place: Place): Shrine | null {
+  const speaker = place.currentSpeakerOf(DIAMOND_SUTRA);
+  if (speaker === null) return null;
+  // 四句偈即达标：接口只要求最小核心，不要求出处证明
+  return place;
+}
+
+class Disciple implements Teacher {
+  expound(passage: Passage): Dharma {
+    // 惠能的契约：签名匹配编译器可查，此前置条件只能自己守
+    // &quot;心无所得&quot; —— 违反者，签名合而契约违
+    assert(this.mind.grasps() === Nothing);
+    return passage.spokenThrough(this);
+  }
+}
+
+// &quot;若是经典所在之处，即为有佛，若尊重弟子&quot;
+// 调用方依赖 Teacher 这个类型，而非某个已入灭的唯一实例
+function relyOn(teacher: Teacher): void { /* 即为有佛 */ }
+</code></pre>
+<p>这个映射在两处失效。其一，行为契约再严格，能检查的也只是可观测的输出与副作用；「心无所得」是对运行者内部状态的要求，任何黑盒测试都触及不到——它不是一个更难验证的契约，而是根本不在契约语言的表达范围之内。其二，下一品佛随即会说「佛说般若波罗蜜，即非般若波罗蜜」：这套刚刚被抬到与舍利塔同型的接口，转身就要求使用者不得把接口本身当作实体持有——一个最终要求擦除自身类型定义的类型系统，在工程里没有对应物。替换原则能把人送到师位跟前，坐上去靠的不是类型检查。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

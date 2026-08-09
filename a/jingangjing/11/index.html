@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -184,6 +198,39 @@ footer a{color:var(--ink-soft)}
 <p>先看佛构造大数的手法。恒河沙约 10^20 量级；令每粒沙为一条恒河、再取其沙，就是平方到 10^40；再乘上三千大千世界和七宝的体量。这套操作类似大数记号里的迭代——但无论怎么迭代，结果仍是一个有限数，仍在同一个可比较的全序集合里。梵文「福德聚」（puṇyaskandha）这个词暴露了它的数据类型：一个可累加的标量，<code>int</code> 再大也是 <code>int</code>。</p>
 <p>而「受持四句偈为他人说」的福德，经文说它「胜前福德」，但通篇不给出数值。合理的读法不是「它是一个更大的数」，而是它压根不在这条数轴上——类似源代码与算力资源的区别。布施七宝是转移资源：资源是稀缺的、竞争性的（rivalrous），给了你我就没有，且用掉即耗尽，对应六祖说的「得三界中富贵报」——一次性收益，域内结算。讲说般若是传递源代码：代码复制的边际成本为零，非竞争性，且「为他人说」这个动作本身就是自我复制指令——每个接收者都可能成为新的发送节点。更关键的是，这份代码的功能是修改运行它的系统本身：「令诸闻者生大智慧，成无上道」，它改写的是众生处理一切经验的方式，而不是往既有账户里充值。</p>
 <p>这个类比在哪里失效？失效点恰好是佛学要强调的地方。第一，开源软件的传播价值仍然可以用采用率、影响力来计量，仍是「有为」的；而经文说的无为福（asaṃskṛta）之所以「胜」，不是因为病毒式传播带来了更大的累计数字——那还是在数轴上比大小——而是因为它属于不生不灭的无条件范畴，量的比较对它根本不适用。第二，代码类比暗示「般若」是一套可打包传输的信息，但《金刚经》后文会反复拆这个台：法尚应舍、无法可说。真正传递的不是一个知识对象，而更像触发接收方自己完成的一次状态跃迁——四句偈只是触发器，不是载荷。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>维护过长寿系统的人都认识这种账本：append-only 的事件日志，只增不改，每条记录都合法、都可审计。佛教讲的福德就是这样一份 event-sourced ledger——每一次布施是一条事件，可以无限追加。本品的前半段是佛在做压力测试：把单条事件的数额推到「恒河沙自乘」的量级，schema 完全扛得住。梵文「福德聚」（puṇyaskandha，福德之堆）这个词本身就声明了存储模型：可累加、可比较、可 fold 出一个总量。须菩提两次回答「甚多」，等于确认写入成功、余额巨大。</p>
+<p>但真正的问题不在写入侧，在读取侧。任何「余额」都不是日志本身的属性，而是某个投影函数跑出来的结果。世间默认的 reducer 是「我得到了什么」：每条布施事件被解析出施者、受者、财物三个字段，归并进「我的所得」。只要这个 reducer 不换，追加再多事件，产出的都是同一种东西——一个更大的数，仍在同一张账本的语义之内。这对应六祖说的「得三界中富贵报」：域内结算，用掉即减。第 10 品的「应无所住而生其心」是抽象规格，本品给出它的可操作推论：住相的善行是往日志里 push 记录；般若做的是另一件事——不动日志，替换读日志的函数。事件照常流过，但不再有任何一条被物化成「我的」状态。这不是把余额刷得更大，而是让「查余额」这个操作失去意义。</p>
+<p>所以「而此福德，胜前福德」不能读成一次比较运算的返回值。七宝布施是日志中的数据，受持般若是对整个日志的重新解释，两者不在同一层：一个在系统内累积状态，一个改变系统赋予一切状态的含义。数据层的量无论放大多少个数量级，都触碰不到解释层——这就是「校量功德」序列反复加码而结论不变的原因。经文还附了一个部署条件：「为他人说」。一个只存在于你本地的 reducer 补丁，对所有还在运行旧投影的节点毫无作用；这个变更的价值不在于被持有，只在部署中兑现。</p>
+<pre><code class="language-typescript">type DanaEvent = {
+  kind: &quot;dana&quot;;
+  giver: AgentId;      // 施者
+  receiver: AgentId;   // 受者
+  treasure: bigint;    // 财物：七宝 × 恒河沙数世界，仍是可累加的量
+};
+
+// 「福德聚」：append-only，能堆起来的，就能比大小
+type Ledger = readonly DanaEvent[];
+
+// 世间默认的投影：把每条事件归并进「我的所得」
+function worldlyMerit(ledger: Ledger, self: AgentId): bigint {
+  return ledger
+    .filter((e) =&gt; e.giver === self)
+    .reduce((sum, e) =&gt; sum + e.treasure, 0n);
+}
+
+// 本品的核心动作：不是 ledger.push(更大的事件)，而是换掉投影本身
+type Projection&lt;T&gt; = (ledger: Ledger) =&gt; T;
+
+// 「应无所住而生其心」：事件照常流过，但不落入任何账户
+const prajnaProjection: Projection&lt;void&gt; = (ledger) =&gt; {
+  for (const event of ledger) {
+    void event; // 施者、受者、财物都被读到，却不归并进「我的」状态
+  }
+  // 没有返回值可供 fold、排序：「胜前福德」不是 &gt;，比较根本不会发生
+};
+</code></pre>
+<p>这个映射在哪里失效：再精妙的 reducer 也仍是一段被写出、被部署的代码，是因缘组装的有为法，而本品标题里的「无为」（asaṃskṛta）恰恰指非造作、不可交付的那一边——把般若当成「一个更好的投影函数」，等于又造出一个可以持有和执行的相。更深一层，event sourcing 默认日志是实在的、只有解释可变，而般若最终连施者、受者、财物这些字段的自性一并勘破：不是换个读法，是看出账本从未以我们以为的方式存在过。代码只能演示到「换投影」为止，那之后的一步没有对应的 API。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

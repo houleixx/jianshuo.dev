@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -211,6 +225,41 @@ footer a{color:var(--ink-soft)}
 </ul>
 <p>这类似于分布式系统里的一个硬结论：对一个持续运行的系统，不存在与「此刻」严格同时的全局一致性快照——你观测到的任何「当前状态」都是重建出来的过去。也像流处理系统里没有「现在这个元素」这种对象，游标指向的 now 在指向的瞬间即已失效。「诸心皆为非心，是名为心」则是在指出一个类型错误（type error）：把「心」当名词用，是把一个过程（process）具体化（reify）成了对象（object）——好比把函数的执行误当成一个可以拿在手里的返回值。「心」这个词是个方便的句柄（handle），句柄背后没有那个想象中的实体。</p>
 <p>类比到此为止都成立，但要标出失效点。工程类比容易把「不可得」降级为测量问题：采样太慢、时钟不同步、观测有延迟——言下之意，如果有无限快的采样，还是能抓到的。佛教的主张更强：不是工程上抓不到，而是本体上无此物可抓。念头不是「变化太快的对象」，而是根本没有对象性——缘起而现，无自性可言。这一步没有工程对应物，因为工程默认了实体存在，只是难以测量；般若否定的正是这个默认。类比是脚手架，砌到这里，墙要自己往上长。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>第 17 品破掉了发心的「我」，本品清扫作用域里剩下的最后一个对象：能知的「心」。工程师对这个对象太熟悉了——几乎所有关于「人」的建模里，都躺着一个长生命周期的 mind：有身份，有状态，跨调用持存，可以被引用、被读取、被持有。本品的论证，等价于证明这个类型是无居民的（uninhabited）：不是它的值恰好为空，而是根本不存在任何值属于它。</p>
+<p>先看本品立的部分。五眼具足、「佛说是沙」，翻译成工程语言是：这个证明不动运行时。值层面的一切照常成立——沙是沙，念头照常生灭，观察照常发生；将被否定的，只是我们在这些现象之上虚构出来的那个持久实体。类型层的手术不影响值层的行为，这是「般若不坏世俗谛」的工程表述。</p>
+<p>然后佛把断言推到极限——恒河沙数世界中众生的若干种心，如来悉知——随即自拆：诸心皆为非心。前面的「理工男视角」已经在运行时层面演示过抓取如何失败，并承认「本体上无此物可抓」这一步没有工程对应物。其实有，只是不在运行时，而在类型系统里。类型理论区分两件事：一个请求失败（实体存在，但超时、404、返回空），和一个类型无居民（该类型不存在任何值，任何声称返回它的函数都不可能正常返回）。前者是 null 和异常的世界——null 的意思是「格子存在，格子里恰好没东西」，它仍然预设了格子；后者是 never 的世界：无格子，无物，无失败可言，因为从未有一个成功的可能。「不可得」（nopalabhyate，无法被认取为对象）的精确译名不是 null，是 never。</p>
+<p>佛证明这一点的方法，正是类型理论里证明无居民性的标准方法：穷尽全部构造路径，逐一堵死。「可把捉之心」若有值，只能从三个构造子之一产出——过去、现在、未来，别无第四时。检查过去的构造子：它能产出的只有记忆，而记忆的类型是「关于念的记录」，与念本身不合一，类型检查不过。检查未来的构造子：它尚未被调用，值不存在于任何作用域。检查现在的构造子：调用它这个动作本身就是新起的一念，待调用返回，它想构造的那个「现在」已落入过去构造子的辖区——这是一个没有基例的递归，永不正常返回。三条路径穷尽，皆空，故该类型无居民。在 Curry-Howard 对应下，无居民类型即无法证明的命题：「存在一个可把捉的当下之心」，此命题为假，且是被构造性地、逐分支地证伪的。「过去心不可得，现在心不可得，未来心不可得」就是这三个分支的判决书。</p>
+<p>那「心」这个词为什么还能用？「是名为心」：Mind 是一个类型别名，只活在类型层。它在源码里处处合法，能通过检查，能组织代码，能支撑沟通；编译之后它被整体擦除，运行时从来没有一个叫 Mind 的对象在跑。名字的有用与实体的不可得，从头到尾是两个层面的事。我们说「我的心很乱」，语法上没错，就像在注释里引用一个类型；错的是试图在运行时对它取地址。</p>
+<pre><code class="language-typescript">type Thought = { readonly arisen: number };    // 一念，缘起而现
+type Memory = { readonly traceOf: string };    // 关于念的记录，不是念本身
+type Expectation = { readonly notYet: true };  // 尚未构造的占位
+
+// 「悉知」并不失效：观察照常发生，产出的是记录与预期
+function recallPast(): Memory { return { traceOf: &quot;already ceased&quot; }; }
+function anticipateFuture(): Expectation { return { notYet: true }; }
+
+// upalabhyate：把「当下这一念」本身拿到手并持有。
+// 本次调用自身即是新起的一念；待它返回，
+// 目标已落入 recallPast 的辖区——这是一个没有基例的递归
+function graspPresent(): never {
+  return graspPresent();
+}
+
+// 三个构造路径穷尽时间轴，能产出「被持有之念」的路径为零：
+// 「过去心不可得，现在心不可得，未来心不可得」
+type Graspable = Extract&lt;
+  Memory | Expectation | ReturnType&lt;typeof graspPresent&gt;,
+  Thought
+&gt;;
+
+// 静态断言：Graspable 无居民——不是空着的格子（null），是无值的类型（never）
+const _proof: [Graspable] extends [never] ? true : false = true;
+
+// 「是名为心」：Mind 是合法的名字，编译后被整体擦除，运行时并无此物
+type Mind = Thought | Memory | Expectation;
+</code></pre>
+<p>这个映射在一处失效：类型层的证明由站在程序之外的编译器完成，而般若没有外部编译器——执行证明的与被证明「不可得」的是同一个心，德山宣鉴注经几十年却被一句「上座点哪个心」问倒，倒的正是这一点。此外，工程里的擦除止于类型层，运行时的值仍被默认为实有；般若的遮遣连值层的自性也一并否定，不给任何一层留一个「真正存在」的底座。证明写在纸上是类型检查，落在自己身上才是这一品。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

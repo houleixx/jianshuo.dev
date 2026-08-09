@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -182,6 +196,40 @@ footer a{color:var(--ink-soft)}
 <p>「说法者，无法可说，是名说法」的结构，很像对一个 API 的正确理解。「说法」是一个接口名（interface），佛的言教是针对不同调用方（根器）的按需响应。错误的做法是把某次响应的返回值序列化存盘，然后宣称「这个字节串就是服务本身」。「若人言如来有所说法」犯的就是这个错：把一次次因缘而起的响应，固化成一份佛随身携带、逐字照念的静态文档。而佛的实现是无状态的（stateless）：每个响应由当下的请求和条件生成，服务端不保存「我曾经说过什么」的会话记录——这正是「勿谓如来作是念：我当有所说法」，连「我在提供服务」这个状态位都没有。</p>
 <p>「众生众生者，如来说非众生，是名众生」则像是对一个变量做两级解引用。「众生」是个名字，名字绑定到的是一个五蕴聚合的进程——有行为、有输出、持续运行，但你在内存里找不到一个叫「众生本体」的对象，只有一堆相互引用的组件。问「众生是否实有」，就像问「进程是不是一个东西」：说是，你拿不出那个东西；说不是，它明明在跑。「非众生，非不众生」是对这个问题的精确回答：在实现层面无此实体，在运行层面不可否认。</p>
 <p>类比的失效处必须说清楚。第一，「谤佛」没有工程对应物：把文档误当服务，最多算架构理解错误，没人会说你「诽谤了服务器」。佛法在这里多出一层——错误的实体化认定不是中性的 bug，它恰好复制了佛教诊断的病根（执取），所以被判得极重。第二，工程里我们拆掉一层抽象是为了到达更底层的「真实实现」，源代码总还在那里；而般若的拆除没有终点处的实体——拆到底不是找到最终实现，而是发现「找最终实现」这个动作本身就是问题。哥德尔告诉我们形式系统内有不可证的真命题，但佛教的主张更强：真理不是系统内够不着的一个命题，而是要在放下命题式抓取之后直接现证的。类比能把你送到门口，进门要换一种认知方式——这大概也是本品「无法可说」的另一层意思。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>「若人言：如来有所说法，即为谤佛。」这句重判翻译成工程语言是：声称类型在运行时存在，是对这门语言的根本误读。</p>
+<p>TypeScript 是最贴身的例子。类型系统约束着代码库里的每一行：每个调用点被检查，每处不匹配被拒绝，重构时它替你抓住所有遗漏。这个作用完全真实。但打开编译产物，类型一个字节都不在——不是被藏起来，是被彻底擦除（type erasure）。运行时没有任何对象叫「类型」，<code>instanceof</code> 对接口无从下手，写 <code>return T</code> 会直接得到编译错误：'T' only refers to a type, but is being used as a value。约束处处生效，实体无处可得。「说法者，无法可说，是名说法」描述的正是这种存在方式：说法真实发生了四十余年，规范了无数人的修行，但其中没有一个可以抓在手里的「法」——它从来不是值（value），只是在每个调用点起作用的约束。</p>
+<p>再看「勿谓如来作是念：我当有所说法」。一个泛型函数没有唯一的具体类型。<code>function teach&lt;T&gt;(listener: T)</code> 在每个调用点被实例化成不同的具体签名：对这个调用者推导出这组约束，对那个调用者推导出另一组。问「teach 的类型究竟是什么」，答案有两种落空方式：若指某一次实例化，那只是一期一会的产物，换个调用点就不成立；若指泛型本身，运行时无此物。佛说法四十余年正是这样一个泛型函数——每次开口都是对当前根器的一次实例化，所以既没有一份「标准输出」可以存档，也没有一个「我固定在讲的东西」需要在心里持有。断言「如来有所说法」的人，是把某一次实例化的结果当成了泛型定义本身：既错认了那次输出，也错认了函数。</p>
+<p>后半段拆「众生」，对应结构类型（structural typing）与名义类型（nominal typing）之争。名义类型的世界观里，一个对象「本质上属于」某个类：出生时烙上类名，血统决定身份。TypeScript 拒绝了这个世界观：判断一个值是不是 <code>Sattva</code>，不查血统，只看结构是否满足——它从未声明过自己实现这个接口，检查照样通过。「彼非众生，非不众生」是同一个判断的两面：查无名义上的众生本体（非众生），但满足结构者宛然能闻法、能生信、能通过一切检查（非不众生）。而 <code>Sattva</code> 这个类型名换成任何别的名字，约束一个字符都不变——「是名众生」，名字只是贴在结构上的假名。</p>
+<pre><code class="language-typescript">// 「说法者，无法可说，是名说法」
+// 类型在编译期约束一切，在运行时不存在任何实体。
+
+type Faith = { readonly source: string };
+
+interface Sattva {
+  hear(dharma: string): Faith | null; // 能闻法、能生信
+}
+
+function teach&lt;L extends Sattva&gt;(listener: L, condition: string): Faith | null {
+  // 每个调用点实例化出不同的 L——应机而说，没有标准输出
+  return listener.hear(condition);
+}
+
+function seize&lt;T&gt;(_witness: T) {
+  // return T;
+  // ^ 编译错误：'T' only refers to a type, but is being used as a value.
+  // 「若人言如来有所说法」——把约束当作可取得的值，类型系统直接拒绝。
+}
+
+// 结构类型：此对象从未声明实现 Sattva，却完整满足它
+const someone = {
+  hear: (d: string): Faith | null =&gt; (d.length &gt; 0 ? { source: d } : null),
+};
+
+const faith = teach(someone, &quot;凡所有相，皆是虚妄&quot;); // 通过检查
+// 「彼非众生，非不众生」：查无本体，用不可废。
+</code></pre>
+<p>这个映射在哪里失效：类型擦除是语言设计者的一个选择，Java 保留了泛型的痕迹，C++ 的 RTTI 干脆把类型放回运行时——工程里的「无实体」只是实现策略，随时可以逆转，而般若的「无法可说」不是策略，法从来不存在一个「加回运行时信息」的版本可供选择。更关键的是，擦除之后还有编译器稳稳站在元层充当约束的执行者，本品不给这个退路：「无法可说」这句话本身同样不可执取，元层也要过刀。类型系统能让你理解「作用真实而实体空」如何可能，但它止步于一个仍然坚固的系统；般若要求连系统一起放下。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

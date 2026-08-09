@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -190,6 +204,39 @@ footer a{color:var(--ink-soft)}
 <p>「无住」则相当于把 reward 变量从系统里整个删掉。注意，不是把 reward 设为零（那是「布施无意义」的断灭见），也不是把 reward 设为无穷大（那还是在同一个标量空间里），而是让这个行为不再挂接任何目标函数——用工程语言说，布施成为一个无副作用记账的纯动作（fire and forget），不写日志，不留状态，不等回执。虚空之喻在这里非常准确：虚空「不可思量」不是数值意义上的大，而是类型意义上的不可测——好比测度论里，「不可测」不等于「测出来是无穷」，而是测量操作本身对该对象不适用。福德不可思量，是说无住布施的「收益」根本不在可度量的类型里。</p>
 <p>另一个贴合处是指针与所指：「住」（pratiṣṭhita）就是心持有一个指向对象的指针不释放——指向受施者、指向善行、指向「我」。无住即不持有引用，动作完成，引用即释放，没有悬挂指针，也就没有内存泄漏（烦恼）。</p>
 <p>但类比在这里失效：Goodhart 定律的教训是「换一个更好的指标」或「小心代理指标」，工程师删掉一个 reward 通常是为了换上另一个 reward。而本品的主张更彻底——施者、受者、施物这「三轮」在究竟意义上本来就不是独立实体（体空），无住不是一种更聪明的优化策略，而是对系统真实结构的如实描述。工程类比能解释「为什么不该住相」，解释不了「为什么本来就无相可住」。后者是般若空观的地界，类比的尺子到这里为止。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>须菩提的问题「应云何住」，翻译成架构师的母语就是：状态应该放在哪里？这是每个系统设计的第一问——session 存哪、账本记哪、真相以哪张表为准。佛的回答不是给出一个更好的存储位置，而是指出这个问题的前提有问题：这个系统不需要持久层。</p>
+<p>先看「相」是什么。经验本身是一条事件流：色、声、香、味、触、法，六种输入源源不断地到达。「取相」就是对这条流做实体化（materialization）——把流动的事件坍缩成一个静态快照，然后把快照当成实体：这是「我」，这是「受施的人」，这是「我做的那件善事」。「住」则是长期持有这些实体化视图，并且依据它们做后续决策。工程师立刻能看出这个设计的问题：世界这条流不会停，快照在写下的那一刻就开始陈旧，而这套系统里没有任何失效机制。执着，就是一个从不失效的缓存；烦恼，就是基于陈旧缓存做出的决策与真实事件流之间永不收敛的 diff。</p>
+<p>本品拿布施做例子，因为布施是最容易触发实体化的操作：一次给予，天然派生出施者、受者、所施之物三个实体，注家称为「三轮」。住相布施的实现是这样的：每完成一次善行，就往一张以「我」为主键的福德账本里写一行。这个设计的直接后果写在经文里——「住相布施，福德有限」。原因不是道德的，是结构的：账本一旦定义了 schema，每一列就有了类型，每个类型就有了值域；凡是写得进表的东西，必然有界。</p>
+<p>「无住相布施」不是把这行记录删掉，也不是把善行本身取消。布施照做，流上的每一帧照常响应，一件不少——变化只有一个：不做实体化，不写账本。「福德不可思量」由此而来：不是那个数字大到读不出来，而是系统里根本没有那张表。没有列，就没有值域；没有值域，「有限」这个谓词就失去了作用对象。</p>
+<p>再往深一层，就是「三轮体空」：施者、受者、施物这三个实体，从来就不是基表，而是事件流之上的派生视图。你以为自己一直在往基表写入，其实那些「表」本身就是投影出来的。所以无住不是一种克制——忍住不写——而是一次 schema 层面的看清：可写入的对象本来就不存在。这也解释了结尾那个回环「应如所教住」：无状态的服务不是没有行为的服务，它照样处理每一个请求，只是每次处理都自足完成，不依赖任何驻留状态。心也一样：「无所住」不是心停摆，而是心的每一次运作都完整发生、完整结束，不需要一个落脚的存储。这就是「无所住」本身可以叫做「住」的原因。</p>
+<pre><code class="language-typescript">type SenseFrame = Frame&lt;&quot;色&quot; | &quot;声&quot; | &quot;香&quot; | &quot;味&quot; | &quot;触&quot; | &quot;法&quot;&gt;;
+
+// 反模式：住相布施。
+// 把一次流动的给予实体化成三个对象（三轮），再记入账本。
+class AttachedGiver {
+  private meritLedger = new Map&lt;EntityId, number&gt;();
+
+  give(donor: Entity, recipient: Entity, gift: Asset): void {
+    act(gift, recipient);
+    // 写入即封顶：schema 定了，值域就有界——「其福德」可思量
+    const merit = this.meritLedger.get(donor.id) ?? 0;
+    this.meritLedger.set(donor.id, merit + appraise(gift));
+  }
+}
+
+// 「菩萨于法，应无所住，行于布施」
+// 布施是流上的一次完整响应：不实体化施者、受者、施物，
+// 不持有快照，处理完即结束。
+async function unattachedGiving(stream: AsyncIterable&lt;SenseFrame&gt;) {
+  for await (const frame of stream) {
+    respond(frame); // 该给的照给，一帧不落
+    // 此处没有 ledger.set(...)：不是收益为零，
+    // 而是系统里没有那张表——「福德不可思量」
+  }
+}
+</code></pre>
+<p>这个映射在哪里失效：工程里的无状态是一个可逆的设计选择，工程师站在系统外权衡利弊，选它是为了可伸缩、易恢复——动机仍是收益。而般若的无住不是策略，是对实相的如实描述：三轮本来体空，不是「建议你别建那三张表」，而是那三张表从未真正存在过。更关键的是，代码模型里永远有一个持有全部模型的程序员，而无住要放下的，恰恰包括这个站在系统外面的持有者本身。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

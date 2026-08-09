@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -177,6 +191,37 @@ footer a{color:var(--ink-soft)}
 <p>「以无我修一切善法」则像一个无状态服务（stateless service）：请求进来，正确处理，返回结果，但不在本地为「我」累积任何状态。带四相行善，相当于每处理一个请求就往一个名为 self 的全局变量里写一笔「功德余额」——系统跑得越久，这个变量越膨胀，最后所有行为都在为维护它服务，这就是惠能说的「转增我人」。离四相行善，是把这个累积器整个删掉：动作照做，副作用照常发生在世界上（善行是真实的），只是没有一个不断记账的「我」。惠能的判据「心不望报」翻译过来就是：函数不持有对返回值的引用。</p>
 <p>「善法即非善法，是名善法」是指针与所指的关系：「善法」这个名字是指针，指向的行为才是实体。执著善法之名，等于把指针的值当成了对象本身。</p>
 <p>但要诚实标出类比失效的位置，而失效处正是本品最深的地方。第一，「接口」仍是一个概念抽象，工程里我们靠它做类型检查；而经文接下来连「善法」这个抽象本身也否定掉了——它不允许你退到任何一个元层面安顿下来。你说「一切法平等」，「平等」本身也是一法，也要被扫掉，这有点像一个不肯给自己留任何不动点的系统，任何自指的断言都立即被消解。第二，无状态服务不记状态是为了水平扩展和容错，是工程权衡；经文里的「无我」不是权衡出来的架构选择，而是一个事实陈述：那个累积器从来就不存在，删无可删。工程师是选择不用全局变量；《金刚经》是指出全局变量本来就是野指针。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>第 22 品说「无有少法可得」，最自然的反问是：那还修什么。TypeScript 工程师每天都在回答一个同构的问题：所有类型在编译后都会被擦除，产物里一个类型都不剩——那为什么还要写类型？没有人因此得出「所以全用 any」的结论。类型擦除（type erasure），正是本品三句话的工程语义。</p>
+<p>「是法平等，无有高下」：高下只存在于类型层。子类型的格、继承的树、泛型的约束，这些精巧的等级结构全部活在检查器里；编译产物是一片平地，<code>Buddha</code> 与 <code>Insect</code> 在运行时没有任何秩的差别。注意这不是说现象没有差别——值和值当然不同，南山高、北山低——而是说「谁比谁更高一级」这个排序关系本身，在真正运行的世界里没有对应物，它是检查期叠加上去的分别。「无上」（anuttara）由此有了精确的读法：擦除后的世界里不存在 supertype，没有更上的一层可攀。</p>
+<p>「以无我、无人、无众生、无寿者，修一切善法」是枢纽，它同时堵两个漏洞。对执有者：你写下的所有类型终将被擦掉，别指望在运行时把它们攥在手里。对执空者：擦除的前提是先通过检查——一个从未写过类型的 any 程序，和一个严格检查之后再擦除的程序，产物看上去同样「无类型」，却是两种完全不同的东西。恶取空混淆的正是这两者：把「终将擦除」误读成「无需检查」。惠能说「若不离四相，虽修一切善法，转增我人」，对应的工程病是运行时自省：代码不断对自己做 instanceof，按自己的类型标签分支，元数据反过来纠缠住行为，越跑越厚。离四相的代码不问「我是什么」，它只做检查过的事，然后不携带任何标签地运行。</p>
+<p>「所言善法者，即非善法，是名善法」：下面代码里的 Kusala 这个 brand 类型必须写——它引导整个检查；又必须不存在于产物——它不能被运行时执取。既写又擦，两步都不能省。</p>
+<pre><code class="language-typescript">// 善行的最小合同：只有作用于世界的效果，没有作用者的字段
+type Act = { run: () =&gt; void };
+
+// 「善法」是类型层的判定，产物里没有它的任何表示
+// ——所言善法者，即非善法，是名善法
+declare const kusala: unique symbol;
+type Kusala&lt;A extends Act&gt; = A &amp; { readonly [kusala]: true };
+
+function certify&lt;A extends Act&gt;(act: A): Kusala&lt;A&gt; {
+  // 检查在此发生；通过之后，标记只活在编译期
+  return act as Kusala&lt;A&gt;;
+}
+
+// 「以无我、无人、无众生、无寿者，修一切善法」
+function cultivate(acts: ReadonlyArray&lt;Kusala&lt;Act&gt;&gt;): void {
+  for (const act of acts) {
+    act.run(); // 效果真实地落在世界上，一件不少
+  }
+  // 返回 void：无有少法可得——不是没做，是做完不持有
+  // 运行时也问不出「这是不是善法」：擦除后没有 instanceof Kusala
+}
+
+// 反例（恶取空）：既然类型终将擦除，何必写类型——
+// 这不是般若，是未经检查的 any。擦除的前提，是先通过检查。
+</code></pre>
+<p>这个映射在两处失效。其一，编译期与运行期是先后两个阶段，先检查、后擦除；而本品的净心与行善不是先后两步，是同一件事的两面——离相不是行善之前完成的一次校验，是行善进行时的品质。其二，类型擦除之所以无损，是因为类型本来就没有运行时因果力；我执恰恰相反，它不是可以无损剥离的注释——带着它，同一个动作会长成另一个东西。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

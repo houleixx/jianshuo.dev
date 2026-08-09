@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -181,6 +195,40 @@ footer a{color:var(--ink-soft)}
 <p>先看「若福德有实，如来不说得福德多」。假设福德是一个实有的量，那它就是某个测度空间里的可测对象——一个确定的有限值。而任何有限值在无界的尺度下都谈不上「多」：对任意有限数 n，总存在比它大的数。真正配得上「甚多」的东西恰恰不能是一个具体的数——就像「无穷」不是数轴上最右边的那个点，而是对「落在数轴上」这件事本身的否定。福德「无故」才「多」，结构上与「无穷大不是一个实数，所以它大于一切实数」同构：退出计量体系，才超越计量体系内的一切值。</p>
 <p>再看佛与须菩提的一问一答，这是一个干净的双层抽象。须菩提的回答「得福甚多」运行在接口层（世俗谛）：在因果的 API 约定下，输入大布施，返回大福报，这个调用完全合法。佛的补充则揭示实现层（胜义谛）：接口返回的「福德」不是一个持有实体的对象，更像一个指针或惰性求值的表达式——你可以传递它、谈论它，但试图解引用、把它攥成一个「东西」，就犯了类型错误。「福德多不多」这个问题预设了福德是可比较的值类型，佛的回答是先在接口层如实作答，再指出这个类型标注本身是方便安立的，不是实现的真相。</p>
 <p>类比在哪里失效？在数学里，「无穷」被驯化成了新的形式对象——超限基数照样可以比较、运算，测度论给不可测集也划定了明确的边界。也就是说，数学处理「超出计量」的方式是建一个更大的计量体系。而《金刚经》的「无」不走这条路：它不是把福德升级成一个更大的对象，而是否定「对象化」这个动作本身——并且这个否定同样不能被执为实有（否则「空」又成了一个新实体）。数学的塔可以一层层往上盖，般若的刀是把「盖塔」的手松开。类比能送你到楼梯口，最后一步是放下楼梯。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>分布式系统里有一条老规矩：派生数据不要落盘当真源。账户余额、点赞总数、库存水位，这类数字都不是世界里的实体，而是事件历史上的一个投影——真正发生过的只有一笔笔转账、一次次点击。事件是事实，余额是视图。凡是把视图物化成一个可读写的字段，你就同时签下了这个领域最著名的两笔债：缓存失效与状态漂移。快照写下的那一刻就开始过期；两个副本各自维护同一个「余额」，迟早分叉；更糟的是，余额一旦成了实体，就有人开始直接改它——绕过事件、伪造历史，系统的一致性从此失守。</p>
+<p>第 19 品做的正是这样一场架构评审。佛先确认读路径完全合法：输入三千大千世界的七宝布施，查询福报，返回「甚多」——因果这条事件流宛然存在，这次 query 没有任何问题，所以须菩提的回答佛并未否定。佛否定的是 schema 设计：「若福德有实」——如果你给福德建一张表、一个 balance 列，它就成了一个确定的、写死在某个时刻的数。而任何被物化的数都有限量、会过期、可被攥取；攥取即腐败——记功德账、恃福而骄，正是「绕过事件流直接改余额」的宗教版本。「以福德无故」——正因为系统里根本没有那个字段，福德只是对全部因缘的一次即时投影，它才始终与整条事件流保持一致，也才不被任何一次快照的限量框住。流不封口，fold 就没有最终值：这就是「无量数限，故名曰多」的工程表述。</p>
+<p>注意佛没有删掉事件流。二谛在这里表现为干净的读写分离：世俗谛上，布施照做，事件照记，查询照样返回「得福甚多」；胜义谛上，不存在一个叫「福德」的持久化实体供你持有。两层必须同时成立——只认实体表是凡夫，把投影错当了真源；连事件流也删掉则滑向断灭空，连因果都不认账。本品拆的不是布施，而是那张从一开始就不该建的表。</p>
+<pre><code class="language-typescript">// 事件是唯一的事实：布施发生了，如实记录（「以是因缘」）
+interface DanaEvent {
+  readonly treasures: bigint; // 七宝数量
+  readonly occurredAt: number;
+}
+
+type EventLog = readonly DanaEvent[];
+
+// 反模式：「若福德有实」——把投影物化成可持有的字段
+class MeritBalance {
+  private total = 0n; // 一个确定的数，写下即过期
+  apply(e: DanaEvent) {
+    this.total += e.treasures;
+  }
+  grasp(): bigint {
+    return this.total; // 可攥取，即可腐败：绕过事件直接改它只差一步
+  }
+}
+
+// 本品的写法：「以福德无故」——福德只是事件流上的即时投影
+// 纯函数，不落盘；每次观察都重新遍历全部因缘
+const meritOf = (log: EventLog): bigint =&gt;
+  log.reduce((acc, e) =&gt; acc + e.treasures, 0n);
+
+// 流不封口，投影就没有「最终值」
+declare const openLog: AsyncIterable&lt;DanaEvent&gt;;
+// 不提供 finalMerit(openLog)：对未封口的流求总值，本身是个类型错误
+// ——如来说得福德多：可在任意时刻观察，不可在任何时刻持有
+</code></pre>
+<p>这个映射在哪里失效：事件溯源只是把「实有」从余额搬进了日志——事件流仍被执为不可动摇的真源，而般若连这一层也不放过，第 18 品刚说完心不可得，因缘本身同样无自性，不是一份可以永久信赖的 append-only log。更要紧的是，「不要物化派生态」在工程里是一条可以持有的最佳实践，般若的「无」却连「持有一条最佳实践」这个动作也要松开——若把「福德无实」又建成一张新表，不过是换了个 schema 的执著。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -182,6 +196,33 @@ footer a{color:var(--ink-soft)}
 <p>第一层类比：<strong>规格（spec）与实现（implementation）</strong>。「一切诸佛皆从此经出」很像「一切编译器都实现自同一份语言规格」——般若是 spec，每一位佛是一个通过验收的实现。而「所谓佛法者，即非佛法」对应一条工程铁律：打印在纸上的 spec 文档不等于语言本身；把某一份 PDF 当成语言来崇拜，是初级错误。惠能的「如标如指」就是指针与所指的关系：持有指针不等于持有对象，解引用之后就应该放下指针。</p>
 <p>第二层类比：<strong>量的累积与度量本身</strong>。七宝布施是在一个固定度量下累积标量——好比给一个 O(2^n) 的算法不断加服务器。「受持四句偈为他人说」则是换算法：般若不在原度量下和你比大小，它改写度量本身。任何有限标量在「换度量」这个操作面前都不构成对比项，这就是「其福胜彼」为什么不是 1000 倍或 10^9 倍、而是范畴性胜出的原因。须菩提说「福德即非福德性」，等于先声明：你问的那个「多」只在世俗度量内有定义。</p>
 <p>类比在哪里失效？失效点有两处，而且都正是佛学越出工程学的地方。其一，工程里的 spec 仍然是一个确定的、可最终引用的对象，系统有 ground truth 这一层；般若却宣称连「spec」自身也无自性——「佛法即非佛法」意味着不存在一个可以停靠的最底层文档，这更接近哥德尔式的处境：系统无法在自身内部把自己奠基为实体。其二，spec-实现关系是静态的知识传递，而「受持、为他人说」要求的是把自己变成实现并跑通全部测试——佛教叫「行同佛行」，这一步没有任何文档阅读可以替代。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>程序员入行第一天就学过一个区分：数据和代码。本品的整个论证，就是把这个区分推到极限。</p>
+<p>财布施转移的是数据。装满三千大千世界的七宝，无论量级多大，本质上是一个值：可以计数，可以比较，也会在使用中被消耗。须菩提说「是福德即非福德性」，用工程语言讲就是：福德是纯粹的值语义（value semantics）——它没有身份、没有内在本质，只是一个在特定上下文里才有意义的数量。正因为它只是值，「多」这个查询才是合法的；也正因为它只是值，它再大也是有限的、惰性的，躺在那里等着被花掉。</p>
+<p>法布施转移的是函数，而且是高阶函数。注意经文的措辞是「受持……为他人说」：接受者不是得到一份结果，而是获得了继续生成的能力——他可以再为下一个人说。这个函数的返回值里携带着函数自身。「一切诸佛，及诸佛阿耨多罗三藐三菩提法，皆从此经出」说的正是这件事：般若是那个生成器，每一位觉悟者都是它的一次调用结果，而每个结果又能发起新的调用。这就是「其福胜彼」为什么不给出倍数：一个只会被消耗的值，和一个在自我应用下封闭、能无限产出（包括产出新的生成器）的函数之间，不存在倍数关系。</p>
+<p>然后是本品最锋利的一步。刚把这个生成器抬到一切之源的位置，佛立刻补上：「所谓佛法者，即非佛法。」资深工程师对这个陷阱应该有切身体会：函数一旦被写下来，你手里持有的就只是文本，不再是函数。序列化闭包会丢失环境，这是每个语言运行时都承认的事实——<code>toString()</code> 的产物是 string，不是 capability。经卷、注疏、乃至这本导读，都是序列化产物。文本必须在一个活的运行时里被重新求值（受持），并且被真正调用（为他人说），才重新成为法布施。把序列化文件本身供起来，等于把 <code>.ts</code> 源码字符串误当成正在运行的进程。本品在同一口气里完成自我抬高和自我标记：此经是一切之源，同时此经的文本形态只是数据。</p>
+<pre><code class="language-typescript">type Merit = bigint;                          // 福德是值：可累加、可耗尽
+interface Awakened { transmit(): Awakened }   // 觉悟者能再产生觉悟者
+
+// 财布施：参数再大，返回的仍是一个有限的、惰性的值
+function almsgiving(worlds: bigint): Merit {
+  return worlds * TREASURES_PER_WORLD;        // 「是福德即非福德性」——只是个数
+}
+
+// 法布施：返回值携带生成能力本身，在自我应用下封闭
+// 「一切诸佛……皆从此经出」
+function transmitDharma(): Awakened {
+  return { transmit: transmitDharma };
+}
+
+// 陷阱：序列化之后，持有的是数据，不是函数
+// 「所谓佛法者，即非佛法，是名佛法」
+const scripture: string = transmitDharma.toString();
+assert(typeof scripture === &quot;string&quot;);        // 持有经文不等于持有法
+// 文本须在活的运行时里重新求值并被调用，才再次成为法布施：
+const revived: Awakened = evaluateInLivingPractice(scripture).transmit();
+</code></pre>
+<p>这个映射在两处失效。工程里的 eval 是机械的、无损的——只要语法合法，任何解释器都能把文本还原成函数；而「受持」不存在这样的解释器，能求值这段文本的运行时是你的整个身心与行持，且没有任何保证。更深一层：代码里的 <code>transmitDharma</code> 终究是一个稳定的、可引用的对象，而般若连生成器本身的自性也一并否定——「是名佛法」意味着连这个函数也只是假名，不存在一个可以最终持有的对象，哪怕它是函数。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

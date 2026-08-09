@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -180,6 +194,33 @@ footer a{color:var(--ink-soft)}
 <p>说一个变量「没有固定的内在值」，是一个关于绑定方式的陈述：它的值永远依赖于调用时传入的环境，随上下文而定。这对应「缘起性空」——诸法没有自性，是说它们的存在方式是依条件而起的函数 f(conditions)，而不是一个写死的常量。断灭见的错误，在类型系统里看得很清楚：它把「没有内在值」（unbound）偷换成了「值等于零」（value = 0）或「变量不存在」（undefined），这是三个完全不同的语义。程序员都知道，把 null 当 0 用会出 bug，把「依赖注入」理解成「什么都不注入」则整个系统直接崩溃。第 26 品说的是「不要把函数的某次输出当成函数本身」（以色见我是邪道）；第 27 品说的是「但也别因此宣布这个函数不存在」（于法不说断灭相）。</p>
 <p>另一个贴合的类比是控制系统里的<strong>过冲修正</strong>。第 1 到 26 品持续施加一个方向的修正力——破执著相。任何反馈系统在强修正之后都有过冲风险：矫枉过正，冲到反方向的错误区。第 27 品就是那个反向的阻尼项，在系统冲向「一切皆无」之前把它拉回来。佛教说的中道，在这个意义上不是折中主义的「取中间值」，而是一个动态稳定：两个吸引子（常见与断见）都是错误状态，正见是在两者都不落入的轨道上运行。</p>
 <p>类比的失效处也要讲清楚。第一，「自由变量」的类比是纯描述性的语义学，而本品的断灭见首先是一个伦理事故：否定因果相续，修行与善恶就都失去了意义——lambda 演算里没有任何东西对应「断佛种性」的严重性。第二，程序语义中总有一个站在系统之外的解释器在做求值，而般若的空是自返的：分析者、分析工具、分析行为本身同样无自性，没有一个免检的元层级。类比失效的这两处，恰恰是佛学从语义分析走向修行实践的地方——《金刚经》不满足于给出正确的类型标注，它要求你在每一次求值中不落两边。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>「面向接口编程，不要依赖实现」是每个架构师的肌肉记忆。它破的是耦合：调用方不得把系统等同于某台机器、某个进程、某次部署的产物——那些随时会被替换。但从这条原则推不出下一条：「既然不该依赖实现，实现就不重要，可以全部拿掉」。把服务缩容到零的架构师并没有达到解耦的最高境界，他制造了一次事故。第 27 品拦住的正是这一步推理。</p>
+<p>把它拆成两个命题，就能看清中间的语义断层：</p>
+<p>其一，服务不等于任何一个具体实例。这是关于身份的陈述：不要 pin 住 instance id，不要假设 IP 不变。前 26 品的所有减法都在做这件事——我相、人相、众生相、寿者相，都是被错误固化的身份绑定，要一个一个解开。</p>
+<p>其二，服务可以没有任何实例。这是关于存在连续性的陈述：请求还在进来，契约还要被满足。它与第一条只差一步，语义完全不同。而且方向恰好相反：正因为服务不被钉死在任何实例上，滚动升级和故障转移才成为可能；如果行为本身断了，解耦就失去了全部意义。破身份耦合的前提，恰恰是行为的相续。</p>
+<p>用重构的语言说更准。《金刚经》从第 1 品做到第 26 品的，是一场大型的 behavior-preserving refactoring：大规模删除对具体表示的依赖，但每一步都必须保持测试全绿。因果就是那套回归测试——善恶有报、修行有果，这些可观测行为一条都不能红。断灭见的错误，是把「重构」做成了「删功能」：diff 里同样是大片红色，性质却完全不同，前者删的是耦合，后者删的是行为。第 27 品是 code review 里那条拦住 merge 的评论：你删掉的不是坏抽象，是系统本身。</p>
+<p>所以「于法不说断灭相」可以直译成工程语言：发菩提心的人做的每一次减法，都带着不变量断言。空掉的是自性——独立、恒常、不依条件的实体性，对应那种「系统就是这台机器」的硬编码；保住的是缘起，即行为在条件之间的相续。扫相扫到尽头，可用性不减一分。</p>
+<pre><code class="language-typescript">// 滚动升级：替换所有的「相」，不中断任何「法」
+async function rollingUpgrade(service: Service, next: Image): Promise&lt;void&gt; {
+  for (const old of service.instances()) {
+    const fresh = await service.spawn(next);
+    await waitHealthy(fresh);
+
+    // 不变量：任何时刻健康实例数 &gt;= 1
+    // ——「于法不说断灭相」
+    assert(service.healthyCount() &gt;= 1, &quot;断灭：零实例不是解脱，是宕机&quot;);
+
+    await service.retire(old); // 每一个相都可以放下
+  }
+
+  // 结束时没有任何旧实例存活，但服务从未中断。
+  // 觉悟不由相得（不依赖旧实例），也不在相外（不曾离开运行中的实例）。
+  const report = await regressionSuite.run(service);
+  assert(report.allGreen, &quot;因果即回归测试，一条都不能红&quot;);
+}
+</code></pre>
+<p>这个映射在两处失效。其一，工程里的连续性是被维护出来的：有 SLA、有 on-call、有人写下那条 assert；而缘起因果不是谁替法界值班断言出来的不变量，它不依赖任何维护者，法尔如是。其二，重构有终点——merge、发布、关闭工单；般若的减法没有 done 状态，「不落两边」不是一次通过就归档的迁移，而是每个起念处都要重新持守的运行时纪律。代码能表达这一品的结构，表达不了它没有版本号这件事。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

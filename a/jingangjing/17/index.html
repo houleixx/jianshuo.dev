@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -197,6 +211,40 @@ footer a{color:var(--ink-soft)}
 <p>先看授记一段的论证结构，它是一个标准的归谬（reductio ad absurdum）：假设存在某个法 D，使得"如来通过得到 D 而成佛"为真；则燃灯佛不会授记（因为有所得即未觉悟）；但授记这个事件确实发生了；矛盾；故不存在这样的 D。前提、推理规则、结论，一步不缺。《金刚经》常被当作神秘主义文本，但这一段的骨架是逻辑学的，理工科读者应该能直接认出这个证明的形状。</p>
 <p>再看"实无有法名为菩萨"。在程序里，符号（symbol）和它绑定的对象（binding）是两回事。"菩萨""发菩提心""无上正等正觉"都是符号，我们默认每个符号背后都有一个可解引用（dereference）的实体。本品做的事情，相当于告诉你：这些符号没有绑定——不是绑定了一个空对象，而是压根不存在那个"对象"层。"我当灭度众生"之所以不名菩萨，是因为说这话的人在心里给"我"和"灭度众生"各分配了一个实体，然后让前者持有后者——一次非法的实体化（reification）。而"如来者，即诸法如义"则像是说：如来不是某个持有特殊状态的实例，而是一个无状态（stateless）的恒等映射——对一切输入如其所是，不增不减。成佛不新增任何状态，这正是"无有法得阿耨多罗三藐三菩提"的工程学表述。</p>
 <p>类比在哪里失效？失效点恰好在"无实无虚"。在程序语言里，"符号无绑定"仍是一个系统内可判定的状态：查表，返回 null，null 本身还是类型系统里的一个值。也就是说，编程世界里的"无"是另一种"有"。而本品拒绝这种降级：菩提"无实无虚"，既不是查到了对象，也不是查到了 null——它拒绝进入"查表"这个框架本身。断言"菩萨不存在"和断言"菩萨存在"在经文看来是同一类错误，都预设了那张符号表是终极的。类比能带你到符号表的边缘，"如"在表外。这个失效处，就是佛学超出计算模型的地方。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>做过大型系统的人都背过这条训诫：同一个事实，只允许有一个真相源（source of truth）；一切派生值（derived value）要么现算，要么就要为缓存失效付出无穷代价。物化视图（materialized view）从写下的那一刻起开始漂移，这是分布式系统里为数不多接近定律的东西。</p>
+<p>第 17 品处理的正是一个派生值的存储问题。这个系统的真相源只有一条事件流：度生、严土、说法，一件一件如实发生。"菩萨"不是流里的事件，而是对整条流计算出来的一个谓词——每一件事都利益众生，且没有一件事被"我"署名。本品的裁决是：这个谓词只许现算，永远不许物化。一旦把它写成状态——"我当灭度无量众生""我得阿耨多罗三藐三菩提"——你就建了第二份真相源。而这个特定的谓词还有一个更狠的性质：写入动作本身就是事件流里的新事件，且恰好是一次"被我署名"的事件，直接证伪了正在被缓存的那个判断。普通缓存是渐渐变陈旧，这份缓存是出生即陈旧——断言即失效。"若作是言：我当灭度无量众生，则不名菩萨"，说的就是这个自指结构。</p>
+<p>燃灯佛授记一段，用这套语义读非常干净。授记不是交付一个可存储的工件。假如"菩提"是一个能被拿到手、写进自身状态的值，那么"能存它"这个能力本身就让不变量失效——这样的系统恰恰不该被认证。认证只能颁给一个不存任何派生副本的系统："以实无有法得阿耨多罗三藐三菩提，是故燃灯佛与我授记。"可存储性与被认证互斥。</p>
+<p>由此，"如来者，即诸法如义"是这个模型的零漂移极限：系统里没有任何一份关于自己的物化视图，每一次读都直接对着实相现算。无实——没有存下任何副本可供指认；无虚——每次现算都有确定的行为，度生说法历历分明。"一切法皆是佛法"，因为一张覆盖一切的视图不排斥任何行；"即非一切法"，因为连"一切法"这个表名也不许物化成新的实体。</p>
+<p>所以本品破的不是行动，而是"成就即状态积累"这个直觉：写路径全速运行，度生、严土一件不少；被禁止的只有一条路——读出自己的状态，然后把它存起来。修行是维护一个只在无人断言时才成立的不变量。</p>
+<pre><code class="language-typescript">interface Act {
+  liberates: boolean;       // 是否利益众生
+  claimedBySelf: boolean;   // 是否被&quot;我当&quot;署名
+}
+
+/** &quot;实无有法名为菩萨&quot;：系统里没有 Bodhisattva 表，
+ *  只有对事件流现算的谓词，禁止缓存。 */
+function bodhisattvaInvariant(history: readonly Act[]): boolean {
+  return history.every((act) =&gt; act.liberates &amp;&amp; !act.claimedBySelf);
+}
+
+/** 自我认定不是对流的只读观察，它本身就是流里的新事件，
+ *  且 claimedBySelf 必然为 true。 */
+function claimAttainment(history: readonly Act[]): Act[] {
+  return [...history, { liberates: false, claimedBySelf: true }];
+}
+
+/** 定理：对任意历史 h，断言之后不变量必不成立。
+ *  —— &quot;若作是言，则不名菩萨&quot; */
+function theorem(h: readonly Act[]): void {
+  console.assert(bodhisattvaInvariant(claimAttainment(h)) === false);
+}
+
+// 注意整个模块没有导出 setBodhisattva()。
+// 不是忘了写，而是这个写路径在语义上不存在——
+// &quot;实无有法，发阿耨多罗三藐三菩提心者&quot;。
+</code></pre>
+<p>这个映射在哪里失效：工程里缓存派生值是一桩可以做好的交易，配上正确的失效协议就是合法优化；而般若不承认任何协议能让"我是菩萨"这句断言变得安全，它要拆的不是坏缓存，是"读出自己再持有自己"这个动作本身。更深一层，上面的模型仍然保留了事件流这份数据和返回 boolean 的检查器，而"诸法如"不是一个可供查询的存储，"是名菩萨"连这个谓词函数也要拆掉——无实无虚拒绝的是读写框架本身，不是框架里的某个值。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

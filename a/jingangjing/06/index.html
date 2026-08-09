@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -189,6 +203,45 @@ footer a{color:var(--ink-soft)}
 <p>第一，自举编译器丢弃 stage 0 是零成本的：<code>rm</code> 一下就完了。而「舍法」不是删除一条信念记录，四相是心的默认运行方式，「舍」意味着改掉执取这个动作本身——相当于不是清空变量，而是取消这个变量的存在。这在软件里做不到：类型系统不允许一个「不再有取值这回事」的变量。佛学声称人心可以，这一步没有工程对应物。</p>
 <p>第二，顺序不可交换。编译器可以随时回退到 stage 0 重新构建；筏喻却有严格的时序约束——「法尚应舍」说的是渡过之后，绝不是渡河之前就把筏子扔了轻装上阵。「后五百岁」「持戒修福」「无量千万佛所种诸善根」这些前置条件，都在强调渡河本身极其漫长。把「法尚应舍」读成「所以不用修行」，是把析构函数写进了构造函数里。</p>
 <p>第三，「一念净信」在这套类比里没有位置。它不是对某命题赋真值，更接近系统在一瞬间没有任何进程占用——而我们没有任何计算模型用「不运行」来定义一种成就。类比到此为止，剩下的部分只能实证。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>工程界有句老话：计算机科学只有两件难事，缓存失效和命名。第 6 品处理的恰好是第一件——只是这次，缓存在心里。</p>
+<p>本品说的「相」（saṃjñā）不是外形，是概念认取。翻译成工程语言：心从不直接读实相，它读的是自己缓存的快照。「我」就是一条缓存记录——把此刻五蕴的聚合物化成一个稳定的 key，此后所有请求都命中这条记录，不再回源。「人、众生、寿者」是同一张表里的另外三条。缓存本身不是罪：没有这一层，日常心智根本扛不住负载。问题在于把缓存当成了源站。快照在写入的那一刻就开始过期，而心把它当作实相本身在读。「凡所有相，皆是虚妄」由此有了一个冷静的译法：所有缓存条目都是 stale 的，by construction——不是恰好过期，而是快照这种数据结构注定过期。</p>
+<p>本品真正锋利的是后两步。第一步，「法相」：佛法这套教义自己也会被缓存。你把「无我」存成一条新记录，之后遇事直接命中它，看似在修行，读路径没有任何变化。第二步更隐蔽，「非法相」：听懂了「不可执取」，于是删掉 dharma 这条记录——但删除之后顺手写入了一条负缓存：「此处无物」。做过 DNS 或 CDN 的人都知道，缓存一个 NOT_FOUND 和缓存一个 200，对后续请求的钉死效果完全一样。经文那组对称句「若取法相……若取非法相……」说的就是这件事：条目内容无关紧要，set 这个操作本身才是执著。要破的不是某个 key，而是写入动作。筏喻在这套语义里是自然推论：连这份缓存失效协议本身，也不许变成常驻条目。</p>
+<p>「一念生净信」于是有了精确的工程语义：一次绕过全部缓存层的直读。不是把某个信念的 value 改成 true，而是那一瞬间没有任何一层快照插在心与实相之间。为什么「乃至一念」就够？因为衡量的是读路径的品质，不是持续时长——read-through 成功一次，就证明了这条路径存在。而为什么多数人做不到？和多数系统不敢关缓存是同一个原因：没有这层，扛不住负载。「已于无量千万佛所种诸善根」描述的正是那个漫长的容量建设过程：把系统练到能承受无缓存直读，信心才不是奇迹，而是压测通过后的自然结果。</p>
+<pre><code class="language-typescript">// 「相」= saṃjñā：不是外形，而是一次概念认取——对实相的快照缓存
+type Notion = &quot;self&quot; | &quot;other&quot; | &quot;beings&quot; | &quot;lifespan&quot; | &quot;dharma&quot; | &quot;non-dharma&quot;;
+
+interface Snapshot { takenAt: number; content: unknown }
+
+class Mind {
+  private cache = new Map&lt;Notion, Snapshot&gt;();
+  get cacheSize(): number { return this.cache.size; }
+
+  perceive(notion: Notion): Snapshot {
+    const hit = this.cache.get(notion);
+    if (hit) return hit;               // 「心取相」：读到的是快照，且必然 stale
+    const fresh = reality.read();
+    this.cache.set(notion, fresh);     // 执著不在条目内容，而在这一次 set
+    return fresh;
+  }
+
+  // 天真的放下：删掉「法」，却写入一条负缓存
+  naiveLetGo(): void {
+    this.cache.delete(&quot;dharma&quot;);
+    this.cache.set(&quot;non-dharma&quot;, NOTHING); // 「若取非法相，即着我人众生寿者」
+  }
+
+  // 「乃至一念生净信」：一次绕过全部缓存层的直读
+  pureRead(): Snapshot {
+    return reality.read();             // 不写回。难的不是这一行，而是敢不写回
+  }
+}
+
+// 「无法相，亦无非法相」检验的不是某个 key 的取值，而是整张表为空
+const assertNoNotion = (m: Mind) =&gt;
+  assert(m.cacheSize === 0, &quot;心一取相，则为着我人众生寿者&quot;);
+</code></pre>
+<p>这个映射在哪里失效：代码里 <code>reality.read()</code> 仍然返回一个 <code>Snapshot</code>——只要有返回值可以持有，那就又是一条相，而般若义理中的「直读」没有任何返回值可拿，这是类型系统表达不了的。其次，工程里的缓存失效是存储层的运维问题，破执的对象却不是那张表，而是不断发起 set 的读写者本人。般若不是在优化你的系统，它质问的是「谁在读」——这一问落在代码模型之外。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

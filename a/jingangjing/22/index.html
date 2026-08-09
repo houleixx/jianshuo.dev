@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -179,6 +193,41 @@ footer a{color:var(--ink-soft)}
 <p>"得"这个动词预设了一套接口：存在一个调用方（我），调用某个函数（修行），函数返回一个对象（菩提），调用方把它绑定到变量上（我得到了菩提）。须菩提的问题相当于在问：<code>attain()</code> 的返回类型是什么？佛的回答是：这个函数的返回类型是 void。它不返回任何对象——"乃至无有少法可得"，连一个字节都不返回。它的全部作用是副作用：清空调用方持有的所有错误引用。</p>
 <p>更准确的类比是数组的"有序性"。你对一个乱序数组执行排序，完成后数组"获得"了有序性——但你无法在数组里指出哪个元素是"有序"，它不占下标、不占内存，不是数组中的一项，而是整个排列的全局属性。菩提同理：它不是心中新增的一个内容项，而是一切颠倒执取被移除后，心整体呈现的性质。正因为它不是"其中一项"，所以"无有少法可得"；也正因为如此，它才能"无上"——任何作为对象存在的东西都可以被比较、被超越，唯独不作为对象存在的全局属性没有更高一级。这就是"是名"句式的逻辑：不可得，恰恰是它成立的方式。</p>
 <p>类比在哪里失效？失效在调用方。在程序的图景里，排序完成后，那个观察"数组已有序"的程序员还站在系统外面；副作用清空了数据，却没有清空操作者。而本品的锋刃恰恰指向这里：六祖说"所得心尽，即是菩提"——要清空的不只是"所得之物"，还包括"能得之心"。佛学称之为"能所双泯"：能抓取的主体和被抓取的客体一起消解。工程语言里没有对应物，因为任何工程描述都默认保留一个在系统外做验收的观察者。类比失效的这一点，正是《金刚经》超出一切对象化思维的地方——它不是宣布返回值为空，而是连"等着接收返回值的那个人"也一并解构了。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>工程师的职业直觉里，「完成一件事」默认等于「交付了什么」：一个 feature、一个产物、一条可以写进周报的新纪录。第 22 品攻击的正是这个默认值。须菩提问：佛证得无上正等正觉，是不是其实无所得？佛给出全经最干脆的印可，并且把结论推到量级的下限：乃至无有少法可得——连一个最小单位的「交付物」也不存在。</p>
+<p>把这句话移植到工程语义里，最贴切的载体是删除式重构。设想一个背了二十年技术债的系统：到处是缓存着过期数据的字段、悬空的引用、为绕过旧 bug 而写的补偿逻辑。修复它的那个终极 PR，理想形态是什么？diff 里 insertions 为 0，deletions 为几万行。合并之后，系统「获得」了正确性吗？没有任何一行代码是新获得的。正确性从来不是可以 add 进来的东西——历史上被一次次 add 进来的，只有错误。本品所说的修行，就是这个只删不增的长期重构；所谓证得，就是 diff 终于收敛为纯负。第 17 品「实无有法得阿耨多罗三藐三菩提」，用版本控制的语言说：那个提交里没有新增。</p>
+<p>第二层更关键，也是本品比前几品多走的一步。重构完成后，你会本能地想写入一个标记：<code>refactor_complete = true</code>，或者一条「已达成」的记录。本品的回答是：这一行写入本身就是新的技术债。「若有少法可得，亦是著相」——任何用来记载「我得到了」的状态，都是往刚清空的系统里新增的一条执取；落盘的那一刻，「无所得」就被破坏了。所以正觉在存储模型上只能是一个派生属性：不物化、不占字段、没有自己的存储位，仅仅是「执取集合为空」这一事实的别名。这正是「是名」句式的存储语义：它不能作为一条数据存在，只能作为空集的名字成立。「无上」也由此成立——任何被物化存储的成就都可以被更大的成就覆盖，唯独「无一物可被覆盖」的状态没有上一级。</p>
+<pre><code class="language-python">from dataclasses import dataclass, field
+
+
+@dataclass
+class Mind:
+    &quot;&quot;&quot;一个只允许删除的系统：修行的每次提交都是负 diff。&quot;&quot;&quot;
+
+    graspings: set[str] = field(
+        default_factory=lambda: {&quot;我相&quot;, &quot;法相&quot;, &quot;所得心&quot;}
+    )
+
+    def release(self, grasping: str) -&gt; None:
+        self.graspings.discard(grasping)  # 唯一合法的写操作是删除
+
+    @property
+    def anuttara(self) -&gt; bool:
+        # 正觉不落盘：没有自己的字段，只是&quot;执取为空&quot;的别名。
+        # &quot;乃至无有少法可得，是名阿耨多罗三藐三菩提&quot;
+        return not self.graspings
+
+
+def test_recording_attainment_destroys_it() -&gt; None:
+    mind = Mind()
+    for g in sorted(mind.graspings):
+        mind.release(g)
+    assert mind.anuttara
+
+    mind.graspings.add(&quot;我已证得&quot;)  # 想把成果作为一条记录存下来
+    assert not mind.anuttara  # &quot;若有少法可得，亦是著相&quot;：写入即破坏
+</code></pre>
+<p>这个映射在两处失效。其一，代码里的「空」只是集合元素个数为零，那个空集合仍被一个持续存在的 <code>Mind</code> 对象持有着；而般若的「无所得」不是容器清空了，而是「容器与元素」这套模式本身不成立。其二，<code>release</code> 是一串有为操作，凡能被操作序列到达的状态都是有条件、可退转的，而本品恰恰否认「通过 practice 到达菩提」这个调用关系本身——菩提不是重构的产出，把它当作任何流程的终态，就又把它变回了一个可得之物。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

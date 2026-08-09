@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -191,6 +205,36 @@ footer a{color:var(--ink-soft)}
 <p>把「我执」看作一个指针 <code>self</code>，指向一块名为「我」的内存。四果的修行是一个逐步释放这块内存的过程：须陀洹断掉一部分对它的引用（见惑），斯陀含、阿那含继续减少引用计数，阿罗汉是 <code>free(self)</code> 彻底执行完毕——「我」这个对象不复存在。现在考察语句「我得阿罗汉道」：这个宣称要成立，必须先解引用 <code>self</code> 去取出那个宣称的主语。但阿罗汉果的定义就是 <code>self</code> 已被释放。于是「阿罗汉宣称自己得阿罗汉道」是一次对已释放指针的解引用——语句本身就是运行时错误，错误的出现恰好证明释放并未完成。这不是「得了道但不好意思说」的谦虚问题，而是类型层面的矛盾：宣称的动作与宣称的内容互斥。</p>
 <p>「入流而无所入」则像一个无状态（stateless）服务。有状态的服务每处理一个请求就在会话里积累一笔记录；无状态服务处理同样的请求，但不留会话。须陀洹「不入色声香味触法」不是屏蔽六种输入——他照样看、照样听——而是输入不再写进「我」的状态。功能全在，会话为空。「入流」这个名字描述的正是这种不留状态的处理方式，所以「入流」的实义是「无所入」。</p>
 <p>类比在两处失效，而失效处正是佛学越出工程学的地方。第一，在工程里 use-after-free 是 bug，要修复；本品却不打算修复它，而是把这个矛盾当作检测仪：凡是能通过「我得道」断言的，恰好没得道。第二，工程里对象释放后，指向它的名字就应作废；但经文说「是名须陀洹」「而名须菩提」——名字在对象释放后依然合法使用。这就是佛教二谛的安排：胜义谛上无我、无果、无所行，世俗谛上名言照常运转，须菩提还叫须菩提，还是人中第一。工程系统里名与实必须严格绑定，否则系统崩溃；般若的立场是名与实本来就没绑定过，看清这一点，系统反而不崩溃了。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>本品四段问答的形式完全一致：X 名为 Y，而实无 Y，是名 X。这个三段式在软件工程里有一个精确的对应物：类型擦除（type erasure）与幽灵类型（phantom type）。</p>
+<p>幽灵类型是只存在于类型系统里的标记。它给一个值加上品牌（brand），让编译器据此区分「已校验的输入」和「未校验的输入」、「已授权的句柄」和「裸句柄」——但它不添加任何运行时字段。编译之后，品牌被整个擦除，带品牌的值和不带品牌的值产物完全相同，一个比特都不差。类型在源代码层面真实起作用（名字合法、约束有效、误用会被拒绝），在运行时却「实无有法」。</p>
+<p>用这套语义重读四果。须陀洹、斯陀含、阿那含、阿罗汉是四个类型，不是四种运行时状态。「证果」是一次类型收窄（narrowing）：收窄前后，对象本身没有发生任何变化——没有新增字段，没有写入标志位，没有任何可以被 diff 出来的差异。这就是「实无所得」的工程含义：得到的不是一笔新数据，而是一个不改变对象的类型判定。而这个判定不发生在运行时——须菩提的「人中最为第一」是佛评定的，印可来自系统外部，如同类型检查由编译器完成，运行中的程序从不、也无法查询自己的类型。</p>
+<p>现在看被破掉的那个动作。「我得阿罗汉道」在这套语义里是什么？是对象试图在运行时携带自己的类型标签——给自己写一个 rank 字段。问题不在这个宣称是否傲慢，而在它违反了品牌的构造方式：品牌的全部意义就是没有运行时表示，一旦某个对象在运行时带上了「我是阿罗汉」的标签，它携带的恰恰是这个类型定义所排除的东西，于是通不过收窄。断言「若作是念，即为着我人众生寿者」说的就是这次类型检查失败。</p>
+<p>最后是「一相无相」。四个果位在类型层面是四个不同的名字，擦除之后，产物无从区分——不是变得相同，而是同样什么都没有添加。四相归一，一相即无相：四个类型共享同一个空的运行时表示。</p>
+<pre><code class="language-typescript">// 果位是幽灵类型：源代码里合法有效，运行时被整个擦除
+// ——「实无有法名阿罗汉」
+declare const fruit: unique symbol;
+type Srotapanna = { readonly [fruit]?: &quot;入流&quot; };
+type Arhat = { readonly [fruit]?: &quot;无诤&quot; };
+
+interface Practitioner {
+  perceive(input: unknown): void; // 照样处理色声香味触法，只是不写进自身字段
+  rank?: never; // 契约：不得携带自我标签
+}
+
+// 印可来自系统外部（世尊的评定），不在运行时发生
+function certify(p: Practitioner): Practitioner &amp; Arhat {
+  // 「若作是念『我得阿罗汉道』，即为着我、人、众生、寿者」
+  assert(!(&quot;rank&quot; in p), &quot;运行时带着自我标签的对象，通不过这次收窄&quot;);
+  return p as Practitioner &amp; Arhat; // 类型变了，对象没变
+}
+
+// 测试：证前证后，逐比特相同——证得的内容就是「无所得」本身
+const before = structuredClone(subhuti);
+const arhat: Arhat = certify(subhuti);
+assert.deepStrictEqual(arhat, before);
+</code></pre>
+<p>这个映射在一处关键失效：类型擦除里，品牌在编译期是实有的——存在一个层面，果位在那里「真的存在」，只是运行时看不见。般若不给这个退路：连名言层面的「阿罗汉」也是假名，没有任何一个层面上它是实法，「是名」不等于「在类型系统里真有」。另外，编译器的保证是一次性、静态的，而无我不是验证通过后就持有的属性——须菩提「不作是念」是每一个当下的事，没有哪次 certify 能一劳永逸。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -181,6 +195,38 @@ footer a{color:var(--ink-soft)}
 <p>前半段是一条合格的日志头（log header）。「如是我闻。一时，佛在舍卫国……千二百五十人俱」——这几乎就是一次提交记录的元数据：记录者（阿难）、时间戳（一时）、主机（佛）、地点（祇树给孤独园）、在场证人（1250 人）。佛经结集是一个分布式系统在创始节点下线后达成共识的过程：几百个「节点」各自持有记忆副本，靠公开诵出、集体校验来确认哪些内容可以写入正典。「如是我闻」就是每条记录强制携带的来源声明——不是我说的，是我听来的，且有一千二百五十个证人可供交叉验证。这个类比在「可审计性」上完全成立：六种成就就是六个必填字段，缺一个，这条记录的可信度就降级。</p>
 <p>后半段是一个更深的东西：接口与实现的分离。佛的对外接口——穿衣、持钵、乞食、吃饭、洗脚、坐下——与任何一个普通比丘完全同构；从外部行为上做黑盒测试，测不出「觉悟」这个内部状态的任何差异。整部《金刚经》后面要论证的正是这一点：觉悟不新增任何可观测的特殊行为，它改变的是对同一套行为的执取方式。「次第乞」则是一个无优先级的轮询调度（round-robin）：不设权重、不看请求方的资源多寡，严格按序处理。大迦叶和须菩提各自实现了一个带偏好的调度策略，且都能给出合理性证明；佛的做法是把策略参数整个删掉——平等不是「给每类对象计算出相同的权重」，而是根本不建那张权重表。</p>
 <p>类比在哪里失效？日志类比的失效处在于：日志只是对事件的记录，事件本身另有意义；而在本品中，「记录的这一天」本身就是教义——演示即定理，方法部分就是结论部分。接口类比的失效处在于：工程上我们分离接口与实现，是为了将来能替换实现；而佛法的方向相反——它要你最终看穿「实现」这个概念本身，连「内部有一个觉悟状态待封装」的想法也放掉。这一步没有对应的工程操作，也正是第 2 品之后经文要处理的问题。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>把本品后半段当作代码来读，它的结构会立刻显形：这是一段严格按作用域组织的资源管理代码。着衣、持钵是两次 acquire；乞食、吃饭是在持有期内的使用；「饭食讫，收衣钵」是释放，获取与释放在同一层作用域内对称闭合。「洗足已」更彻底——连「进城走了一趟」这个环境副作用也被清理干净。最后「敷座而坐」：栈上什么都不剩，一个干净的空帧。整段经文没有一个形容词，正如严谨的资源管理代码没有一行多余的逻辑。</p>
+<p>这段代码的分量不在单次执行，而在运行历史。它不是演示用的示例，是每天都在跑的主循环，跑了四十多年。写过长期服务的人都知道，这类进程最致命的问题从来不是崩溃，而是泄漏：每次循环多持有一点点内存，单次执行完全无感，code review 看不出来，压测也测不出来，直到某一天 OOM。「住」就是泄漏——逃逸出作用域的引用。饭吃完了，对这顿饭的评价还在心里持有着；路走完了，对沿途施主的比较还没有释放。每一个这样的引用都很小，小到不影响任何一次执行的正确性；但它们不被回收，堆只增不减。</p>
+<p>于是本品的两个断言可以完全用工程语言复述。第一，凡夫与佛运行的是同一个函数体。穿衣、乞食、吃饭、洗脚、坐下，逐行 diff 为空；区别不在任何一次执行的 trace 里，而在堆上——一个进程每天泄漏一点执取，另一个每次循环结束时引用归零。这就是为什么这一天从外部看毫无奇特之处，也是为什么般若必须从最平常的一天讲起：它要改的不是代码，是泄漏。觉悟不是给日常新增一个功能分支，而是删掉所有逃逸。</p>
+<p>第二，演示先于言说。全经后面反复出现的核心命令「应无所住」，在第一品先以一个稳定运行的参考实现出现——先有一个跑了四十几年、内存占用零增长的进程摆在现场，然后才开始讨论它的规格。第 2 品须菩提起身提问，相当于对着生产环境里这个反常地干净的系统开始 code reading：它为什么不泄漏？此后三十一品，都是对这个问题的回答。答案先于问题上线，这是本品作为「发起序」的真正含义。</p>
+<pre><code class="language-python">from contextlib import contextmanager
+
+@contextmanager
+def held(thing):
+    thing.take_up()                    # 着衣持钵
+    try:
+        yield thing
+    finally:
+        thing.put_down()               # 饭食讫，收衣钵
+        assert thing.escaped_refs() == 0   # 无一个引用逃逸出本作用域
+
+def one_ordinary_day(world) -&gt; None:
+    &quot;&quot;&quot;尔时，世尊食时——返回类型是 None：这一天不产出、不积累任何东西。&quot;&quot;&quot;
+    with held(world.robe), held(world.bowl) as bowl:
+        for house in world.city:       # 于其城中，次第乞已
+            bowl.receive(house.offering())
+        eat(bowl)
+    world.wash_feet()                  # 洗足已：连走过路的痕迹也清理掉
+    world.spread_seat()                # 敷座而坐：栈清空，帧归零
+
+
+# 差异只显现在长期运行的堆上。
+for day in range(45 * 365):
+    one_ordinary_day(world)
+    assert world.heap_growth() == 0    # 跑几十年，占用不增一字节
+</code></pre>
+<p>这个映射在一个地方失效：所有者。RAII 的全部语义预设一个管理资源的运行时、一个作用域的主人，我们释放资源，是为了这个主人下次还能再申请。而般若的方向是连「持有者」一并看空——无住不是一条在作用域退出时强制执行的检查，而是照见从头到尾就没有一个能持有东西的自我。只要那行 assert 还在，就还有一个检查者站在循环外面；那正是后面三十一品要继续拆掉的东西。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

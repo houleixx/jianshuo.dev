@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -177,6 +191,42 @@ footer a{color:var(--ink-soft)}
 <div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>这一品最容易被误读成「智慧的收益是布施的一亿倍以上」。但经文的原话精确得多：「算数譬喻所不能及」——不是倍数很大，是倍数不存在。这在工程上对应一个熟悉的概念：量纲不匹配（dimensional mismatch）。3 米比 2 米长，可以比；3 米和 2 秒，无法比——不是差距大，是比较运算本身没有定义。本品用极限法逼出这个结论：把物质布施推到十亿座须弥山的七宝，仍然够不着四句偈的百分之一，说明无论系数放多大都追不上——这不是同一条数轴上的两个点。</p>
 <p>第二层类比：资产与源代码。一堆七宝是资产（data），持经说法是分发生成规则（code）。资产再大也是有限存量，转移一次少一次；而一份能被复制、被讲解、被执行的规则，每次「为他人说」都是零成本 fork，收益随传播指数展开。六祖说七宝布施「终是有漏之因」，用系统的话说：有漏就是封闭系统内的状态转移，守恒且必然耗散；般若是打破封闭、引入新生成器的操作。这也解释了为什么校量总强调「乃至四句偈」——代码的价值不在体积，四行核心算法足够。</p>
 <p>但类比在这里必须止步，而失效处正是佛学的锋刃所在。如果般若只是「更强的生成器」，它仍是系统内一个可计量的对象，仍在「福德」的类型系统里，只是类型更高——那经文大可说「无量倍」而不必说「不可比」。《金刚经》的立场更彻底：般若是「无所得」，它不是数轴上更远的点，也不是更高维的量，而是对「计量」这个动作本身的看破。用第 19 品的话说，「福德无故，如来说得福德多」——正因为不把福德当实体，才谈得上多。源代码毕竟还是个文件；般若连「文件」都不是。类比能送你到不可通约性门口，门里面的事，类比进不去。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>程序员的职业生涯里有一条隐形的分界线：一边是写程序的人，一边是改求值器的人。绝大多数工作发生在对象层——在既定语义下生产值、累积值、优化值；偶尔有人下到元层，去动那个决定「什么算一个值、值怎么被算出来」的解释器本身。第 24 品做的事，就是把这条分界线画在福德上。</p>
+<p>七宝布施是对象层的操作。它在「福德」这套记账语义下执行，每一次布施都是一笔合法交易，账本诚实地记下余额。经文先把这个方向推到极限——三千大千世界所有须弥山王等量的七宝——然后指出：这仍然只是 Merit 类型的一个很大的取值。类型没变，语义没变，负责记账的解释器没变。「有漏」在这套语言里的含义是：余额再大也是余额，会被消费，会清零，因为它从头到尾都活在账本的语义之内。</p>
+<p>四句偈是另一回事。般若不是账本上更大的一笔，它是对求值器的变换：它改写的不是「算多少」，而是「怎么算」——更准确地说，是让你看见「算」这个动作本身是被构造出来的。于是「为他人说」传递的东西也不是值：你给听者的不是一笔转账，而是一枚装进他求值器的元层补丁；装上之后，他往后的一切行为都在新的语义下被求值。这也解释了全经为什么不废布施——第 4 品的「无所住行于布施」，用工程的话说是：同一个 API，调用照常发生，但执行它的语义已经换了。补丁生效后，交易还在跑，只是不再被余额执取。</p>
+<p>看清这个结构，「算数譬喻所不能及」就不再是修辞。compare 的签名是 (a: Merit, b: Merit)，定义域是同一类型的两个值。把七宝之山传进去，合法；把般若传进去，得到的不是「返回无穷大」，而是根本不通过类型检查——比较运算在这里没有定义。梵本在这一句连用六个词（数、分数、计算、譬喻、类比、比拟）逐一否定，相当于把每一条能把元层对象强行转换回值域的隐式转换路径都封死了。经文不是说智慧的福德更多，它是说：一个作用于求值器的东西，不出现在求值结果的数轴上。</p>
+<pre><code class="language-typescript">// 福聚（punya-skandha）：同一账本语义下可计量、可耗尽的值
+type Merit = { readonly amount: bigint };
+
+type Action = { readonly kind: &quot;dana&quot; | &quot;other&quot;; readonly scale: bigint };
+
+// 比较运算的定义域是两个同类型的值——这是「校量」能够成立的前提
+function compare(a: Merit, b: Merit): -1 | 0 | 1 {
+  return a.amount &lt; b.amount ? -1 : a.amount &gt; b.amount ? 1 : 0;
+}
+
+// 「如是等七宝聚」：把物质规模推到极限，仍只是 Merit 的一个大取值
+const sumeruOfTreasure: Merit = { amount: 10n ** 60n };
+
+// 求值器：给行为计分的语义本身——「福德」这套观念
+type Evaluator = (act: Action) =&gt; Merit;
+
+// 般若不是 Merit，而是 Evaluator 的变换：改写「怎么算」，而非「算多少」
+type Prajna = (ev: Evaluator) =&gt; Evaluator;
+
+declare const fourVerses: Prajna; // 「乃至四句偈等」
+
+// 「为他人说」：交付的不是值，是元层补丁；此后听者的行为在新语义下求值
+function teach(listener: { evaluator: Evaluator }): void {
+  listener.evaluator = fourVerses(listener.evaluator);
+}
+
+// compare(sumeruOfTreasure, fourVerses);
+//                           ^^^^^^^^^^ 类型错误：Prajna 不在 Merit 的定义域里
+// 「乃至算数譬喻所不能及」——不是返回天文数字，而是比较本身未定义
+</code></pre>
+<p>这个映射的失效处在于：软件里的元层仍然是一层——解释器本身也是个对象，可以被版本化、被比较、被拥有，解释器塔可以无限堆上去，而每一层都还是「一个东西」。般若不是塔上更高的一层，它是「无所得」：连「补丁」「安装」「持有」这些动词都要被它看破——若它真是一枚可交付的 Evaluator 补丁，它就仍是可执取之物，经文只需说「无量倍」而不必说「不可比」。teach() 写成一次赋值就能完成，但「受持」从来不是安装完成。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -183,6 +197,43 @@ footer a{color:var(--ink-soft)}
 <p>内存里并不存在「对象」，只存在一段连续或不连续的字节。所谓一个 struct、一个 object、一个文件，是类型系统和文件系统把某些字节「执取为一整块」的结果。这就是 piṇḍa-grāha 的精确对应物：byte 是「微尘」，object 是「一合相」，而把 bytes 解释成 object 的那次 cast，就是「执」。系统跑得好好的，靠的正是这些抽象；但没有一个工程师会认为 File 这个概念在磁盘上有对应的实体——磁盘上只有扇区，「文件」活在文件系统的元数据和我们的约定里。「如来说一合相，即非一合相，是名一合相」翻译成工程语言就是：抽象可以用，但抽象没有实体；is-named，not is。</p>
 <p>「不可说」也有对应物：接口的名字不携带实现。你无法通过说出「File」这个词来穷尽它背后 inode、块分配、缓存一致性的全部机制；名字只是句柄，不是所指。贪著一合相，相当于把句柄当成了资源本身——一个悬空指针式的错误。</p>
 <p>但要诚实标出类比失效的地方，而失效处正是本品比还原论更激进的地方。工程上的抽象层级有一个底：你可以说对象是假的、字节是真的，再往下说字节是假的、电平是真的——总有一层被当作 ground truth。本品不给这个底。「微尘众，则非微尘众」明确拒绝了「整体是假、基本粒子是真」的方案：微尘同样是缘起的假名，往下拆没有终点。用计算机的话说，这不是「高层抽象编译到底层真实」的体系结构，而是 turtles all the way down——每一层都只是相对于观察方式成立的打包，找不到一个不依赖解释的裸数据层。物理学走到量子场论其实也有类似的味道（「粒子」是场的激发的一种数法），但佛经在两千年前就把这个刀口对准了日常经验：你以为你活在一个世界里，其实你活在一次未曾察觉的类型转换里。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>分布式系统工程师有一个说了二十年、却从未有人见过的东西：集群的「当前全局状态」。</p>
+<p>监控大盘上写着 cluster state，故障复盘里写着「那一刻系统处于……」，但认真做过一次分布式调试的人都知道：没有任何观察者、在任何物理时刻，真正读到过这个东西。没有全局时钟，没有瞬时的全局快照，每个节点手里只有自己的局部视图，加上一堆延迟不一的消息。「系统此刻的状态」这个短语在实现层面没有所指——不是测不准，是压根不存在一个可供测量的对象。</p>
+<p>本品做的正是这个断言，只是对象从集群换成了物理世界。「若世界实有者，则是一合相」：如果世界实有，它就得是一个真实的、于某一刻浑然成立的整体——相当于要求存在一个全局一致、瞬时为真的 state。而工程事实是：所谓全局状态，从来都是观测协议装配出来的。Chandy-Lamport 快照算法让 marker 沿因果链传播，切出一条「一致割线」（consistent cut）；这条割线满足因果一致，可以用来打 checkpoint、做故障恢复，但它描述的那个「时刻」在物理时间里从未同时存在过。两次并发的快照会切出两条互不相同的割线，两条都一致，谁也不比谁更「真」。快照是装配的产物，不是发现的对象。梵文 piṇḍa-grāha 的重心正在这里：不是世上现成有一块，而是发生了一次「执取为一块」的操作。世界是一次打包动作，不是一个包。</p>
+<p>更激进的是零件那一侧。还原论者会退一步：好吧，全局状态是假的，但单个事件总是真的。Lamport 在 1978 年给出的答案与本品一致：也不是。「事件 A 先于事件 B」只在 happened-before 这个偏序里成立，它由消息传递关系定义，是关系性的，不是事件自带的属性；两个没有因果路径相连的事件之间，「谁先谁后」这个问题本身没有答案。不存在一条绝对时间轴让所有事件各就各位，事件的「位置」和割线一样，只相对于观测方式成立。「微尘众，则非微尘众」——最小单位同样不自存，往下拆没有 ground truth。</p>
+<p>那怎么办？惠能说「不坏假名，而谈实相」。工程上我们本来就是这么干的：没有人因为全局状态不实有就拆掉监控大盘。快照照做，checkpoint 照打，只是心里清楚交付物是一条构造出来的割线，而非某个时刻的世界本身。真正的事故出在忘记这一点的时候：把一次陈旧的读当成「现状」，让一个节点把自己的局部视图执为全局真相——每一次 split-brain，本质上都是「凡夫贪著其事」：把打包动作的输出当成了实事。「不可说」由此也不神秘：<code>actual_state(cluster, at=t)</code> 这个函数无法实现，不是因为难，而是因为它的返回值类型没有居民。</p>
+<pre><code class="language-python">from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class ConsistentCut:
+    &quot;&quot;&quot;一条一致割线：由快照协议装配出来的「整体」。
+
+    它满足因果一致，但它所描述的那个「时刻」
+    在物理时间里从未同时存在过。
+    &quot;&quot;&quot;
+    node_states: dict[str, bytes]      # 各节点在割线上的局部状态
+    in_flight: dict[str, list[bytes]]  # 被割线穿过、尚在途中的消息
+
+def snapshot(cluster: Cluster) -&gt; ConsistentCut:
+    &quot;&quot;&quot;Chandy-Lamport：marker 沿因果链传播，把散多的局部视图
+    执取为一块。「一合相」是这次打包操作的输出，不是它的输入。
+    &quot;&quot;&quot;
+    ...
+
+cut_a = snapshot(cluster)
+cut_b = snapshot(cluster)   # 并发的第二次观测
+assert is_consistent(cut_a)
+assert is_consistent(cut_b)
+
+
+def actual_state(cluster: Cluster, at: float) -&gt; World:
+    &quot;&quot;&quot;「若世界实有者，则是一合相」——本函数即那个「实有」。
+    它无法实现：不是精度不够，而是返回值没有所指（「不可说」）。
+    &quot;&quot;&quot;
+    raise NotImplementedError(&quot;no global now&quot;)
+</code></pre>
+<p>这个映射在哪里失效：Chandy-Lamport 仍然预设了实有的节点、实有的消息，以及一个站在系统之外发起快照的工程师，而般若不给观察者留这个机位——那个正在执取的心本身也是被打包出来的一合相，无处可退。并且，工程师认清割线是构造物之后照常上班即可，佛经的目标却不是修正世界模型，而是止息贪著本身：前者是认识论的修补，后者是解脱。所以不要把本品读成一篇分布式系统随笔——方向恰恰相反，是分布式系统偶然踩到了它两千年前画下的刀口。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

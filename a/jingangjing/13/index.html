@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -192,6 +206,42 @@ footer a{color:var(--ink-soft)}
 <p>「是经名为金刚般若波罗蜜，以是名字，汝当奉持」——这是声明一个句柄（handle），供日常调用。「佛说般若波罗蜜，即非般若波罗蜜」——这是紧接着的一条类型注解：该句柄不是所指对象本身，两者不可混同，<code>"prajnaparamita" != prajnaparamita</code>。「是名般若波罗蜜」——注解完毕，句柄照常使用。三句合起来相当于：创建引用，声明引用非实体，继续使用引用。哈里森和琼斯的文献学结论（「非世界」是「不具界性」、tenocyate 是「在此意义上使用此词」）恰好支持这个读法：梵本原文本来就更像一份 API 文档里的使用说明，而不是一个故弄玄虚的悖论。</p>
 <p>本品的推广顺序也很有工程味道：先对经名做这个操作（自指——理论适用于理论自身的名字，类似一个能正确处理自己源代码的编译器），再对微尘和世界做（系统的最小粒度单元和最大聚合单元都是 schema 里的抽象，不是 ground truth），再对三十二相做（不能用接口特征反推出实现——三十二相是 interface，法身是 implementation，而且这个 implementation 恰恰声明自己「无相」，没有可枚举的成员变量）。</p>
 <p>但类比在一个关键处失效，而失效处正是佛学越出工程直觉的地方。在计算机里，指针解引用到最后总会落到实实在在的字节上——名字是虚的，对象是实的。本品的主张更彻底：微尘、世界这些「对象」本身也是缘起的组装结果，没有最终落地的、自带本质的字节层。用地图与疆域的话说，佛不只说「地图不是疆域」，还说疆域本身也是逐层构造、无自性可得——指针的尽头还是指针。工程师的本体论里有一个 bare metal 兜底，般若的本体论里没有；接受这一点不靠推理，靠的是经文所说的「受持、为他人说」——在使用中松开对每一层的执取。这一步类比给不了，只能自己走。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>Phil Karlton 那句名言在架构师圈子里人尽皆知：计算机科学只有两个难题，缓存失效和命名。第 13 品罕见地同时处理这两个难题，并且给出同一个答案：命名本身就是一次缓存写入，而正确的协议要求写入与失效声明必须是同一个原子操作。</p>
+<p>须菩提问经名，相当于请求给一个正在运行的系统分配稳定标识符。佛照常返回了标识符——「是经名为金刚般若波罗蜜」——但在同一个事务里附上失效标记：「即非般若波罗蜜，是名般若波罗蜜」。注意这里没有宽限期。不是先让名字当一阵子真、日后再来破除，而是条目落库的那一刻就带着 authoritative: false 的元数据。名字仍然可读、可传、可用于路由（「以是名字，汝当奉持」），但协议禁止任何调用方把它升格为实体。更严格的是，这条失效策略第一个管辖的对象就是策略自身所在的经的名字——它没有把自己排除在适用范围之外，相当于配置系统的校验规则也校验规则文件本身。</p>
+<p>「如来无所说」是对源站的描述。四十九年说法，origin server 一直在响应请求，但每个响应都带着 Vary 头：内容随提问者的根器协商生成，不存在一个可以缓存下来当作「佛法本体」的规范表示。你抓包抓到的全是应机的 representation，从来没有一个 canonical payload 被交付过。</p>
+<p>接下来佛把同一条协议推到数据的两端。微尘是系统里最细的粒度，世界是最大的聚合，佛说两者都是视图：逐行扫描是视图，全表 rollup 也是视图，不存在一张藏在视图背后、自带本质的基表。三十二相则堵住最后一条路：想通过响应特征给源站做指纹识别——收集三十二个可观测字段就宣称定位了如来——同样失败，因为那三十二个字段也只是缓存得下来的表示，而源不是任何可缓存的表示。</p>
+<p>最后的福德比较由此变得可以计算。恒河沙数的身命布施，是往缓存里写入天文数字的条目，每一条仍在「非微尘、非世界」的失效范围之内；受持四句偈并为他人解说，是把失效纪律本身安装进另一个系统。一条作用于全部条目（包括自身）的失效规则，价值高于任何数量的条目。「如法受持」的答案至此闭合：持的不是经名这个 key，而是那条让一切 key 都无法被钉死的纪律。</p>
+<pre><code class="language-typescript">/** 佛说般若波罗蜜，即非般若波罗蜜，是名般若波罗蜜。 */
+interface Designation&lt;V&gt; {
+  readonly view: V;
+  readonly authoritative: false; // 「即非」：禁止升格为实体
+}
+
+class ConventionalCache&lt;V&gt; {
+  private entries = new Map&lt;string, Designation&lt;V&gt;&gt;();
+
+  /** 命名与失效声明是同一个原子操作，没有「先当真」的宽限期。 */
+  name(label: string, view: V): void {
+    this.entries.set(label, { view, authoritative: false });
+  }
+
+  /** 「以是名字，汝当奉持」：假名照常读、照常用。 */
+  read(label: string): V | undefined {
+    return this.entries.get(label)?.view;
+  }
+
+  // 刻意不提供 revalidate() 或 getOrigin()：「如来无所说」，
+  // 缓存背后没有一个可供回源校验的权威对象。
+}
+
+const world = new ConventionalCache&lt;unknown&gt;();
+world.name(&quot;微尘&quot;, &quot;最细粒度的视图&quot;);
+world.name(&quot;世界&quot;, &quot;最大聚合的视图&quot;);
+world.name(&quot;三十二相&quot;, &quot;对源站的特征侧写&quot;);
+world.name(&quot;金刚般若波罗蜜&quot;, world); // 失效策略同样管辖自身的名字
+</code></pre>
+<p>这个映射在一处失效：工程里的缓存失效协议之所以成立，是因为总有一个源站可以回源——If-Modified-Since 发出去，对端会用 200 或 304 作答；而般若否定的恰恰是「存在一个等着被回源的权威对象」，连「缘起之流」也不是藏在视图背后的基表。另外，authoritative: false 是写代码时一次性完成的注解，「受持、为他人说」却是每当执取升起都要重新执行的运行时纪律——类型检查代替不了这份功课。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

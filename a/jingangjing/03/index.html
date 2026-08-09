@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -179,6 +193,43 @@ footer a{color:var(--ink-soft)}
 <p>第一层：saṃjñā（相/想）是指针，不是对象。「众生」「我」这些词，是心智为了处理世界而分配的句柄（handle）。凡夫的默认 bug 是把句柄当实体：以为 <code>self</code> 这个指针后面真有一块叫「我」的、独立分配、永不回收的内存。四相就是四个悬空指针（dangling pointer）——ātman、pudgala、sattva、jīva 各自声称指向一个常存主体，而佛陀的断言是：解引用下去，那块内存从未被分配过。众生是五蕴的临时聚合，相当于一个由多个组件动态组装的对象，只有组合关系，没有那个「本体字段」。</p>
 <p>第二层：菩萨是无状态服务（stateless service）。一个理想的 service 处理每个请求都全力以赴，但不在会话里保存「我是谁、我服务过谁、总共服务了多少个」这些状态变量。本品描述的菩萨正是如此：请求空间是全集（九类众生），SLA 是最高档（无余涅槃），但执行完不留任何记账——没有 <code>served_count++</code>，没有「施者—受者」的会话记录。「灭度无量无数无边众生，实无众生得灭度者」翻译过来就是：吞吐量无穷大，状态表为空。一旦服务开始记账——「我度了他」——它就持有了我相与众生相，行为立刻退化：产生优越感、期待回报、区分亲疏，这正是「即非菩萨」的判定条件。</p>
 <p>类比在哪里失效，值得说清楚。无状态服务是工程上的设计选择：状态其实存在，只是被有意外置或丢弃，为的是可扩展和容错。佛学的主张更强：那些状态变量的所指从一开始就不存在——不是「选择不存」，而是「无可存者」。换句话说，工程师做的是 <code>state = null</code>，佛陀说的是这个类型本身为空集。另外，无状态是冷的架构属性，而菩萨的「无我而度生」是愿力与智慧的同时运行：既要无限投入（这不是任何服务的自然属性），又要零执取。类比失效的这一点，恰好就是本品超出工程直觉的地方——它要求你在删除「做事的人」这个变量之后，把事做到无穷大。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>关系型数据库教给每个工程师一个世界观：万物都是带主键的实体。一行记录可以被 UPDATE 一千次，只要 id 不变，它就还是「同一行」；变化被理解为同一实体在时间中的状态迁移。函数式阵营对此有一个著名的反对：世界上其实只有值。值是不可变的，所谓「变化」，是一连串各自独立的值，被观察者用一根叫「同一性」的线串了起来——线不在数据里，在叙事里。Rich Hickey 把前者叫 place-oriented，把后者叫 value-oriented。</p>
+<p>本品做的，是对「众生」这个类型的一次值语义改写。佛陀的定义是五蕴和合：色、受、想、行、识五个分量的临时组合。注意这个 schema 里没有的字段——没有 id，没有从生到死保持不变的那一列。「寿者相」就是坚持这一列存在：同一个生命体，从出生一路贯穿到死亡。「我相」则是把自己也建成这样一个实体，当作一切动作默认的 this。</p>
+<p>有了这个类型定义，本品的论证可以完整重放。第一步，愿是全域上的一个全函数：九类众生的三组分类（出生方式 × 有无形体 × 有无心识）是一次穷举式的模式匹配，像 sealed union 上的 exhaustive match，编译器检查过，没有漏分支；返回类型取上确界——无余涅槃，不接受部分成功。第二步是翻转：函数对全域跑完了，却「实无众生得灭度者」。为什么？因为「某个众生得度了」这句话要成立，需要一个跨越转变前后仍然「是同一个」的主语——需要 Being 上有 identity。而这个类型里没有 id。度之前是一个值，度之后是另一个值，把两个值串成「同一个众生的前后」的那根线，不在任何数据结构里，在旁观者的讲述里。事情做了，但「承受这件事的那个东西」从来不是一条数据。</p>
+<p>第三步是判据。四相是在四个粒度上给这个值类型强行补 id 的四次尝试：我、人、众生、寿者。「若菩萨有我相……即非菩萨」翻译成工程语言就是：liberate 必须是自由函数；一旦把它写成某个 Bodhisattva 对象的方法，让它有了 this——有了一个在每次调用之间持存、并声称「是我做的」的接收者——这个函数的语义就已经变质，哪怕函数体一个字符都没改。</p>
+<pre><code class="language-typescript">// 众生：五蕴的组合值。「若卵生、若胎生……」只是这个类型的九种居民。
+type Being = Readonly&lt;{
+  form: Form;                   // 色
+  feeling: Feeling;             // 受
+  perception: Perception;       // 想
+  volition: Volition;           // 行
+  consciousness: Consciousness; // 识
+  // 注意没有的字段：id、bornAt、diesAt。
+  // 寿者相所需要的那一列，在这个类型里不存在。
+}&gt;;
+
+// 愿：全域上的全函数，返回类型取上确界。
+// 「我皆令入无余涅槃而灭度之」——是 Nirvana，不是 Partial&lt;Nirvana&gt;。
+declare function liberate(being: Being): Nirvana;
+
+// 要断言「这个众生得度了」，前提是转变前后「是同一个」：
+interface HasIdentity {
+  readonly id: EntityId;
+}
+function isSameEntity&lt;T extends HasIdentity&gt;(before: T, after: T): boolean {
+  return before.id === after.id;
+}
+
+// isSameEntity(beingBefore, nirvanaAfter);
+//   ^ 无法通过类型检查：Being 不满足 HasIdentity。
+//   「实无众生得灭度者」——不是函数没有跑，是这个断言写不出来。
+
+// 四相 = 在四个粒度上让 Being 强行 implements HasIdentity 的尝试。
+// 而把 liberate 改写成 bodhisattva.liberate(being)，给它一个 this，
+// 正是「若菩萨有我相……即非菩萨」的触发条件。
+</code></pre>
+<p>这个映射在一处失效。值语义是工程上的建模选择——在登录与账务那一层，主键照常真实有效，我们只是选择在某些层不建 identity；般若的主张更彻底：不是建议少用 id，而是无论怎样建模，id 的所指从来不可得，连「五蕴组合值」这个模型本身也是一个 saṃjñā，同样不可执取。还有一件事类型系统写不下：一个不认任何主语的纯函数，为什么会被以全集为定义域、以上确界为目标调用一遍——那个调用者，经文称之为愿，不在任何签名里。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

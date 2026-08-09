@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -184,6 +198,29 @@ footer a{color:var(--ink-soft)}
 <p>"云何住？云何降伏其心？"本质上是一个控制论问题。把心看作一个动力系统：设定点（setpoint）是"住"——让系统稳定在目标状态；扰动抑制是"降伏"——妄念是噪声，如何滤掉。按控制论的标准解法，你需要设计一个控制器：传感器监测偏差，反馈回路施加修正。绝大多数修行方法——数息、持咒、观想——确实就是这样的控制器。</p>
 <p>而佛的回答"应如是住，如是降伏其心"，在类比里相当于说：这个系统不需要外挂控制器。南怀瑾的解读点破了机制：你在专注提问的那一刻，心已经是定的——观测行为本身改变了系统状态，问题在被认真提出时已经部分自解。这有点像一个不动点：<code>f(x) = x</code>，你要找的状态就是你现在所在的状态，迭代算法启动的那一刻就已经收敛。</p>
 <p>但类比在关键处失效，而失效处正是佛学的独特主张。控制论预设了控制器和被控对象的二元结构——有一个"我"在管理"我的心"。《金刚经》后文将逐步拆掉这个预设：不存在一个独立于心之外的管理者，"降伏其心"最终不是加一个更强的控制回路，而是看清"需要被降伏的心"和"执行降伏的我"都是同一个建构。工程学处理的是"如何控制系统"，本品引出的问题最终是"控制者是否存在"。这一步跨出去，类比的脚手架就该拆了——脚手架本来就是用来拆的，这恰好也是《金刚经》对一切方法的态度。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>把须菩提的两问直译成工程语言，几乎不需要转换：心是一份高频变更的可变共享状态，写入方不受你控制（念头自己会冒出来），现在请求两个原语——「住」是把它固定在一个已知好的值上，「降伏」是把不受欢迎的并发写入压下去。任何维护过有状态系统的人都提过同样的需求：状态失控了，加一层东西管住它。</p>
+<p>工程史给这类需求的标准答案就是加层：加锁、上 GC、挂监控、配 supervisor。这些层都有用，但它们共享同一个宿命——管理状态的机制自身就是状态。锁是共享状态，还引入死锁这种新的失控方式；GC 的记账数据活在它所管理的那个堆里；监控产生日志，日志系统自己需要被监控；supervisor 挂了要有另一个 supervisor 来拉起。元数据也是数据。每加一层，局部秩序确实变好，但「谁来管理管理者」的问题只是上移了一层。这个递归没有 base case：你找不到一层是纯粹的管理、自身不携带任何待管理状态的。</p>
+<p>须菩提要的正是这样一层：请为心提供一个持有者。而佛的「应如是住，如是降伏其心」，在工程语义里是一种罕见的答复——既不是实现，也不是更优的替代方案，而是驳回需求的前提。「心需要一个外部持有者」这个假设，本身就是又一个念头；你为降伏心而搭建的每一个机制，都会成为新的心的内容，成为下一轮需要被降伏的东西。所以答案不是第 N + 1 层，而是零层。历代的两种读法在这里也各有对应：顺文读把「如是」当前向引用——声明在此，定义由后三十品逐步绑定；禅家读把「如是」当场求值——你认真提问的那一刻，那份专注没有经过任何管理层，它已经就是所求的状态。两种读法共享同一个否定：不新增任何一层。</p>
+<pre><code class="language-typescript">// 须菩提的需求：为心提供「住」与「降伏」两个原语
+type Thought = { content: string };
+type Mind = { arising: Thought[] };            // 高频变更的可变状态
+
+type Keeper&lt;S&gt; = {
+  pinned: S;                                   // 「应云何住」：固定在已知好的值上
+  suppressed: Thought[];                       // 「云何降伏其心」：被压下的写入
+  meta: Keeper&lt;Keeper&lt;S&gt;&gt;;                     // Keeper 的字段也是状态，
+};                                             // 于是需要下一层来管理它
+
+// 这个类型没有有限深度的值：每构造一层，就欠下一层。
+declare function build&lt;S&gt;(state: S): Keeper&lt;S&gt;; // 只能声明，无法诚实地实现
+
+// 佛的答复不是 Keeper 的更优实现，也不是替代类型。
+// 「应如是住，如是降伏其心」——收回需求本身：
+// 心不是一份等待持有者的资源；为管理它而写的每一行代码，
+// 都会成为新的它。后三十品的工作，是把这份需求文档逐行删掉。
+</code></pre>
+<p>这个映射在一处失效：在工程里，拒绝加层之后你仍然对正确性负责，总得另找机制兜底，「零抽象」至多是一条更好的设计原则。而「如是」不是技术选型——把它当成一条可复用的架构原则，它就又变成了一层。更根本的差异是视角：类型的无穷回归可以站在系统外部看清，心却没有外部视角可供站立，这个困境无处 attach debugger，般若要求的恰恰是在没有外部的地方直接看。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

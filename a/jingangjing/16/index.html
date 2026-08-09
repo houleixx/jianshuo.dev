@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -181,6 +195,41 @@ footer a{color:var(--ink-soft)}
 <p>第一段讲的「重罪轻受」，本质上是一笔延迟结算的负债被重组了。业力系统像一个记账式的状态机：每个行为写入一条日志，果报是日志在未来某刻的求值结果。「先世罪业，应堕恶道」是一个已入队、尚未执行的巨额结算——类似一笔利滚利的技术债，放着不管，最终会以系统崩溃（堕恶道）的形式爆发。持经者「为人轻贱」，相当于把这笔债提前触发，在小场景里以可承受的代价结清：fail fast，小额清偿，替代未来的灾难性违约。工程师都懂这个道理——现在挨一次代码评审的难堪，好过上线后事故复盘的灭顶。这个类比在「债务总量守恒、清偿方式可变」这一点上是贴合的：经文没有说债务凭空消失，只说清偿路径改变了。</p>
 <p>第二段的功德比较，则是复杂度类的区别。佛供养八百四千万亿那由他诸佛，是一个天文数字级的常数——但再大的常数，乘上再大的倍数，仍在同一个复杂度类里。持经悟般若的功德是另一个类，像 O(1) 与任何指数增长之间的关系倒过来看：不管把前者放大多少倍（百分、千万亿分），都追不上后者。「算数譬喻所不能及」说得非常精确——不是「差距很大」，而是「不存在换算系数」。有为福德与无为功德之间是量纲差异，不是数量差异。</p>
 <p>类比的失效处要标清楚，而失效处正是佛学越出工程学的地方。其一，业不是外部账本上的客观负债，佛教的立场是「业由心造」；所以六祖才能把「先世/今世」重解为「前念/后念」——债务重组的类比到这里失效，因为在观心路线里，消业不是换一种方式还钱，而是发现记账主体（那个执着于「我」的心）本身站不住。其二，复杂度类的类比预设了两个类都可度量、只是不可互换；而般若功德是「不可思议」——不是「很大以至于难以计算」，而是不落在可计算、可思维的框架之内。工程里没有对应物：任何系统的性能再好，也仍在可测量的范畴里。这两处断裂不是类比的缺陷，而是本品真正想指出的东西。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>第 16 品处理的是一个像生产事故一样具体的问题：上一品刚把持经功德说到不可称量，现实里持经的人却被人轻贱——承诺的收益没有兑现，这套因果系统是不是有 bug。</p>
+<p>佛的回答，用事件溯源（event sourcing）的语义来读最省力。业力系统是一个 append-only 的事件日志：每个行为 commit 一条不可变的事件，没有 update，没有 delete。而「果报」不是存在哪个字段里的状态——它是投影（projection），是日志在某个解释函数下 fold 出来的物化视图。「先世罪业，应堕恶道」说的是：日志里有一条重事件，按默认的物化路径，它会在未来某刻成熟为一次不可恢复的状态转移。「以今世人轻贱故，先世罪业则为消灭」说的是：持经没有删掉这条事件——账还是要还的——它改变的是物化路径，让同一条事件提前、以可承受的轻微形式结清。「消业障」由此获得一个精确的定义：不改写历史，只解除历史对未来的锁。</p>
+<p>第二段的功德比较，是数据面和代码面的区别。供养八百四千万亿那由他诸佛，每一次供养都是往日志里 append 一行；行数再大，操作仍然停留在数据面。持经悟般若动的是另一个东西：解释函数本身。数据和代码之间没有汇率——append 一亿行不等于修改一行 reducer，append 任何行数都不等于。「算数譬喻所不能及」不是夸张，是类型错误：你在拿 Ledger 和 (Ledger) =&gt; Outcome 比大小，编译器应该在这里直接报错。</p>
+<p>六祖的观心解法在这个语义下也变得自然。他把「先世/今世」读作「前念/后念」：状态本来就不持久，每一念都是对日志重新跑一遍 fold；所谓「妄不得住」，是说当觉心成为解释函数，妄念事件物化不出任何驻留的状态——不是日志被清空了，而是没有东西再把它们 hold 成一个叫「我」的可变对象。</p>
+<p>至于佛为什么不把功德说尽——「心则狂乱，狐疑不信」——写过 API 的人都懂：返回超出客户端 schema 处理能力的 payload，得到的不是理解，是反序列化崩溃。佛在这里做的是限流。</p>
+<pre><code class="language-typescript">type KarmicEvent = Readonly&lt;{ id: string; weight: number }&gt;;
+type Ledger = readonly KarmicEvent[]; // append-only：已造之业，不可删改
+
+type Outcome =
+  | { settledAt: &quot;future&quot;; severity: &quot;ruinous&quot; }  // 「应堕恶道」
+  | { settledAt: &quot;now&quot;; severity: &quot;bearable&quot; };   // 「为人轻贱」
+
+// 果报不是存储的字段，而是日志在解释函数下的投影
+type Materialize = (ledger: Ledger) =&gt; Outcome[];
+
+const defaultPath: Materialize = (ledger) =&gt;
+  ledger.map(() =&gt; ({ settledAt: &quot;future&quot;, severity: &quot;ruinous&quot; }));
+
+// 持经改变的不是数据，而是这个函数：同一条事件，提前以轻报结清
+const sutraPath: Materialize = (ledger) =&gt;
+  ledger.map(() =&gt; ({ settledAt: &quot;now&quot;, severity: &quot;bearable&quot; }));
+
+// 供养属于数据面：无论 append 多少行，Materialize 本身分毫未动
+const makeOffering = (ledger: Ledger, offering: KarmicEvent): Ledger =&gt;
+  [...ledger, offering];
+
+test(&quot;消业障不改写历史&quot;, () =&gt; {
+  const ledger: Ledger = [{ id: &quot;past-life&quot;, weight: 1e9 }];
+  const outcomes = sutraPath(ledger);
+  expect(ledger).toHaveLength(1);            // 「先世罪业」一条没少：账还是要还的
+  expect(outcomes[0].settledAt).toBe(&quot;now&quot;); // 变的只是清偿的时机与代价
+});
+</code></pre>
+<p>这个映射在哪里失效：event sourcing 预设日志真实存在，并且有一个 runtime 在忠实地执行 fold；而般若的立场更彻底——不仅果报是投影，连持有这份日志的「我」、乃至解释框架本身，都是投影，投影找不到最终的宿主。所以「不可思议」不等于「不可计算」：不可计算仍是一个定义良好的数学类别，仍在思维之内，而「不可思议」是说这件事不落在任何可建模的框架里，包括本文这一个。把这一品读成「换个 reducer 就好」的编程哲学，恰好是它要破的那种执着。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

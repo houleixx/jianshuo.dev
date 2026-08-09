@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -188,6 +202,42 @@ footer a{color:var(--ink-soft)}
 <p>但如果只读到这一层，工程师的本能反应会是：特征不够就加特征，32 维不行上 3200 维，再不行换更好的传感器。四句偈堵死的正是这条路。「色」和「音声」不是两个具体特征，而是全部感官输入通道的代表——视觉通道和听觉通道。偈子说的不是「这些特征区分度不够」，而是：如来根本不在特征空间里。这是一个类型错误（type error）：你在输入空间里搜索一个不属于输入空间的对象，采样再密、分辨率再高，也只是在错误的空间里更精确地失败。「行邪道」（mithyā-prahāṇa，错误的努力）翻译成工程语言就是：优化器很卖力，但目标函数写错了，梯度下降得越快，离目标越远。</p>
 <p>玄奘补译的第二颂还有更狠的一层：「法性非所识」。这接近一个自指困境——认识系统无法把自身的运行基础当作普通对象来认识，就像一个形式系统无法在系统内部完整刻画自己的语义（哥德尔式的限制），或者说，你无法用采样去测量「采样空间本身」。法身不是特征空间里的一个点，它更像特征空间得以成立的那个前提。</p>
 <p>类比到此失效，而失效处正是佛学的立足点。哥德尔的结论是「不可完备」，到此为止；佛经却说「不能见如来」之后还有路——只是那条路不叫「识别」（vijñāna，识），叫「证」（般若现观）。工程框架里，认识只有一种模式：主体采集客体的数据。佛学主张存在另一种认知模式：不经由对象化的直接契入。这个主张无法在工程框架内验证——它恰恰是对该框架边界的陈述。本品的可迁移教训倒是朴素的：当一个系统持续识别失败时，先检查的不该是特征数量，而是目标是否真的在你的可观测空间里。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>本品的整个论证，可以搬进相等性判断（equality）的语义里，一字不损。</p>
+<p>「以三十二相观如来」是一次结构相等（structural equality）判定：把三十二个可观测字段逐一比对，全部匹配即认定同一。佛的归谬一步到位——转轮圣王在这组字段上与佛逐位相等。而结构相等天然承认这种情形：两个对象字段完全相同，仍然可以不是同一个对象。做测试的人天天见：一个把接口填满的 mock，能通过全部契约测试，但它不是那个服务。第 5 品的「凡所有相，皆是虚妄」到本品被落实为一条判定逻辑：观测面上的匹配，判定不了同一性。</p>
+<p>资深工程师的第一反应是换判据：结构相等不可靠，就换引用相等——比指针，比 UUID，比某个更深的私有 identity 字段。四句偈堵的正是这条路。「色」与「音声」代表的不是某几个字段，而是「一切可读取的字段」。引用、UUID、私有属性，只要能被读出来参与比较，就仍在观测面上，仍是一种相——只是藏得更深的相。把法身理解成一个隐藏的 id，等于把「非相」重新做成了一个相，判据升级了，层级没变。</p>
+<p>玄奘补译的第二颂「法性非所识」给出真正的层级差：法身之于诸相，如同求值器之于堆中对象。程序能拿到的每一个引用，指向的都是堆里的值；而让「读取、比较、判定」得以执行的那一层机制，本身不在堆里，没有地址，不是任何表达式的合法返回值。这不是「尚未实现」，而是这个表达式在语言内根本写不出来。所以破三十二相，不是要求一个更强的判据，而是指出「判定」这个操作的作用域从一开始就罩不住目标。留在工程内的教训很朴素：当所有判据都通过、你却仍怀疑认错了对象，该检查的不是判据的强度，而是你比较所在的层级。</p>
+<pre><code class="language-typescript">/** 三十二相：一个存在暴露出来的全部可读字段 */
+interface ObservableMarks {
+  usnisa: boolean;   // 顶上肉髻
+  urna: boolean;     // 眉间白毫
+  levelFeet: boolean; // 足下平满
+  // ... 其余二十九相从略
+}
+
+interface Being { marks: ObservableMarks; hiddenId: string; }
+
+const observe = (b: Being): ObservableMarks =&gt; b.marks;
+
+// 「以三十二相观如来」：结构相等判定
+const isTathagataByMarks = (b: Being): boolean =&gt;
+  deepEqual(observe(b), observe(buddha));
+
+// 归谬：「若以三十二相观如来者，转轮圣王则是如来」
+assert(isTathagataByMarks(chakravartin) === true); // 判据被证伪
+
+// 诱人的修补：换引用相等——但 hiddenId 仍是可读字段，
+// 仍是「相」，只是更深一层的「色」
+const isTathagataById = (b: Being): boolean =&gt;
+  b.hiddenId === buddha.hiddenId;
+
+// 法身之于对象，如求值器之于堆：它使 observe 与 === 得以
+// 执行，却不是任何表达式的值。「法性非所识」。
+function dharmakaya(b: Being): never {
+  throw new TypeError(&quot;not addressable from within the heap&quot;);
+}
+</code></pre>
+<p>这个映射的失效处在于：<code>never</code> 仍是类型系统里一个可书写、可推理的公民——我们用一个可命名的符号去标注不可命名者，本身就又造了一个相；<code>throw</code> 也仍是堆内发生的运行时事件，只是把缺席编了码。般若说的「不可得」不是异常、不是哨兵值，法身也不是「运行时」这样一个可指称的架构组件——般若传统主张在对象化的读取之外另有一种直接的证入，而那在本模型里没有任何对应物。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

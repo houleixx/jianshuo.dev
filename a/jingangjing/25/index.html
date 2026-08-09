@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -180,6 +194,45 @@ footer a{color:var(--ink-soft)}
 <p>第二层：「度」是一个无法实例化的操作。函数签名 <code>save(savior, savee)</code> 要求两个实参都是真实存在的对象。本品的论证等价于指出：在实相层面，这两个形参都绑定不到实体上——「我」和「众生」都是假名指针，解引用之后没有 struct。于是 <code>save()</code> 不是执行失败，而是根本无从调用。但教化在现象层面照常发生，这更像编译器优化后的代码：源代码里写着「度众生」，编译到实相层这个调用被整个消解（optimized away），因为它不产生任何真实的状态变更——「平等真法界」里，佛位不增，生位不减。</p>
 <p>第三层：「自性自度」是自举（bootstrapping）。编译器不能替一门语言运行程序，最多提供一个引导环境；自举编译器最终要用自己编译自己。佛的角色类似引导程序：指出方法，但觉悟这个进程必须在众生自己的机器上跑起来。</p>
 <p>类比失效的地方要说清楚。第一，视图/标签的类比只覆盖了「无实体」这半边，覆盖不了另半边：佛并非因为「没人可度」就停机不作为——无我与大悲在佛这里同时运行，这在工程语义里近乎矛盾（一个没有调用者的进程持续输出），类比到此为止。第二，「优化掉的调用」暗示教化没发生，但佛教的立场是教化真实发生、只是不被抓取——不是 no-op，而是不留引用、不挂账的操作。这个「做了但不持有」的状态，工程里没有现成对应物，它正是本品超出类比的部分。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>做过大型系统的人都有一个共同的直觉：最可靠的节点是无状态的节点。一个无状态的 handler 做的是真实的工作——请求进来，转换发生，响应返回——但它不保留任何东西：没有会话，没有「我服务过的客户」列表，没有随处理量增长的计数器。工作发生了，账没有落下。</p>
+<p>本品做的，是把这个直觉推到极限。「若有众生如来度者，如来则有我、人、众生、寿者」——用工程语言重写：一旦系统在完成一次转换之后保留了对它的引用，四样东西被同时实例化。要有一个能拥有这份状态的持久主体（我相：一个必须活得比调用更久的 this）；要有一个被钉在内存里的客户对象（人相）；要有一张不断增长的「所有被我处理过的对象」集合（众生相）；这些状态还必须有生命周期管理（寿者相：TTL、会话、租约）。四相不是四个观念，而是四类被保留的引用。梵文本此处用的是 grāha（执、抓取）而不是 saṃjñā（想）——「执」翻成工程语言就是 retain：关键不在你怎么想，而在调用返回之后你手里还攥着什么。</p>
+<p>所以「实无有众生如来度者」不是说转换没有发生，而是说：调用返回，栈帧弹出，没有任何引用存活下来。反过来，只要「我度了他」这条记录还在堆上，它就是一个泄漏——而且是最隐蔽的那种，因为它泄漏出来的不是内存，是「我」本身。那条记录必须有一个记账的主体才能成立，于是「度化」这个动作反手重新构造出了它本该消解的自我。功德账本，就是自我的建堆过程。</p>
+<p>第二段经文处理的是命名问题。无状态的服务仍然有名字，日志里仍然写着 service-a handled the request。「如来说有我」就是这个层面的「我」：一个用于路由和沟通的接口标识符，背后并不需要一个必然存在的单例。凡夫的错误是把服务名当成了有状态的实例，以为标识符解析出来的必定是一个持久对象。同理，「凡夫」也只是按当前堆上内容打的运行时标签：一个进程此刻攥着引用，它就表现为凡夫；引用一放，标签即刻失效。标签描述的是当前行为，不是不可变的本质——所以转迷为悟在架构上是可能的，这正是「凡夫者，则非凡夫，是名凡夫」。</p>
+<pre><code class="language-python">from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Teaching:
+    &quot;&quot;&quot;指出方法。随请求生成，不指向任何实体。&quot;&quot;&quot;
+    content: str
+
+class DeludedTeacher:
+    &quot;&quot;&quot;反面示范：每次度化都落账，四相由此实例化。&quot;&quot;&quot;
+    def __init__(self) -&gt; None:
+        self.liberated: list[str] = []  # 众生相：被持有的客体集合
+        self.merit: int = 0             # 我相：必须有个记账的主体
+
+    def liberate(self, being: str) -&gt; Teaching:
+        teaching = Teaching(f&quot;path for {being}&quot;)
+        self.liberated.append(being)    # 「若有众生如来度者」：引用被保留
+        self.merit += 1                 # 自我随账本一起增长
+        return teaching
+
+class Tathagata:
+    &quot;&quot;&quot;化无所化：转换照常发生，但没有任何字段可供落账。&quot;&quot;&quot;
+    __slots__ = ()  # 类型层面封死：实例上不可能挂任何状态
+
+    def liberate(self, being: str) -&gt; Teaching:
+        # 「实无有众生如来度者」：调用返回，栈帧弹出，不留引用
+        return Teaching(f&quot;path for {being}&quot;)
+
+def test_liberation_retains_nothing() -&gt; None:
+    t = Tathagata()
+    t.liberate(&quot;subhuti&quot;)
+    t.liberate(&quot;anyone&quot;)
+    assert not hasattr(t, &quot;__dict__&quot;)   # 度前度后，无处结存
+</code></pre>
+<p>这个映射在关键处失效。无状态在工程里是一种权衡后的设计选择——我们本可以存、但为了伸缩性选择不存；而本品说的是「实无」：众生从来就不是一个可被持有的对象，根本不存在那个可供取舍的存储方案。并且无状态服务对请求是冷漠的，佛却在无人调用时依然大悲常运——一个不为任何 SLA 工作、也不写任何日志的进程持续运转，这在工程语义里没有位置，它恰是般若越出代码的地方。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

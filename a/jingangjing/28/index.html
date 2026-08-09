@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -180,6 +194,39 @@ footer a{color:var(--ink-soft)}
 <p>梵文本那对关键动词——parigraha（摄受）与 udgraha（执取）——几乎就是「借用」和「取得所有权」的区别。菩萨行善，福德如实产生，这相当于函数执行产生了真实的输出；但菩萨对这份福德只持有一个共享引用 <code>&amp;T</code>，从不写 <code>let mine = merit</code>，从不把所有权 move 到「我」名下。鸠摩罗什的「不受」，翻译成类型系统的语言就是：<code>self</code> 上不存在任何接收福德的字段。玄奘的「所应摄受，不应摄取」更精确：值可以被产生、被传递（摄受），但禁止被某个特定作用域独占（摄取）。</p>
 <p>另一个贴合的模型是无状态服务（stateless service）。一台无状态服务器处理每个请求都实实在在做了功——计算发生了，副作用写进了外部世界——但它自身不积累任何会话状态，处理完即归零。菩萨的「福德照作而不受」正是这个架构：动作真实发生，效果留在众生那里（回向），而「我」这台服务器上没有累积任何叫「我的功德」的状态变量。为什么这样反而「胜前菩萨」？因为一旦福德被记到「我」的账上，就产生了对「我」这个对象的一次强引用；引用计数不清零，这个本该被识破为空的「我」就永远无法被回收。执著福德，等于给「自我」这个内存泄漏源不断加持。「知一切法无我」是在类型层面宣告：根本不存在能充当所有者的那个实体，所有权转移在编译期就该报错。</p>
 <p>类比在两处失效，而失效处正是佛学越出工程学的地方。第一，无状态设计是为了可扩展性做的权衡，是可选的架构决策；而「不受福德」在佛法里不是优化项，是唯一与实相一致的运行方式——因为「所有者不存在」不是设计约定，是事实。第二，Rust 的借用检查器管住的是值，但从不怀疑「程序」自身的存在；般若的检查器更彻底，它最终连检查器自己（能观的心、乃至「无我」这条规则本身）也判为无自性。工程学到边界为止，本品的「忍」，是心在这个没有地板的结论上站稳的能力。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>这一品的论证，可以整个搬进类型系统里说。</p>
+<p>先看佛设的对比。前一位菩萨用满恒河沙世界的七宝布施——这是在同一个有序类型 <code>Merit</code> 上把数值推向极限。输入规模再大，返回值仍落在原来的序里，仍然可比、可积累、可耗尽。后一个人做的事完全不同：他没有产出更大的值，他改了签名。「知一切法无我」在工程语义里是一条类型层面的声明：<code>type Self = never</code>——那个理应接收福德的实体，是一个无居留类型（uninhabited type），写得出类型名，构造不出任何值。于是「不受福德」不再是一条靠自律执行的运行时策略，而是编译期事实：<code>credit(to: Self, m: Merit)</code> 这个函数可以声明，却永远凑不齐参数去调用。不受，不是忍住不收，而是「收」这个调用点根本无法成立。</p>
+<p>须菩提的追问是每个工程师的第一反应：副作用明明发生了，返回值怎么会没有？佛的回答给出一个精确的区分：perform 与 bind 是两回事。梵本里那对动词——摄受（parigraha）与执取（udgraha）——对应的正是这两个动作。摄受是把效果提交出去：福德如实生起，写进世界，流向众生，像一次不可撤销的 commit。执取是把返回值绑定回来：<code>this.balance += merit</code>，让一段本已流出去的效果在「我」的字段上留下一份拷贝。本品只删掉第二步。函数照常执行，副作用照常提交，只是返回类型收窄为 void——没有任何一行代码把结果接住。</p>
+<p>为什么这样反而「胜前菩萨」？因为一旦执取，依赖图里就多出一条指向 <code>Self</code> 的边，而 <code>Self</code> 无值——这条边在诚实的类型系统里只能靠 <code>as any</code> 强行糊住。每一次「我的功德又多了一分」，都是对一个不存在的类型撒一次谎，系统从此 unsound：后续所有推理（我修得如何、我比谁高）都建立在这个被强转出来的幻影实例上。前一位菩萨输掉的不是数值，是可靠性——他的整套账目依赖一个类型检查通不过的受者。「得成于忍」由此有了工程学的对应物：忍，是面对 <code>Self = never</code> 这个结论时不去写那个 cast 的能力——不恐慌、不回退、不为了让代码「好写一点」而偷偷把自我重新引入类型系统。</p>
+<pre><code class="language-typescript">type Merit = { readonly amount: bigint };
+
+// 「知一切法无我」：能充当受者的那个实体，是无居留类型——
+// 写得出类型名，构造不出任何值。
+type Self = never;
+
+interface World {
+  absorb(m: Merit): void; // 回向：效果流向众生，一次不可撤销的提交
+}
+
+// 前一位菩萨的签名：行善返回福德，调用方自然会把它绑定到自己名下
+declare function giveWithReturn(worlds: bigint): Merit;
+
+// 本品的签名：同样的副作用，返回类型收窄为 void
+function give(worlds: bigint, world: World): void {
+  const merit = produce(worlds); // 「菩萨所作福德」——照作，不打折扣
+  world.absorb(merit);           // 摄受（parigraha）：提交给世界
+  // 到此为止。没有 return，没有字段接住 merit。
+  // 执取（udgraha）无处发生：
+  // credit(to: Self, m: Merit) 永远凑不齐第一个参数。
+}
+
+declare function produce(worlds: bigint): Merit;
+
+// 唯一能破坏「不受」的写法，是对不存在的类型撒谎：
+// const me = undefined as unknown as Self; // 「贪著」，自此系统 unsound
+</code></pre>
+<p>这个映射在两处失效。第一，<code>type Self = never</code> 是我们写下的声明，下一次重构就能撤销；「一切法无我」不是团队约定出来的接口，而是被证知的实相，没有版本可以回退。第二，类型检查只需通过一次，「忍」却是持续的运行时功夫——心在每一个念头上都可能重新写下那个 cast，安忍不是编译期的一劳永逸，而是刹那刹那的不退转。把本品读成一条可采纳的编程守则，恰恰又是一次执取。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

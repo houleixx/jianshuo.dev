@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -181,6 +195,36 @@ footer a{color:var(--ink-soft)}
 <p>「身相」是如来的一种表示。三十二相好比一个对象暴露出来的接口签名或渲染结果：它确实由对象生成，也确实携带信息，但把渲染结果当成对象本身，是典型的层次错误（category error）。你不能通过 <code>toString()</code> 的输出来 <code>==</code> 判定对象同一性；同理，「可以身相见如来不？不也」。须菩提的理由也很工程化：「如来所说身相，即非身相」——这个表示是有损的、依赖上下文的投影，就像三维对象投到二维平面，投影随视角而变，不是对象的固有属性。</p>
 <p>「凡所有相，皆是虚妄」则把这个判断做成了全称量词：任何 lakṣaṇa（可辨识特征）都是投影，没有哪一个投影是无损的。这对应地图与疆域（map vs. territory）原则的强形式：不存在与疆域等价的地图，因为「是地图」这个性质本身就意味着压缩和取舍。</p>
 <p>但类比在最后一步失效，而失效处正是本品的锋刃。工程语义里，表示背后总有一个「真正的对象」在内存里等着你解引用：看破渲染结果，是为了拿到那个 ground truth。而佛的结论不是「绕过身相，去找一个藏在背后的真如来实体」——如果那样，如来只是换了一个更隐蔽的相。「若见诸相非相，即见如来」的结构是：见如来不是解引用到某个终极对象，而就是「看出一切表示皆是表示」这个认知转换本身。用类比的语言说：疆域也不是一个自成的实体，「疆域」同样是一张地图；系统里没有裸对象，只有层层表示，而看清这一点的那一眼，就是本品所说的「见」。指针类比能把你送到门口，进门要靠放下「所指必有实体」这条默认假设——这条假设在工程里是公理，在般若学里恰恰是要被拆掉的执着。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>把本品的问题换到一个你熟悉的系统里问一遍：在一个事件溯源（event sourcing）架构里，「用户」这个实体存在吗？严格地说不存在。系统里只有一条 append-only 的事件日志，以及从日志折叠（fold）出来的各种派生状态——物化视图、缓存、读模型。你查到的每一个「当前状态」，都是对因果流的一次快照式折叠：缘聚则成（replay 到某个 offset），缘离则灭（视图可以随时丢弃重建）。</p>
+<p>「身相」就是这样一个派生状态。三十二相是从「如来」这条因缘流上物化出来的读模型。佛的问题——「可以身相见如来不」——翻译过来是：能否凭一个物化视图，resolve 到它背后的实体？须菩提的否定是结构性的，而不是精度问题。他没有说「视图分辨率不够，换个高清的就行」，他说的是「如来所说身相，即非身相」：这个视图的类型就是 Derived，它的 schema 里没有一个外键指回某张实体表——因为系统里根本没有实体表。</p>
+<p>「凡所有相，皆是虚妄」是把这个判断升级成全称量词：对一切派生状态成立。注意「虚妄」的精确语义。梵文 mṛṣā 不是「不存在」，而是「不像它呈现的那样实在」——这几乎就是 stale by construction 的定义。视图是真实可读的，能正常服务查询；它的欺诳性只在一处：它把自己呈现为一个稳定自存的对象，而它实际是流的一次有损折叠。资深工程师对这类事故不陌生：把缓存当权威数据、把物化视图当账本、把监控面板上的数字当系统本身，是同一类 bug 的不同马甲——把 derived state 提拔成 source of truth。</p>
+<p>但本品立的东西比「分清派生与真源」更狠。老练的工程师读到这里会说：视图是派生的，没错，但 log 是 ground truth——绕过视图去读日志就好了。这正是第 5 品预先堵死的退路。日志同样是被记录下来的东西：它有 schema、有编码、有采样边界，它也是一个「相」。缘起的系统是 derived all the way down，没有 base table。所以「若见诸相非相，即见如来」不是一条查询路径——不是说穿过视图、穿过日志，最终 resolve 到某个终极存储；而是说：在每一次读的当下，同时读出「这是一次折叠」这个事实本身，包括对日志的读。视图照常 serve，重建照常发生，只是「把它当实体」这个执取不再发生。这就是注家说的「即相离相」：不灭相，不避相，在相上看破相。</p>
+<pre><code class="language-typescript">type Marks = { readonly [feature: string]: boolean }; // lakṣaṇa：可辨识特征
+type Derived&lt;T&gt; = T &amp; { readonly provenance: &quot;fold&quot; }; // 一切读出之物都带此标记
+
+// 系统里没有 `tathagata` 实体表——只有因缘日志；而日志本身也是 Derived
+declare const causalLog: Derived&lt;Array&lt;{ seq: number; delta: Partial&lt;Marks&gt; }&gt;&gt;;
+
+/** 缘聚则成，缘离则灭：任何「身相」都是对日志的一次折叠，可弃可重建 */
+function materializeMarks(upTo: number): Derived&lt;Marks&gt; {
+  const view = causalLog
+    .filter((e) =&gt; e.seq &lt;= upTo)
+    .reduce&lt;Marks&gt;((acc, e) =&gt; ({ ...acc, ...e.delta }), {});
+  return { ...view, provenance: &quot;fold&quot; };
+}
+
+/** 「可以身相见如来不？」——试图按视图 resolve 实体 */
+function resolveEntityBy(_view: Derived&lt;Marks&gt;): never {
+  // 「如来所说身相，即非身相」：派生物没有主键指回一个自存的实体
+  throw new Error(&quot;derived view has no backing entity&quot;);
+}
+
+// 「凡所有相，皆是虚妄」：不是视图算错了，而是「是视图」这个性质
+// 本身就意味着有损与过期——对全体折叠成立，包括 seq 再大的那一次
+console.assert(materializeMarks(108).provenance === &quot;fold&quot;);
+</code></pre>
+<p>这个映射在哪里失效：工程上区分派生与真源，动机是可靠性——它默认栈底总有一层可信存储兜底，而工程系统也确实需要这一层；般若恰恰抽掉这个兜底，且不许你用「无真源」再造一个新的形而上真源。更根本的差异在观察者：代码里的「见」仍是一次有调用者的函数调用，调用者站在系统外拿返回值，而「见诸相非相」里没有站在外面的观察者——那个能观、所用的类型系统、乃至「派生」这个概念本身，同样在缘起之流里。把这一品读成「数据建模最佳实践」，就又造了一个相。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -182,6 +196,40 @@ footer a{color:var(--ink-soft)}
 <p>第三层："非法，非非法"像是拒绝二值逻辑的强制求值。系统问你：法存在，true 还是 false？本品的回答是拒绝这个类型的问题本身——不是返回 null，而是指出该谓词对此对象未定义（undefined predicate），类似问"绿色的重量是多少"。执"法"是 true 的错误，执"非法"是 false 的错误，两者共享同一个更深的错误：以为这是个可布尔化的命题。</p>
 <p>第四层："以无为法而有差别"——真理是同一个常量，贤圣的差别是逼近精度的差别。像同一个无理数 π，不同算法逼近到不同位数；位数有高下，π 本身无高下。差别全部落在求值者一侧。</p>
 <p>类比在哪里失效：神经网络的参数构型虽不可用规则清单表达，原则上仍是一个物理可描述的状态——足够大的存储就能复制它。而"无为法"的不可说更强：它根本不是一个状态、一个对象，不在"可复制/不可复制"的论域之内。工程里的"不可序列化"是实践困难，佛学里的"不可说"是范畴错误——前者是带宽问题，后者是类型问题。失效的这一步，恰好就是"非法非非法"要你亲自跨过去的那一步：任何模型（包括本节这个模型）本身也是筏，用完当舍。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>第 7 品的两个问题，翻译成代码评审的语言，是一次类型审查：「觉悟」这个东西，在你的系统模型里是什么类型？佛的问法（「如来得……耶？」）默认了一个答案——它是值类型：可以被实例化、被持有、从无到有地转移进某个人的名下。须菩提的整段回答只做一件事：驳回这个类型标注。</p>
+<p>区分两类东西。一类是系统里的状态：字段、对象、堆上的分配，有生有灭，可以 get 也可以 set——这对应「有为法」。另一类是系统的性质（property）：比如一个分布式存储的线性一致性。你在代码库里 grep 不到「一致性」这个对象；没有哪一行代码是它，没有哪个节点持有它；它不占内存，不进堆，只对整个系统成立或不成立。「无为法」属于第二类。所以「得菩提」在类型上就不成立：性质没有实例，无法转移到任何 owner 名下。更彻底的是，让性质开始成立的那次变更，往往是一个纯删除的 diff——像修一个内存泄漏，你不是往堆里加了什么，而是放掉了一直不该持有的引用。变更生效之后，系统的行为整个不同了，而堆里没有新增任何对象。这就是「无所得」的工程语义：diff 全是红的，却不是什么都没有发生。</p>
+<p>「说法」被同样处理。性质不可能被有限地写尽：任何断言、任何测试用例，都是针对某一类具体缺陷写下的检查——「对病设药」。测试全绿不等于正确性本身。把某条断言当成性质本体，是把检查误认成被检查者，此谓「不可取」；而无论积累多少条断言，这个集合也不会收敛为性质本身，此谓「不可说」。</p>
+<p>于是「非法，非非法」也有了准确的落点：不许把性质实体化为仓库里的一份工件——那是执有；也不许因为写不尽就删光所有断言、宣布根本没有性质可言——那是执无，等于 anything goes。最后，「一切贤圣，皆以无为法而有差别」：贤圣不是各自持有不同的真理。他们面对的是同一个性质，差别只在各自残余的违反还剩多少——那是一条减法的进度条，刻度不在拥有了什么上，而在还没放下什么上。</p>
+<pre><code class="language-python">from typing import Protocol
+
+class Attainable(Protocol):
+    &quot;&quot;&quot;凡可「得」者：可实例化、可持有、可转移进某个 owner 名下。&quot;&quot;&quot;
+    def transfer_to(self, owner: &quot;Agent&quot;) -&gt; None: ...
+
+
+# 修正：觉悟不是系统里的一份状态，而是系统满足的一个性质。性质没有实例。
+
+def grasped_refs(mind: State) -&gt; set[Ref]:
+    &quot;&quot;&quot;仍被强持有的引用：能取的我，与所取的法。&quot;&quot;&quot;
+    ...
+
+def bodhi(mind: State) -&gt; bool:
+    # 「无有定法，名阿耨多罗三藐三菩提」：
+    # 谓词成立的那一刻，堆里没有新增任何对象——是减法完成，不是资产入账。
+    return not grasped_refs(mind)
+
+def teach(bug: type[Grasping]) -&gt; Assertion:
+    &quot;&quot;&quot;「对病设药」：每次说法都是针对一类执取写下的断言。
+    断言只是对性质的一次有损检查——「皆不可取、不可说」。&quot;&quot;&quot;
+    ...
+
+def rank(sages: list[State]) -&gt; list[State]:
+    # 「一切贤圣，皆以无为法而有差别」：
+    # 差别是残余执取的多少，不是各自持有的真理数量。
+    return sorted(sages, key=lambda m: len(grasped_refs(m)))
+</code></pre>
+<p>这个映射在哪里失效：<code>bodhi(mind)</code> 仍是一个外部观察者对系统状态求值的谓词，它预设了一个站在系统之外、拿着状态空间做检查的第三方视角，而般若要消解的恰恰是这个视角本身——能求值者与被求值者的分裂（能所），就是最后一个没放掉的引用。所以当这个函数返回 True 时，「我已无所执」作为一个被持有的结果，立刻又成了新的执取。模型可以把你送到这一步，但它的返回值必须连同模型一起丢弃。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

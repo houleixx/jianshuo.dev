@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -179,6 +193,39 @@ footer a{color:var(--ink-soft)}
 <p>另一个贴合的模型是波与介质。水波从湖心推到岸边，看起来有个「东西」移动了几百米，但没有任何一个水分子走完这段路——每个水分子只在原地画圈。「波来了」是模式（pattern）层面的描述，对水分子层面不成立。南怀瑾的电灯比喻是同一个结构：灯亮了，「电来了」，但并没有一个叫「电」的物件从电厂搬运到你家。来去是我们对模式的叙事投影。</p>
 <p>还有那个名字里的自指机关：tathāgata 由「来」「去」两个词根拼成，定义却同时否定来去——像一个变量名叫 <code>currentPosition</code>，而它绑定的类型被声明为「无位置」。标识符与语义彻底解耦：名字只是句柄（handle），对句柄做 dereference，不保证得到名字暗示的那种对象。「故名如来」的「名」字，说的正是这件事：这只是个句柄。</p>
 <p>类比到这里为止都成立，但要标出失效点。第一，「协议 / 类型 / 不变式」仍是概念构造，是人类心智搭的抽象层——而佛学说的法身不是「更高一层抽象」，它不在类型系统里的任何一层，般若的刀连「抽象层」这个概念本身也要切掉。第二，波的类比里，介质（水）仍是一个可执著的实体，你会忍不住说「至少水是真的」——而《金刚经》下一品（第 30 品）马上就把「微尘」和「世界」这两种介质也碾碎给你看。类比的失效处恰恰是经文的推进方向：工程思维停在「找到正确的抽象层」，般若要的是连找抽象层的那个动作一起放下。第三，类型错误靠推理即可识别，「威仪寂静」却要求在走路吃饭的当下亲证——这一步没有任何形式系统可以代劳。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>本品否定的不是一个答案，而是一种建模方式。工程师默认用可变对象给世界建模：一个实体，带 place 和 posture 两个字段，方法调用改写字段，时间就是一连串 mutation，日志记录它的轨迹。「如来若来若去，若坐若卧」正是这个模型——提问的人把如来实例化成了一个可变对象，然后开始追踪它的状态变迁。佛的判词「是人不解我所说义」下得很重，因为错的不是某次读数，而是 schema 本身。</p>
+<p>替换的模型是值语义。值不移动。42 从未从内存的一处「走到」另一处；你把它「传」进一个函数，没有任何东西发生位移，只是同一个值又在别处成立。把佛陀入城乞食那一段写成数据，不是一个对象在被反复改写，而是一条不可变的帧序列：每一帧记录一个时刻、一个位置、一个姿态，生成即定格，永不变更。所谓「来了」「去了」，是读取端对相邻两帧做 diff 之后讲出的故事——一个派生值。它不存在于任何一帧内部：逐帧检查，每一帧只是如其所是地在那里，没有任何一帧「正在移动」。Rich Hickey 对 identity 的定义在这里刚好用得上：identity 是我们叠加在一串不可变值之上的叙事。那个从舍卫大城走回来、洗足、敷座而坐的「佛」，就是这样一条叙事线——它是投影，不是数据。</p>
+<p>到这里要防一个更隐蔽的错误：以为热闹的帧流「背后」还有一个安静的存储层，一份不动的 master copy。没有。值语义不需要 backing store——寂静不是另一个地方，它就是这条流本身的语义：流里的每一个值都从未动过。行住坐卧一帧不缺，威仪照常运转；但整条流从头扫到尾，找不到一次真正发生过的位移。这就是品名「威仪寂静」的准确含义：寂静不在威仪之外，威仪的每一帧本身就是寂静的。相应地，「如来」这个词在流里也 grep 不到——它不是某一帧，不是帧的集合，也不是背后的单例；它命名的是每一帧都完全满足、却不存放在任何字段里的那件事：如其所是。无所从来，亦无所去，故名如来。</p>
+<pre><code class="language-typescript">type Posture = &quot;walking&quot; | &quot;standing&quot; | &quot;sitting&quot; | &quot;lying&quot;;
+
+// 每一帧是不可变的值：生成即定格，永不改写
+interface Frame {
+  readonly instant: number;
+  readonly place: string;
+  readonly posture: Posture;
+}
+
+const settle = (f: Frame): Frame =&gt; Object.freeze({ ...f });
+
+// 「若来若去」不是任何一帧的属性，
+// 而是读取端对相邻两帧做 diff 之后讲出的叙事——一个派生值
+function narrateMotion(prev: Frame, next: Frame): string | null {
+  if (prev.place === next.place) return null;
+  return `came from ${prev.place}, went to ${next.place}`;
+}
+
+// 「无所从来，亦无所去」：逐帧检查，
+// 整条事件流里没有任何一个值发生过位移
+function assertStillnessWithinConduct(stream: readonly Frame[]): void {
+  for (const frame of stream) {
+    console.assert(Object.isFrozen(frame), &quot;a value has no history of travel&quot;);
+  }
+  // 注意：这里没有第二个存储层。寂静不藏在帧的背后，
+  // 它就是这些帧的语义本身——「威仪寂静」
+}
+</code></pre>
+<p>这个映射的失效处在于：值语义仍然是一个模型，「帧」与「流」仍然是心智造出来的相——经文并不是让你从坏模型迁移到好模型，而是连「再换一个模型」的那只手也要松开；把般若读成「用不可变数据结构思考人生」，只是又冻结了一帧新的执著。此外，代码里的不动可以由类型和运行时担保、可以写断言去验证，「无所从来亦无所去」却不是一个待验证的命题——它要在走路、吃饭、坐下的那一步里亲见，而那里没有断言可写。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

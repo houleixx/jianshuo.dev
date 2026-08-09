@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -189,6 +203,45 @@ footer a{color:var(--ink-soft)}
 <p>第 14 品的特殊贡献在于两次"自指"操作，这正是它比前十三品更深的地方。第一次：须菩提说"实相者，则是非相"——相当于宣布连元语言也不豁免。塔尔斯基处理真值悖论的办法是把对象语言和元语言分层，"真"这个谓词只能在上一层语言中定义；而《金刚经》拒绝给任何一层发豁免权："实相"（对真实的正确认知）本身也是一个符号，也要被"即非"。第二次："第一波罗蜜，即非第一波罗蜜"——解构工具解构自身，类似一个把自己也列入清理范围的垃圾回收器。系统不允许任何 token 逃出引号，包括它自己的元语言。</p>
 <p>歌利王的案例可以用无状态服务（stateless service）来理解。瞋恨的产生需要一个持久化的会话状态：有一个跨请求存在的"我"，把这次伤害记入自己的账本，才谈得上怨恨。四相皆无，相当于每个事件处理完即释放，没有一个累积 grievance 的 session 对象——疼痛信号照常传入（佛教不否认受，vedanā），但没有那个把疼痛登记为"我的受害记录"的持久化层。伤害无处落账，瞋恨这个函数因缺少 self 参数而无法调用。</p>
 <p>类比的失效处必须说清楚，而失效处正是佛学越出工程学的地方。第一，无状态服务是工程师设计出来的架构选择，而"无我"是一个发现性命题：佛教声称那个持久的 self 从来就不存在，我们只是一直在运行一个把连续事件误编译成"同一个我"的进程——离相不是删除某个对象，是看穿它从未被实例化。第二，符号与所指的类比会诱导一个误解：以为拆掉符号之后还剩一个"裸的真实"可以直接访问。本品恰恰堵死了这条路——"实相者，则是非相"，不存在一个绕过一切表示的裸 API。工程世界里 map 之下总有 territory；般若的立场是：你能拿到的每一张 territory，仔细看，还是 map。明暗喻说的就是这个：放下对某一张 map 的独占性执着，不是失明，而是第一次看清整个视野。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>工程界流传一句老话：计算机科学只有两件难事，缓存失效和命名。第 14 品同时谈到了这两件事，并且给出的答案比工程界的更彻底。</p>
+<p>心对世界做的事情，很像一层自动加载的缓存。每观测一次，就把结果物化成一条记录——"我"、"人"、"众生"，都是这样的物化视图；"寿者相"则是给这些记录默认配了一个近乎无限长的 TTL。此后所有的读请求都打在缓存上，不再回源。这就是"住"。</p>
+<p>问题在于，源头是一个永不停写的流。对一个每毫秒都在变的数据源，任何快照在写入完成的那一刻就已经过期。"若心有住，则为非住"——你以为缓存给了你一个稳定的立足点，实际上你立足的是一条必然 stale 的记录。执着的毛病不是"抓得太紧"，而是"读到的太旧"：你在跟一份过期数据里的世界打交道。</p>
+<p>歌利王的案例在这个语义下变得很干净。瞋恨这个计算需要一次 join：伤害事件流入后，得跟缓存里那行叫"我"的记录做关联，累积成"我的受害史"，怨恨才成立。"无我相"等于表里根本没有这一行——疼痛照常流过（经文不否认受），join 的结果是空集。于是忍辱波罗蜜被重新定义：不是给"我"这一行加写锁、硬扛并发冲击的英雄主义，而是那一行从未存在。这就是"忍辱波罗蜜，如来说非忍辱波罗蜜"。</p>
+<p>本品最深的一步是把失效策略应用到策略自身。"实相"——对真实的正确认知——一旦被物化成一条记录抓在手里，立刻变成又一条过期缓存，所以须菩提说完就自拆："是实相者，则是非相。""第一波罗蜜，即非第一波罗蜜"同理：连"不缓存"这条规则，写死供奉起来，也是新的缓存。般若的失效是全量的，不给任何条目豁免，包括它自己。</p>
+<p>结尾的明暗喻由此可以直译：住法布施如人入暗——从缓存里读，你只能看见写入那一刻的世界，此后的一切变化都在视野之外，这就是黑暗的确切含义。无所住不是关掉眼睛，而是撤掉缓存层，每个请求读穿到当下：如人有目，日光明照，见种种色。离相的收益不是空无，是新鲜度。</p>
+<pre><code class="language-typescript">type Perception = { readonly seen: string; readonly at: number };
+
+interface World {
+  observe(): Perception; // 源头是永不停写的流：每次观测结果都不同
+}
+
+// 相（saṃjñā）：把一次观测物化成记录，并默认永不过期——寿者相
+class DwellingMind {
+  private selfImage?: Perception; // 我相：被钉死的缓存行
+
+  perceive(world: World): Perception {
+    this.selfImage ??= world.observe(); // 只在第一次回源
+    return this.selfImage; // 此后读到的永远是旧值：&quot;如人入暗，则无所见&quot;
+  }
+}
+
+// 无所住心：不持有任何缓存行，每个请求都读穿到当下
+class NonAbidingMind {
+  perceive(world: World): Perception {
+    return world.observe(); // &quot;如人有目，日光明照，见种种色&quot;
+  }
+  // 这个类没有 invalidate() 方法，因为没有东西需要失效。
+  // 若把&quot;永不缓存&quot;固化成一条策略供奉起来，策略本身又成了缓存
+  // ——&quot;第一波罗蜜，即非第一波罗蜜&quot;
+}
+
+const dwelling = new DwellingMind();
+dwelling.perceive(world);
+// 若心有住，则为非住：快照在写入完成的那一刻就已过期
+assert(dwelling.perceive(world).at &lt; world.observe().at);
+</code></pre>
+<p>这个映射在关键处失效。缓存模型预设了一个可以读穿抵达的权威数据源，而本品恰恰堵死了这条路——"实相者，则是非相"：你每次回源拿到的仍是一次观测（saṃjñā），而不是"裸的世界"，不存在一个最终真源供你 observe()。其次，工程里的缓存是为摊薄读成本而做的合理权衡，失效策略是可调优的参数；而般若所说的这层缓存从来没有兑现过它承诺的东西——"我"这条记录不是过期了，是从未对应过任何真实的行。无所住不是把 TTL 调到零的极限优化，是看穿整张表的虚构。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

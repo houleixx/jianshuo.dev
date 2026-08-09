@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -183,6 +197,40 @@ footer a{color:var(--ink-soft)}
 <p>「不生法相」而又「如是知、如是见、如是信解」，很像一个无状态服务（stateless service）的设计约束：每个请求照常被完整处理——解析、计算、响应，一样不少——但处理完不把中间表征持久化为全局状态。心照常运行表征（认知系统不可能不用表征，正如服务不可能不用内存），被禁止的只是把表征写盘、当成 ground truth 长期锁定。</p>
 <p>最精彩的是末句的自指。「所言法相者，即非法相，是名法相」是把规则应用于规则自身，结构上类似哥德尔式的自指或程序里的不动点：一个对所有概念做「去实体化」操作的算子，最后必须能吃掉自己，否则它就成了唯一的例外——一个新的、更顽固的实体。《金刚经》在这里完成了闭包：算子作用于自身而不崩溃，说明这套否定不是又一个理论，而是一个对任何理论（包括自身）都生效的操作。</p>
 <p>类比的失效处也要说清楚。工程师抛弃一个模型，是为了换一个拟合更好的模型，目标函数是预测精度，动作是迭代；本品不是让你换模型，而是止息「执模型为实」的抓取动作本身，目标是解脱而非精度。统计学家 Box 说「所有模型都是错的，但有些有用」，工程师听完继续调参；《金刚经》关心的是那个「非用模型不可、并暗中相信模型为真」的抓取惯性——这一层没有工程对应物，正是佛学越出类比的地方。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>本品处理的故障模式，每个维护过大型系统的人都见过：派生值被当成了真源（source of truth）。</p>
+<p>第 3 品破「相」，破的是一次具体的错误读数——心里闪过「有一个我」，像一次脏读，事务结束就该消失。本品破「见」，破的是更顽固的一层：某次计算的输出被缓存下来，从此所有请求都直接命中缓存，再也不回源。dṛṣṭi（见）就是一条 TTL 被设成无穷大的缓存条目——它本来是从当时的条件（因缘）派生出来的中间结果，却被固化成权威数据，后续一切认知都在它之上做增量更新，误差从此复利。缓存失效之所以是计算机科学两大难题之一，正因为写入的那一刻，没有任何东西提醒你：这只是派生的。</p>
+<p>开头那段对话破的是另一个工程师熟悉的混淆：mention 与 use。佛谈到「我见」，如同 lint 规则里引用一段反模式代码——引用它是为了标记它，不是为了推荐它。把「佛说过四见」读成「佛主张四见实有」，等于把警告信息里的坏例子当成 API 文档来调用。药方被当成了病本身。</p>
+<p>「X，即非 X，是名 X」在这套语义里是一次精确的元数据操作：值照常可读，名字照常参与通信（是名），但条目被永久打上 derived 标记（即非）——任何一次取用都不得省略「这是派生值，须回源重算」这个前提。注意佛没有让你清空缓存、关停计算。「应如是知、如是见、如是信解」：请求照常处理，视图照常渲染，认知系统不可能不产出中间结果。被禁止的只有一个操作：promote——把任何一个派生视图升格为真源。破的是升格，不是派生。</p>
+<p>最后一句把同样的操作施加于这条策略自身。「不生法相」如果被写成一条权威配置，它就成了系统里唯一免于失效的条目，恰好违反自己。所以策略必须自带声明：本策略同样是派生值。工程上我们几乎从不这样做——配置树总要有个根，部署总要有个不动点；《金刚经》的激进之处在于，连根也标记为 derived，且系统不因此崩溃。</p>
+<pre><code class="language-typescript">type Conditions = Record&lt;string, unknown&gt;;
+
+// 一切见解都是派生值：由条件计算而来，携带来源，永不权威。
+interface Derived&lt;T&gt; {
+  readonly value: T;
+  readonly from: Conditions;
+  readonly authoritative: false; // 字面量类型：合法状态里不存在「权威的见」
+}
+
+// 「应如是知，如是见，如是信解」——计算照常进行，一样不少
+function view&lt;T&gt;(compute: (c: Conditions) =&gt; T, from: Conditions): Derived&lt;T&gt; {
+  return { value: compute(from), from, authoritative: false };
+}
+
+// 「不生法相」：类型系统里不存在 SourceOfTruth&lt;T&gt;，
+// 因此写不出任何 promote(v: Derived&lt;T&gt;): SourceOfTruth&lt;T&gt;。
+// 非法状态不是被运行时拦截，而是不可表达。
+
+// 「所言法相者，即非法相，是名法相」——本策略自身也只是一个派生视图
+const policy = view(
+  () =&gt; &quot;no derived view may be promoted to source of truth&quot;,
+  { origin: &quot;conditions, not essence&quot; }
+);
+
+// 调用方拿到的永远是 { value, from, authoritative: false }：
+// 名字照用（是名），实体性在类型层面无处安放（即非）。
+</code></pre>
+<p>这个映射在哪里失效：缓存之所以能回源，是因为工程世界里确实存在一个 origin 服务器；而般若的「回源」回到的不是一层更真的数据，而是发现「真源」这个概念本身也是派生的——失效链条没有终点，也不需要终点。程序员失效缓存是为了换取更高的正确性，目标函数还在；佛失效「见」，止息的是「必须持有权威数据才能安心」的抓取本身——这一层没有工程对应物，代码只能演示到 <code>authoritative: false</code> 为止。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>

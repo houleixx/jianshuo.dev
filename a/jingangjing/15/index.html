@@ -123,6 +123,20 @@ h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
   padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
   letter-spacing:.09em}
 .sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
 /* 理工男视角 panel */
 .sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
   border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
@@ -185,6 +199,46 @@ footer a{color:var(--ink-soft)}
 <p>第一，有限累加到不了另一个基数。三时舍身、无量劫布施，本质上是一个巨大的求和：Σ(单次善行)。但只要每一项都是有限值、且累加发生在同一个度量空间内，总和永远停留在这个空间里——就像有限数相加永远得不到无穷，可数集合怎么并也并不出不可数集合。「不可称量、无边」在说：般若功德不是这个求和序列的极限，它压根不在这条数轴上。类比失效处也在这里：佛学的主张不是「无穷大于有限」这种数学关系，而是「有漏福报在轮回度量内、无漏智慧脱离该度量」——它否定的是度量框架的适用性，而不是给出一个更大的数。</p>
 <p>第二，荷担如来是接手维护权。一个开源项目的用户和它的 maintainer 是两种角色：用户消费功能，maintainer 对代码库的存续负责——review、修复、传给下一代。 「受持读诵、广为人说」就是从用户转为 maintainer：佛法这个「项目」在佛灭后没有中央服务器，它的存续完全依赖每一代承载者。「乐小法者」类似只 fork 来解决自己问题、从不上游回馈的人——不是道德指责，而是角色事实：他们的目标函数（个人解脱）不包含项目存续这一项，自然担不起维护权。</p>
 <p>第三，「则为是塔」是分布式系统里的完整副本。塔本来是中心化圣物存放点——舍利只有一份，塔的神圣性来自独占。而「在在处处，若有此经，则为是塔」宣布了去中心化：法不在某个唯一地点，任何一份完整副本所在之处就是全部。这和 git 的设计一致——每个 clone 都是完整仓库，不存在降级的「镜像」。失效处：git 副本的等价性靠哈希校验保证字节级一致，而经文的「副本」要求的不是文本保真，而是有人真正受持——一卷无人读的经并不自动成塔。佛学在此超出类比：载体的神圣性最终仍系于「信心不逆」的人，而不是信息本身的冗余存储。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>本品把功德较量推到极限：每天三次、每次以恒河沙数的身体布施，持续无量劫，仍不敌「闻此经典，信心不逆」。深度解读给出的判据是「有漏」与「无漏」之别。「漏」这个字，对维护过长期运行系统的工程师几乎不需要翻译——它就是 leak。</p>
+<p>考虑一个跑了很多年的进程。它不停地分配对象，每个对象都有明确的 owner，owner 又被别的对象引用。只要引用图里出现一个环——A 持有 B，B 回指 A——而这个环从 root 可达，回收器就永远不会碰它。分配越多，环越大，堆越满，却没有一个字节被真正释放。注意：泄漏的根源不在任何单次操作，每一次分配都可以是「好」的分配；问题出在所有权结构。</p>
+<p>三时舍身，正是这样的分配。惠能说这种布施「心有能所」：有能施的我，有所施的对象，有归于我的福报。翻译成引用语义：self 持有 deed，deed 产生的 reward 回指 self。每布施一次，就往这个环上加一条边；无量百千万亿劫的布施，是把这个自引用的环滚到天文尺度——但环仍然是环。有漏福报「再大也有限量」的工程含义是：只要所有权回路闭合，无论累积多少，它都留在堆里，随进程的生命周期流转，这个流转就叫轮回。</p>
+<p>「闻此经典，信心不逆」做的不是又一次分配。般若的动作是去检查 root set，然后发现一件事：「我」不在里面。self 不是 GC root，它本身就是堆上被无数引用相互支撑出来的一个对象。本品用「我见」替换了前文的「我相」，区别也可以在这里落地：「相」是把 self 当作一次运行时快照，「见」是把「self 是 root」hardcode 成编译期常量。一旦看清 root set 里没有 self，整个 self–deed–reward 的巨环从真正的 root 不可达，标记阶段扫不到，清除阶段一次回收——亿万劫滚出来的环，不是被一笔更大的福报比下去，而是整个换了量纲：「不可称量」的意思是它已经不在堆的计量体系之内。</p>
+<p>「乐小法者……于此经不能听受」由此获得准确的工程解释：如果一个系统的全部正确性证明都建立在「self 是 root」这条公理上，那么「root set 里没有 self」对它不是一条新知识，而是一个 fatal error。听不进去不是态度问题，是类型不兼容。而「荷担如来」提醒我们另一面：这个检查不是静态数据，必须有进程去执行它。受持、读诵、为人解说，是让这段逻辑在一代又一代的运行时里保持活跃——经在哪里被真正执行，哪里就是塔。</p>
+<pre><code class="language-typescript">interface Obj {
+  id: string;
+  refs: Obj[];
+}
+
+/** 有漏之福：布施本身没有错，错在所有权回路。 */
+function giveWithSelf(self: Obj): void {
+  const reward: Obj = { id: `reward-${self.refs.length}`, refs: [self] };
+  const deed: Obj = { id: `deed-${self.refs.length}`, refs: [reward] };
+  self.refs.push(deed); // 「心有能所」：我 → 行为 → 福报 → 回指我，环闭合
+}
+
+/** 标记阶段：只从真正的 root 出发。 */
+function reachable(roots: Obj[]): Set&lt;Obj&gt; {
+  const marked = new Set&lt;Obj&gt;();
+  const stack = [...roots];
+  while (stack.length &gt; 0) {
+    const obj = stack.pop()!;
+    if (!marked.has(obj)) {
+      marked.add(obj);
+      stack.push(...obj.refs);
+    }
+  }
+  return marked;
+}
+
+/** 闻此经典，信心不逆：不分配更大的福报，只检查一个前提。 */
+function prajna(roots: Obj[], self: Obj): void {
+  console.assert(!roots.includes(self), &quot;self 不是 root，它只是堆上的对象&quot;);
+  console.assert(!reachable(roots).has(self),
+    &quot;self–deed–reward 之环整体不可达：亿万劫所累，一次回收&quot;);
+}
+</code></pre>
+<p>这个映射在关键处失效：GC 的回收等于对象消灭，而般若破除我执并不是断灭——「无我」之后，缘起的显现照常运行，佛法明确拒绝「回收完什么都不剩」的断见。经文还说「其福胜彼」：无漏功德不是零，而是不可称量，堆模型里没有任何状态能表达「被释放、却更丰饶」。代码只能演示环从何处断；断掉之后是什么，类型系统写不出来。</p></div>
 <h2>关键概念</h2>
 <div class="tablewrap"><table>
 <thead>
