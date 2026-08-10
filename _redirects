@@ -14,3 +14,9 @@
 /a/why-did-he-sell/* /voicedrop/books/why-did-he-sell/:splat 301
 /a/stock-101 /voicedrop/books/stock-101/ 301
 /a/stock-101/* /voicedrop/books/stock-101/:splat 301
+/a/jingangjing /voicedrop/books/jingangjing/ 301
+/a/jingangjing/* /voicedrop/books/jingangjing/:splat 301
+/a/bazi /voicedrop/books/bazi/ 301
+/a/bazi/* /voicedrop/books/bazi/:splat 301
+/a/tcm-analysis /voicedrop/books/tcm-analysis/ 301
+/a/tcm-analysis/* /voicedrop/books/tcm-analysis/:splat 301
