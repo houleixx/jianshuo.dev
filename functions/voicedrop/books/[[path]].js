@@ -163,17 +163,17 @@ async function index(env) {
                repeating-linear-gradient(90deg,rgba(0,0,0,.03) 0 1px,transparent 1px 3px);
     pointer-events:none}
   .slip{position:absolute;top:9px;left:17px;z-index:1;background:var(--slip);
-    padding:12px 6px 14px;writing-mode:vertical-rl;max-height:76%;
+    padding:13px 7px 15px;writing-mode:vertical-rl;max-height:80%;
     border-radius:1px;box-shadow:0 1px 2px rgba(0,0,0,.28)}
   .slip::after{content:"";position:absolute;inset:3px;border:1px solid rgba(42,37,32,.22)}
   .t{font-family:"Songti SC","Noto Serif SC","Source Han Serif SC",STSong,serif;
     font-weight:900;line-height:1;color:var(--slip-ink);display:block;
     white-space:nowrap;max-height:100%;overflow:hidden}
-  .s5{font-size:20px;letter-spacing:.14em}
-  .s7{font-size:16.5px;letter-spacing:.12em}
-  .s9{font-size:14px;letter-spacing:.10em}
-  .s12{font-size:12px;letter-spacing:.06em}
-  .s99{font-size:10.5px;letter-spacing:.04em;white-space:normal}
+  .s5{font-size:26px;letter-spacing:.14em}
+  .s7{font-size:20px;letter-spacing:.10em}
+  .s9{font-size:15.5px;letter-spacing:.08em}
+  .s12{font-size:12.5px;letter-spacing:.04em}
+  .s99{font-size:11.5px;letter-spacing:.04em;white-space:normal}
   .sub{position:absolute;top:14px;right:9px;z-index:1;writing-mode:vertical-rl;
     max-height:62%;overflow:hidden;font-size:10.5px;line-height:1.35;
     letter-spacing:.12em;color:rgba(255,255,255,.72)}
