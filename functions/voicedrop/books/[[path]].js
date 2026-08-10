@@ -31,14 +31,19 @@ export async function onRequest({ request, env, params }) {
     return new Response('method not allowed', { status: 405 });
   }
   const segments = Array.isArray(params.path) ? params.path : (params.path ? [params.path] : []);
-  const rel = decodeURIComponent(segments.join('/'));
+  let rel = decodeURIComponent(segments.join('/'));
   if (rel.includes('..') || rel.startsWith('/')) return notFound();
 
   // 索引页：/books 或 /books/
   if (!rel) return index(env);
 
-  const key = PUBLISHER + rel;
-  const obj = request.method === 'HEAD' ? await env.FILES.head(key) : await env.FILES.get(key);
+  const fetchKey = (key) => (request.method === 'HEAD' ? env.FILES.head(key) : env.FILES.get(key));
+  let obj = await fetchKey(PUBLISHER + rel);
+  // 目录路径（/books/<slug> 或 /books/<slug>/，[[path]] 不保留尾斜杠）→ 补 index.html
+  if (!obj && !rel.split('/').pop().includes('.')) {
+    rel = rel.replace(/\/$/, '') + '/index.html';
+    obj = await fetchKey(PUBLISHER + rel);
+  }
   if (!obj) return notFound();
 
   const ext = (rel.split('.').pop() || '').toLowerCase();

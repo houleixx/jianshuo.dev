@@ -10,9 +10,7 @@
 /tweets/* /a/tweets/:splat 301
 
 # books moved to the voicedrop shelf (R2-backed, see functions/voicedrop/books/)
-/a/why-did-he-sell /voicedrop/books/why-did-he-sell/index.html 301
-/a/why-did-he-sell/ /voicedrop/books/why-did-he-sell/index.html 301
+/a/why-did-he-sell /voicedrop/books/why-did-he-sell/ 301
 /a/why-did-he-sell/* /voicedrop/books/why-did-he-sell/:splat 301
-/a/stock-101 /voicedrop/books/stock-101/index.html 301
-/a/stock-101/ /voicedrop/books/stock-101/index.html 301
+/a/stock-101 /voicedrop/books/stock-101/ 301
 /a/stock-101/* /voicedrop/books/stock-101/:splat 301
