@@ -193,49 +193,32 @@ async function getSessionMessages(id: string) {
 // 认证不走 Caddy basic_auth（Caddyfile 对此路径豁免）：客户端带 VoiceDrop 用户
 // bearer（anon_*/session JWT），这里拿它去 jianshuo.dev whoami 验真——app 里零内置密钥。
 const BOOK_MAX_TURNS = Number(process.env.BOOK_MAX_TURNS ?? 80);
-const BOOK_DAILY_LIMIT = Number(process.env.BOOK_DAILY_LIMIT ?? 2);
-const WHOAMI_URL = process.env.WHOAMI_URL ?? "https://jianshuo.dev/files/api/whoami";
-const ARTICLES_URL = process.env.ARTICLES_URL ?? "https://jianshuo.dev/files/api/articles";
-let bookJobRunning = false;
-// per-scope 当日已写本数（进程内存，重启清零——1 核小机够用）
-const bookQuota = new Map<string, { day: string; count: number }>();
+const BOOK_CHARGE_URL = process.env.BOOK_CHARGE_URL ?? "https://jianshuo.dev/agent/usage/book-charge";
 
-// ⚠️ anon token 是客户端自造随机数，whoami 对任何格式正确的 token 都散列出
-// scope 返回 200——所以 whoami 只提供归因，不是门槛。真门槛 = 该 scope 必须
-// 已有成文文章（GET /articles 非空）：伪造 token 散列出的 scope 永远是空的，
-// 全被挡掉；真用户得先录音成文才能写书。
-async function verifyVoiceDropToken(auth: string | undefined): Promise<string | null> {
-  if (!auth?.startsWith("Bearer ")) return null;
+// 认证 = 计费（2026-08-10 起，替代早前的「须有成文文章 + 每日限额」门槛）：
+// 转发用户 bearer 到 agent worker 的 book-charge，一口价扣 320 算力，扣成功才开写。
+// 伪造随机 token 的新账户只有 200 注册赠送 < 320 → 402，天然挡住；数量限制全部
+// 取消——算力就是闸门。dry=true 只验余额不扣（部署冒烟 + App 预检）。
+async function chargeBook(
+  auth: string | undefined,
+  seed: string,
+  dry: boolean,
+): Promise<{ status: number; body: any }> {
+  if (!auth?.startsWith("Bearer ")) return { status: 401, body: { error: "bad token" } };
   try {
-    const [who, arts] = await Promise.all([
-      fetch(WHOAMI_URL, { headers: { Authorization: auth } }),
-      fetch(ARTICLES_URL, { headers: { Authorization: auth } }),
-    ]);
-    if (!who.ok || !arts.ok) return null;
-    const scope = (await who.json() as any)?.scope;
-    const articles = (await arts.json() as any)?.articles;
-    if (typeof scope !== "string" || !Array.isArray(articles) || articles.length < 1) return null;
-    return scope;
+    const r = await fetch(BOOK_CHARGE_URL, {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ seed: seed.slice(0, 200), dry }),
+    });
+    const body = await r.json().catch(() => ({}));
+    return { status: r.status, body };
   } catch {
-    return null;
+    return { status: 502, body: { error: "charge unreachable" } };
   }
 }
 
-function underDailyQuota(scope: string): boolean {
-  const day = new Date().toISOString().slice(0, 10);
-  const q = bookQuota.get(scope);
-  return !q || q.day !== day || q.count < BOOK_DAILY_LIMIT;
-}
-
-function countBook(scope: string) {
-  const day = new Date().toISOString().slice(0, 10);
-  const q = bookQuota.get(scope);
-  if (q && q.day === day) q.count += 1;
-  else bookQuota.set(scope, { day, count: 1 });
-}
-
 function runBookJob(seed: string, scope: string) {
-  bookJobRunning = true;
   console.log(`[book] start scope=${scope} seed=${seed.slice(0, 120).replace(/\n/g, " ")}`);
   const q = query({
     prompt: `用 wjs-voicedrop-writing-book skill 写一本书。种子：\n${seed}`,
@@ -258,8 +241,6 @@ function runBookJob(seed: string, scope: string) {
       }
     } catch (e) {
       console.error("[book] job failed", e);
-    } finally {
-      bookJobRunning = false;
     }
   })();
 }
@@ -271,27 +252,19 @@ async function handleBook(req: IncomingMessage, res: ServerResponse, payload: an
     res.writeHead(400, json).end(JSON.stringify({ error: "empty seed" }));
     return;
   }
-  const scope = await verifyVoiceDropToken(req.headers.authorization);
-  if (!scope) {
-    res.writeHead(401, json).end(JSON.stringify({ error: "bad token" }));
+  // 扣费即准入：402 = 算力不足（body 里带 need_suanli/suanli 供 App 展示），
+  // 401 = token 无效。扣成功立刻开写——没有数量限制。
+  const charge = await chargeBook(req.headers.authorization, seed, !!payload?.dry);
+  if (charge.status !== 200 || !charge.body?.ok) {
+    res.writeHead(charge.status === 200 ? 502 : charge.status, json).end(JSON.stringify(charge.body));
     return;
   }
   if (payload?.dry) {
-    // 认证链路探活，不起 job、不计额度（部署冒烟用）
-    res.writeHead(200, json).end(JSON.stringify({ ok: true, dry: true, scope }));
+    res.writeHead(200, json).end(JSON.stringify(charge.body));
     return;
   }
-  if (!underDailyQuota(scope)) {
-    res.writeHead(429, json).end(JSON.stringify({ error: "quota" }));
-    return;
-  }
-  if (bookJobRunning) {
-    res.writeHead(409, json).end(JSON.stringify({ error: "busy" }));
-    return;
-  }
-  countBook(scope);
-  runBookJob(seed, scope);
-  res.writeHead(202, json).end(JSON.stringify({ ok: true }));
+  runBookJob(seed, String(charge.body.scope ?? ""));
+  res.writeHead(202, json).end(JSON.stringify({ ok: true, charged_suanli: charge.body.charged_suanli, suanli: charge.body.suanli }));
 }
 
 // --- chat runs（断线不中止） ---
