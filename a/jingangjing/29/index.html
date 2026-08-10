@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第二十九品 威仪寂静分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第29品「威仪寂静分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal three">二十九</span>
+  <h1>威仪寂静分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第二十九品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>“须菩提！若有人言：如来若来若去，若坐若卧，是人不解我所说义。何以故？如来者，无所从来，亦无所去，故名如来。”</p></div>
+<h2>白话</h2>
+<p>“须菩提！如果有人说：如来有来、有去、有坐、有卧——这个人没有理解我所说的义理。为什么？所谓如来，没有从任何地方来，也没有去往任何地方，所以才叫做‘如来’。”</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>先立靶子：假如有人把「如来」理解成一个会来、会去、会坐、会卧的对象——一个在时空中移动的实体，佛直接判定「是人不解我所说义」。</li>
+<li>然后给出理由，也是全经对「如来」一词唯一一次正面下定义：如来者，无所从来，亦无所去。</li>
+<li>定义本身构成一个悖论式的双关：这个名字里明明写着「来」，定义却恰恰是「无来无去」——名字与所指被硬生生拆开。</li>
+<li>品名「威仪寂静」点出落点：不是要取消行住坐卧四威仪，而是在来去坐卧的每一个动作之中，直接见到那个不动的东西。</li>
+</ol>
+<h2>深度解读</h2>
+<p>《金刚经》开篇第一幕，是佛「入舍卫大城乞食……饭食讫，收衣钵，洗足已，敷座而坐」——一连串具体不过的来、去、坐。到了第 29 品，佛回头把这一幕拆掉：如果你以为那个走来走去、坐下吃饭的就是「如来」，你就没听懂这部经。本品是对全经开头的一次远程呼应，也是对「如来」这个名号的最终结算。</p>
+<p>先看结构位置。全经破「相」是分层推进的：第 5 品说「凡所有相，皆是虚妄。若见诸相非相，即见如来」，破的是静态的身相；第 26 品说「若以色见我，以音声求我，是人行邪道，不能见如来」，破的是用感官通道去锁定佛；第 29 品更进一步，连动作相也破掉——来去坐卧是比色身更微细的执著对象，因为它们是事件而非实体，一般人不容易意识到自己在执著它们。三步下来，能被知觉捕捉的一切——形体、声音、行为——全部被判定为「不是如来」。那么如来到底是什么？本品给出正面答案：无所从来，亦无所去。</p>
+<p>这个答案在梵文里是一个精巧的文字机关。「如来」的梵文是 tathāgata，这个复合词有两种合法的拆法：tathā-gata（「如去」，这样去了的）和 tathā-āgata（「如来」，这样来了的）——词源本身就在「来」与「去」之间摇摆。而梵本此句作：Tathāgata iti Subhūte ucyate na kvacid-gato na kutaścid āgataḥ——「须菩提，所谓 Tathāgata，是指没有去到任何地方（na kvacid-gato）、也没有从任何地方来（na kutaścid āgataḥ）的那个」。名字的字面由 gata（去）和 āgata（来）构成，定义却对这两个词根同时否定。这正是全经「A，即非 A，是名 A」公式的极致用法：这一次，公式打到了佛自己的名号头上。孔兹（Edward Conze）的英译如实保留了这个机关："'Tathagata' is called one who has not gone anywhere, nor come from anywhere."</p>
+<p>「四威仪」（梵 īryāpatha）是佛教对身体姿态的标准四分法：行、住、坐、卧。值得注意的是一处译本差异：梵本此句列了五个动词——gacchati（去）、āgacchati（来）、tiṣṭhati（站住）、niṣīdati（坐）、śayyāṃ kalpayati（卧），鸠摩罗什译成「若来若去，若坐若卧」，省去了「住（站）」。这不影响义理——四威仪本就是对「身体一切姿态」的穷举式概括，列三个还是五个都是同一个意思：身体能摆出的所有状态，没有一个是如来。</p>
+<p>历代注家在这里的分歧值得细看。一路解法以三身框架切入：佛有法身（dharmakāya，法性之身，无形无相）、报身、化身，会来去坐卧的是应化身的示现，法身则「无所从来亦无所去」——江味农《金刚经讲义》判本品科目为「泯相入体」，即泯除应化之相、契入法身之体，走的大体是这一路。这种解法清晰，但有一个隐患：它容易让人以为在来去坐卧「背后」另藏着一个不动的实体，像戏台背后站着一个真人。</p>
+<p>禅门的解法堵住了这个隐患。六祖惠能《金刚经口诀》注此品只有一句话：「如来者，非来非不来，非去非不去，非坐非不坐，非卧非不卧。行住坐卧四威仪中，常在空寂，即是如来也。」注意他的措辞是双重否定——不是「不来」对治「来」，而是「非来非不来」，连「不动」这个相也一并遣掉；更关键的是后半句：空寂不在四威仪之外，而在四威仪「之中」。品名「威仪寂静」四个字本身就是这个立场：威仪与寂静不是两件事。南怀瑾《金刚经说什么》顺着这一路讲得更白：他用电作比喻——开关一开，灯亮了，「电来了没有？来过了，好像没有来」；并把这个观察直接用到修行上：「妄想本来空的呀，无所从来，亦无所去……清净根本没有跑，是你理解见地不够清楚。」念头的生灭、功夫的得失，同样无所从来亦无所去——不必留住清净，也不必赶走妄念。</p>
+<p>所以本品要回答的问题可以压缩成一句：既然前面把佛的相全破了，那眼前这位托钵走路的释迦牟尼是谁？答案是：你看到的来去坐卧是现象层的事件流，「如来」这个词从来不指向事件流里的任何一帧，它指的是「诸法如义」——事物如其所是的那个「如」（tathatā，真如）。「如」没有位置，因此谈不上来去；没有姿态，因此谈不上坐卧。名字叫「如来」，只是随顺世俗的称呼——故名如来。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>这一品处理的是一个类型错误（type error）。</p>
+<p>把「如来从哪里来、到哪里去」当成一个合法问题，相当于问「TCP 协议现在在哪台机器上」。某台服务器上的一次连接、一串握手包，确实在时空中发生——有源地址、有目的地址、有时间戳，这对应佛的应化身，来去坐卧历历分明。但「TCP 协议」本身没有 IP 地址。协议是一组不变式（invariant），它约束一切实现，却不居留在任何一次实现里。对协议问「你从哪个端口来」，编译器应该直接报错：该类型没有 position 字段。「是人不解我所说义」——佛在这里干的就是编译器的活：指出提问者把表现层（instance）的谓词用到了定义层（type）上。</p>
+<p>另一个贴合的模型是波与介质。水波从湖心推到岸边，看起来有个「东西」移动了几百米，但没有任何一个水分子走完这段路——每个水分子只在原地画圈。「波来了」是模式（pattern）层面的描述，对水分子层面不成立。南怀瑾的电灯比喻是同一个结构：灯亮了，「电来了」，但并没有一个叫「电」的物件从电厂搬运到你家。来去是我们对模式的叙事投影。</p>
+<p>还有那个名字里的自指机关：tathāgata 由「来」「去」两个词根拼成，定义却同时否定来去——像一个变量名叫 <code>currentPosition</code>，而它绑定的类型被声明为「无位置」。标识符与语义彻底解耦：名字只是句柄（handle），对句柄做 dereference，不保证得到名字暗示的那种对象。「故名如来」的「名」字，说的正是这件事：这只是个句柄。</p>
+<p>类比到这里为止都成立，但要标出失效点。第一，「协议 / 类型 / 不变式」仍是概念构造，是人类心智搭的抽象层——而佛学说的法身不是「更高一层抽象」，它不在类型系统里的任何一层，般若的刀连「抽象层」这个概念本身也要切掉。第二，波的类比里，介质（水）仍是一个可执著的实体，你会忍不住说「至少水是真的」——而《金刚经》下一品（第 30 品）马上就把「微尘」和「世界」这两种介质也碾碎给你看。类比的失效处恰恰是经文的推进方向：工程思维停在「找到正确的抽象层」，般若要的是连找抽象层的那个动作一起放下。第三，类型错误靠推理即可识别，「威仪寂静」却要求在走路吃饭的当下亲证——这一步没有任何形式系统可以代劳。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>本品否定的不是一个答案，而是一种建模方式。工程师默认用可变对象给世界建模：一个实体，带 place 和 posture 两个字段，方法调用改写字段，时间就是一连串 mutation，日志记录它的轨迹。「如来若来若去，若坐若卧」正是这个模型——提问的人把如来实例化成了一个可变对象，然后开始追踪它的状态变迁。佛的判词「是人不解我所说义」下得很重，因为错的不是某次读数，而是 schema 本身。</p>
+<p>替换的模型是值语义。值不移动。42 从未从内存的一处「走到」另一处；你把它「传」进一个函数，没有任何东西发生位移，只是同一个值又在别处成立。把佛陀入城乞食那一段写成数据，不是一个对象在被反复改写，而是一条不可变的帧序列：每一帧记录一个时刻、一个位置、一个姿态，生成即定格，永不变更。所谓「来了」「去了」，是读取端对相邻两帧做 diff 之后讲出的故事——一个派生值。它不存在于任何一帧内部：逐帧检查，每一帧只是如其所是地在那里，没有任何一帧「正在移动」。Rich Hickey 对 identity 的定义在这里刚好用得上：identity 是我们叠加在一串不可变值之上的叙事。那个从舍卫大城走回来、洗足、敷座而坐的「佛」，就是这样一条叙事线——它是投影，不是数据。</p>
+<p>到这里要防一个更隐蔽的错误：以为热闹的帧流「背后」还有一个安静的存储层，一份不动的 master copy。没有。值语义不需要 backing store——寂静不是另一个地方，它就是这条流本身的语义：流里的每一个值都从未动过。行住坐卧一帧不缺，威仪照常运转；但整条流从头扫到尾，找不到一次真正发生过的位移。这就是品名「威仪寂静」的准确含义：寂静不在威仪之外，威仪的每一帧本身就是寂静的。相应地，「如来」这个词在流里也 grep 不到——它不是某一帧，不是帧的集合，也不是背后的单例；它命名的是每一帧都完全满足、却不存放在任何字段里的那件事：如其所是。无所从来，亦无所去，故名如来。</p>
+<pre><code class="language-typescript">type Posture = &quot;walking&quot; | &quot;standing&quot; | &quot;sitting&quot; | &quot;lying&quot;;
+
+// 每一帧是不可变的值：生成即定格，永不改写
+interface Frame {
+  readonly instant: number;
+  readonly place: string;
+  readonly posture: Posture;
+}
+
+const settle = (f: Frame): Frame =&gt; Object.freeze({ ...f });
+
+// 「若来若去」不是任何一帧的属性，
+// 而是读取端对相邻两帧做 diff 之后讲出的叙事——一个派生值
+function narrateMotion(prev: Frame, next: Frame): string | null {
+  if (prev.place === next.place) return null;
+  return `came from ${prev.place}, went to ${next.place}`;
+}
+
+// 「无所从来，亦无所去」：逐帧检查，
+// 整条事件流里没有任何一个值发生过位移
+function assertStillnessWithinConduct(stream: readonly Frame[]): void {
+  for (const frame of stream) {
+    console.assert(Object.isFrozen(frame), &quot;a value has no history of travel&quot;);
+  }
+  // 注意：这里没有第二个存储层。寂静不藏在帧的背后，
+  // 它就是这些帧的语义本身——「威仪寂静」
+}
+</code></pre>
+<p>这个映射的失效处在于：值语义仍然是一个模型，「帧」与「流」仍然是心智造出来的相——经文并不是让你从坏模型迁移到好模型，而是连「再换一个模型」的那只手也要松开；把般若读成「用不可变数据结构思考人生」，只是又冻结了一帧新的执著。此外，代码里的不动可以由类型和运行时担保、可以写断言去验证，「无所从来亦无所去」却不是一个待验证的命题——它要在走路、吃饭、坐下的那一步里亲见，而那里没有断言可写。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>如来</td>
+<td>tathāgata</td>
+<td>佛的十号之一。复合词可拆为 tathā-gata（如去）或 tathā-āgata（如来），词源本身摇摆于来去之间；本品定义其为「无所从来亦无所去」</td>
+</tr>
+<tr>
+<td>无所从来，亦无所去</td>
+<td>na kvacid-gato na kutaścid āgataḥ</td>
+<td>梵本原句：没有去到任何地方，没有从任何地方来。对「如来」名号中两个词根（gata / āgata）的同时否定</td>
+</tr>
+<tr>
+<td>四威仪</td>
+<td>īryāpatha</td>
+<td>行、住、坐、卧四种身体姿态，概括身体的一切状态。梵本此处列五动词（去、来、住、坐、卧），罗什译省「住」</td>
+</tr>
+<tr>
+<td>真如</td>
+<td>tathatā</td>
+<td>事物如其所是的实相。「如来」之「如」即指此；「如」无方位、无姿态，故无来去坐卧</td>
+</tr>
+<tr>
+<td>法身</td>
+<td>dharmakāya</td>
+<td>佛的法性之身，无形无相、不生不灭；与示现来去坐卧的应化身相对。注家以此框架解本品，禅门则强调法身不在威仪之外</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>如来者，无所从来，亦无所去，故名如来。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>南怀瑾《金刚经说什么》二十九品 威仪寂静分（实修驿站）：http://www.shixiu.net/nanshi/zhuzuo/jgjssm/4385.html</li>
+<li>六祖惠能《金刚经口诀》威仪寂静（劝学网）：https://www.quanxue.cn/ct_fojia/jingangkj/jingangkj30.html</li>
+<li>Edward Conze 译《The Diamond Sutra in Sanskrit and English》第 29 节梵英对照：https://lienchungbacluchoaky.wordpress.com/2017/06/06/the-diamond-sutra-in-sanskrit-and-english-translated-from-the-sanskrit-by-edward-conze/</li>
+<li>江味农《金刚经讲义》威仪寂静分（地藏孝亲网）：https://www.dizang.org/jj/jgj/p34.htm</li>
+<li>百度百科「第二十九品威仪寂静分」：https://baike.baidu.com/item/%E7%AC%AC%E4%BA%8C%E5%8D%81%E4%B9%9D%E5%93%81%E5%A8%81%E4%BB%AA%E5%AF%82%E9%9D%99%E5%88%86/1495230</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/28/"><span class="lbl">← 上一品</span><span>不受不贪分</span></a><a class="next" href="/a/jingangjing/30/"><span class="lbl">下一品 →</span><span>一合理相分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

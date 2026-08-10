@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第三十二品 应化非真分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第32品「应化非真分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal three">三十二</span>
+  <h1>应化非真分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第三十二品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>“须菩提！若有人以满无量阿僧祇世界七宝，持用布施；若有善男子、善女人，发菩提心者，持于此经，乃至四句偈等，受持读诵，为人演说，其福胜彼。云何为人演说，不取于相，如如不动。何以故？”</p>
+<p>“一切有为法，如梦幻泡影，如露亦如电，应作如是观。”</p>
+<p>佛说是经已，长老须菩提及诸比丘、比丘尼、优婆塞、优婆夷、一切世间天、人、阿修罗，闻佛所说，皆大欢喜，信受奉行。</p></div>
+<h2>白话</h2>
+<p>“须菩提！假如有人用装满无量无数个世界的七种珍宝来做布施；又假如有善男子、善女人，发起了求觉悟之心，受持这部经，哪怕只是其中四句偈那么少的内容，能够领受奉持、阅读背诵、为他人讲说，那么后者的福德胜过前者。怎样为他人讲说呢？不执取任何相，安住于如如不动。为什么？”</p>
+<p>“一切因缘造作而成的事物，都像梦、像幻术、像水泡、像影子，像露水，也像闪电，应当这样去观察它们。”</p>
+<p>佛陀说完了这部经，长老须菩提和在场的比丘、比丘尼、男居士、女居士，以及一切世间的天众、人众、阿修罗众，听了佛的教导，都非常欢喜，深信领受，依教奉行。</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>最后一次福德较量：用装满无量阿僧祇个世界的七宝布施，其福不如一个发了菩提心的人受持、演说此经的四句偈。这是全经反复出现的比较格式的终章版本，并且首次点明受持者的资格——「发菩提心者」。</li>
+<li>回答「怎样演说」：不取于相，如如不动。讲经的人自己先不能执取任何相，才有资格把这部破相之经讲给别人。</li>
+<li>给出理由，即著名的「六如偈」：一切有为法，如梦幻泡影，如露亦如电，应作如是观。既然一切因缘造作之物皆无实体，自然无相可取。</li>
+<li>流通分收尾：四众弟子及天、人、阿修罗皆大欢喜，信受奉行。全经至此圆满。</li>
+</ol>
+<h2>深度解读</h2>
+<p>这是《金刚经》的最后一品。按中国注经传统的「三分科经」法（序分、正宗分、流通分），本品末段「佛说是经已……信受奉行」就是流通分——记录法会圆满、嘱托流传的标准结尾。而在结尾之前，佛把全经的两条主线各收拢了一次。</p>
+<p>第一条线是福德较量。全经从第 8 品起反复用「七宝布施 vs 受持四句偈」做对比，筹码不断加大，到本品达到极限：「满无量阿僧祇世界七宝」。阿僧祇（梵文 asaṃkhyeya）意为「无央数」，是印度数学里表示不可计量的大数单位。但本品与前面各次较量有一处关键差别：受持此经的人被限定为「发菩提心者」——发起求无上觉悟之心的人。福德不是来自念诵行为本身，而是来自发心与经义的相应。这呼应了第 2 品须菩提的最初提问「善男子、善女人，发阿耨多罗三藐三菩提心，应云何住」——全经以发菩提心者之问开始，以发菩提心者之福结束，首尾闭合。</p>
+<p>第二条线是「说而无说」。经中多次说「如来无所说法」「若人言如来有所说法，即为谤佛」（第 21 品），那么现在要求受持者「为人演说」，岂不自相矛盾？本品的回答是八个字：「不取于相，如如不动。」相（梵文 nimitta / lakṣaṇa），指心所执取的一切表象、特征；如如（梵文 tathatā，又译真如），指事物不依概念加工的本然状态。演说时不执取「我在说法」「有法可说」「有人听法」这些相，心安住于真如而不动摇，这样的「说」才不违背「无所说」。南怀瑾在《金刚经说什么》中讲这一品时特别强调：佛说法四十九年，却自称没有说过一个字，因为法不可说，凡开口说出的都会落在法相上。</p>
+<p>然后是理由——「六如偈」。因为连用梦、幻、泡、影、露、电六个比喻，此偈历来被称为六如偈，明代唐寅（唐伯虎）自号「六如居士」即取此意。「有为法」（梵文 saṃskṛta-dharma）指一切由因缘和合造作而成、有生有灭的现象，与不生不灭的「无为法」（asaṃskṛta）相对。六个比喻各显无常虚幻的一个侧面：梦，醒来即空；幻，幻术逼真而非实；泡，才生即灭；影，依物而现、自身无体；露，日出即干；电，一闪即逝。既然一切有为法都是这样的存在方式，那么对它们「不取于相」就不是压抑或假装，而是如实观察的自然结果——这正是「应作如是观」的分量：不是「应作如是想」，而是观，一种可以训练的观察方式。</p>
+<p>这里有一个如实呈现的文本问题：鸠摩罗什译本是六喻，但现存梵文本及玄奘、义净、菩提流支等译本都是九喻——星、翳、灯、幻、露、泡、梦、电、云。Conze 校订的梵文作：tārakā timiraṃ dīpo māyāvaśyāya budbudam, supinaṃ vidyud abhraṃ ca, evaṃ draṣṭavyaṃ saṃskṛtam，直译即「如星辰、如眼翳、如灯焰、如幻术、如露、如泡、如梦、如电、如云，应如是观有为」。罗什的六喻要么依据不同的梵文底本，要么是他一贯的删繁就简。这首偈并非《金刚经》独有，也见于《五百颂般若》。另一个文本事实：「应化非真分」这个品名并不出自佛经本身，传统上归于梁昭明太子的三十二分法，但据学者考证，最早提及昭明太子作三十二分的是明初宗泐、如玘的《金刚般若波罗蜜经注解》，这一归属很可能是元末明初的假托。</p>
+<p>「应化非真」四字仍然点题极准：应化即应化身（梵文 nirmāṇakāya），佛为度众生而变现的身相。品名的意思是——连佛这一期示现的说法度生，本身也是有为法，也在「如梦幻泡影」的观察范围之内。《金刚经》的最后一步，是把自己也放进了自己的命题里：这部经、这场法会、这位说法者，同样非真。正因为彻底到这个程度，四众听完才「皆大欢喜」——不是绝望，而是卸下了对一切相（包括对佛与法的相）的执取之后的轻松。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>本品的结构可以用两个计算机概念搭脚手架：派生状态（derived state）和自指（self-reference）。</p>
+<p>先看六如偈。「有为法」的定义是「因缘和合而生」，翻译成工程语言：凡是由依赖项计算出来的东西。缓存、物化视图、编译产物、渲染帧——它们都「存在」，都能被观察和使用，但没有独立的生命：依赖一变，它们即刻失效。梦幻泡影露电，六个比喻描述的正是派生状态的六种失效方式——有的在「醒来」（上下文切换）时消失，有的依附于别的对象（影之于形），有的存活时间极短（泡、露、电）。「应作如是观」相当于一条工程纪律：永远不要把缓存当作真源（source of truth），不要在派生数据上建立持久依赖。「不取于相」就是不持有对临时对象的强引用；「如如不动」就是不随派生状态的变动而变动的那个不变量。</p>
+<p>但类比在真源处失效，而失效点正是般若的锋刃所在。工程系统里，派生状态背后总有一个持久数据库、一份权威数据；而《金刚经》的主张是：找遍整个系统，没有任何一个「有为」的层次可以充当真源——每一层都是从别的层派生的，依赖图没有根节点。「如如」不是藏在最底层的那个数据库，它不是一个更硬的实体，而是对「无根可执」这件事本身的如实安住。把真如想象成终极存储，恰恰是又取了一个相。</p>
+<p>再看自指。本品把「一切有为法如梦幻」这个命题应用到了命题自身：说这话的佛、载这话的经，也是有为法，也非真——这是「应化非真」的题眼。一个形式系统对自身做断言，理工男会立刻想到哥德尔：自指通常制造悖论或不完备。但《金刚经》的自指没有让系统崩溃，反而以「皆大欢喜，信受奉行」正常收尾。差别在于：哥德尔句是在系统内部寻求真值判定，而「不取于相」根本放弃了对命题（包括本命题）的执取——不是解决了自指悖论，而是不在悖论所要求的层面上持有任何东西。这一步没有工程对应物，它不是更聪明的算法，而是换了运行方式。类比到此为止，剩下的是实践。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>本品做了两件事，每一件都能在系统设计里找到对应的肌肉记忆。</p>
+<p>第一件是全经最后一次福德较量：满无量阿僧祇世界的七宝布施，不敌一个发菩提心者受持四句偈。工程师对这种不等式并不陌生——资源的数量与设计的层级不可通约。给一个一致性模型有缺陷的系统加机器，加到无穷，它还是那个系统；而一次四行的接口签名修改，可能让整类故障从此不再可能发生。七宝是容量，四句偈是规格层面的变更；「发菩提心」是这次变更生效的前提——它必须出自意图的改变，而不是从别处抄来的模式。福胜彼，不是因为数量更大，而是因为根本不在同一个维度上。</p>
+<p>第二件是回答「云何为人演说」，答案八个字：不取于相，如如不动。这是本品真正可以移植的部分。把「演说」看成一个长期运行的服务：接收此经，转发给听者。「取相」在这个服务里有三个精确的对应物。会话：记住「谁在听」，这是人相、众生相；计数器：记住「我说了多少次」，这是我相，即「我在说法」；私藏副本：把转发的内容落成自己拥有的持久状态，这是法相，即「有法可说」。资深工程师知道这三样东西各自引入什么代价——会话引入亲和性，进程一死用户就丢了；计数器引入需要加锁保护的共享状态；私藏副本引入一致性负担。三样全部去掉之后，得到的是一个无状态、幂等、crash-only 的服务：在任何一条指令上被 kill -9，都没有任何东西损失，因为它从未持有需要幸存的东西。「如如不动」由此获得一个操作性定义：不动不是坚固——坚固意味着还有一个要守住的状态——而是没有可被破坏的状态。可以在任意瞬间被打断而无损的进程，才是真正打不动的进程。</p>
+<p>六如偈是这套设计的本体论依据。梦、幻、泡、影、露、电，说的是运行时的诚实事实：栈帧、连接、在途请求、进程本身，一切在制品都会在某个瞬间消失，区别只是存活时长。「应作如是观」的语气值得注意：不是「应作如是想」——不是要你培养某种情绪，而是像混沌工程一样，把「一切都会被杀掉」这个前提注入设计并反复验证。观是可执行的：随机杀进程，重放请求，检查结果是否不变。信心不来自「相信它不会挂」，而来自「挂了也无所谓」被测试覆盖。</p>
+<p>最后，本品把这部经自身也标进了回收范围：说法的佛、载法的经，同样是有为法，同样带着自己的下线计划。听者「皆大欢喜」——那是一个系统里没有任何组件需要永生时，特有的平静。</p>
+<pre><code class="language-python">from dataclasses import dataclass
+from typing import Callable
+
+@dataclass(frozen=True)
+class Gatha:
+    &quot;&quot;&quot;四句偈：不可变值。没有谁拥有它，任何人都可以转发它。&quot;&quot;&quot;
+    text: str
+
+def expound(gatha: Gatha, emit: Callable[[str], None]) -&gt; None:
+    &quot;&quot;&quot;为人演说。「不取于相」的三条不变式：
+
+    1. 无会话——不记「谁在听」（无人相、众生相）
+    2. 无计数——不记「我说了几次」（无我相，「我在说法」）
+    3. 无私藏——除入参外不持有任何引用，不落任何盘（无法相）
+
+    推论：本函数无状态且幂等，可在任意一行被 kill -9
+    而不损失任何东西——「如如不动」：没有可被破坏的状态。
+    &quot;&quot;&quot;
+    emit(gatha.text)
+
+def test_interrupt_anywhere_loses_nothing() -&gt; None:
+    heard: list[str] = []
+    verse = Gatha(&quot;一切有为法，如梦幻泡影&quot;)
+    expound(verse, heard.append)          # 第一次演说
+    expound(verse, heard.append)          # 崩溃重启后的重放
+    assert heard[0] == heard[1]           # 应作如是观：重放与首说无差别
+</code></pre>
+<p>这个映射的失效点在于：工程里的无状态从来不是真的无状态，只是状态的搬运——服务不持有，是因为数据库替它持有，架构整体仍然有一个「别处」在执取。般若的「不取」没有这个别处：它不是把执取外包给更可靠的一层，而是看见没有任何一层可供外包，也没有任何一物需要存放。并且，无状态是服务于可用性指标的手段，而「不取于相」不服务于任何指标——一旦把它当作高可用的心法来持有，它就又成了一个相。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>有为法</td>
+<td>saṃskṛta-dharma</td>
+<td>由因缘和合造作而成、有生有灭的一切现象；与不生不灭的无为法（asaṃskṛta）相对</td>
+</tr>
+<tr>
+<td>不取于相</td>
+<td>相：nimitta / lakṣaṇa</td>
+<td>不执取心中呈现的任何表象、特征；演说佛法时不住「能说、所说、听者」之相</td>
+</tr>
+<tr>
+<td>如如不动</td>
+<td>如如：tathatā（真如）</td>
+<td>安住于事物不经概念加工的本然状态，不为境相所动摇</td>
+</tr>
+<tr>
+<td>应化</td>
+<td>nirmāṇa（应化身 nirmāṇakāya）</td>
+<td>佛为度化众生而变现的身相；品名「应化非真」谓此示现本身亦属有为、非究竟真实</td>
+</tr>
+<tr>
+<td>阿僧祇</td>
+<td>asaṃkhyeya</td>
+<td>「无央数」，古印度表示不可计量的大数单位</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>一切有为法，如梦幻泡影，如露亦如电，应作如是观。</p>
+<p>不取于相，如如不动。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>南怀瑾《金刚经说什么》三十二品 应化非真分（实修驿站）：http://m.shixiu.net/nanshi/zhuzuo/jgjssm/4388.html</li>
+<li>维基百科「金刚经」条目（译本九喻对照、三十二分法考证、能断金刚题义）：https://zh.wikipedia.org/zh-hans/金刚经</li>
+<li>李利安《〈金刚经〉玄奘译本对罗什译本的补正作用》（爱思想）：https://www.aisixiang.com/data/148735.html</li>
+<li>Diamond Sutra Chapter 32, Alex Johnson 英译：https://diamond-sutra.com/read-the-diamond-sutra-here/diamond-sutra-chapter-32/</li>
+<li>Dharma Wheel 论坛：Diamond Sutra 结偈梵文出处讨论（含 Conze 梵文转写与英译）：https://www.dharmawheel.net/viewtopic.php?t=43911</li>
+<li>经书网《金刚经》第三十二品详细讲解注解：https://www.jingangjin.com.cn/m/view.php?aid=2875</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/31/"><span class="lbl">← 上一品</span><span>知见不生分</span></a><a class="next" href="/a/jingangjing/"><span class="lbl">读完了 →</span><span>回到目录</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

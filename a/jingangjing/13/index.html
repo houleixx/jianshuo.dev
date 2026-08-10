@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第十三品 如法受持分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第13品「如法受持分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal two">十三</span>
+  <h1>如法受持分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第十三品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>尔时，须菩提白佛言：“世尊！当何名此经？我等云何奉持？”</p>
+<p>佛告须菩提：“是经名为金刚般若波罗蜜，以是名字，汝当奉持。所以者何？须菩提！佛说般若波罗蜜，即非般若波罗蜜。是名般若波罗蜜。须菩提！于意云何？如来有所说法不？”</p>
+<p>须菩提白佛言：“世尊！如来无所说。”</p>
+<p>“须菩提！于意云何？三千大千世界所有微尘，是为多不？”</p>
+<p>须菩提言：“甚多，世尊！”</p>
+<p>“须菩提！诸微尘，如来说非微尘，是名微尘。如来说：世界，非世界，是名世界。须菩提！于意云何？可以三十二相见如来不？”</p>
+<p>“不也，世尊！不可以三十二相得见如来。何以故？如来说：三十二相，即是非相，是名三十二相。”</p>
+<p>“须菩提！若有善男子、善女人，以恒河沙等身命布施；若复有人，于此经中，乃至受持四句偈等，为他人说，其福甚多！”</p></div>
+<h2>白话</h2>
+<p>这时，须菩提对佛说："世尊，这部经应当叫什么名字？我们要怎样奉行受持它？"</p>
+<p>佛告诉须菩提："这部经就叫『金刚般若波罗蜜』，你们应当依这个名字来奉持。为什么这样说呢？须菩提，佛所说的般若波罗蜜，并不是一个实有自体的般若波罗蜜，只是假借这个名字称为般若波罗蜜。须菩提，你怎么看：如来有没有说过什么法？"</p>
+<p>须菩提对佛说："世尊，如来没有说过什么法。"</p>
+<p>"须菩提，你怎么看：三千大千世界里所有的微尘，算多不多？"</p>
+<p>须菩提说："非常多，世尊。"</p>
+<p>"须菩提，这些微尘，如来说它们并非实有的微尘，只是名叫微尘。如来说的世界，也并非实有的世界，只是名叫世界。须菩提，你怎么看：能凭三十二种殊胜身相见到如来吗？"</p>
+<p>"不能，世尊。不能凭三十二相见到如来。为什么？如来说的三十二相，本身并不是实有之相，只是名叫三十二相。"</p>
+<p>"须菩提，假如有善男子、善女人，用恒河沙数那么多次的身体性命来布施；又假如另有人，对这部经哪怕只受持其中四句偈，并讲给别人听，后者的福报要多得多。"</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>须菩提提出两个实际问题：这部经叫什么名字，以及后人该如何奉持。佛给出经名「金刚般若波罗蜜」。</li>
+<li>命名的当下即拆解命名：佛说般若波罗蜜，即非般若波罗蜜，是名般若波罗蜜——经名本身第一个被套进「三句式」，防止听者把名字当成实体。</li>
+<li>进一步釜底抽薪：如来无所说。连「佛说了一部经」这件事本身也不能执为实有。</li>
+<li>把同一操作从法义推广到物质世界：微尘（最小单位）非微尘，世界（最大集合）非世界，皆是假名。</li>
+<li>再推广到佛身：不可以三十二相见如来，三十二相即是非相。</li>
+<li>最后较量福德：恒河沙数的身命布施，不如受持并为人解说此经四句偈——完成从「名相皆空」到「为何仍要持经」的闭环。</li>
+</ol>
+<h2>深度解读</h2>
+<p>第 13 品在全经结构里是一个明显的节点：经讲到一半，须菩提忽然问经名。按梁昭明太子的科判，本品题为「如法受持」——问的正是「怎样才算正确地持有这部经」。这个问题看似事务性，实际上是全经最危险的一个陷阱：一旦经有了名字，名字就可能被当成崇拜对象，「持经」就退化成持一个符号。</p>
+<p>佛的回应因此分两步。第一步正常给名：「是经名为金刚般若波罗蜜，以是名字，汝当奉持。」第二步立刻自拆：「佛说般若波罗蜜，即非般若波罗蜜。是名般若波罗蜜。」这是《金刚经》著名的「三句式」（A，即非 A，是名 A）第一次施加在经自身的名字上——理论把自己也纳入了适用范围。般若波罗蜜（prajñāpāramitā），直译「智慧到彼岸」，是全经的核心法门；连它也「即非」，等于宣告：本经不给你任何一个可以抓牢的实体，包括本经自己。历代注家对这三句的主流读法是「性空幻有」：一切法因缘而起（幻有），故无独立不变的自性（性空），名字只是为交流而立的假名（prajñapti）。六祖惠能《金刚经口诀》在此处强调的是行持而非玄理：「口说心不行，即无波罗蜜」——名字要靠践行来兑现，否则连假名的作用都没有。</p>
+<p>「如来无所说」是第二层。不是佛没开口，而是佛所说的一切都是应机的指引，没有一个叫「佛法」的固定内容物被交付出来。随后佛把这个操作沿两个方向推到极限：向下推到微尘（paramāṇu，物质分析到不可再分的最小单位），向上推到三千大千世界（lokadhātu，佛教宇宙论中的最大集合单位）——最小的和最大的都非实有，皆是假名。南怀瑾在《金刚经说什么》里把这一段读作「心物一元」：物质世界的空与心念的空在此会合，「没有世界的存在，也没有微尘的存在，一切本空」。接着推到佛身：三十二相（dvātriṃśan mahāpuruṣa-lakṣaṇāni，传统认为佛与转轮圣王具足的三十二种殊胜身体特征）也不是见如来的凭据，因为如来是法身，法身无相。六祖对此另有一个实践性的转读：「三十二相者，是三十二清净行」——把身相还原为修行，只爱著佛的相貌而不修行，「终不得见如来」。</p>
+<p>本品也是现代学术争论的焦点。孔兹（Edward Conze）依梵本把此处经名只译作「Wisdom which has gone beyond」（般若波罗蜜），并把三句式读成神秘主义的「悖论逻辑」——A 既是 A 又不是 A。当代文献学家保罗·哈里森（Paul Harrison）依吉尔吉特写本（此处梵文作 yo 'py asau lokadhātur adhātuḥ）提出不同读法：「非世界」的梵文否定复合词应按有财释（bahuvrīhi）理解，意为「不具有『界』之自性的」，是「X 缺乏 Y 性」而非「X 不是 X」的形式矛盾。理查德·琼斯（Richard Jones）进一步指出，末句 tenocyate 不宜译作「因此称为」——那会造成逻辑推出关系的假象，原意只是「如来是在这个意义上使用这个词的」。换言之，梵本的三句式很可能不是悖论，而是一份严谨的语言使用说明。两种读法（中国注疏传统的「随立随破」与现代文献学的语法分析）结论殊途同归：名言可用，但不指向实体。</p>
+<p>结尾的较量是全品的落点。前面几品用七宝布施作比较，本品升级为「恒河沙等身命布施」（梵本作舍弃恒河沙数的 ātmabhāva，自身）——把最难舍的东西舍掉无数次，仍属有为福德；受持四句偈并为他人说，福多于彼。理由在前面已经给出：财物乃至身命都在「非微尘、非世界」的范围内，而此经给出的是让人从根上看破这套名相系统的智慧。这就回答了本品开头的问题：「如法受持」不是抱紧经名，而是持其无可持处。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>本品可以精确地映射到程序设计里一个基本区分：指针与所指、变量名与内存内容——或者用逻辑学的术语，use 与 mention 的区分。</p>
+<p>「是经名为金刚般若波罗蜜，以是名字，汝当奉持」——这是声明一个句柄（handle），供日常调用。「佛说般若波罗蜜，即非般若波罗蜜」——这是紧接着的一条类型注解：该句柄不是所指对象本身，两者不可混同，<code>"prajnaparamita" != prajnaparamita</code>。「是名般若波罗蜜」——注解完毕，句柄照常使用。三句合起来相当于：创建引用，声明引用非实体，继续使用引用。哈里森和琼斯的文献学结论（「非世界」是「不具界性」、tenocyate 是「在此意义上使用此词」）恰好支持这个读法：梵本原文本来就更像一份 API 文档里的使用说明，而不是一个故弄玄虚的悖论。</p>
+<p>本品的推广顺序也很有工程味道：先对经名做这个操作（自指——理论适用于理论自身的名字，类似一个能正确处理自己源代码的编译器），再对微尘和世界做（系统的最小粒度单元和最大聚合单元都是 schema 里的抽象，不是 ground truth），再对三十二相做（不能用接口特征反推出实现——三十二相是 interface，法身是 implementation，而且这个 implementation 恰恰声明自己「无相」，没有可枚举的成员变量）。</p>
+<p>但类比在一个关键处失效，而失效处正是佛学越出工程直觉的地方。在计算机里，指针解引用到最后总会落到实实在在的字节上——名字是虚的，对象是实的。本品的主张更彻底：微尘、世界这些「对象」本身也是缘起的组装结果，没有最终落地的、自带本质的字节层。用地图与疆域的话说，佛不只说「地图不是疆域」，还说疆域本身也是逐层构造、无自性可得——指针的尽头还是指针。工程师的本体论里有一个 bare metal 兜底，般若的本体论里没有；接受这一点不靠推理，靠的是经文所说的「受持、为他人说」——在使用中松开对每一层的执取。这一步类比给不了，只能自己走。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>Phil Karlton 那句名言在架构师圈子里人尽皆知：计算机科学只有两个难题，缓存失效和命名。第 13 品罕见地同时处理这两个难题，并且给出同一个答案：命名本身就是一次缓存写入，而正确的协议要求写入与失效声明必须是同一个原子操作。</p>
+<p>须菩提问经名，相当于请求给一个正在运行的系统分配稳定标识符。佛照常返回了标识符——「是经名为金刚般若波罗蜜」——但在同一个事务里附上失效标记：「即非般若波罗蜜，是名般若波罗蜜」。注意这里没有宽限期。不是先让名字当一阵子真、日后再来破除，而是条目落库的那一刻就带着 authoritative: false 的元数据。名字仍然可读、可传、可用于路由（「以是名字，汝当奉持」），但协议禁止任何调用方把它升格为实体。更严格的是，这条失效策略第一个管辖的对象就是策略自身所在的经的名字——它没有把自己排除在适用范围之外，相当于配置系统的校验规则也校验规则文件本身。</p>
+<p>「如来无所说」是对源站的描述。四十九年说法，origin server 一直在响应请求，但每个响应都带着 Vary 头：内容随提问者的根器协商生成，不存在一个可以缓存下来当作「佛法本体」的规范表示。你抓包抓到的全是应机的 representation，从来没有一个 canonical payload 被交付过。</p>
+<p>接下来佛把同一条协议推到数据的两端。微尘是系统里最细的粒度，世界是最大的聚合，佛说两者都是视图：逐行扫描是视图，全表 rollup 也是视图，不存在一张藏在视图背后、自带本质的基表。三十二相则堵住最后一条路：想通过响应特征给源站做指纹识别——收集三十二个可观测字段就宣称定位了如来——同样失败，因为那三十二个字段也只是缓存得下来的表示，而源不是任何可缓存的表示。</p>
+<p>最后的福德比较由此变得可以计算。恒河沙数的身命布施，是往缓存里写入天文数字的条目，每一条仍在「非微尘、非世界」的失效范围之内；受持四句偈并为他人解说，是把失效纪律本身安装进另一个系统。一条作用于全部条目（包括自身）的失效规则，价值高于任何数量的条目。「如法受持」的答案至此闭合：持的不是经名这个 key，而是那条让一切 key 都无法被钉死的纪律。</p>
+<pre><code class="language-typescript">/** 佛说般若波罗蜜，即非般若波罗蜜，是名般若波罗蜜。 */
+interface Designation&lt;V&gt; {
+  readonly view: V;
+  readonly authoritative: false; // 「即非」：禁止升格为实体
+}
+
+class ConventionalCache&lt;V&gt; {
+  private entries = new Map&lt;string, Designation&lt;V&gt;&gt;();
+
+  /** 命名与失效声明是同一个原子操作，没有「先当真」的宽限期。 */
+  name(label: string, view: V): void {
+    this.entries.set(label, { view, authoritative: false });
+  }
+
+  /** 「以是名字，汝当奉持」：假名照常读、照常用。 */
+  read(label: string): V | undefined {
+    return this.entries.get(label)?.view;
+  }
+
+  // 刻意不提供 revalidate() 或 getOrigin()：「如来无所说」，
+  // 缓存背后没有一个可供回源校验的权威对象。
+}
+
+const world = new ConventionalCache&lt;unknown&gt;();
+world.name(&quot;微尘&quot;, &quot;最细粒度的视图&quot;);
+world.name(&quot;世界&quot;, &quot;最大聚合的视图&quot;);
+world.name(&quot;三十二相&quot;, &quot;对源站的特征侧写&quot;);
+world.name(&quot;金刚般若波罗蜜&quot;, world); // 失效策略同样管辖自身的名字
+</code></pre>
+<p>这个映射在一处失效：工程里的缓存失效协议之所以成立，是因为总有一个源站可以回源——If-Modified-Since 发出去，对端会用 200 或 304 作答；而般若否定的恰恰是「存在一个等着被回源的权威对象」，连「缘起之流」也不是藏在视图背后的基表。另外，authoritative: false 是写代码时一次性完成的注解，「受持、为他人说」却是每当执取升起都要重新执行的运行时纪律——类型检查代替不了这份功课。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>金刚般若波罗蜜</td>
+<td>vajracchedikā prajñāpāramitā</td>
+<td>经名，「能断金刚的智慧到彼岸」；部分梵本此处仅作 prajñāpāramitā</td>
+</tr>
+<tr>
+<td>微尘</td>
+<td>paramāṇu</td>
+<td>物质分析到不可再分的最小单位，佛教物质观的原子概念</td>
+</tr>
+<tr>
+<td>世界</td>
+<td>lokadhātu</td>
+<td>三千大千世界，佛教宇宙论中一佛教化范围的最大集合单位</td>
+</tr>
+<tr>
+<td>三十二相</td>
+<td>dvātriṃśan mahāpuruṣa-lakṣaṇāni</td>
+<td>佛与转轮圣王具足的三十二种殊胜身体特征；本品明言其非见如来之凭据</td>
+</tr>
+<tr>
+<td>身命布施</td>
+<td>ātmabhāva-parityāga</td>
+<td>舍弃自身性命作布施，内财布施之极致，仍属有为福德</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>佛说般若波罗蜜，即非般若波罗蜜。是名般若波罗蜜。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>南怀瑾《金刚经说什么》第十三品 如法受持分（实修驿站）：http://www.shixiu.net/nanshi/zhuzuo/jgjssm/4369.html</li>
+<li>六祖惠能《金刚般若波罗蜜经口诀》（西园戒幢律寺）：https://www.jcedu.org/201708/1778.html</li>
+<li>Jayarava, "The Use of Negation in Vajracchedikā"（含 Harrison、Jones 对第 13 品梵文否定式的讨论）：http://jayarava.blogspot.com/2013/11/the-use-of-negation-in-vajracchedika.html</li>
+<li>Paul Harrison, "Vajracchedikā Prajñāpāramitā: A New English Translation of the Sanskrit Text"（Schøyen Collection, Buddhist Manuscripts Vol. III）：https://static1.squarespace.com/static/5c03ced75ffd204418037b7a/t/5c5306ce575d1f9230da8a6a/1548945103490/Diamond+Sutra-Paul+Harrison+tr.pdf</li>
+<li>Edward Conze 英译《金刚经》（Terebess Asia Online）：https://terebess.hu/english/diamond.html</li>
+<li>《金刚经》三句式「即非—是名」义理讨论（搜狐/凤凰转载）：https://www.sohu.com/a/319104315_467442</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/12/"><span class="lbl">← 上一品</span><span>尊重正教分</span></a><a class="next" href="/a/jingangjing/14/"><span class="lbl">下一品 →</span><span>离相寂灭分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

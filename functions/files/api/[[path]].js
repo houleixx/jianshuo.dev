@@ -1006,6 +1006,35 @@ async function handleRequest(context) {
     return json({ error: 'unknown llmlog action' }, 404);
   }
 
+  // ── Admin-only: 用户反馈 (voicedrop/admin/feedback.html) ─────────────────────
+  // 反馈由 agent worker POST /agent/feedback 落盘 feedback/<date>/<ts>-<rand>.json，
+  // 这里只读：dates 列日期文件夹，list 把当天所有条目连内容一起返回（单条很小）。
+  if (request.method === 'GET' && action === 'feedback') {
+    if (scope !== '') return json({ error: 'admin only' }, 403);
+    if (sub2 === 'dates') {
+      return json({ dates: await listDateFolders('feedback/') });
+    }
+    if (sub2 === 'list') {
+      const date = url.searchParams.get('date') || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: 'date=YYYY-MM-DD required' }, 400);
+      const keys = [];
+      let cursor;
+      do {
+        const listed = await env.FILES.list({ prefix: `feedback/${date}/`, limit: 500, ...(cursor ? { cursor } : {}) });
+        keys.push(...listed.objects.map((o) => o.key));
+        cursor = listed.truncated ? listed.cursor : undefined;
+      } while (cursor);
+      const items = (await Promise.all(keys.map(async (key) => {
+        try {
+          const obj = await env.FILES.get(key);
+          return { key, ...JSON.parse(await obj.text()) };
+        } catch { return null; }
+      }))).filter(Boolean).sort((a, b) => (a.ts < b.ts ? 1 : -1));
+      return json({ items });
+    }
+    return json({ error: 'unknown feedback action' }, 404);
+  }
+
   // ── Admin-only: mine run log (voicedrop/admin/mine.html) ─────────────────────
   // Per-audio events written by miner.js under minelogs/<date>/<ts>-<stem>.json.
   if (request.method === 'GET' && action === 'minelog') {

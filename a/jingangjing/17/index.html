@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第十七品 究竟无我分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第17品「究竟无我分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal two">十七</span>
+  <h1>究竟无我分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第十七品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>尔时，须菩提白佛言："世尊！善男子、善女人，发阿耨多罗三藐三菩提心，云何应住？云何降伏其心？"</p>
+<p>佛告须菩提："善男子、善女人，发阿耨多罗三藐三菩提心者，当生如是心：我应灭度一切众生。灭度一切众生已，而无有一众生实灭度者。何以故？须菩提！若菩萨有我相、人相、众生相、寿者相，则非菩萨。所以者何？须菩提！实无有法，发阿耨多罗三藐三菩提心者。"</p>
+<p>"须菩提！于意云何？如来于燃灯佛所，有法得阿耨多罗三藐三菩提不？"</p>
+<p>"不也，世尊！如我解佛所说义，佛于燃灯佛所，无有法得阿耨多罗三藐三菩提。"</p>
+<p>佛言："如是，如是！须菩提！实无有法，如来得阿耨多罗三藐三菩提。须菩提！若有法，如来得阿耨多罗三藐三菩提者，燃灯佛则不与我授记：'汝于来世，当得作佛，号释迦牟尼。'以实无有法得阿耨多罗三藐三菩提，是故燃灯佛与我授记，作是言：'汝于来世，当得作佛，号释迦牟尼。'何以故？如来者，即诸法如义。"</p>
+<p>"若有人言：如来得阿耨多罗三藐三菩提。须菩提！实无有法，佛得阿耨多罗三藐三菩提。须菩提！如来所得阿耨多罗三藐三菩提，于是中无实无虚。是故如来说：一切法皆是佛法。须菩提！所言一切法者，即非一切法，是故名一切法。"</p>
+<p>"须菩提！譬如人身长大。"</p>
+<p>须菩提言："世尊！如来说：人身长大，则为非大身，是名大身。"</p>
+<p>"须菩提！菩萨亦如是。若作是言：我当灭度无量众生，则不名菩萨。何以故？须菩提！实无有法名为菩萨。是故佛说一切法，无我、无人、无众生、无寿者。"</p>
+<p>"须菩提！若菩萨作是言：'我当庄严佛土'，是不名菩萨。何以故？如来说：庄严佛土者，即非庄严，是名庄严。"</p>
+<p>"须菩提！若菩萨通达无我、法者，如来说名真是菩萨。"</p></div>
+<h2>白话</h2>
+<p>这时，须菩提向佛请问："世尊，善男子、善女人发起无上正等正觉之心以后，心应当安住在哪里？应当怎样降伏妄心？"</p>
+<p>佛告诉须菩提："善男子、善女人发起无上正等正觉之心的，应当生这样的心：我要度脱一切众生。而度脱了一切众生之后，实际上并没有任何一个众生被度脱。为什么？须菩提，如果菩萨还有自我的相、他人的相、众生的相、寿命者的相，就不是菩萨。这又是为什么？须菩提，实际上并不存在一个叫作'发无上正等正觉之心'的法。"</p>
+<p>"须菩提，你怎么看？如来当年在燃灯佛那里，有没有得到一个叫作'无上正等正觉'的法？"</p>
+<p>"没有，世尊。按我对佛所说义理的理解，佛在燃灯佛那里，并没有得到什么法可以称为无上正等正觉。"</p>
+<p>佛说："对，正是这样。须菩提，实际上没有任何法，让如来由此得到无上正等正觉。须菩提，假如真有一个法让如来得到了无上正等正觉，燃灯佛当年就不会给我授记说：'你在来世当成佛，名号释迦牟尼。'正因为实际上没有法可得，燃灯佛才给我授记，说：'你在来世当成佛，名号释迦牟尼。'为什么？所谓如来，就是一切法如其本来的意思。"</p>
+<p>"如果有人说：如来得到了无上正等正觉——须菩提，实际上没有任何法让佛得到无上正等正觉。须菩提，如来所证得的无上正等正觉，在其中既不是实有，也不是虚无。所以如来说：一切法都是佛法。须菩提，所说的一切法，并非实有的一切法，只是名为一切法。"</p>
+<p>"须菩提，好比说一个人身体高大。"</p>
+<p>须菩提说："世尊，如来说的人身高大，并非实有一个大身，只是名为大身。"</p>
+<p>"须菩提，菩萨也是如此。如果他说'我要度脱无量众生'，就不能称为菩萨。为什么？须菩提，实际上没有一个法叫作菩萨。所以佛说一切法都没有我、没有人、没有众生、没有寿命者。"</p>
+<p>"须菩提，如果菩萨说'我要庄严佛土'，就不能称为菩萨。为什么？如来说的庄严佛土，并非实有的庄严，只是名为庄严。"</p>
+<p>"须菩提，如果菩萨透彻通达了无我、无法的道理，如来才说他是真正的菩萨。"</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>须菩提把全经开头（第 2 品）的问题原样重问一遍：发菩提心的人，心怎么安住、怎么降伏。这不是失忆，而是要在更深一层重新回答。</li>
+<li>佛的回答先重复前文——度尽一切众生而无一众生实被度——然后把刀锋推进一步：连"发菩提心"这件事本身，也"实无有法"，找不到一个实体。</li>
+<li>佛用自己的经历作证：当年在燃灯佛处若真有一个法可得，燃灯佛就不会给他授记；正因无法可得，授记才成立。这是一个以"授记发生了"为前提的反证。</li>
+<li>由此给出全经最高的正面定义："如来者，即诸法如义"——如来不是得到了什么的人，而是与一切法的本来面目相应。菩提无实无虚，所以一切法皆是佛法，而"一切法"本身又立刻被拆掉：即非一切法，是名一切法。</li>
+<li>用"人身长大即非大身"作例，把同一逻辑落回菩萨身上：说"我当灭度众生""我当庄严佛土"的，都不名菩萨，因为实无有法名为菩萨。</li>
+<li>结论：通达"无我、无法"二重否定的，如来说名真是菩萨。这就是品名"究竟无我"——无我推到究竟处，连"法"也无。</li>
+</ol>
+<h2>深度解读</h2>
+<p>第 17 品是《金刚经》后半部的起点，而它开头的问题与第 2 品一字不差："云何应住？云何降伏其心？"历代注家几乎一致认为这个重复是全经结构的关键。通行的判分是：前半部破"人我执"（对自我这个主体的执着），说众生空；后半部破"法我执"（对佛法、修行、果位这些"对象"的执着），说法空。同一个问题问两遍，因为答案有两层深度。第一遍的回答是：度一切众生而不执着有众生被度——破的是"我"和"众生"这些主体相。第 17 品的回答多出一句前面没有的话："实无有法，发阿耨多罗三藐三菩提心者。"这次破的不是发心的人，而是"发心"这件事本身。南怀瑾在《金刚经说什么》里把这两层称为人无我与法无我：只证人无我，是小乘果位；进一步证法无我，"人法二无我"，才是成佛。品名"究竟无我"（昭明太子所拟）即指此：无我推到究竟，连能修之法、所证之果一并否定。</p>
+<p>本品最精彩的论证是燃灯佛授记一段。"授记"（梵文 vyākaraṇa）是佛对修行者的正式预告：你将于某世成佛，名号为某。释迦牟尼引述自己的前世：他在燃灯佛（Dīpaṃkara，过去佛）座下时，燃灯佛授记他来世成佛。佛在这里做了一个严格的条件推理：假如当时真有一个叫"无上正等正觉"的法被我得到，燃灯佛就不会授记——因为有所得就意味着还有能得与所得的对立，还在相里，恰恰证明没有觉悟；正因为实无所得，授记才成立。注意这个论证的形状：它不是玄谈，而是以一个双方承认的历史事件（授记确实发生了）为前提，反推出"实无有法得菩提"。可得性与成佛互斥，这是全经"得即非得"逻辑最锋利的一次出场。</p>
+<p>紧接着是全经对"如来"最重要的一次定义："如来者，即诸法如义。"梵本此句作"如来即是真如（bhūta-tathatā）的同义语"，Conze 英译为 Tathāgata is synonymous with true Suchness。"如"（tathatā，音译"真如"）意为"如其所是"——事物不增不减、不加扭曲的本来样子。"如来"（tathāgata）一词本身就从 tathā（如）派生。这个定义把"成佛"从"获得某物"改写成"如实相应"：如来不是一个拿到了终极奖品的人，而是与一切法的实相完全一致的状态。所以下一句说，如来所得的菩提"无实无虚"——说它实有，无一法可指认；说它虚无，授记、成佛、说法又历历分明。正因为菩提不是一个特定对象，它才不排斥任何对象，故"一切法皆是佛法"。但这句话极易被抓成新的执着（"既然全是佛法，那怎样都行"），所以经文立刻用标准的三段式拆掉它："所言一切法者，即非一切法，是故名一切法"——"一切法"也只是个名字。</p>
+<p>末段把这套逻辑落回菩萨的自我认知：说"我当灭度无量众生""我当庄严佛土"的，不名菩萨——不是因为度生、严土错了，而是因为"我当"二字里藏着一个自居能作者的"我"和一个被实体化的"事业"。最后一句"若菩萨通达无我、法者，如来说名真是菩萨"存在一个著名的句读分歧：一读为"无我法"（关于无我的法），一读为"无我、法"（无我与无法，即人法二无我）。玄奘译本此处作"无我无法"，多数注家取后一读，与本品破法执的主旨相合；本书从之。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>本品可以用两个计算机概念来搭脚手架：反证法和悬空指针。</p>
+<p>先看授记一段的论证结构，它是一个标准的归谬（reductio ad absurdum）：假设存在某个法 D，使得"如来通过得到 D 而成佛"为真；则燃灯佛不会授记（因为有所得即未觉悟）；但授记这个事件确实发生了；矛盾；故不存在这样的 D。前提、推理规则、结论，一步不缺。《金刚经》常被当作神秘主义文本，但这一段的骨架是逻辑学的，理工科读者应该能直接认出这个证明的形状。</p>
+<p>再看"实无有法名为菩萨"。在程序里，符号（symbol）和它绑定的对象（binding）是两回事。"菩萨""发菩提心""无上正等正觉"都是符号，我们默认每个符号背后都有一个可解引用（dereference）的实体。本品做的事情，相当于告诉你：这些符号没有绑定——不是绑定了一个空对象，而是压根不存在那个"对象"层。"我当灭度众生"之所以不名菩萨，是因为说这话的人在心里给"我"和"灭度众生"各分配了一个实体，然后让前者持有后者——一次非法的实体化（reification）。而"如来者，即诸法如义"则像是说：如来不是某个持有特殊状态的实例，而是一个无状态（stateless）的恒等映射——对一切输入如其所是，不增不减。成佛不新增任何状态，这正是"无有法得阿耨多罗三藐三菩提"的工程学表述。</p>
+<p>类比在哪里失效？失效点恰好在"无实无虚"。在程序语言里，"符号无绑定"仍是一个系统内可判定的状态：查表，返回 null，null 本身还是类型系统里的一个值。也就是说，编程世界里的"无"是另一种"有"。而本品拒绝这种降级：菩提"无实无虚"，既不是查到了对象，也不是查到了 null——它拒绝进入"查表"这个框架本身。断言"菩萨不存在"和断言"菩萨存在"在经文看来是同一类错误，都预设了那张符号表是终极的。类比能带你到符号表的边缘，"如"在表外。这个失效处，就是佛学超出计算模型的地方。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>做过大型系统的人都背过这条训诫：同一个事实，只允许有一个真相源（source of truth）；一切派生值（derived value）要么现算，要么就要为缓存失效付出无穷代价。物化视图（materialized view）从写下的那一刻起开始漂移，这是分布式系统里为数不多接近定律的东西。</p>
+<p>第 17 品处理的正是一个派生值的存储问题。这个系统的真相源只有一条事件流：度生、严土、说法，一件一件如实发生。"菩萨"不是流里的事件，而是对整条流计算出来的一个谓词——每一件事都利益众生，且没有一件事被"我"署名。本品的裁决是：这个谓词只许现算，永远不许物化。一旦把它写成状态——"我当灭度无量众生""我得阿耨多罗三藐三菩提"——你就建了第二份真相源。而这个特定的谓词还有一个更狠的性质：写入动作本身就是事件流里的新事件，且恰好是一次"被我署名"的事件，直接证伪了正在被缓存的那个判断。普通缓存是渐渐变陈旧，这份缓存是出生即陈旧——断言即失效。"若作是言：我当灭度无量众生，则不名菩萨"，说的就是这个自指结构。</p>
+<p>燃灯佛授记一段，用这套语义读非常干净。授记不是交付一个可存储的工件。假如"菩提"是一个能被拿到手、写进自身状态的值，那么"能存它"这个能力本身就让不变量失效——这样的系统恰恰不该被认证。认证只能颁给一个不存任何派生副本的系统："以实无有法得阿耨多罗三藐三菩提，是故燃灯佛与我授记。"可存储性与被认证互斥。</p>
+<p>由此，"如来者，即诸法如义"是这个模型的零漂移极限：系统里没有任何一份关于自己的物化视图，每一次读都直接对着实相现算。无实——没有存下任何副本可供指认；无虚——每次现算都有确定的行为，度生说法历历分明。"一切法皆是佛法"，因为一张覆盖一切的视图不排斥任何行；"即非一切法"，因为连"一切法"这个表名也不许物化成新的实体。</p>
+<p>所以本品破的不是行动，而是"成就即状态积累"这个直觉：写路径全速运行，度生、严土一件不少；被禁止的只有一条路——读出自己的状态，然后把它存起来。修行是维护一个只在无人断言时才成立的不变量。</p>
+<pre><code class="language-typescript">interface Act {
+  liberates: boolean;       // 是否利益众生
+  claimedBySelf: boolean;   // 是否被&quot;我当&quot;署名
+}
+
+/** &quot;实无有法名为菩萨&quot;：系统里没有 Bodhisattva 表，
+ *  只有对事件流现算的谓词，禁止缓存。 */
+function bodhisattvaInvariant(history: readonly Act[]): boolean {
+  return history.every((act) =&gt; act.liberates &amp;&amp; !act.claimedBySelf);
+}
+
+/** 自我认定不是对流的只读观察，它本身就是流里的新事件，
+ *  且 claimedBySelf 必然为 true。 */
+function claimAttainment(history: readonly Act[]): Act[] {
+  return [...history, { liberates: false, claimedBySelf: true }];
+}
+
+/** 定理：对任意历史 h，断言之后不变量必不成立。
+ *  —— &quot;若作是言，则不名菩萨&quot; */
+function theorem(h: readonly Act[]): void {
+  console.assert(bodhisattvaInvariant(claimAttainment(h)) === false);
+}
+
+// 注意整个模块没有导出 setBodhisattva()。
+// 不是忘了写，而是这个写路径在语义上不存在——
+// &quot;实无有法，发阿耨多罗三藐三菩提心者&quot;。
+</code></pre>
+<p>这个映射在哪里失效：工程里缓存派生值是一桩可以做好的交易，配上正确的失效协议就是合法优化；而般若不承认任何协议能让"我是菩萨"这句断言变得安全，它要拆的不是坏缓存，是"读出自己再持有自己"这个动作本身。更深一层，上面的模型仍然保留了事件流这份数据和返回 boolean 的检查器，而"诸法如"不是一个可供查询的存储，"是名菩萨"连这个谓词函数也要拆掉——无实无虚拒绝的是读写框架本身，不是框架里的某个值。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>实无有法</td>
+<td>na kaścid dharmaḥ</td>
+<td>不存在任何一个可指认的实体性的"法"——发心、得菩提、名为菩萨，皆无实体可得</td>
+</tr>
+<tr>
+<td>阿耨多罗三藐三菩提</td>
+<td>anuttarā samyaksaṃbodhi</td>
+<td>音译词，义为"无上正等正觉"，即佛的圆满觉悟</td>
+</tr>
+<tr>
+<td>授记</td>
+<td>vyākaraṇa</td>
+<td>佛对修行者未来必定成佛的正式预告，含成佛的时劫与名号</td>
+</tr>
+<tr>
+<td>诸法如义</td>
+<td>bhūta-tathatā（真如）</td>
+<td>一切法如其所是的实相；"如来"一词即由"如"（tathā）派生，梵本称如来即真如之同义语</td>
+</tr>
+<tr>
+<td>无我法</td>
+<td>dharma-nairātmya</td>
+<td>通行读法为"无我、无法"二重否定：既无人我，亦无法我，即"人法二无我"</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>如来者，即诸法如义。</p>
+<p>若菩萨通达无我、法者，如来说名真是菩萨。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>《金刚经》第 17 品 究竟无我（原文与注解），quanxue.cn — https://www.quanxue.cn/ct_fojia/jingang/jingang18.html</li>
+<li>南怀瑾《金刚经说什么》究竟无我分，quanxue.cn — https://www.quanxue.cn/ct_nanhuaijin/jingang/jingang136.html</li>
+<li>六祖惠能《金刚般若波罗蜜经口诀》，西园戒幢律寺 — https://www.jcedu.org/201708/1778.html</li>
+<li>Diamond Sutra: Chapter 17（Alex Johnson 英译）— https://diamond-sutra.com/read-the-diamond-sutra-here/diamond-sutra-chapter-17/</li>
+<li>Tathāgata（含 Conze 对 tathatā/真如的解说），Wikipedia — https://en.wikipedia.org/wiki/Tathagata</li>
+<li>第十七品究竟无我分，百度百科 — https://baike.baidu.com/item/%E7%AC%AC%E5%8D%81%E4%B8%83%E5%93%81%E7%A9%B6%E7%AB%9F%E6%97%A0%E6%88%91%E5%88%86/5492559</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/16/"><span class="lbl">← 上一品</span><span>能净业障分</span></a><a class="next" href="/a/jingangjing/18/"><span class="lbl">下一品 →</span><span>一体同观分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

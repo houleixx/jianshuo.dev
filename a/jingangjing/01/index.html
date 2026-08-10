@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第一品 法会因由分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第1品「法会因由分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal">一</span>
+  <h1>法会因由分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第一品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>如是我闻。一时，佛在舍卫国祇树给孤独园，与大比丘众千二百五十人俱。</p>
+<p>尔时，世尊食时，着衣持钵，入舍卫大城乞食。于其城中，次第乞已，还至本处。饭食讫，收衣钵，洗足已，敷座而坐。</p></div>
+<h2>白话</h2>
+<p>以下是我亲耳听到的。那一次，佛住在舍卫国的祇树给孤独园，与一千二百五十位大比丘在一起。</p>
+<p>那时，到了吃饭的时间，世尊穿好袈裟，拿起食钵，走进舍卫大城乞食。在城中挨家挨户依次乞食完毕，回到住处。吃完饭，收好袈裟和食钵，洗净双脚，铺好座位，坐了下来。</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>开篇六个要素——「如是我闻」「一时」「佛」「舍卫国祇树给孤独园」「千二百五十人」——先建立这部经的可信凭据：谁听到的、什么时候、谁说的、在哪里、谁在场。</li>
+<li>交代时间场景：到了吃饭时间，佛做的第一件事不是说法，而是穿衣、持钵、进城要饭。</li>
+<li>强调乞食方式是「次第乞」——挨家挨户按顺序来，不挑贫富、不选对象。</li>
+<li>乞食归来，吃饭、收拾衣钵、洗脚、铺座、坐下。全部动作按发生顺序平铺直叙，无一句议论。</li>
+<li>这一段看似流水账，实为全经的「发起序」：般若大法即将从这套最平常的日用威仪中开讲。</li>
+</ol>
+<h2>深度解读</h2>
+<p>《金刚经》全名《金刚般若波罗蜜经》，通行本是后秦鸠摩罗什的汉译。通行的三十二分科判，传说出自梁昭明太子之手，但这一归属最早见于明代注疏，学界一般认为是元末明初才附会上去的——分章是后人所加，「法会因由分」这个标题也是。不过这个标题概括得准确：本品交代法会的因缘由来。</p>
+<p>传统注疏把佛经开头这段套话称为「证信序」，并拆出六种成就：「如是」是信成就，「我闻」是闻成就，「一时」是时成就，「佛」是主成就，「舍卫国祇树给孤独园」是处成就，「千二百五十人俱」是众成就。六个要素齐备，这部经才算有了完整的来源凭据。「如是我闻」（梵文 evaṃ mayā śrutam）相传是佛临终前嘱咐的：日后结集经典，一律以这四个字开头，表明内容是弟子阿难亲闻转述，而非自己的发挥。六祖惠能在《金刚经口诀》里解释：「如者指义，是者定词。阿难自称如是之法，我从佛闻，明不自说也。」</p>
+<p>「舍卫国」即憍萨罗国的首都舍卫城（Śrāvastī），「祇树给孤独园」是佛陀晚年最重要的驻地：给孤独长者（Anāthapiṇḍada，一位以周济孤贫闻名的富商）出巨资买下祇陀太子的园林供养佛陀，太子感动之余捐出园中树木，故名「祇树、给孤独之园」。「比丘」（bhikṣu）意为乞士——以乞食为生的出家修行者；南怀瑾特别指出这个词的双关：向众生乞食以养色身，向佛乞法以养慧命。</p>
+<p>本品真正的重心在后半段，而后半段的奇特之处在于它的彻底平淡。一部要讲「无上正等正觉」的经，开场镜头却是一位七十多岁的老人赤脚进城要饭、回来吃饭、洗脚、坐下。历代注家几乎一致认为这不是闲笔。南怀瑾的读法最直白：穿衣吃饭就是修行，般若不在日用之外；佛的一天和常人的一天在动作上毫无区别，区别只在心。这正是全经「应无所住」的第一次演示——先做出来，再讲出来。</p>
+<p>「次第乞」是另一个被反复讨论的细节。次第乞食是头陀行之一（巴利文 sapadāna，义为不越次、不拣择），挨户依序而乞。印顺法师一系的讲记指出：乞食是给施主种福的机会，所以不能挑贫富，必须按顺序来。传统注疏常引一段对照：大迦叶专向穷人乞食（舍富从贫，怜其贫而予其种福之机），须菩提专向富人乞食（舍贫从富，不忍耗损穷人），两人各有道理，也各有偏心；而佛次第而乞，无所拣择。「平等」这个抽象概念，在这里被压缩成一个可执行的走路顺序。</p>
+<p>还有一处值得注意的版本差异：现存梵文本在「千二百五十比丘」之后还有一句 sambahulaiś ca bodhisattvair mahāsattvaiḥ（「以及众多菩萨摩诃萨」），孔兹（Edward Conze）的英译保留了它，而鸠摩罗什译本没有这句。这提示罗什所据的底本可能更早，也提示听众构成（纯声闻众还是含菩萨众）在传抄中曾被调整——《金刚经》是说给谁听的，文本史本身就留有讨论空间。</p>
+<p>在全经的论证结构中，本品的功能是设定初始条件。第 2 品须菩提将起身提问，此后三十品全是问答；而问答的全部前提——一个已经「善护念诸菩萨」的佛、一群现场证人、一套无可挑剔的日常——都在这一品里静静摆好了。答案其实已经演示完毕，问题才刚要被提出。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>本品可以拆成两个部分，各对应一个工程概念。</p>
+<p>前半段是一条合格的日志头（log header）。「如是我闻。一时，佛在舍卫国……千二百五十人俱」——这几乎就是一次提交记录的元数据：记录者（阿难）、时间戳（一时）、主机（佛）、地点（祇树给孤独园）、在场证人（1250 人）。佛经结集是一个分布式系统在创始节点下线后达成共识的过程：几百个「节点」各自持有记忆副本，靠公开诵出、集体校验来确认哪些内容可以写入正典。「如是我闻」就是每条记录强制携带的来源声明——不是我说的，是我听来的，且有一千二百五十个证人可供交叉验证。这个类比在「可审计性」上完全成立：六种成就就是六个必填字段，缺一个，这条记录的可信度就降级。</p>
+<p>后半段是一个更深的东西：接口与实现的分离。佛的对外接口——穿衣、持钵、乞食、吃饭、洗脚、坐下——与任何一个普通比丘完全同构；从外部行为上做黑盒测试，测不出「觉悟」这个内部状态的任何差异。整部《金刚经》后面要论证的正是这一点：觉悟不新增任何可观测的特殊行为，它改变的是对同一套行为的执取方式。「次第乞」则是一个无优先级的轮询调度（round-robin）：不设权重、不看请求方的资源多寡，严格按序处理。大迦叶和须菩提各自实现了一个带偏好的调度策略，且都能给出合理性证明；佛的做法是把策略参数整个删掉——平等不是「给每类对象计算出相同的权重」，而是根本不建那张权重表。</p>
+<p>类比在哪里失效？日志类比的失效处在于：日志只是对事件的记录，事件本身另有意义；而在本品中，「记录的这一天」本身就是教义——演示即定理，方法部分就是结论部分。接口类比的失效处在于：工程上我们分离接口与实现，是为了将来能替换实现；而佛法的方向相反——它要你最终看穿「实现」这个概念本身，连「内部有一个觉悟状态待封装」的想法也放掉。这一步没有对应的工程操作，也正是第 2 品之后经文要处理的问题。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>把本品后半段当作代码来读，它的结构会立刻显形：这是一段严格按作用域组织的资源管理代码。着衣、持钵是两次 acquire；乞食、吃饭是在持有期内的使用；「饭食讫，收衣钵」是释放，获取与释放在同一层作用域内对称闭合。「洗足已」更彻底——连「进城走了一趟」这个环境副作用也被清理干净。最后「敷座而坐」：栈上什么都不剩，一个干净的空帧。整段经文没有一个形容词，正如严谨的资源管理代码没有一行多余的逻辑。</p>
+<p>这段代码的分量不在单次执行，而在运行历史。它不是演示用的示例，是每天都在跑的主循环，跑了四十多年。写过长期服务的人都知道，这类进程最致命的问题从来不是崩溃，而是泄漏：每次循环多持有一点点内存，单次执行完全无感，code review 看不出来，压测也测不出来，直到某一天 OOM。「住」就是泄漏——逃逸出作用域的引用。饭吃完了，对这顿饭的评价还在心里持有着；路走完了，对沿途施主的比较还没有释放。每一个这样的引用都很小，小到不影响任何一次执行的正确性；但它们不被回收，堆只增不减。</p>
+<p>于是本品的两个断言可以完全用工程语言复述。第一，凡夫与佛运行的是同一个函数体。穿衣、乞食、吃饭、洗脚、坐下，逐行 diff 为空；区别不在任何一次执行的 trace 里，而在堆上——一个进程每天泄漏一点执取，另一个每次循环结束时引用归零。这就是为什么这一天从外部看毫无奇特之处，也是为什么般若必须从最平常的一天讲起：它要改的不是代码，是泄漏。觉悟不是给日常新增一个功能分支，而是删掉所有逃逸。</p>
+<p>第二，演示先于言说。全经后面反复出现的核心命令「应无所住」，在第一品先以一个稳定运行的参考实现出现——先有一个跑了四十几年、内存占用零增长的进程摆在现场，然后才开始讨论它的规格。第 2 品须菩提起身提问，相当于对着生产环境里这个反常地干净的系统开始 code reading：它为什么不泄漏？此后三十一品，都是对这个问题的回答。答案先于问题上线，这是本品作为「发起序」的真正含义。</p>
+<pre><code class="language-python">from contextlib import contextmanager
+
+@contextmanager
+def held(thing):
+    thing.take_up()                    # 着衣持钵
+    try:
+        yield thing
+    finally:
+        thing.put_down()               # 饭食讫，收衣钵
+        assert thing.escaped_refs() == 0   # 无一个引用逃逸出本作用域
+
+def one_ordinary_day(world) -&gt; None:
+    &quot;&quot;&quot;尔时，世尊食时——返回类型是 None：这一天不产出、不积累任何东西。&quot;&quot;&quot;
+    with held(world.robe), held(world.bowl) as bowl:
+        for house in world.city:       # 于其城中，次第乞已
+            bowl.receive(house.offering())
+        eat(bowl)
+    world.wash_feet()                  # 洗足已：连走过路的痕迹也清理掉
+    world.spread_seat()                # 敷座而坐：栈清空，帧归零
+
+
+# 差异只显现在长期运行的堆上。
+for day in range(45 * 365):
+    one_ordinary_day(world)
+    assert world.heap_growth() == 0    # 跑几十年，占用不增一字节
+</code></pre>
+<p>这个映射在一个地方失效：所有者。RAII 的全部语义预设一个管理资源的运行时、一个作用域的主人，我们释放资源，是为了这个主人下次还能再申请。而般若的方向是连「持有者」一并看空——无住不是一条在作用域退出时强制执行的检查，而是照见从头到尾就没有一个能持有东西的自我。只要那行 assert 还在，就还有一个检查者站在循环外面；那正是后面三十一品要继续拆掉的东西。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>如是我闻</td>
+<td>evaṃ mayā śrutam</td>
+<td>佛经开头的定型句，声明内容为阿难亲闻于佛，属六种成就中的信成就与闻成就</td>
+</tr>
+<tr>
+<td>祇树给孤独园</td>
+<td>Jetavanaṃ Anāthapiṇḍadasya ārāmaḥ</td>
+<td>舍卫城外的园林精舍：给孤独长者购园、祇陀太子施树，合建供佛，佛陀晚年主要驻地</td>
+</tr>
+<tr>
+<td>比丘</td>
+<td>bhikṣu（巴利 bhikkhu）</td>
+<td>乞士，以乞食为生的出家修行者；向众生乞食养身，向佛乞法养慧</td>
+</tr>
+<tr>
+<td>次第乞</td>
+<td>巴利 sapadāna</td>
+<td>头陀行之一：挨户依序乞食，不拣贫富，行为层面的平等</td>
+</tr>
+<tr>
+<td>世尊</td>
+<td>Bhagavān</td>
+<td>对佛的尊称，直译「有德尊者」，经中指释迦牟尼佛</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>尔时，世尊食时，着衣持钵，入舍卫大城乞食。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>南怀瑾《金刚经说什么》第一品 法会因由分 — http://m.shixiu.net/nanshi/zhuzuo/jgjssm/4357.html</li>
+<li>六祖惠能《金刚经口诀》 — https://www.quanxue.cn/ct_fojia/jingangkj/jingangkj01.html</li>
+<li>Edward Conze, <em>The Diamond Sutra in Sanskrit and English</em> — http://www.buddhistische-gesellschaft-berlin.de/downloads/diamantsutraconze.pdf</li>
+<li>维基百科「金刚经」条目（三十二分科判源流） — https://zh.wikipedia.org/zh-hans/金刚经</li>
+<li>道源长老《金刚般若波罗蜜经讲记》（佛陀教育基金会） — http://ftp3.budaedu.org/ghosa3/C006/T052V/ref/T052V_01.pdf</li>
+<li>百度百科「第一品法会因由分」（六种成就） — https://baike.baidu.com/item/第一品法会因由分/7250405</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/intro/"><span class="lbl">← 导读</span><span>总导读</span></a><a class="next" href="/a/jingangjing/02/"><span class="lbl">下一品 →</span><span>善现启请分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

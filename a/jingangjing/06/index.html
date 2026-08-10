@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第六品 正信希有分 · 金刚经理工男读本</title>
+<meta name="description" content="《金刚经》第6品「正信希有分」：原文、白话、深度解读与理工男视角。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f5eed9; --paper-deep:#efe3c2; --paper-panel:#faf5e8;
+  --ink:#2b2620; --ink-soft:#6b6152; --line:rgba(43,38,32,.16);
+  --zhu:#b3342a; --zhu-deep:#8f2a22; --qing:#3d5566; --qing-bg:#eef0ea;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+  line-height:1.9;font-size:17px;
+  background-image:radial-gradient(ellipse at 20% 0%,rgba(255,255,255,.5),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(179,52,42,.04),transparent 45%)}
+a{color:var(--zhu-deep);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:4px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--zhu);outline-offset:3px}
+.wrap{max-width:46rem;margin:0 auto;padding:0 1.4rem}
+.wide{max-width:72rem}
+
+/* top bar */
+.topbar{border-bottom:1px solid var(--line);font-size:.82rem}
+.topbar .wrap{display:flex;justify-content:space-between;align-items:center;
+  padding-top:.9rem;padding-bottom:.9rem}
+.topbar a{color:var(--ink-soft)}
+.topbar .brand{font-family:var(--mono);letter-spacing:.05em}
+
+/* seal */
+.seal{display:inline-flex;align-items:center;justify-content:center;
+  width:3.2rem;height:3.2rem;background:var(--zhu);color:#f8f0dd;
+  font-size:1.5rem;font-weight:700;line-height:1;border-radius:4px;
+  box-shadow:inset 0 0 0 2px rgba(248,240,221,.35);flex:none}
+.seal.small{width:2.3rem;height:2.3rem;font-size:1.02rem}
+.seal.two{font-size:1.05rem;letter-spacing:-.08em}
+.seal.small.two{font-size:.78rem}
+.seal.three{font-size:.9rem;letter-spacing:-.12em}
+.seal.small.three{font-size:.62rem}
+
+/* hero (index) */
+.hero{padding:4.5rem 0 3.5rem;border-bottom:1px solid var(--line)}
+.hero .wrap{display:flex;gap:3.5rem;align-items:stretch;justify-content:space-between}
+.hero-main{max-width:34rem}
+.hero-eyebrow{font-family:var(--mono);font-size:.78rem;color:var(--ink-soft);
+  letter-spacing:.18em;margin-bottom:1.6rem}
+h1.book-title{font-size:clamp(2.6rem,6vw,4rem);font-weight:900;line-height:1.25;
+  letter-spacing:.06em}
+.hero-sub{margin-top:1.4rem;font-size:1.05rem;color:var(--ink-soft);max-width:30rem}
+.hero-meta{margin-top:2.2rem;display:flex;gap:2.2rem;font-family:var(--mono);
+  font-size:.8rem;color:var(--ink-soft)}
+.hero-meta b{display:block;font-size:1.35rem;color:var(--ink);font-weight:600}
+.hero-cta{margin-top:2.4rem}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--paper);
+  padding:.7rem 1.6rem;border-radius:3px;font-size:.95rem;letter-spacing:.1em}
+.hero-cta a:hover{background:var(--zhu-deep);text-decoration:none}
+/* vertical sutra panel */
+.scripture{writing-mode:vertical-rl;background:var(--paper-deep);
+  border:1px solid var(--line);outline:1px solid var(--line);outline-offset:3px;
+  padding:2rem 1.6rem;font-size:1.12rem;line-height:2.35;letter-spacing:.14em;
+  color:var(--ink);max-height:26rem;flex:none;
+  background-image:repeating-linear-gradient(to right,transparent 0,transparent 2.55em,var(--line) 2.55em,var(--line) calc(2.55em + 1px));
+  animation:inkfade 1.2s ease both}
+.scripture .colophon{color:var(--zhu-deep);font-size:.85rem;letter-spacing:.3em}
+@keyframes inkfade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.scripture{animation:none}}
+@media (max-width:860px){
+  .hero .wrap{flex-direction:column;gap:2.5rem}
+  .scripture{max-height:19rem;align-self:center}
+}
+
+/* index sections */
+.section-label{font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+  color:var(--ink-soft);margin:3.2rem 0 1.4rem;display:flex;align-items:center;gap:1rem}
+.section-label::after{content:"";flex:1;height:1px;background:var(--line)}
+.intro-card{display:flex;gap:1.4rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.6rem 1.8rem;margin-bottom:.5rem}
+.intro-card h2{font-size:1.25rem;font-weight:700}
+.intro-card p{color:var(--ink-soft);font-size:.95rem;margin-top:.4rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));
+  gap:.9rem;padding-bottom:4rem}
+.chip{display:flex;gap:1rem;align-items:flex-start;background:var(--paper-panel);
+  border:1px solid var(--line);border-radius:6px;padding:1.1rem 1.2rem;color:var(--ink);
+  transition:border-color .15s,transform .15s}
+.chip:hover{border-color:var(--zhu);text-decoration:none;transform:translateY(-2px)}
+.chip .t{font-weight:700;font-size:1.02rem;line-height:1.5}
+.chip .d{font-size:.84rem;color:var(--ink-soft);margin-top:.25rem;line-height:1.65}
+.part-note{font-size:.9rem;color:var(--ink-soft);margin:-0.6rem 0 1.2rem}
+
+/* chapter page */
+.ch-head{padding:3.4rem 0 2.2rem;text-align:center}
+.ch-head .seal{margin:0 auto}
+.ch-head h1{font-size:clamp(1.9rem,4.5vw,2.6rem);font-weight:900;letter-spacing:.1em;
+  margin-top:1.3rem}
+.ch-head .ch-sub{font-family:var(--mono);font-size:.8rem;color:var(--ink-soft);
+  letter-spacing:.25em;margin-top:.7rem}
+.content{padding-bottom:3rem}
+.content h2{font-size:1.3rem;font-weight:900;letter-spacing:.08em;
+  margin:3rem 0 1.1rem;display:flex;align-items:center;gap:.9rem}
+.content h2::before{content:"";width:.55rem;height:.55rem;background:var(--zhu);
+  border-radius:1px;flex:none}
+.content p{margin:1rem 0}
+.content ol,.content ul{padding-left:1.6rem;margin:1rem 0}
+.content li{margin:.45rem 0}
+.content blockquote{border-left:3px solid var(--zhu);padding:.2rem 0 .2rem 1.2rem;
+  margin:1.4rem 0;font-size:1.08rem;letter-spacing:.05em}
+.content table{border-collapse:collapse;width:100%;margin:1.4rem 0;font-size:.92rem;
+  line-height:1.7}
+.content th,.content td{border:1px solid var(--line);padding:.55rem .8rem;text-align:left}
+.content th{background:var(--paper-deep);font-weight:700}
+.content .tablewrap{overflow-x:auto}
+/* 原文 panel */
+.sec-original{background:var(--paper-deep);border:1px solid var(--ink-soft);
+  outline:1px solid var(--line);outline-offset:4px;border-radius:2px;
+  padding:1.8rem 2rem;margin:1.6rem 0;font-size:1.13rem;line-height:2.3;
+  letter-spacing:.09em}
+.sec-original p{margin:.9rem 0}
+/* code blocks */
+.content pre{background:#2e2b26;color:#e8e0cf;border-radius:6px;padding:1.1rem 1.3rem;
+  overflow-x:auto;font-size:.84rem;line-height:1.75;margin:1.2rem 0;
+  font-family:var(--mono)}
+.content code{font-family:var(--mono)}
+.content p code,.content li code{background:var(--paper-deep);padding:.1em .35em;
+  border-radius:3px;font-size:.85em}
+.content pre code{background:none;padding:0}
+/* 写给高级程序员 panel */
+.sec-dev{background:#f2f0e9;border:1px solid rgba(43,38,32,.25);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-dev-label{font-family:var(--mono);font-size:.75rem;color:#5a5344;
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-dev{color:#4a4438}h2.h-dev::before{background:#4a4438;border-radius:50%}
+/* 理工男视角 panel */
+.sec-eng{background:var(--qing-bg);border:1px solid rgba(61,85,102,.3);
+  border-radius:6px;padding:.4rem 1.8rem 1rem;margin:1.6rem 0}
+.sec-eng-label{font-family:var(--mono);font-size:.75rem;color:var(--qing);
+  letter-spacing:.2em;margin-top:1.2rem}
+h2.h-eng{color:var(--qing)}h2.h-eng::before{background:var(--qing)}
+/* refs */
+.sec-refs{font-size:.85rem;color:var(--ink-soft)}
+.sec-refs a{overflow-wrap:anywhere}
+/* prev/next */
+.pager{display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);
+  padding:1.6rem 0 4rem;font-size:.95rem}
+.pager a{display:flex;flex-direction:column;gap:.2rem;max-width:45%}
+.pager .lbl{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);letter-spacing:.15em}
+.pager .next{text-align:right;margin-left:auto}
+footer{border-top:1px solid var(--line);padding:2rem 0 3rem;font-size:.82rem;
+  color:var(--ink-soft);text-align:center}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<nav class="topbar"><div class="wrap wide">
+  <a href="/a/jingangjing/" class="brand">金刚经 · 理工男读本</a>
+  <a href="/a/">jianshuo.dev/a</a>
+</div></nav>
+<header class="ch-head wrap">
+  <span class="seal">六</span>
+  <h1>正信希有分</h1>
+  <div class="ch-sub">金刚般若波罗蜜经 · 第六品 / 三十二品</div>
+</header>
+<main class="wrap content">
+<h2>原文</h2>
+<div class="sec-original"><p>须菩提白佛言："世尊！颇有众生，得闻如是言说章句，生实信不？"</p>
+<p>佛告须菩提："莫作是说。如来灭后，后五百岁，有持戒修福者，于此章句能生信心，以此为实，当知是人不于一佛、二佛、三四五佛而种善根，已于无量千万佛所种诸善根，闻是章句，乃至一念生净信者，须菩提！如来悉知悉见，是诸众生得如是无量福德。何以故？是诸众生无复我相、人相、众生相、寿者相。"</p>
+<p>"无法相，亦无非法相。何以故？是诸众生若心取相，则为着我、人、众生、寿者。"</p>
+<p>"若取法相，即着我、人、众生、寿者。何以故？若取非法相，即着我、人、众生、寿者。是故不应取法，不应取非法。以是义故，如来常说：汝等比丘，知我说法，如筏喻者，法尚应舍，何况非法。"</p></div>
+<h2>白话</h2>
+<p>须菩提向佛请问："世尊，将来会不会有众生，听到这样的言说章句，能生起真实的信心？"</p>
+<p>佛告诉须菩提："不要这样说。如来灭度之后，到了后五百岁那个时代，仍会有持戒修福的人，对这些章句能生起信心，把它当作真实。要知道，这样的人不只是在一位佛、两位佛、三四五位佛那里种过善根，而是已经在无量千万位佛那里种下了种种善根。听到这些章句，哪怕只在一念之间生起清净的信心，须菩提，如来全都知道、全都看见——这些众生会获得如此无量的福德。为什么？因为这些众生已不再有自我的观念、他人的观念、众生的观念、寿命者的观念。"</p>
+<p>"他们也没有『法』的观念，同样没有『非法』的观念。为什么？因为这些众生只要心里一执取任何观念，就落入了对自我、他人、众生、寿命者的执著。"</p>
+<p>"如果执取『法』的观念，就落入我、人、众生、寿者的执著。为什么这么说？因为哪怕执取『非法』的观念，同样落入我、人、众生、寿者的执著。所以既不应执取法，也不应执取非法。正因为这个道理，如来常说：你们这些比丘，要知道我说的法，就像渡河的筏子——法尚且应当舍弃，何况那些非法。"</p>
+<h2>这一品在说什么</h2>
+<ol>
+<li>须菩提替未来的众生发问：前几品讲的这套「无相」的道理这么反直觉，后世的人听到，真能生起实信吗？</li>
+<li>佛先纠正问题本身——「莫作是说」：即使到正法衰微的「后五百岁」，仍会有持戒修福的人能信，而且这种信不是偶然，其背后是在无量诸佛处积累的善根。</li>
+<li>佛把门槛压到极低又抬到极高：哪怕只有「一念」清净的信心，如来悉知悉见，此人得无量福德。</li>
+<li>接着给出这种信为什么可能的结构性解释：能生净信的人，已经不再执取我、人、众生、寿者四相，也不执取「法相」，甚至不执取「非法相」——心一取相，就是执著。</li>
+<li>结论以筏喻收束：佛法本身只是渡河的工具，「法尚应舍，何况非法」——对教法的执著也要放下，对教法之否定的执著更要放下。</li>
+</ol>
+<h2>深度解读</h2>
+<p>第 6 品在《金刚经》的论证结构中，处理的是一个元问题。前五品刚刚抛出了全经最核心的命题——「凡所有相，皆是虚妄；若见诸相非相，即见如来」（第 5 品）。这个命题反直觉到什么程度？须菩提立刻意识到：它不仅难懂，而且难信。于是他不再问义理本身，而是问义理的可接受性：将来的人听到这些话，真能相信吗？这是一个关于「信」的认识论问题，也是全经第一次把目光从当下的法会投向佛灭度之后的历史。</p>
+<p>佛的回答分三层。</p>
+<p>第一层，驳回问题的悲观预设：「莫作是说」。「后五百岁」（梵文本作 paścimāyāṃ pañcaśatyāṃ，saddharma-vipralopa-kāle，「正法坏灭之时的最后五百年」）在传统判教里通常解为佛灭后正法、像法之后的衰微时段——即使在那样的时代，持戒修福者依然能「生信心，以此为实」。值得注意的是佛给出的解释不是奇迹，而是因果积累：此人「已于无量千万佛所种诸善根」。信不是凭空发生的心理事件，而是长期训练的输出结果。这与《金刚经》一贯的冷静风格一致——它不诉诸神秘体验，而诉诸条件。</p>
+<p>第二层，定义这种信的品质：「一念生净信」。「净信」（梵文 prasāda，本义澄净、澄清）不同于一般的相信。南怀瑾在《金刚经说什么》里特别区分：「净信很难啊！它不是正信，而是净信，干净，空灵，什么妄念都没有。」也就是说，这里的信不是「我认为这个命题为真」的命题态度，而是心在一瞬间不起任何妄念的澄净状态——所以经文才敢说「乃至一念」就得无量福德：衡量的不是持续时长，而是品质。</p>
+<p>第三层是本品真正的重心：为什么这种人能信？因为「是诸众生无复我相、人相、众生相、寿者相，无法相，亦无非法相」。这里的「相」，梵文本用的是 saṃjñā（想、观念、概念认取），而不是指外形的 lakṣaṇa——当代学者（如 Paul Harrison 据梵本的英译）多译作 notion 或 perception。也就是说，四相不是四种「样子」，而是四种概念执取：对「我」的认取（ātma-saṃjñā）、对「他人」「众生」「寿命延续者」的认取。六祖惠能《金刚经口诀》把四相逐一拆解：「无我者，无色受想行识也；无人者，了四大不实，终归地水火风也；无众生者，无生灭心也；无寿者，我身本无，宁有寿者。」</p>
+<p>但本品把破执又推进了两步，这是它超出前几品的地方。第一步：不但不执「我」，也不执「法相」（dharma-saṃjñā）——连「佛法」这个概念本身也不能抓住不放。第二步更险：也不执「非法相」（adharma-saṃjñā）——如果因为听说「法不可执」，就抓住「一切皆空、什么都没有」这个观念，那还是执著，而且是更隐蔽的执著。经文的论证是对称的：「若取法相，即着我人众生寿者；若取非法相，即着我人众生寿者。」执取的内容变了，执取这个动作没变，而问题恰恰出在动作上。龙树一系对此的态度历来很硬：执有固然愚昧，执空「则更愚昧」——因为执空的人自以为已经放下了。</p>
+<p>于是有了全经最著名的比喻之一：筏喻（梵 kolopama，此喻可上溯至巴利《中部·蛇喻经》）。法如渡河之筏，渡过之后就该舍弃，没有人上了岸还把筏子扛在头上走。「法尚应舍，何况非法」——连能载人渡过生死的般若法尚且要放下，何况那些本来就不是渡河工具的东西。惠能对「非法」的注解偏具体：「非法者，生天等法」，即那些只能带来人天福报、不能出离生死的法门。近代讲家如南怀瑾则强调筏喻的中道性质：《金刚经》并非绝对讲空，而是「实际理地不着一尘，万行门中不舍一法」——理上一尘不立，事上一法不舍。工具要用，用完要放；两头都不能省。</p>
+<p>本品由此在全经中承担了一个枢纽功能：它把第 5 品的「离相」从对象层面（不执著事物）提升到方法层面（不执著教法本身，也不执著对教法的否定），为后面第 7 品「无有定法如来可说」直接铺路。</p>
+<h2 class="h-eng">理工男视角</h2>
+<div class="sec-eng"><div class="sec-eng-label">ENGINEER'S NOTES</div><p>本品的结构可以用「自举」（bootstrapping）来搭脚手架。</p>
+<p>编译器工程里有一个经典操作：用一个简陋的初始编译器把正式编译器的源码编译出来，正式编译器能自我编译之后，初始那一级就被丢弃——它的全部价值就在于让你不再需要它。筏喻是同构的：法（dharma）是渡河的工具，其设计目标就是自身的可抛弃性。一个上了岸还扛着筏子的人，和一个永远用 stage 0 编译器做生产构建的团队，犯的是同一个错误——把脚手架当成了建筑本身。</p>
+<p>「不应取法，不应取非法」的对称结构，则可以用状态机来精确表述。设一个变量 <code>belief</code>，「取法相」相当于 <code>belief = dharma</code>；听懂了「法不可执」之后，把它改成 <code>belief = null</code>——这看起来是清空了，但注意：<code>null</code> 依然是这个变量的一个取值，赋值这个操作本身一次都没有停过。经文说「若取非法相，即着我人众生寿者」，指的正是这一层：把「空」当作新的持仓，执著的机制原封未动，只是换了标的。逻辑上也一样——命题 P 的否定 ¬P 仍然是同一形式系统内的一个命题，断言 ¬P 并没有让你跳出这个系统。维特根斯坦在《逻辑哲学论》末尾说读懂此书的人要把书当梯子扔掉，是同一个动作的哲学版。</p>
+<p>但要老实标出类比在哪里失效，失效处正是佛学多出来的部分。</p>
+<p>第一，自举编译器丢弃 stage 0 是零成本的：<code>rm</code> 一下就完了。而「舍法」不是删除一条信念记录，四相是心的默认运行方式，「舍」意味着改掉执取这个动作本身——相当于不是清空变量，而是取消这个变量的存在。这在软件里做不到：类型系统不允许一个「不再有取值这回事」的变量。佛学声称人心可以，这一步没有工程对应物。</p>
+<p>第二，顺序不可交换。编译器可以随时回退到 stage 0 重新构建；筏喻却有严格的时序约束——「法尚应舍」说的是渡过之后，绝不是渡河之前就把筏子扔了轻装上阵。「后五百岁」「持戒修福」「无量千万佛所种诸善根」这些前置条件，都在强调渡河本身极其漫长。把「法尚应舍」读成「所以不用修行」，是把析构函数写进了构造函数里。</p>
+<p>第三，「一念净信」在这套类比里没有位置。它不是对某命题赋真值，更接近系统在一瞬间没有任何进程占用——而我们没有任何计算模型用「不运行」来定义一种成就。类比到此为止，剩下的部分只能实证。</p></div>
+<h2 class="h-dev">写给高级程序员</h2>
+<div class="sec-dev"><div class="sec-dev-label">FOR SENIOR ENGINEERS</div><p>工程界有句老话：计算机科学只有两件难事，缓存失效和命名。第 6 品处理的恰好是第一件——只是这次，缓存在心里。</p>
+<p>本品说的「相」（saṃjñā）不是外形，是概念认取。翻译成工程语言：心从不直接读实相，它读的是自己缓存的快照。「我」就是一条缓存记录——把此刻五蕴的聚合物化成一个稳定的 key，此后所有请求都命中这条记录，不再回源。「人、众生、寿者」是同一张表里的另外三条。缓存本身不是罪：没有这一层，日常心智根本扛不住负载。问题在于把缓存当成了源站。快照在写入的那一刻就开始过期，而心把它当作实相本身在读。「凡所有相，皆是虚妄」由此有了一个冷静的译法：所有缓存条目都是 stale 的，by construction——不是恰好过期，而是快照这种数据结构注定过期。</p>
+<p>本品真正锋利的是后两步。第一步，「法相」：佛法这套教义自己也会被缓存。你把「无我」存成一条新记录，之后遇事直接命中它，看似在修行，读路径没有任何变化。第二步更隐蔽，「非法相」：听懂了「不可执取」，于是删掉 dharma 这条记录——但删除之后顺手写入了一条负缓存：「此处无物」。做过 DNS 或 CDN 的人都知道，缓存一个 NOT_FOUND 和缓存一个 200，对后续请求的钉死效果完全一样。经文那组对称句「若取法相……若取非法相……」说的就是这件事：条目内容无关紧要，set 这个操作本身才是执著。要破的不是某个 key，而是写入动作。筏喻在这套语义里是自然推论：连这份缓存失效协议本身，也不许变成常驻条目。</p>
+<p>「一念生净信」于是有了精确的工程语义：一次绕过全部缓存层的直读。不是把某个信念的 value 改成 true，而是那一瞬间没有任何一层快照插在心与实相之间。为什么「乃至一念」就够？因为衡量的是读路径的品质，不是持续时长——read-through 成功一次，就证明了这条路径存在。而为什么多数人做不到？和多数系统不敢关缓存是同一个原因：没有这层，扛不住负载。「已于无量千万佛所种诸善根」描述的正是那个漫长的容量建设过程：把系统练到能承受无缓存直读，信心才不是奇迹，而是压测通过后的自然结果。</p>
+<pre><code class="language-typescript">// 「相」= saṃjñā：不是外形，而是一次概念认取——对实相的快照缓存
+type Notion = &quot;self&quot; | &quot;other&quot; | &quot;beings&quot; | &quot;lifespan&quot; | &quot;dharma&quot; | &quot;non-dharma&quot;;
+
+interface Snapshot { takenAt: number; content: unknown }
+
+class Mind {
+  private cache = new Map&lt;Notion, Snapshot&gt;();
+  get cacheSize(): number { return this.cache.size; }
+
+  perceive(notion: Notion): Snapshot {
+    const hit = this.cache.get(notion);
+    if (hit) return hit;               // 「心取相」：读到的是快照，且必然 stale
+    const fresh = reality.read();
+    this.cache.set(notion, fresh);     // 执著不在条目内容，而在这一次 set
+    return fresh;
+  }
+
+  // 天真的放下：删掉「法」，却写入一条负缓存
+  naiveLetGo(): void {
+    this.cache.delete(&quot;dharma&quot;);
+    this.cache.set(&quot;non-dharma&quot;, NOTHING); // 「若取非法相，即着我人众生寿者」
+  }
+
+  // 「乃至一念生净信」：一次绕过全部缓存层的直读
+  pureRead(): Snapshot {
+    return reality.read();             // 不写回。难的不是这一行，而是敢不写回
+  }
+}
+
+// 「无法相，亦无非法相」检验的不是某个 key 的取值，而是整张表为空
+const assertNoNotion = (m: Mind) =&gt;
+  assert(m.cacheSize === 0, &quot;心一取相，则为着我人众生寿者&quot;);
+</code></pre>
+<p>这个映射在哪里失效：代码里 <code>reality.read()</code> 仍然返回一个 <code>Snapshot</code>——只要有返回值可以持有，那就又是一条相，而般若义理中的「直读」没有任何返回值可拿，这是类型系统表达不了的。其次，工程里的缓存失效是存储层的运维问题，破执的对象却不是那张表，而是不断发起 set 的读写者本人。般若不是在优化你的系统，它质问的是「谁在读」——这一问落在代码模型之外。</p></div>
+<h2>关键概念</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>概念</th>
+<th>梵文/巴利文</th>
+<th>解释</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>后五百岁</td>
+<td>paścimāyāṃ pañcaśatyāṃ</td>
+<td>正法坏灭之时的最后五百年；传统多解为佛灭后教法逐渐衰微的末法时段</td>
+</tr>
+<tr>
+<td>净信</td>
+<td>prasāda</td>
+<td>澄净无杂念的信心，是一种心的澄清状态而非对命题的认可；经中说「一念」即得无量福德</td>
+</tr>
+<tr>
+<td>相（我相等四相）</td>
+<td>saṃjñā</td>
+<td>概念认取、观念，而非外形（lakṣaṇa）；四相即对「我、人、众生、寿命者」的四种概念执取</td>
+</tr>
+<tr>
+<td>法相 / 非法相</td>
+<td>dharma-saṃjñā / adharma-saṃjñā</td>
+<td>对「佛法」这一概念的执取 / 对「无法、空无」这一概念的执取；两者同为执著</td>
+</tr>
+<tr>
+<td>筏喻</td>
+<td>kolopama（巴利 kullūpama）</td>
+<td>法如渡河之筏，渡后应舍；可上溯至巴利《中部·蛇喻经》</td>
+</tr>
+</tbody>
+</table></div>
+<h2>金句</h2>
+<blockquote>
+<p>汝等比丘，知我说法，如筏喻者，法尚应舍，何况非法。</p>
+<p>乃至一念生净信者，须菩提！如来悉知悉见，是诸众生得如是无量福德。</p>
+</blockquote>
+<h2>参考资料</h2>
+<div class="sec-refs"><ul>
+<li>第六品正信希有分 — 百度百科：https://baike.baidu.com/item/%E7%AC%AC%E5%85%AD%E5%93%81%E6%AD%A3%E4%BF%A1%E5%B8%8C%E6%9C%89%E5%88%86/5251679</li>
+<li>六祖惠能《金刚经口诀》（正信希有分注）：https://blog.sina.com.cn/s/blog_b5d26fd20101rdhp.html</li>
+<li>南怀瑾《金刚经说什么》正信希有分（净信与无所住）：https://www.quanxue.cn/ct_nanhuaijin/jingang/jingang63.html</li>
+<li>The Raft, to be Left Aside — Diamond Sutra and Alagaddūpama Sutta, Way of Bodhi：https://www.wayofbodhi.org/diamond-sutra-and-alagaddupama-sutta/</li>
+<li>Vajracchedikā Prajñāpāramitā §1–10（梵本对读）— Reading Sanskrit：https://readsanskrit.wordpress.com/2015/09/12/vajracchedika-prajnaparamita/</li>
+<li>Paul Harrison (tr.), Vajracchedikā Prajñāpāramitā, Schøyen Collection Buddhist Manuscripts Vol. III：https://static1.squarespace.com/static/5c03ced75ffd204418037b7a/t/5c5306ce575d1f9230da8a6a/1548945103490/Diamond+Sutra-Paul+Harrison+tr.pdf</li>
+</ul></div>
+</main>
+<div class="wrap"><nav class="pager"><a href="/a/jingangjing/05/"><span class="lbl">← 上一品</span><span>如理实见分</span></a><a class="next" href="/a/jingangjing/07/"><span class="lbl">下一品 →</span><span>无得无说分</span></a></nav></div>
+<footer><div class="wrap">
+  原文据鸠摩罗什译《金刚般若波罗蜜经》（大正藏 T0235）· 解读由 Claude 协作整理 ·
+  <a href="/a/jingangjing/">全书目录</a>
+</div></footer>
+</body>
+</html>

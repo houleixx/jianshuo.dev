@@ -13,7 +13,7 @@ npm run build
 echo "▸ sync → $VPS:$REMOTE"
 rsync -az --delete \
   --exclude node_modules --exclude .env --exclude workspace --exclude '*.log' \
-  dist public package.json package-lock.json deploy \
+  dist public bin package.json package-lock.json deploy \
   "$VPS:$REMOTE/"
 
 echo "▸ install + restart"

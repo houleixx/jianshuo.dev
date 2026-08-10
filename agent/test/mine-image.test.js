@@ -23,7 +23,14 @@ function envWithPhotos(seed = {}) {
     const obj = await rawGet(key);
     if (!obj) return null;
     const v = e.FILES._store.get(key);
-    return { ...obj, arrayBuffer: async () => new TextEncoder().encode(v).buffer };
+    return { ...obj, arrayBuffer: async () => {
+      const body = new TextEncoder().encode(v);
+      // 照片键补上真 JPEG 魔数——loadPhoto 现在按字节嗅探格式，认不出会跳过该图
+      if (!key.includes("photos/")) return body.buffer;
+      const u = new Uint8Array(3 + body.length);
+      u.set([0xff, 0xd8, 0xff]); u.set(body, 3);
+      return u.buffer;
+    } };
   };
   e.R2_ACCOUNT_ID = "acc";
   e.R2_ACCESS_KEY_ID = "ak";
