@@ -469,7 +469,7 @@ async function handleRequest(context) {
       headers: {
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
-        'referrer-policy': 'no-referrer',
+        'referrer-policy': 'origin',
       },
     });
   }
