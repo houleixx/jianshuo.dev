@@ -62,6 +62,10 @@ export function realtimeCostUY(usage = {}) {
 export const IMAGE_SUANLI = 1.8;
 export function imageCostUY() { return suanliToUY(IMAGE_SUANLI); }
 
+// 写书（lab.jianshuo.dev /api/book 整本书流水线）单价：一口价按算力计。
+export const BOOK_SUANLI = 320;
+export function bookCostUY() { return suanliToUY(BOOK_SUANLI); }
+
 export function gateDecision(balanceUY, durationSec) {
   if ((durationSec || 0) > MAX_RECORDING_SEC) return "too-long";
   if (balanceUY <= 0) return "no-credit";
@@ -106,6 +110,7 @@ export const REASON_ZH = {
   "migrated":      "余额迁移",
   "overdraft":     "透支",
   "realtime":      "AI 采访",
+  "book":          "写书",
   "referral_author": "邀请奖励",
   "referral_new":    "受邀赠送",
 };

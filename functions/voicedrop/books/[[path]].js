@@ -11,8 +11,9 @@
 // key 钉死在该 scope 的 books/ 尾段下，桶里其他东西（articles/、WECHAT.json…）
 // 够不着，所以不需要 photo 那样的文件类型白名单。
 //
-// GET /books/        → 书架索引：一行一本书（= 一个 <slug>/ 文件夹），显示书名
-//                      （取自 <slug>/index.html 的 <title>），不平铺夹内文件。
+// GET /books/        → 书架索引：一本书一个「书封」（竖排题签 + 副题 + 印章，
+//                      封面色按 slug 哈希稳定分配），书名取自 <slug>/index.html
+//                      的 <title>，不平铺夹内文件。
 // GET /books/<name>  → 文件本体，inline 展示；html/md/txt 只缓存 5 分钟（书会
 //                      反复重发迭代），其余（pdf/图片等大文件）缓存一天。
 
@@ -31,14 +32,19 @@ export async function onRequest({ request, env, params }) {
     return new Response('method not allowed', { status: 405 });
   }
   const segments = Array.isArray(params.path) ? params.path : (params.path ? [params.path] : []);
-  const rel = decodeURIComponent(segments.join('/'));
+  let rel = decodeURIComponent(segments.join('/'));
   if (rel.includes('..') || rel.startsWith('/')) return notFound();
 
   // 索引页：/books 或 /books/
   if (!rel) return index(env);
 
-  const key = PUBLISHER + rel;
-  const obj = request.method === 'HEAD' ? await env.FILES.head(key) : await env.FILES.get(key);
+  const fetchKey = (key) => (request.method === 'HEAD' ? env.FILES.head(key) : env.FILES.get(key));
+  let obj = await fetchKey(PUBLISHER + rel);
+  // 目录路径（/books/<slug> 或 /books/<slug>/，[[path]] 不保留尾斜杠）→ 补 index.html
+  if (!obj && !rel.split('/').pop().includes('.')) {
+    rel = rel.replace(/\/$/, '') + '/index.html';
+    obj = await fetchKey(PUBLISHER + rel);
+  }
   if (!obj) return notFound();
 
   const ext = (rel.split('.').pop() || '').toLowerCase();
@@ -89,23 +95,98 @@ async function index(env) {
   books.sort((a, b) => String(a.title).localeCompare(String(b.title), 'zh'));
 
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const rows = books.map((b) =>
-    `<li><a href="/books/${encodeURI(b.slug)}/index.html">${esc(b.title)}</a></li>`).join('\n');
+
+  // 书封样式：竖排题签（主标题）+ 竖排小字副题 + 「建硕」印章，
+  // 封面色从传统矿物色里按 slug 哈希稳定分配（同一本书永远同一个颜色）。
+  const PALETTE = [
+    ['#33506B', '#263D54'], ['#A04A38', '#7E3626'], ['#3D6B57', '#2C5342'],
+    ['#5A4157', '#463043'], ['#40403C', '#2F2F2C'], ['#A67F42', '#8A6730'],
+    ['#2E4159', '#223146'], ['#7A4A2E', '#603921'], ['#8A3A4A', '#6E2C39'],
+    ['#5A6B3D', '#47552E'], ['#35597E', '#284664'],
+  ];
+  const colorOf = (slug) => {
+    let h = 0;
+    for (const ch of slug) h = (h * 31 + ch.codePointAt(0)) % 997;
+    return PALETTE[h % PALETTE.length];
+  };
+  // 主副题拆分：在 ——／：／· 处断开，题签只放主题，副题竖排在封面右侧。
+  const splitTitle = (t) => {
+    for (const sep of ['——', '—', '：', ':', ' · ', '·']) {
+      const i = t.indexOf(sep);
+      if (i > 1) return [t.slice(0, i).trim(), t.slice(i + sep.length).trim()];
+    }
+    return [t.trim(), ''];
+  };
+  // 题签单列不换行，字号按主题长度分级，保证再长也不折列。
+  const sizeClass = (n) => (n <= 5 ? 's5' : n <= 7 ? 's7' : n <= 9 ? 's9' : n <= 12 ? 's12' : 's99');
+
+  const covers = books.map((b) => {
+    const [main, sub] = splitTitle(b.title);
+    const [c, c2] = colorOf(b.slug);
+    return `<a class="book" href="/books/${encodeURI(b.slug)}/" style="--c:${c};--c2:${c2}" title="${esc(b.title)}">` +
+      `<span class="slip"><span class="t ${sizeClass([...main].length)}">${esc(main)}</span></span>` +
+      (sub ? `<span class="sub">${esc(sub)}</span>` : '') +
+      `<span class="seal">建硕</span></a>`;
+  }).join('\n');
+
   const html = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Books</title>
+<title>书架 · VoiceDrop</title>
 <style>
-  body{margin:0;background:#fff;color:#1a1a1a;font:16px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
-  main{max-width:640px;margin:0 auto;padding:40px 20px}
-  h1{font-size:22px;margin:0 0 20px}
-  ul{list-style:none;margin:0;padding:0}
-  li{padding:12px 0;border-bottom:1px solid #eee}
-  a{color:#0a58ca;text-decoration:none;word-break:break-all}
-  a:hover{text-decoration:underline}
-  p.empty{color:#999}
+  :root{--paper:#F6F1E6;--ink:#26221B;--muted:#8A8072;--slip:#F4EDDD;--slip-ink:#2A2520;--seal:#A63A2B}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:15px/1.7 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background-image:radial-gradient(rgba(38,34,27,.028) 1px,transparent 1px);background-size:22px 22px}
+  main{max-width:960px;margin:0 auto;padding:44px 20px 72px}
+  header{text-align:center;margin-bottom:40px}
+  h1{font-family:"Songti SC","Noto Serif SC","Source Han Serif SC",STSong,serif;
+    font-size:34px;font-weight:900;letter-spacing:.55em;text-indent:.55em;margin:0}
+  .count{color:var(--muted);font-size:12.5px;letter-spacing:.18em;margin-top:10px}
+  .count::before,.count::after{content:"·";margin:0 .8em;opacity:.5}
+  .shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:26px 20px}
+  @media (min-width:700px){.shelf{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:34px 26px}}
+  .book{position:relative;display:block;aspect-ratio:105/148;
+    background:linear-gradient(150deg,var(--c) 0%,var(--c2) 100%);
+    border-radius:2px 7px 7px 2px;text-decoration:none;
+    box-shadow:0 1px 2px rgba(38,34,27,.18),0 6px 16px rgba(38,34,27,.16);
+    transition:transform .18s ease,box-shadow .18s ease;-webkit-tap-highlight-color:transparent}
+  .book:hover{transform:translateY(-5px);
+    box-shadow:0 2px 4px rgba(38,34,27,.16),0 14px 28px rgba(38,34,27,.22)}
+  .book:focus-visible{outline:3px solid var(--seal);outline-offset:3px}
+  @media (prefers-reduced-motion:reduce){.book{transition:none}.book:hover{transform:none}}
+  .book::before{content:"";position:absolute;inset:0 auto 0 0;width:11px;border-radius:2px 0 0 2px;
+    background:linear-gradient(90deg,rgba(0,0,0,.30),rgba(0,0,0,.10) 55%,rgba(255,255,255,.14) 88%,rgba(0,0,0,.12));
+    pointer-events:none}
+  .book::after{content:"";position:absolute;inset:0;border-radius:inherit;
+    background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px),
+               repeating-linear-gradient(90deg,rgba(0,0,0,.03) 0 1px,transparent 1px 3px);
+    pointer-events:none}
+  .slip{position:absolute;top:9px;left:17px;z-index:1;background:var(--slip);
+    padding:12px 6px 14px;writing-mode:vertical-rl;max-height:76%;
+    border-radius:1px;box-shadow:0 1px 2px rgba(0,0,0,.28)}
+  .slip::after{content:"";position:absolute;inset:3px;border:1px solid rgba(42,37,32,.22)}
+  .t{font-family:"Songti SC","Noto Serif SC","Source Han Serif SC",STSong,serif;
+    font-weight:900;line-height:1;color:var(--slip-ink);display:block;
+    white-space:nowrap;max-height:100%;overflow:hidden}
+  .s5{font-size:20px;letter-spacing:.14em}
+  .s7{font-size:16.5px;letter-spacing:.12em}
+  .s9{font-size:14px;letter-spacing:.10em}
+  .s12{font-size:12px;letter-spacing:.06em}
+  .s99{font-size:10.5px;letter-spacing:.04em;white-space:normal}
+  .sub{position:absolute;top:14px;right:9px;z-index:1;writing-mode:vertical-rl;
+    max-height:62%;overflow:hidden;font-size:10.5px;line-height:1.35;
+    letter-spacing:.12em;color:rgba(255,255,255,.72)}
+  .seal{position:absolute;right:11px;bottom:11px;z-index:1;width:27px;height:27px;
+    background:var(--seal);border-radius:3.5px;display:flex;align-items:center;justify-content:center;
+    writing-mode:vertical-rl;font-family:"Songti SC","Noto Serif SC",STSong,serif;
+    font-size:10.5px;line-height:1.15;letter-spacing:.05em;color:#F6F1E6;
+    box-shadow:0 1px 2px rgba(0,0,0,.25);opacity:.95}
+  .empty{color:var(--muted);text-align:center;margin-top:60px}
 </style></head>
-<body><main><h1>📚 Books</h1>
-${books.length ? `<ul>${rows}</ul>` : '<p class="empty">还没有书。</p>'}
+<body><main>
+<header><h1>书架</h1><p class="count">VoiceDrop&nbsp;&nbsp;共 ${books.length} 册</p></header>
+${books.length ? `<div class="shelf">${covers}</div>` : '<p class="empty">还没有书。</p>'}
 </main></body></html>`;
   return new Response(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },

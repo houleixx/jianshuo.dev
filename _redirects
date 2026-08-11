@@ -8,3 +8,19 @@
 /cchour-report/* /a/cchour-report/:splat 301
 /tweets /a/tweets/ 301
 /tweets/* /a/tweets/:splat 301
+
+# books moved to the voicedrop shelf (R2-backed, see functions/voicedrop/books/)
+/a/why-did-he-sell /voicedrop/books/why-did-he-sell/ 301
+/a/why-did-he-sell/* /voicedrop/books/why-did-he-sell/:splat 301
+/a/stock-101 /voicedrop/books/stock-101/ 301
+/a/stock-101/* /voicedrop/books/stock-101/:splat 301
+/a/jingangjing /voicedrop/books/jingangjing/ 301
+/a/jingangjing/* /voicedrop/books/jingangjing/:splat 301
+/a/bazi /voicedrop/books/bazi/ 301
+/a/bazi/* /voicedrop/books/bazi/:splat 301
+/a/tcm-analysis /voicedrop/books/tcm-analysis/ 301
+/a/tcm-analysis/* /voicedrop/books/tcm-analysis/:splat 301
+
+# shelf pages use voicedrop.cn-style absolute /books/ links; make them work here too
+/books /voicedrop/books/ 301
+/books/* /voicedrop/books/:splat 301

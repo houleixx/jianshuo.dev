@@ -28,8 +28,8 @@ import { writeLlmLog } from "./llmlog.js";
 import { QUEUE_TABLE_SQL, makeSqlStore, ArticleQueue, normalizeAnchor } from "./queue.js";
 import { runEditTurn } from "./edit-turn.js";
 import { proxyVolcAsrWebSocket } from "./asr-proxy.js";
-import { editGate, claudeCostUY, imageCostUY, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
-import { ensureAccount, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, referralLedger, usageSummary } from "./usage_store.js";
+import { editGate, claudeCostUY, imageCostUY, bookCostUY, BOOK_SUANLI, uyToSuanli, uyToYuan, suanliToUY, RATE, DAY_MS, CAMPAIGN_EXPIRE_DAYS, reasonZH, DAILY_POOL_SUANLI, DAILY_POOL_UY, FUSE_MULT, ucToCoins } from "./usage.js";
+import { ensureAccount, balanceUY, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, referralLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleIapRoute } from "./iap.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
@@ -843,6 +843,25 @@ export async function handleUsageRoute(url, request, env) {
     const a = await env.USAGE.prepare("SELECT granted_uy,spent_uy FROM account WHERE user_sub=?").bind(scope).first();
     return J({ suanli: r1(uyToSuanli(bal)), yuan: r2(uyToYuan(bal)),
       granted_suanli: r1(uyToSuanli(a.granted_uy)), spent_suanli: r1(uyToSuanli(a.spent_uy)) });
+  }
+
+  // 写书扣费（lab.jianshuo.dev /api/book 调用，转发用户 bearer）：一口价 320 算力。
+  // 余额不足 402（不扣）；成功即记账并返回新余额。dry=true 只验余额不扣费。
+  // 这同时就是写书的准入门槛：伪造随机 token 的新账户只有 200 注册赠送，不够一本书。
+  if (url.pathname === "/agent/usage/book-charge" && request.method === "POST") {
+    const scope = await resolveScope(tok, env);
+    if (!scope) return J({ error: "unauthorized" }, 401);
+    if (!env.USAGE) return J({ error: "degraded" }, 503);
+    const b = await request.json().catch(() => ({}));
+    const now = Date.now();
+    const bal = await ensureAccount(env.USAGE, scope, now);
+    if (bal < bookCostUY())
+      return J({ error: "no-credit", need_suanli: BOOK_SUANLI, suanli: r1(uyToSuanli(bal)) }, 402);
+    if (b.dry) return J({ ok: true, dry: true, scope, suanli: r1(uyToSuanli(bal)) });
+    await debit(env.USAGE, scope, bookCostUY(), "book",
+      b.seed ? { seed: String(b.seed).slice(0, 200) } : null, now);
+    const after = await balanceUY(env.USAGE, scope, now);
+    return J({ ok: true, scope, charged_suanli: BOOK_SUANLI, suanli: r1(uyToSuanli(after)) });
   }
 
   if (url.pathname === "/agent/usage/ledger" && request.method === "GET") {
