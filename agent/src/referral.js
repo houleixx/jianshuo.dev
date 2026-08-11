@@ -15,6 +15,7 @@ import { deviceCheckGate, deviceCheckMark } from "./devicecheck.js";
 import {
   REFERRAL_DEFAULTS, POOL_7D_UY, SEED_COINS_UC, DAILY_POOL_UY, FUSE_MULT,
   CAMPAIGN_EXPIRE_DAYS, DAY_MS, expiryAfterDays, uyToSuanli,
+  FEED_AUTHOR_UC, ucToCoins,
 } from "./usage.js";
 
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
@@ -175,6 +176,9 @@ async function handleInviteLink(request, env) {
     // 邀请人/新朋友各自「约得」的算力现价（0 = 现价不可得，客户端隐藏数字）。
     suanliInviter: per ? Math.round(cfg.authorCoins * per) : 0,
     suanliFriend: per ? Math.round(cfg.newUserCoins * per) : 0,
+    // 别人给我的文章加油（投币）一次，我约得的算力现价（作者侧 2 币 × 币价；
+    // 同对递减不计入，「约」字兜底）。写书页「算力不够怎么攒」的文案用。
+    suanliFeedAuthor: per ? Math.round(ucToCoins(FEED_AUTHOR_UC) * per) : 0,
   });
 }
 

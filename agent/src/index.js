@@ -857,7 +857,8 @@ export async function handleUsageRoute(url, request, env) {
     const bal = await ensureAccount(env.USAGE, scope, now);
     if (bal < bookCostUY())
       return J({ error: "no-credit", need_suanli: BOOK_SUANLI, suanli: r1(uyToSuanli(bal)) }, 402);
-    if (b.dry) return J({ ok: true, dry: true, scope, suanli: r1(uyToSuanli(bal)) });
+    // dry 也带 need_suanli：客户端两种结果拿到同一个价目字段，价格不用写死在 App 里。
+    if (b.dry) return J({ ok: true, dry: true, scope, need_suanli: BOOK_SUANLI, suanli: r1(uyToSuanli(bal)) });
     await debit(env.USAGE, scope, bookCostUY(), "book",
       b.seed ? { seed: String(b.seed).slice(0, 200) } : null, now);
     const after = await balanceUY(env.USAGE, scope, now);

@@ -109,19 +109,23 @@ async function collectBooks(env) {
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
 
-  // 书名 = <slug>/index.html 的 <title>；没有 index.html 或没有 <title> 就退回 slug。
+  // 书名 = <slug>/index.html 的 <title>；作者 = 同页 <meta name="author">（写书
+  // skill 2026-08-11 起按提交者署名输出；没有此 meta 的存量书都是建硕的）。
   const books = await Promise.all(slugs.map(async (slug) => {
-    let title = slug;
+    let title = slug, author = '';
     try {
       const obj = await env.FILES.get(`${PUBLISHER}${slug}/index.html`);
       if (obj) {
-        const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(await obj.text());
+        const html = await obj.text();
+        const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
         if (m && m[1].trim()) title = m[1].trim();
+        const a = /<meta\s+name="author"\s+content="([^"]*)"/i.exec(html);
+        if (a && a[1].trim()) author = a[1].trim().slice(0, 20);
       }
     } catch {}
     const [main, sub] = splitTitle(title);
     const [c, c2] = colorOf(slug);
-    return { slug, title, main, sub, c, c2 };
+    return { slug, title, main, sub, c, c2, author };
   }));
   books.sort((a, b) => String(a.title).localeCompare(String(b.title), 'zh'));
   return books;
@@ -158,11 +162,19 @@ async function index(env) {
   // 题签单列不换行，字号按主题长度分级，保证再长也不折列。
   const sizeClass = (n) => (n <= 5 ? 's5' : n <= 7 ? 's7' : n <= 9 ? 's9' : n <= 12 ? 's12' : 's99');
 
+  // 印章 = 作者名的短形（中文 3 字去姓、超长取前 2；存量无 author 的书归建硕）。
+  const sealOf = (author) => {
+    const a = (author || '').trim();
+    if (!a) return '建硕';
+    const chars = [...a];
+    if (/^[㐀-鿿]+$/.test(a)) return chars.length <= 2 ? a : chars.slice(-2).join('');
+    return chars.slice(0, 2).join('').toUpperCase();
+  };
   const covers = books.map((b) =>
     `<a class="book" href="/books/${encodeURI(b.slug)}/" style="--c:${b.c};--c2:${b.c2}" title="${esc(b.title)}">` +
       `<span class="slip"><span class="t ${sizeClass([...b.main].length)}">${esc(b.main)}</span></span>` +
       (b.sub ? `<span class="sub">${esc(b.sub)}</span>` : '') +
-      `<span class="seal">建硕</span></a>`).join('\n');
+      `<span class="seal">${esc(sealOf(b.author))}</span></a>`).join('\n');
 
   const html = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

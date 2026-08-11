@@ -218,10 +218,30 @@ async function chargeBook(
   }
 }
 
-function runBookJob(seed: string, scope: string) {
-  console.log(`[book] start scope=${scope} seed=${seed.slice(0, 120).replace(/\n/g, " ")}`);
+// 真实作者署名（2026-08-11）：用提交者自己的 bearer 拉他的 CLAUDE.json，取
+// profile.name（设置页「名字」，挖文章署名同源）。拉不到/没填 → 空，书就不署名
+// ——绝不回落到任何默认人名。
+async function fetchAuthorName(auth: string | undefined): Promise<string> {
+  if (!auth) return "";
+  try {
+    const r = await fetch("https://jianshuo.dev/files/api/download/CLAUDE.json", {
+      headers: { Authorization: auth },
+    });
+    if (!r.ok) return "";
+    const j: any = await r.json();
+    return String(j?.profile?.name || "").trim().slice(0, 20);
+  } catch {
+    return "";
+  }
+}
+
+function runBookJob(seed: string, scope: string, author: string) {
+  console.log(`[book] start scope=${scope} author=${author || "-"} seed=${seed.slice(0, 120).replace(/\n/g, " ")}`);
+  const byline = author
+    ? `作者署名「${author}」——book.json 的 author 字段用这个名字，封面/页脚照此署名。`
+    : `提交者没有留名字——book.json 不写 author 字段，全书不署名（不要默认署任何人名）。`;
   const q = query({
-    prompt: `用 wjs-voicedrop-writing-book skill 写一本书。种子：\n${seed}`,
+    prompt: `用 wjs-voicedrop-writing-book skill 写一本书。${byline}\n种子：\n${seed}`,
     options: {
       cwd: WORKSPACE,
       model: MODEL,
@@ -263,7 +283,11 @@ async function handleBook(req: IncomingMessage, res: ServerResponse, payload: an
     res.writeHead(200, json).end(JSON.stringify(charge.body));
     return;
   }
-  runBookJob(seed, String(charge.body.scope ?? ""));
+  // 署名：App 显式给的 author 优先，否则用 bearer 拉提交者设置里的名字。
+  const author =
+    String(payload?.author ?? "").trim().slice(0, 20) ||
+    (await fetchAuthorName(req.headers.authorization));
+  runBookJob(seed, String(charge.body.scope ?? ""), author);
   res.writeHead(202, json).end(JSON.stringify({ ok: true, charged_suanli: charge.body.charged_suanli, suanli: charge.body.suanli }));
 }
 
