@@ -14,6 +14,10 @@
 // GET /books/        → 书架索引：一本书一个「书封」（竖排题签 + 副题 + 印章，
 //                      封面色按 slug 哈希稳定分配），书名取自 <slug>/index.html
 //                      的 <title>，不平铺夹内文件。
+// GET /books/?format=json → 同一份索引的 JSON 版（iOS「写书」tab 图书馆用）：
+//                      {books:[{slug,title,main,sub,c,c2,cover,chapters}]}。
+//                      cover = 该书文件夹里有没有 cover.jpg；chapters = 顶层
+//                      章节 html 数（排除 index/intro）。
 // GET /books/<name>  → 文件本体，inline 展示；html/md/txt 只缓存 5 分钟（书会
 //                      反复重发迭代），其余（pdf/图片等大文件）缓存一天。
 
@@ -35,8 +39,11 @@ export async function onRequest({ request, env, params }) {
   let rel = decodeURIComponent(segments.join('/'));
   if (rel.includes('..') || rel.startsWith('/')) return notFound();
 
-  // 索引页：/books 或 /books/
-  if (!rel) return index(env);
+  // 索引页：/books 或 /books/（?format=json 给 App 吃结构化数据）
+  if (!rel) {
+    const wantJSON = new URL(request.url).searchParams.get('format') === 'json';
+    return wantJSON ? indexJSON(env) : index(env);
+  }
 
   const fetchKey = (key) => (request.method === 'HEAD' ? env.FILES.head(key) : env.FILES.get(key));
   let obj = await fetchKey(PUBLISHER + rel);
@@ -68,10 +75,32 @@ function notFound() {
   });
 }
 
-async function index(env) {
-  // 一个 delimiter listing 拿书的文件夹（delimitedPrefixes）。必须 cursor 翻页：
-  // R2 的 delimited list 按「扫过的 key 数」截断，不是按返回的前缀数
-  // （admin/llm 页曾因此冻在 2026-07-13，同一个坑）。
+// 书封样式：竖排题签（主标题）+ 竖排小字副题 + 「建硕」印章，
+// 封面色从传统矿物色里按 slug 哈希稳定分配（同一本书永远同一个颜色）。
+const PALETTE = [
+  ['#33506B', '#263D54'], ['#A04A38', '#7E3626'], ['#3D6B57', '#2C5342'],
+  ['#5A4157', '#463043'], ['#40403C', '#2F2F2C'], ['#A67F42', '#8A6730'],
+  ['#2E4159', '#223146'], ['#7A4A2E', '#603921'], ['#8A3A4A', '#6E2C39'],
+  ['#5A6B3D', '#47552E'], ['#35597E', '#284664'],
+];
+const colorOf = (slug) => {
+  let h = 0;
+  for (const ch of slug) h = (h * 31 + ch.codePointAt(0)) % 997;
+  return PALETTE[h % PALETTE.length];
+};
+// 主副题拆分：在 ——／：／· 处断开，题签只放主题，副题竖排在封面右侧。
+const splitTitle = (t) => {
+  for (const sep of ['——', '—', '：', ':', ' · ', '·']) {
+    const i = t.indexOf(sep);
+    if (i > 1) return [t.slice(0, i).trim(), t.slice(i + sep.length).trim()];
+  }
+  return [t.trim(), ''];
+};
+
+/// 书架数据：一个 delimiter listing 拿书的文件夹（delimitedPrefixes），再逐本读
+/// <slug>/index.html 的 <title> 当书名。必须 cursor 翻页：R2 的 delimited list 按
+/// 「扫过的 key 数」截断，不是按返回的前缀数（admin/llm 页曾因此冻在 2026-07-13）。
+async function collectBooks(env) {
   const slugs = [];
   let cursor;
   do {
@@ -90,44 +119,50 @@ async function index(env) {
         if (m && m[1].trim()) title = m[1].trim();
       }
     } catch {}
-    return { slug, title };
+    const [main, sub] = splitTitle(title);
+    const [c, c2] = colorOf(slug);
+    return { slug, title, main, sub, c, c2 };
   }));
   books.sort((a, b) => String(a.title).localeCompare(String(b.title), 'zh'));
+  return books;
+}
+
+/// JSON 索引（iOS 图书馆）。在 collectBooks 之上补两样每本书的实体感数据：
+/// cover.jpg 有没有（有就直接铺封面图）、顶层章节 html 数（index/intro 不算章）。
+async function indexJSON(env) {
+  const books = await collectBooks(env);
+  const enriched = await Promise.all(books.map(async (b) => {
+    const [coverObj, listed] = await Promise.all([
+      env.FILES.head(`${PUBLISHER}${b.slug}/cover.jpg`).catch(() => null),
+      env.FILES.list({ prefix: `${PUBLISHER}${b.slug}/`, delimiter: '/', limit: 1000 }).catch(() => null),
+    ]);
+    const chapters = (listed?.objects || [])
+      .map((o) => o.key.split('/').pop().toLowerCase())
+      .filter((leaf) => /\.html?$/.test(leaf) && leaf !== 'index.html' && leaf !== 'intro.html')
+      .length;
+    return { ...b, cover: !!coverObj, chapters };
+  }));
+  return new Response(JSON.stringify({ books: enriched }), {
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'public, max-age=60',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+}
+
+async function index(env) {
+  const books = await collectBooks(env);
 
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-  // 书封样式：竖排题签（主标题）+ 竖排小字副题 + 「建硕」印章，
-  // 封面色从传统矿物色里按 slug 哈希稳定分配（同一本书永远同一个颜色）。
-  const PALETTE = [
-    ['#33506B', '#263D54'], ['#A04A38', '#7E3626'], ['#3D6B57', '#2C5342'],
-    ['#5A4157', '#463043'], ['#40403C', '#2F2F2C'], ['#A67F42', '#8A6730'],
-    ['#2E4159', '#223146'], ['#7A4A2E', '#603921'], ['#8A3A4A', '#6E2C39'],
-    ['#5A6B3D', '#47552E'], ['#35597E', '#284664'],
-  ];
-  const colorOf = (slug) => {
-    let h = 0;
-    for (const ch of slug) h = (h * 31 + ch.codePointAt(0)) % 997;
-    return PALETTE[h % PALETTE.length];
-  };
-  // 主副题拆分：在 ——／：／· 处断开，题签只放主题，副题竖排在封面右侧。
-  const splitTitle = (t) => {
-    for (const sep of ['——', '—', '：', ':', ' · ', '·']) {
-      const i = t.indexOf(sep);
-      if (i > 1) return [t.slice(0, i).trim(), t.slice(i + sep.length).trim()];
-    }
-    return [t.trim(), ''];
-  };
   // 题签单列不换行，字号按主题长度分级，保证再长也不折列。
   const sizeClass = (n) => (n <= 5 ? 's5' : n <= 7 ? 's7' : n <= 9 ? 's9' : n <= 12 ? 's12' : 's99');
 
-  const covers = books.map((b) => {
-    const [main, sub] = splitTitle(b.title);
-    const [c, c2] = colorOf(b.slug);
-    return `<a class="book" href="/books/${encodeURI(b.slug)}/" style="--c:${c};--c2:${c2}" title="${esc(b.title)}">` +
-      `<span class="slip"><span class="t ${sizeClass([...main].length)}">${esc(main)}</span></span>` +
-      (sub ? `<span class="sub">${esc(sub)}</span>` : '') +
-      `<span class="seal">建硕</span></a>`;
-  }).join('\n');
+  const covers = books.map((b) =>
+    `<a class="book" href="/books/${encodeURI(b.slug)}/" style="--c:${b.c};--c2:${b.c2}" title="${esc(b.title)}">` +
+      `<span class="slip"><span class="t ${sizeClass([...b.main].length)}">${esc(b.main)}</span></span>` +
+      (b.sub ? `<span class="sub">${esc(b.sub)}</span>` : '') +
+      `<span class="seal">建硕</span></a>`).join('\n');
 
   const html = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
