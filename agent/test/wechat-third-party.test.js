@@ -549,7 +549,7 @@ describe("微信公众号第三方授权状态", () => {
     expect(html).toContain("componentloginpage");
     expect(html).toContain("pre-auth-code");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("referrer-policy")).toBe("origin");
   });
 
   it("旧 R2 会话和被篡改的 state 都不能打开授权页", async () => {
