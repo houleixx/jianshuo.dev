@@ -32,6 +32,7 @@ import { editGate, claudeCostUY, imageCostUY, bookCostUY, BOOK_SUANLI, bookRevis
 import { ensureAccount, balanceUY, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, referralLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleIapRoute } from "./iap.js";
+import { handleWechatPayRoute, runWechatPaySchedule } from "./wechat-pay.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { handlePromptShareRoutes, shareStates } from "./prompt-share.js";
 import { handlePromptMarket } from "./prompt-market.js";
@@ -1660,14 +1661,19 @@ export default {
 
     // 苹果订阅（claim / App Store 服务器通知 / 状态）—— src/iap.js
     { const r = await handleIapRoute(url, request, env); if (r) return r; }
+    // 微信委托代扣（签约回调 / 支付回调 / 状态）—— src/wechat-pay.js
+    { const r = await handleWechatPayRoute(url, request, env); if (r) return r; }
 
     return new Response("not found", { status: 404 });
   },
 
-  // CF Cron Triggers: 6 小时一次的挖矿兜底 + 每 5 分钟一次的错误报警检查。
+  // CF Cron Triggers: 6 小时一次的挖矿兜底 + 每 5 分钟一次的报警检查、微信续费。
   async scheduled(event, env, ctx) {
     const stub = env.Miner.get(env.Miner.idFromName("miner"));
     if (event.cron === "*/5 * * * *") {
+      // 委托代扣在「当前周期结束前 24 小时」发起；微信成功回调后才实际入账。
+      // 独立 waitUntil，支付侧故障不能影响既有探活报警。
+      ctx.waitUntil(runWechatPaySchedule(env).catch((e) => console.log("[wechat-pay] schedule failed", String(e))));
       ctx.waitUntil((async () => {
         // 探活 voicedrop.cn(备案接入点)。挂了 → 推送报警,含回滚提示。
         try {

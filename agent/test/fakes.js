@@ -137,10 +137,10 @@ export function fakeD1(migrationSql) {
   };
 }
 
-// 读取 usage 相关全部迁移（0001–0004），供 fakeD1 建一个全表的库。
+// 读取 usage 相关全部迁移（0001–0005），供 fakeD1 建一个全表的库。
 export function usageSql() {
   const f = (name) => readFileSync(fileURLToPath(new URL("../migrations/" + name, import.meta.url)), "utf8");
-  return f("0001_usage.sql") + "\n" + f("0002_buckets.sql") + "\n" + f("0003_mint.sql") + "\n" + f("0004_iap.sql");
+  return f("0001_usage.sql") + "\n" + f("0002_buckets.sql") + "\n" + f("0003_mint.sql") + "\n" + f("0004_iap.sql") + "\n" + f("0005_wechat.sql");
 }
 
 // voicedrop-core 库全部迁移（P1: refhits/invites/share_stats/prompt_shares；
