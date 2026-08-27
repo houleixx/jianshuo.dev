@@ -21,8 +21,23 @@ function env(db) {
 const request = (path, { method = "GET", token, body, raw } = {}) => new Request("https://jianshuo.dev" + path, {
   method, headers: token ? { Authorization: "Bearer " + token } : {}, body: raw ?? (body ? JSON.stringify(body) : undefined),
 });
-const call = (e, path, opts, now = NOW) => handleWechatPayRoute(new URL("https://jianshuo.dev" + path), request(path, opts), e, fetch, now);
 const signed = (e, values) => wechatV2Xml(values, e.WECHAT_PAY_API_V2_KEY);
+
+function precontractFetcher(calls = []) {
+  return async (url, init) => {
+    calls.push({ url: String(url), init });
+    expect(String(url)).toBe("https://api.mch.weixin.qq.com/papay/preentrustweb");
+    const body = parseWechatXml(init.body);
+    expect(wechatV2Sign(body, "unit-test-api-key")).toBe(body.sign);
+    return new Response(wechatV2Xml({
+      return_code: "SUCCESS", result_code: "SUCCESS", appid: "wx1234567890", mch_id: "1900000001",
+      pre_entrustweb_id: "pre-entrust-001", miniprogram_username: "gh_wechatpay", miniprogram_path: "pages/sign?pre_entrustweb_id=pre-entrust-001",
+    }, "unit-test-api-key"));
+  };
+}
+
+const defaultPrecontractFetcher = precontractFetcher();
+const call = (e, path, opts, now = NOW, fetcher = defaultPrecontractFetcher, ctx = null) => handleWechatPayRoute(new URL("https://jianshuo.dev" + path), request(path, opts), e, fetcher, now, ctx);
 
 function applyFetcher(calls) {
   return async (url, init) => {
@@ -61,11 +76,32 @@ describe("微信委托代扣的日期与签名", () => {
 });
 
 describe("微信签约、自动续费和入账", () => {
+  it("签约成功回调立刻在 waitUntil 发起首期扣费；15 分钟 Cron 只负责后续/失败兜底", async () => {
+    const db = fakeD1(SQL); const e = env(db);
+    const created = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK });
+    const { contract_code } = await created.json();
+    const calls = []; const background = [];
+    const ctx = { waitUntil(p) { background.push(p); } };
+    const signedResponse = await call(e, "/agent/wechat-pay/contract-notify", {
+      method: "POST", raw: signed(e, { return_code: "SUCCESS", result_code: "SUCCESS", contract_code, contract_id: "contract-first", plan_id: e.WECHAT_PAY_PLAN_ID }),
+    }, NOW, applyFetcher(calls), ctx);
+    expect(await signedResponse.text()).toContain("SUCCESS");
+    expect(background).toHaveLength(1);
+    await Promise.all(background);
+    expect(calls).toHaveLength(1);
+    expect(db.prepare("SELECT status,period_start_at,period_end_at FROM wechat_txn WHERE contract_code=?").bind(contract_code).first())
+      .toMatchObject({ status: "charging", period_start_at: NOW, period_end_at: addCalendarMonth(NOW) });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM wechat_event WHERE contract_code=? AND event_type='initial_charge_triggered'").bind(contract_code).first().n).toBe(1);
+  });
+
   it("签约先由已登录用户创建 pending 行；签约回调验签后才变 active", async () => {
     const db = fakeD1(SQL); const e = env(db);
     const r = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK });
     const b = await r.json();
-    expect(b).toMatchObject({ ok: true, plan_id: e.WECHAT_PAY_PLAN_ID, contract_notify_url: "https://jianshuo.dev/agent/wechat-pay/contract-notify" });
+    expect(b).toMatchObject({ ok: true, pre_entrustweb_id: "pre-entrust-001", wechat_mini_program_username: "gh_wechatpay" });
+    expect(b.wechat_mini_program_path).toContain("pre_entrustweb_id=pre-entrust-001");
+    expect(b.expires_at).toBe(NOW + 2 * 60 * 60 * 1000);
+    for (const sensitive of ["appid", "mch_id", "plan_id", "contract_notify_url", "pay_notify_url", "cancel_notify_url", "sign"]) expect(b).not.toHaveProperty(sensitive);
     const scope = await anonScopeFromToken(TOK);
     expect(db.prepare("SELECT user_sub,status FROM wechat_sub WHERE contract_code=?").bind(b.contract_code).first()).toMatchObject({ user_sub: scope, status: "pending" });
     const bad = await call(e, "/agent/wechat-pay/contract-notify", { method: "POST", raw: "<xml><return_code>SUCCESS</return_code></xml>" });
@@ -74,6 +110,41 @@ describe("微信签约、自动续费和入账", () => {
     const ok = await call(e, "/agent/wechat-pay/contract-notify", { method: "POST", raw: signed(e, { return_code: "SUCCESS", result_code: "SUCCESS", contract_code: b.contract_code, contract_id: "contract-001", plan_id: e.WECHAT_PAY_PLAN_ID }) });
     expect(await ok.text()).toContain("SUCCESS");
     expect(db.prepare("SELECT status,contract_id,next_charge_at FROM wechat_sub WHERE contract_code=?").bind(b.contract_code).first()).toMatchObject({ status: "active", contract_id: "contract-001", next_charge_at: NOW });
+  });
+
+  it("已有有效 iOS 订阅时，Android/微信不能创建预签约或产生待签约行", async () => {
+    const db = fakeD1(SQL); const e = env(db); const scope = await anonScopeFromToken(TOK);
+    await db.prepare("INSERT INTO iap_sub (original_txn_id,user_sub,product_id,expires_date,status,updated_at) VALUES (?,?,?,?,?,?)")
+      .bind("ios-active-1", scope, "monthly_19_9", NOW + 86400000, "active", NOW).run();
+    const r = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: "already-subscribed" });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM wechat_sub").bind().first().n).toBe(0);
+  });
+
+  it("预签约请求由服务端签名；Android 重试不保存会话，微信失败不泄露原始信息", async () => {
+    const db = fakeD1(SQL); const e = env(db); const calls = [];
+    const first = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK }, NOW, precontractFetcher(calls));
+    expect(first.status).toBe(200);
+    const body = await first.json();
+    expect(calls).toHaveLength(1);
+    const outbound = parseWechatXml(calls[0].init.body);
+    expect(outbound).toMatchObject({ plan_id: e.WECHAT_PAY_PLAN_ID, contract_code: body.contract_code, notify_url: "https://jianshuo.dev/agent/wechat-pay/contract-notify", return_app: "Y", version: "1.0" });
+    expect(outbound.request_serial).toMatch(/^[1-9][0-9]{17}$/);
+    const retry = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK }, NOW + 1, precontractFetcher(calls));
+    expect(await retry.json()).toMatchObject({ contract_code: body.contract_code, pre_entrustweb_id: body.pre_entrustweb_id });
+    expect(calls).toHaveLength(2);
+    expect(db.prepare("PRAGMA table_info(wechat_sub)").bind().all().results.map((x) => x.name)).not.toContain("pre_entrustweb_id");
+
+    const badDb = fakeD1(SQL); const badEnv = env(badDb);
+    const failed = await call(badEnv, "/agent/wechat-pay/contract", { method: "POST", token: TOK }, NOW, async () => new Response(wechatV2Xml({
+      return_code: "SUCCESS", result_code: "FAIL", err_code: "PAYAUTHERROR", err_code_des: "merchant permission is missing",
+    }, badEnv.WECHAT_PAY_API_V2_KEY)));
+    expect(failed.status).toBe(502);
+    expect(await failed.json()).toEqual({ error: "contract-unavailable" });
+    const event = badDb.prepare("SELECT payload,message FROM wechat_event WHERE event_type='precontract_failed'").bind().first();
+    expect(event.message).toContain("merchant permission");
+    expect(event.payload || "").not.toContain("pre_entrustweb_id");
   });
 
   it("Cron 只用 D1 due 索引生成稳定订单号；失败可重试，成功申请不重复下单", async () => {
