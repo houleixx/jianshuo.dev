@@ -4,10 +4,6 @@
   "main": "src/index.js",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
-  "vars": {
-    "WECHAT_PAY_CALLBACK_BASE_URL": "https://voicedrop-agent-test.houleixx.workers.dev"
-  },
-
   // 使用 Worker 自动生成的 workers.dev 地址，无需自定义 Route。
   "workers_dev": true,
 
