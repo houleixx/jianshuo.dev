@@ -62,9 +62,15 @@ jobs:
         run: |
           cp wrangler.test.jsonc wrangler.jsonc
           npx -y wrangler@4 pages deploy . --project-name voicedrop-test --branch main --commit-dirty=true
+      - name: Install Agent deployment dependencies
+        working-directory: agent
+        run: npm ci
       - name: Deploy test Agent Worker
         working-directory: agent
         run: npx -y wrangler@4 deploy --config wrangler.test.jsonc
+      - name: Install Reco deployment dependencies
+        working-directory: reco
+        run: npm ci
       - name: Deploy test Reco Worker
         working-directory: reco
         run: npx -y wrangler@4 deploy --config wrangler.test.jsonc
