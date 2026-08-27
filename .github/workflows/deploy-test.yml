@@ -1,0 +1,70 @@
+name: deploy-test
+
+on:
+  push:
+    branches: [test]
+    paths:
+      - 'voicedrop/**'
+      - 'a/**'
+      - 'functions/**'
+      - 'mcp/**'
+      - '_headers'
+      - '_redirects'
+      - 'wrangler.test.jsonc'
+      - 'agent/**'
+      - 'reco/**'
+      - '.github/workflows/deploy-test.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: voicedrop-test-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test-workers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            agent/package-lock.json
+            reco/package-lock.json
+      - name: Test Agent Worker
+        working-directory: agent
+        run: npm ci && npm test
+      - name: Test Reco Worker
+        working-directory: reco
+        run: npm ci && npm test
+
+  deploy:
+    needs: test-workers
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_TEST_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_TEST_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Apply test D1 migrations
+        run: |
+          npx -y wrangler@4 d1 migrations apply voicedrop-usage-test --remote --config agent/wrangler.test.jsonc
+          npx -y wrangler@4 d1 migrations apply voicedrop-core-test --remote --config agent/wrangler.test.jsonc
+          npx -y wrangler@4 d1 migrations apply voicedrop-reco-test --remote --config reco/wrangler.test.jsonc
+      - name: Deploy test Pages and Files API
+        run: |
+          cp wrangler.test.jsonc wrangler.jsonc
+          npx -y wrangler@4 pages deploy . --project-name voicedrop-test --branch main --commit-dirty=true
+      - name: Deploy test Agent Worker
+        working-directory: agent
+        run: npx -y wrangler@4 deploy --config wrangler.test.jsonc
+      - name: Deploy test Reco Worker
+        working-directory: reco
+        run: npx -y wrangler@4 deploy --config wrangler.test.jsonc

@@ -6,12 +6,15 @@
 import { createHash } from "node:crypto";
 import { SUB_GRANT_SUANLI, SUB_BUCKET_GRACE_MS, suanliToUY, uyToSuanli } from "./usage.js";
 import { grantBucket } from "./usage_store.js";
+import { activeIapSubscription } from "./subscription-status.js";
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
 
 const DAY_MS = 86400000;
 const CHARGE_LEAD_MS = DAY_MS;              // 委托代扣申请须在本周期结束前至少 24 小时
 const RETRY_MS = 5 * 60 * 1000;
 const STALE_SETTLING_MS = 10 * 60 * 1000;
+const PRE_ENTRUST_TTL_MS = 2 * 60 * 60 * 1000;
+const DEFAULT_PRECONTRACT_URL = "https://api.mch.weixin.qq.com/papay/preentrustweb";
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
 const xmlReply = (code, message) => new Response(
   `<xml><return_code><![CDATA[${code}]]></return_code><return_msg><![CDATA[${message}]]></return_msg></xml>`,
@@ -84,12 +87,18 @@ function publicOrigin(env, url) {
   return String(env.WECHAT_PAY_PUBLIC_ORIGIN || url.origin).replace(/\/$/, "");
 }
 
+function precontractUrl(env) {
+  return String(env.WECHAT_PAY_PRECONTRACT_URL || DEFAULT_PRECONTRACT_URL);
+}
+
 // 审计记录不保存可复用的签名/随机串；其余微信字段保留，才能把商户订单、微信订单、
 // 协议状态与某一次 Cron/回调串起来排错。日志写入失败绝不能阻断真实支付流程。
 function auditPayload(payload) {
   if (!payload || typeof payload !== "object") return null;
   const copy = { ...payload };
-  for (const k of ["sign", "nonce_str", "api_key", "key"]) if (k in copy) copy[k] = "[redacted]";
+  for (const k of ["sign", "nonce_str", "api_key", "key", "pre_entrustweb_id", "miniprogram_path"]) {
+    if (k in copy) copy[k] = "[redacted]";
+  }
   return JSON.stringify(copy).slice(0, 16_000);
 }
 
@@ -118,6 +127,55 @@ function contractCode(now, random = null) {
 
 function callbackData(params) {
   return params && params.return_code === "SUCCESS" && params.result_code === "SUCCESS";
+}
+
+function requestSerial(now) {
+  // 13 位毫秒时间 + 5 位随机数，始终是非零、未超 int64 上限的纯数字。
+  const random = crypto.getRandomValues(new Uint32Array(1))[0] % 100000;
+  return `${Math.floor(Number(now))}${String(random).padStart(5, "0")}`;
+}
+
+function contractResponse(contractCode, provider, expiresAt) {
+  // 这是唯一给 Android 的签约数据：不泄露商户号、模板、回调地址、签名、密钥或微信完整响应。
+  return J({
+    ok: true,
+    contract_code: contractCode,
+    pre_entrustweb_id: provider.pre_entrustweb_id,
+    wechat_mini_program_username: provider.miniprogram_username || null,
+    wechat_mini_program_path: provider.miniprogram_path || null,
+    expires_at: expiresAt,
+  });
+}
+
+async function postPrecontract(env, sub, now, origin, fetcher, requestSerialValue) {
+  const payload = {
+    appid: env.WECHAT_PAY_APP_ID,
+    mch_id: env.WECHAT_PAY_MCH_ID,
+    plan_id: sub.plan_id,
+    contract_code: sub.contract_code,
+    request_serial: requestSerialValue,
+    contract_display_account: String(env.WECHAT_PAY_CONTRACT_DISPLAY_ACCOUNT || "VoiceDrop 包月算力").slice(0, 128),
+    notify_url: `${origin}/agent/wechat-pay/contract-notify`,
+    version: "1.0",
+    sign_type: "MD5",
+    timestamp: String(Math.floor(now / 1000)),
+    return_app: "Y",
+  };
+  const response = await fetcher(precontractUrl(env), {
+    method: "POST",
+    headers: { "content-type": "text/xml; charset=utf-8" },
+    body: wechatV2Xml(payload, env.WECHAT_PAY_API_V2_KEY),
+  });
+  const body = parseWechatXml(await response.text());
+  if (!response.ok || !callbackData(body) || !verifyWechatV2(body, env.WECHAT_PAY_API_V2_KEY)) {
+    const code = body && (body.err_code || body.return_code || body.result_code) || `http-${response.status}`;
+    const message = body && (body.err_code_des || body.return_msg || body.err_code) || "wechat-precontract-failed";
+    throw Object.assign(new Error(message), { code, provider: body });
+  }
+  if (body.appid !== env.WECHAT_PAY_APP_ID || body.mch_id !== env.WECHAT_PAY_MCH_ID || !body.pre_entrustweb_id) {
+    throw Object.assign(new Error("wechat-precontract-invalid-response"), { code: "invalid-provider-response", provider: body });
+  }
+  return body;
 }
 
 async function postApply(env, txn, sub, fetcher, origin) {
@@ -218,8 +276,8 @@ async function settlePayment(db, txn, values, now) {
   }
 }
 
-// Worker 的 5 分钟 Cron 调用。先补齐 due 订单，再重试 pending/failed 订单；支付成功
-// 的最终入账由微信回调完成，不以 Cron 的「发起成功」作为到账依据。
+// Worker 的 15 分钟 Cron 调用。首期由签约回调立即发起；这里仅处理后续周期和
+// pending/failed 重试。支付成功的最终入账始终由微信回调完成。
 export async function runWechatPaySchedule(env, now = Date.now(), fetcher = fetch, origin = null) {
   if (!ready(env)) return { skipped: "degraded" };
   const db = env.USAGE;
@@ -263,38 +321,60 @@ export async function runWechatPaySchedule(env, now = Date.now(), fetcher = fetc
   return result;
 }
 
-export async function handleWechatPayRoute(url, request, env, fetcher = fetch, now = Date.now()) {
+export async function handleWechatPayRoute(url, request, env, fetcher = fetch, now = Date.now(), ctx = null) {
   if (!url.pathname.startsWith("/agent/wechat-pay/")) return null;
   try {
     if (url.pathname === "/agent/wechat-pay/contract" && request.method === "POST") {
       const scope = await scopeFromToken(bearerToken(request), env);
       if (!scope) return J({ error: "unauthorized" }, 401);
       if (!ready(env)) return J({ error: "degraded" }, 503);
+      // Android/微信入口只要已有有效 iOS 订阅就不允许再起签约，避免用户在 Android
+      // 正常路径下获得第二份包月。反方向的 App Store 成交由 iOS 客户端购买前查询拦截。
+      if (await activeIapSubscription(env.USAGE, scope, now)) return J({ error: "already-subscribed" }, 409);
       // 同一用户在旧协议仍生效时不能再开一份，避免双协议并行扣费；收到微信解约回调后，
       // 旧行保留为 cancelled，新签约会生成全新的 contract_code，历史完整可追溯。
       const active = await env.USAGE.prepare(
         "SELECT contract_code, contract_id FROM wechat_sub WHERE user_sub=? AND status='active' ORDER BY updated_at DESC LIMIT 1"
       ).bind(scope).first();
-      if (active) return J({ error: "already-subscribed", contract_code: active.contract_code, contract_id: active.contract_id || null }, 409);
-      let code = null;
-      for (let i = 0; i < 3; i++) {
-        const candidate = contractCode(now, () => crypto.getRandomValues(new Uint32Array(2)));
-        const ins = await env.USAGE.prepare(
-          "INSERT OR IGNORE INTO wechat_sub (contract_code,user_sub,plan_id,status,created_at,updated_at) VALUES (?,?,?,?,?,?)"
-        ).bind(candidate, scope, env.WECHAT_PAY_PLAN_ID, "pending", now, now).run();
-        if (ins && ins.meta && ins.meta.changes === 1) { code = candidate; break; }
+      if (active) return J({ error: "already-subscribed" }, 409);
+      let sub = await env.USAGE.prepare(
+        "SELECT * FROM wechat_sub WHERE user_sub=? AND status='pending' ORDER BY updated_at DESC LIMIT 1"
+      ).bind(scope).first();
+      if (!sub) {
+        let code = null;
+        for (let i = 0; i < 3; i++) {
+          const candidate = contractCode(now, () => crypto.getRandomValues(new Uint32Array(2)));
+          const ins = await env.USAGE.prepare(
+            "INSERT OR IGNORE INTO wechat_sub (contract_code,user_sub,plan_id,status,created_at,updated_at) VALUES (?,?,?,?,?,?)"
+          ).bind(candidate, scope, env.WECHAT_PAY_PLAN_ID, "pending", now, now).run();
+          if (ins && ins.meta && ins.meta.changes === 1) { code = candidate; break; }
+        }
+        if (!code) return J({ error: "contract-unavailable" }, 503);
+        sub = await env.USAGE.prepare("SELECT * FROM wechat_sub WHERE contract_code=?").bind(code).first();
+        await audit(env.USAGE, { now, direction: "internal", event_type: "contract_created", contract_code: code,
+          user_sub: scope, status_after: "pending", payload: { plan_id: env.WECHAT_PAY_PLAN_ID } });
       }
-      if (!code) return J({ error: "contract-code-conflict" }, 503);
-      await audit(env.USAGE, { now, direction: "internal", event_type: "contract_created", contract_code: code,
-        user_sub: scope, status_after: "pending", payload: { plan_id: env.WECHAT_PAY_PLAN_ID } });
       const origin = publicOrigin(env, url);
-      // 客户端把 contract_code 作为商户侧协议号交给已获批的微信签约 SDK/API；不能由客户端
-      // 自己选择 plan 或回调地址，二者全由服务端固定。
-      return J({ ok: true, contract_code: code, plan_id: env.WECHAT_PAY_PLAN_ID,
-        appid: env.WECHAT_PAY_APP_ID, mch_id: env.WECHAT_PAY_MCH_ID,
-        contract_notify_url: `${origin}/agent/wechat-pay/contract-notify`,
-        pay_notify_url: `${origin}/agent/wechat-pay/pay-notify`,
-        cancel_notify_url: `${origin}/agent/wechat-pay/cancel-notify` });
+      const serial = requestSerial(now);
+      try {
+        const provider = await postPrecontract(env, sub, now, origin, fetcher, serial);
+        const expiresAt = now + PRE_ENTRUST_TTL_MS;
+        await env.USAGE.prepare("UPDATE wechat_sub SET last_error_code=NULL, updated_at=? WHERE contract_code=?")
+          .bind(now, sub.contract_code).run();
+        await audit(env.USAGE, { now, direction: "outbound", event_type: "precontract_created", contract_code: sub.contract_code,
+          user_sub: scope, status_before: "pending", status_after: "pending",
+          payload: { request_serial: serial, has_mini_program: !!(provider.miniprogram_username && provider.miniprogram_path) } });
+        // 会话只经本次 HTTPS 响应交给已认证 Android，不持久化到 D1。
+        return contractResponse(sub.contract_code, provider, expiresAt);
+      } catch (e) {
+        const code = String(e.code || "precontract-failed").slice(0, 64);
+        await env.USAGE.prepare("UPDATE wechat_sub SET last_error_code=?, last_event_at=?, updated_at=? WHERE contract_code=?")
+          .bind(code, now, now, sub.contract_code).run();
+        await audit(env.USAGE, { now, direction: "outbound", event_type: "precontract_failed", contract_code: sub.contract_code,
+          user_sub: scope, status_before: "pending", status_after: "pending", code, message: e.message, payload: e.provider });
+        // Android 不应看到微信的原始失败文本、请求参数或签名材料。
+        return J({ error: "contract-unavailable" }, 502);
+      }
     }
 
     if (url.pathname === "/agent/wechat-pay/contract-notify" && request.method === "POST") {
@@ -313,6 +393,20 @@ export async function handleWechatPayRoute(url, request, env, fetcher = fetch, n
       ).bind(contractId, values.openid || null, now, now, now, now, now, code).run();
       await audit(env.USAGE, { now, direction: "inbound", event_type: "contract_signed", contract_code: code,
         user_sub: sub.user_sub, status_before: sub.status, status_after: "active", payload: values });
+      // 首期不等 15 分钟 Cron：签约已确认后立刻申请扣款。waitUntil 让微信回调快速
+      // 得到 ACK；网络失败会把同一订单标为 failed，之后由独立的 15 分钟 Cron 兜底重试。
+      // 没有 ctx 的纯函数调用（例如旧测试/离线脚本）不触发网络副作用。
+      if (ctx && typeof ctx.waitUntil === "function") {
+        const activeSub = { ...sub, contract_id: contractId, status: "active", period_end_at: now };
+        const initialCharge = (async () => {
+          const txn = await createDueTransaction(env.USAGE, activeSub, env, now);
+          await audit(env.USAGE, { now, direction: "internal", event_type: "initial_charge_triggered",
+            contract_code: code, out_trade_no: txn.out_trade_no, user_sub: sub.user_sub,
+            status_before: "pending", status_after: txn.status });
+          await requestCharge(env.USAGE, env, txn, activeSub, now, fetcher, publicOrigin(env, url));
+        })();
+        ctx.waitUntil(initialCharge.catch((e) => console.log("[wechat-pay] initial charge failed", String(e && e.message || e))));
+      }
       return xmlReply("SUCCESS", "OK");
     }
 

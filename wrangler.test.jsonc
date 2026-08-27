@@ -1,0 +1,12 @@
+{
+  "name": "voicedrop-test",
+  "pages_build_output_dir": ".",
+  "compatibility_date": "2026-06-01",
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "voicedrop-test-files" }
+  ],
+  "d1_databases": [
+    { "binding": "RECO_DB", "database_name": "voicedrop-reco-test", "database_id": "b84f3be3-1a35-4fbb-9d96-9813bfe01b3e" },
+    { "binding": "CORE", "database_name": "voicedrop-core-test", "database_id": "5ebfc1c6-e648-44a5-9864-a42d5a8b4cc5" }
+  ]
+}

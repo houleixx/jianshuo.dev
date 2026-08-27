@@ -1,0 +1,49 @@
+{
+  // 替换所有 REPLACE_WITH_*；本文件绝不绑定生产资源。
+  "name": "voicedrop-agent-test",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "WECHAT_PAY_PUBLIC_ORIGIN": "https://voicedrop-agent-test.houleixx.workers.dev"
+  },
+
+  // 使用 Worker 自动生成的 workers.dev 地址，无需自定义 Route。
+  "workers_dev": true,
+
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "voicedrop-test-files" }
+  ],
+  "browser": { "binding": "BROWSER" },
+
+  "d1_databases": [
+    { "binding": "USAGE", "database_name": "voicedrop-usage-test", "database_id": "e606dc3d-3137-47e0-b6c0-0a8fb1999e48" },
+    { "binding": "RECO_DB", "database_name": "voicedrop-reco-test", "database_id": "b84f3be3-1a35-4fbb-9d96-9813bfe01b3e" },
+    { "binding": "CORE", "database_name": "voicedrop-core-test", "database_id": "5ebfc1c6-e648-44a5-9864-a42d5a8b4cc5", "migrations_dir": "migrations-core", "migrations_table": "d1_migrations_core" }
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "ArticleEditor", "class_name": "ArticleEditor" },
+      { "name": "StatusHub", "class_name": "StatusHub" },
+      { "name": "Miner", "class_name": "Miner" },
+      { "name": "LinkBroker", "class_name": "LinkBroker" },
+      { "name": "LibraryAgent", "class_name": "LibraryAgent" },
+      { "name": "RELAY", "class_name": "AnthropicRelay" },
+      { "name": "RT_RELAY", "class_name": "RealtimeRelay" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ArticleEditor"] },
+    { "tag": "v2", "new_sqlite_classes": ["StatusHub"] },
+    { "tag": "v3", "new_sqlite_classes": ["Miner"] },
+    { "tag": "v4", "new_sqlite_classes": ["LinkBroker"] },
+    { "tag": "v5", "new_sqlite_classes": ["LibraryAgent"] },
+    { "tag": "v6", "new_sqlite_classes": ["AnthropicRelay"] },
+    { "tag": "v7", "new_sqlite_classes": ["RealtimeRelay"] }
+  ],
+
+  // 测试 Worker 只保留微信续费 Cron，避免意外运行挖矿/探活任务。
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}

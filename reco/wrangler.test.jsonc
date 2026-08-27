@@ -1,0 +1,9 @@
+{
+  "name": "voicedrop-reco-test",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": true,
+  "d1_databases": [
+    { "binding": "DB", "database_name": "voicedrop-reco-test", "database_id": "b84f3be3-1a35-4fbb-9d96-9813bfe01b3e" }
+  ]
+}
