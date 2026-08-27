@@ -47,7 +47,7 @@ npx wrangler secret put WECHAT_PAY_APP_ID
 npx wrangler secret put WECHAT_PAY_PLAN_ID
 npx wrangler secret put WECHAT_PAY_API_V2_KEY
 npx wrangler secret put WECHAT_PAY_APPLY_URL
-npx wrangler secret put WECHAT_PAY_PUBLIC_ORIGIN
+npx wrangler secret put WECHAT_PAY_CALLBACK_BASE_URL
 ```
 
 可选：签约页显示的用户账户名称（默认 `VoiceDrop 包月算力`，不能含 emoji）：

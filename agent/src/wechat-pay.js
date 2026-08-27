@@ -80,11 +80,11 @@ function amountFen(env) {
 }
 
 function ready(env) {
-  return !!(env.USAGE && env.WECHAT_PAY_MCH_ID && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_PLAN_ID && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_APPLY_URL && amountFen(env));
+  return !!(env.USAGE && env.WECHAT_PAY_MCH_ID && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_PLAN_ID && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_APPLY_URL && env.WECHAT_PAY_CALLBACK_BASE_URL && amountFen(env));
 }
 
 function publicOrigin(env, url) {
-  return String(env.WECHAT_PAY_PUBLIC_ORIGIN || url.origin).replace(/\/$/, "");
+  return String(env.WECHAT_PAY_CALLBACK_BASE_URL).replace(/\/$/, "");
 }
 
 function precontractUrl(env) {
@@ -281,7 +281,7 @@ async function settlePayment(db, txn, values, now) {
 export async function runWechatPaySchedule(env, now = Date.now(), fetcher = fetch, origin = null) {
   if (!ready(env)) return { skipped: "degraded" };
   const db = env.USAGE;
-  const base = origin || String(env.WECHAT_PAY_PUBLIC_ORIGIN || "https://jianshuo.dev").replace(/\/$/, "");
+  const base = origin || publicOrigin(env);
   const result = { created: 0, requested: 0, failed: 0 };
 
   // 在一次 Worker 中断后的恢复：若已写 ledger，绝不再发钱；否则回到可重试状态。

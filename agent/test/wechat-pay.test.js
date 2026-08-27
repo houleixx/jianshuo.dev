@@ -14,7 +14,7 @@ function env(db) {
     USAGE: db, SESSION_SECRET: "",
     WECHAT_PAY_MCH_ID: "1900000001", WECHAT_PAY_APP_ID: "wx1234567890", WECHAT_PAY_PLAN_ID: "plan_monthly_19_9",
     WECHAT_PAY_API_V2_KEY: "unit-test-api-key", WECHAT_PAY_APPLY_URL: "https://pay.example.test/papay/apply",
-    WECHAT_PAY_PUBLIC_ORIGIN: "https://jianshuo.dev",
+    WECHAT_PAY_CALLBACK_BASE_URL: "https://jianshuo.dev",
   };
 }
 

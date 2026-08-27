@@ -98,7 +98,6 @@
   //   WECHAT_PAY_PLAN_ID     — 审核通过的委托代扣模板 ID
   //   WECHAT_PAY_API_V2_KEY  — 委托代扣 V2 API 密钥（XML 回调/请求验签）
   //   WECHAT_PAY_APPLY_URL   — 商户获批的委托代扣申请 API 地址
-  //   WECHAT_PAY_PUBLIC_ORIGIN — 对外 HTTPS 域名，例如 https://jianshuo.dev
   // Optional:
   //   WECHAT_PAY_AMOUNT_FEN  — 每期金额（分），默认 1990
 }
