@@ -4,7 +4,7 @@
 // bucket + ledger。微信的支付成功回调是唯一入账入口，重复回调与 Cron 重试
 // 都以 out_trade_no 为幂等键。
 import { createHash } from "node:crypto";
-import { SUB_GRANT_SUANLI, SUB_BUCKET_GRACE_MS, suanliToUY, uyToSuanli } from "./usage.js";
+import { SUB_GRANT_SUANLI, suanliToUY, uyToSuanli } from "./usage.js";
 import { grantBucket } from "./usage_store.js";
 import { activeIapSubscription } from "./subscription-status.js";
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
@@ -15,6 +15,7 @@ const RETRY_MS = 5 * 60 * 1000;
 const STALE_SETTLING_MS = 10 * 60 * 1000;
 const PRE_ENTRUST_TTL_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_PRECONTRACT_URL = "https://api.mch.weixin.qq.com/papay/preentrustweb";
+const APPLY_URL = "https://api.mch.weixin.qq.com/pay/pappayapply";
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
 const xmlReply = (code, message) => new Response(
   `<xml><return_code><![CDATA[${code}]]></return_code><return_msg><![CDATA[${message}]]></return_msg></xml>`,
@@ -41,8 +42,7 @@ export function addCalendarMonth(at) {
 
 const md5 = (s) => createHash("md5").update(String(s), "utf8").digest("hex").toUpperCase();
 
-// 微信支付 V2 的 XML + MD5 签名。委托代扣的具体申请 URL 由商户获批的 API 版本决定，
-// 因此不硬编码可能错误的 endpoint，而由 WECHAT_PAY_APPLY_URL 明确配置。
+// 微信支付 V2 的 XML + MD5 签名。委托代扣申请使用微信固定的 V2 官方地址。
 export function wechatV2Sign(params, apiKey) {
   const q = Object.entries(params)
     .filter(([k, v]) => k !== "sign" && v !== undefined && v !== null && v !== "")
@@ -80,7 +80,7 @@ function amountFen(env) {
 }
 
 function ready(env) {
-  return !!(env.USAGE && env.WECHAT_PAY_MCH_ID && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_PLAN_ID && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_APPLY_URL && env.WECHAT_PAY_CALLBACK_BASE_URL && amountFen(env));
+  return !!(env.USAGE && env.WECHAT_PAY_MCH_ID && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_PLAN_ID && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_CALLBACK_BASE_URL && amountFen(env));
 }
 
 function publicOrigin(env, url) {
@@ -192,7 +192,7 @@ async function postApply(env, txn, sub, fetcher, origin) {
     plan_id: txn.plan_id,
     attach: JSON.stringify({ provider: "wechat", contract_code: txn.contract_code, period_start_at: txn.period_start_at }),
   };
-  const response = await fetcher(env.WECHAT_PAY_APPLY_URL, {
+  const response = await fetcher(APPLY_URL, {
     method: "POST",
     headers: { "content-type": "text/xml; charset=utf-8" },
     body: wechatV2Xml(payload, env.WECHAT_PAY_API_V2_KEY),
@@ -251,7 +251,9 @@ async function settlePayment(db, txn, values, now) {
   if (!(lock && lock.meta && lock.meta.changes === 1)) return { ok: true, already: true };
 
   try {
-    await grantBucket(db, txn.user_sub, suanliToUY(SUB_GRANT_SUANLI), "subscription", txn.period_end_at + SUB_BUCKET_GRACE_MS, now,
+    // 微信周期严格截止于自然月端点；扣款申请已在该端点前 24 小时发起，
+    // 不额外赠送订阅算力的有效期。
+    await grantBucket(db, txn.user_sub, suanliToUY(SUB_GRANT_SUANLI), "subscription", txn.period_end_at, now,
       { provider: "wechat", out_trade_no: txn.out_trade_no, transaction_id: values.transaction_id || null });
     const bucket = await db.prepare(
       "SELECT id FROM bucket WHERE user_sub=? AND source='subscription' ORDER BY id DESC LIMIT 1"

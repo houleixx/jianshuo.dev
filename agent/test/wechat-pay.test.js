@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { fakeD1, usageSql } from "./fakes.js";
 import { anonScopeFromToken } from "../../functions/lib/auth.js";
-import { SUB_GRANT_SUANLI, SUB_BUCKET_GRACE_MS, suanliToUY, uyToSuanli, SIGNUP_GRANT_UY } from "../src/usage.js";
+import { SUB_GRANT_SUANLI, suanliToUY, uyToSuanli, SIGNUP_GRANT_UY } from "../src/usage.js";
 import { addCalendarMonth, handleWechatPayRoute, runWechatPaySchedule, wechatV2Sign, wechatV2Xml, parseWechatXml } from "../src/wechat-pay.js";
 
 const SQL = usageSql();
@@ -13,7 +13,7 @@ function env(db) {
   return {
     USAGE: db, SESSION_SECRET: "",
     WECHAT_PAY_MCH_ID: "1900000001", WECHAT_PAY_APP_ID: "wx1234567890", WECHAT_PAY_PLAN_ID: "plan_monthly_19_9",
-    WECHAT_PAY_API_V2_KEY: "unit-test-api-key", WECHAT_PAY_APPLY_URL: "https://pay.example.test/papay/apply",
+    WECHAT_PAY_API_V2_KEY: "unit-test-api-key",
     WECHAT_PAY_CALLBACK_BASE_URL: "https://jianshuo.dev",
   };
 }
@@ -89,6 +89,7 @@ describe("微信签约、自动续费和入账", () => {
     expect(background).toHaveLength(1);
     await Promise.all(background);
     expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://api.mch.weixin.qq.com/pay/pappayapply");
     expect(db.prepare("SELECT status,period_start_at,period_end_at FROM wechat_txn WHERE contract_code=?").bind(contract_code).first())
       .toMatchObject({ status: "charging", period_start_at: NOW, period_end_at: addCalendarMonth(NOW) });
     expect(db.prepare("SELECT COUNT(*) AS n FROM wechat_event WHERE contract_code=? AND event_type='initial_charge_triggered'").bind(contract_code).first().n).toBe(1);
@@ -180,7 +181,7 @@ describe("微信签约、自动续费和入账", () => {
     expect(db.prepare("SELECT out_trade_no,status FROM wechat_txn").bind().first()).toMatchObject({ out_trade_no: txn.out_trade_no, status: "charging" });
   });
 
-  it("支付成功回调才发 200 算力；重复回调幂等，桶到期=自然月末+6小时", async () => {
+  it("支付成功回调才发 200 算力；重复回调幂等，桶严格在自然月末到期", async () => {
     const db = fakeD1(SQL); const e = env(db); const code = await createAndSign(e, db);
     const calls = [];
     await runWechatPaySchedule(e, NOW, applyFetcher(calls));
@@ -191,7 +192,7 @@ describe("微信签约、自动续费和入账", () => {
     const scope = await anonScopeFromToken(TOK);
     const bucket = db.prepare("SELECT * FROM bucket WHERE user_sub=? AND source='subscription'").bind(scope).first();
     expect(bucket.amount_uy).toBe(suanliToUY(SUB_GRANT_SUANLI));
-    expect(bucket.expires_at).toBe(addCalendarMonth(NOW) + SUB_BUCKET_GRACE_MS);
+    expect(bucket.expires_at).toBe(addCalendarMonth(NOW));
     const signupSuanli = Math.round(uyToSuanli(SIGNUP_GRANT_UY));
     const balance = db.prepare("SELECT COALESCE(SUM(remaining_uy),0) AS s FROM bucket WHERE user_sub=?").bind(scope).first().s;
     expect(Math.round(uyToSuanli(balance))).toBe(signupSuanli + SUB_GRANT_SUANLI);

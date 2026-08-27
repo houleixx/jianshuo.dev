@@ -5,12 +5,12 @@
 ## 上线前的商户侧准备
 
 1. 在微信支付商户平台将签约入口所用的 AppID 绑定到商户号，并申请获批「委托代扣 / 自动续费」产品和月度 `plan_id`。
-2. 确认商户获批的委托代扣 API 是 XML V2 接口，并取得其**准确的扣费申请 URL**。本代码不猜测 URL：把该 URL 配到 `WECHAT_PAY_APPLY_URL`。
+2. 确认商户获批的是 XML V2 委托代扣接口。本代码固定调用微信官方申请扣款地址 `https://api.mch.weixin.qq.com/pay/pappayapply`。
 3. 在该模板/产品的通知配置中使用下面三个公网 HTTPS 地址：
 
-   - 签约结果：`https://jianshuo.dev/agent/wechat-pay/contract-notify`
-   - 支付结果：`https://jianshuo.dev/agent/wechat-pay/pay-notify`
-   - 解约结果：`https://jianshuo.dev/agent/wechat-pay/cancel-notify`
+   - 签约结果：`https://voicedrop.cn/agent/wechat-pay/contract-notify`
+   - 支付结果：`https://voicedrop.cn/agent/wechat-pay/pay-notify`
+   - 解约结果：`https://voicedrop.cn/agent/wechat-pay/cancel-notify`
 
 4. Android 先调用 `POST /agent/wechat-pay/contract`（带现有 Bearer token）。Worker 在服务端调用微信 V2 `papay/preentrustweb`、验签并保存会话；Android 只会收到 `contract_code`、`pre_entrustweb_id`、可选的 `wechat_mini_program_username` / `wechat_mini_program_path` 与 `expires_at`。不得把 `plan_id`、商户号、回调 URL、签名或任何密钥下发给客户端。
 5. Android 优先用微信 OpenSDK 的 `WXLaunchMiniProgram` 携带服务端原样返回的 `username` 和 `path` 拉起签约；老模板未返回小程序字段时，改用 `WXOpenBusinessWebview`（`businessType=12`，只传 `pre_entrustweb_id`）。App 回来后不要相信本地结果，轮询 `GET /agent/wechat-pay/status`，以微信签约/扣款异步回调为准。
@@ -46,7 +46,6 @@ npx wrangler secret put WECHAT_PAY_MCH_ID
 npx wrangler secret put WECHAT_PAY_APP_ID
 npx wrangler secret put WECHAT_PAY_PLAN_ID
 npx wrangler secret put WECHAT_PAY_API_V2_KEY
-npx wrangler secret put WECHAT_PAY_APPLY_URL
 npx wrangler secret put WECHAT_PAY_CALLBACK_BASE_URL
 ```
 
