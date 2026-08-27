@@ -1,0 +1,36 @@
+name: block-test-config-from-main
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  reject-test-only-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Reject test-only configuration
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          forbidden=()
+          while IFS= read -r path; do
+            case "$path" in
+              wrangler.test.jsonc|agent/wrangler.test.jsonc|reco/wrangler.test.jsonc|.github/workflows/deploy-test.yml|agent/docs/wechat-pay-test-environment.md)
+                forbidden+=("$path")
+                ;;
+            esac
+          done < <(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
+
+          if ((${#forbidden[@]} > 0)); then
+            printf 'The following test-only files must not be merged into main:\n' >&2
+            printf '  - %s\n' "${forbidden[@]}" >&2
+            exit 1
+          fi
