@@ -13,7 +13,7 @@
   "browser": { "binding": "BROWSER" },
 
   "d1_databases": [
-    { "binding": "USAGE", "database_name": "voicedrop-usage-test", "database_id": "e606dc3d-3137-47e0-b6c0-0a8fb1999e48" },
+    { "binding": "USAGE", "database_name": "voicedrop-usage-test", "database_id": "42c08dbe-081c-4fd0-b801-16c214b5b423" },
     { "binding": "RECO_DB", "database_name": "voicedrop-reco-test", "database_id": "b84f3be3-1a35-4fbb-9d96-9813bfe01b3e" },
     { "binding": "CORE", "database_name": "voicedrop-core-test", "database_id": "5ebfc1c6-e648-44a5-9864-a42d5a8b4cc5", "migrations_dir": "migrations-core", "migrations_table": "d1_migrations_core" }
   ],
