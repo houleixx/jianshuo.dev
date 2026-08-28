@@ -147,12 +147,19 @@ describe("微信签约、自动续费和入账", () => {
     expect(db.prepare("SELECT COUNT(*) AS n FROM wechat_sub").bind().first().n).toBe(0);
   });
 
-  it("售卖开关与 iOS 一致：必须明确开启；关闭后不影响已有 pending 会话继续完成", async () => {
+  it("售卖开关：首次缺失时写入开启；显式关闭后不影响已有 pending 会话继续完成", async () => {
     const db = fakeD1(SQL); const e = env(db);
-    e.FILES = { get: async () => null };
+    const writes = [];
+    e.FILES = {
+      get: async () => null,
+      put: async (key, value, options) => writes.push({ key, value, options }),
+    };
     const missing = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK });
-    expect(missing.status).toBe(403);
-    expect(await missing.json()).toEqual({ error: "disabled" });
+    expect(missing.status).toBe(200);
+    expect(writes).toEqual([{
+      key: "config/wechat-pay.json", value: JSON.stringify({ enabled: true }),
+      options: { httpMetadata: { contentType: "application/json" } },
+    }]);
 
     const blockedDb = fakeD1(SQL); const blockedEnv = env(blockedDb);
     blockedEnv.FILES = { get: async () => ({ text: async () => '{"enabled":false}' }) };
@@ -170,6 +177,17 @@ describe("微信签约、自动续费和入账", () => {
     const status = await (await call(enabled, "/agent/wechat-pay/status", { token: TOK })).json();
     expect(status).toMatchObject({ enabled: false, status: "pending" });
   });
+
+  it("售卖开关读取或写入异常时默认开启，不因 R2 短暂故障关闭入口", async () => {
+    const readFailed = env(fakeD1(SQL));
+    readFailed.FILES = { get: async () => { throw new Error("r2 read failed"); } };
+    expect((await call(readFailed, "/agent/wechat-pay/contract", { method: "POST", token: TOK })).status).toBe(200);
+
+    const writeFailed = env(fakeD1(SQL));
+    writeFailed.FILES = { get: async () => null, put: async () => { throw new Error("r2 write failed"); } };
+    expect((await call(writeFailed, "/agent/wechat-pay/contract", { method: "POST", token: TOK })).status).toBe(200);
+  });
+
   it("预签约请求由服务端签名；Android 重试不保存会话，微信失败不泄露原始信息", async () => {
     const db = fakeD1(SQL); const e = env(db); const calls = [];
     const first = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK }, NOW, precontractFetcher(calls));

@@ -86,17 +86,22 @@ function ready(env) {
   return !!(env.USAGE && env.WECHAT_PAY_MCH_ID && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_PLAN_ID && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_CALLBACK_BASE_URL && amountFen(env));
 }
 
-// 售卖开关与 iOS config/iap.json 一致：只有 R2 config/wechat-pay.json 明确写
-// {"enabled":true} 才开闸；文件不存在、R2 异常或 JSON 损坏均关闭。它仅阻止新签约，
+// 首次访问时把售卖开关初始化为开启，之后由 R2 中的显式 true/false 控制。R2 读、写或
+// 解析异常时仍默认开启，避免临时存储故障把客户端订阅入口误关掉。它仅阻止新签约，
 // 不影响已有协议的续费、回调和状态查询。
 export async function wechatPayEnabled(env) {
   try {
     const obj = env.FILES && await env.FILES.get(WECHAT_PAY_CONFIG_KEY);
     if (obj) return JSON.parse(await obj.text()).enabled === true;
+    if (env.FILES && typeof env.FILES.put === "function") {
+      await env.FILES.put(WECHAT_PAY_CONFIG_KEY, JSON.stringify({ enabled: true }), {
+        httpMetadata: { contentType: "application/json" },
+      });
+    }
   } catch (e) {
-    console.error("[wechat-pay] bad config/wechat-pay.json:", e && e.message);
+    console.error("[wechat-pay] config/wechat-pay.json unavailable; default enabled:", e && e.message);
   }
-  return false;
+  return true;
 }
 
 function publicOrigin(env, url) {
