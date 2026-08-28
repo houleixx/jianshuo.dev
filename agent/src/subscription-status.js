@@ -18,7 +18,7 @@ export async function activeIapSubscription(db, userSub, now = Date.now()) {
 
 async function activeWechatSubscription(db, userSub, now) {
   return await db.prepare(
-    "SELECT period_end_at FROM wechat_sub WHERE user_sub=? AND status='active' AND period_end_at>? ORDER BY period_end_at DESC LIMIT 1"
+    "SELECT period_end_at FROM wechat_sub WHERE user_sub=? AND status IN ('active','cancelled') AND period_end_at>? ORDER BY period_end_at DESC LIMIT 1"
   ).bind(userSub, now).first();
 }
 
