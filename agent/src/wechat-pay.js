@@ -16,6 +16,9 @@ const STALE_SETTLING_MS = 10 * 60 * 1000;
 const PRE_ENTRUST_TTL_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_PRECONTRACT_URL = "https://api.mch.weixin.qq.com/papay/preentrustweb";
 const APPLY_URL = "https://api.mch.weixin.qq.com/pay/pappayapply";
+const QUERY_CONTRACT_URL = "https://api.mch.weixin.qq.com/papay/querycontract";
+const TERMINATE_CONTRACT_URL = "https://api.mch.weixin.qq.com/papay/deletecontract";
+const WECHAT_PAY_CONFIG_KEY = "config/wechat-pay.json";
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
 const xmlReply = (code, message) => new Response(
   `<xml><return_code><![CDATA[${code}]]></return_code><return_msg><![CDATA[${message}]]></return_msg></xml>`,
@@ -81,6 +84,19 @@ function amountFen(env) {
 
 function ready(env) {
   return !!(env.USAGE && env.WECHAT_PAY_MCH_ID && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_PLAN_ID && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_CALLBACK_BASE_URL && amountFen(env));
+}
+
+// 售卖开关与 iOS config/iap.json 一致：只有 R2 config/wechat-pay.json 明确写
+// {"enabled":true} 才开闸；文件不存在、R2 异常或 JSON 损坏均关闭。它仅阻止新签约，
+// 不影响已有协议的续费、回调和状态查询。
+export async function wechatPayEnabled(env) {
+  try {
+    const obj = env.FILES && await env.FILES.get(WECHAT_PAY_CONFIG_KEY);
+    if (obj) return JSON.parse(await obj.text()).enabled === true;
+  } catch (e) {
+    console.error("[wechat-pay] bad config/wechat-pay.json:", e && e.message);
+  }
+  return false;
 }
 
 function publicOrigin(env, url) {
@@ -206,6 +222,101 @@ async function postApply(env, txn, sub, fetcher, origin) {
   return body;
 }
 
+// 回调是最快的状态同步路径，但微信并不保证回调最终送达。每一次可能扣款前，
+// 都以微信查询结果为准：0=已签约，1=已解约，9=签约进行中（均为 V2 contract_state）。
+async function queryWechatContract(env, sub, fetcher) {
+  const payload = {
+    appid: env.WECHAT_PAY_APP_ID,
+    mch_id: env.WECHAT_PAY_MCH_ID,
+    contract_id: sub.contract_id,
+    version: "1.0",
+  };
+  const response = await fetcher(QUERY_CONTRACT_URL, {
+    method: "POST",
+    headers: { "content-type": "text/xml; charset=utf-8" },
+    body: wechatV2Xml(payload, env.WECHAT_PAY_API_V2_KEY),
+  });
+  const body = parseWechatXml(await response.text());
+  if (!response.ok || !callbackData(body) || !verifyWechatV2(body, env.WECHAT_PAY_API_V2_KEY)) {
+    const code = body && (body.err_code || body.return_code || body.result_code) || `http-${response.status}`;
+    throw Object.assign(new Error(body && (body.err_code_des || body.return_msg) || "wechat-contract-query-failed"), { code, provider: body });
+  }
+  if (body.appid !== env.WECHAT_PAY_APP_ID || body.mch_id !== env.WECHAT_PAY_MCH_ID
+      || body.contract_id !== sub.contract_id || (body.plan_id && body.plan_id !== sub.plan_id)
+      || (body.contract_code && body.contract_code !== sub.contract_code)) {
+    throw Object.assign(new Error("wechat-contract-query-invalid-response"), { code: "invalid-provider-response", provider: body });
+  }
+  const state = String(body.contract_state || "");
+  if (!['0', '1', '9'].includes(state)) {
+    throw Object.assign(new Error("wechat-contract-query-unknown-state"), { code: "unknown-contract-state", provider: body });
+  }
+  return { state, body };
+}
+
+// 用户从 App 主动解除自动续费时，仍由服务端使用微信协议号发起。客户端永远
+// 不接触 contract_id、商户号或 V2 签名材料。微信 V2 的 deletecontract 是同步
+// 受理结果；后续重复的微信解约回调仍会按幂等方式落库。
+async function terminateWechatContract(env, sub, fetcher) {
+  const payload = {
+    appid: env.WECHAT_PAY_APP_ID,
+    mch_id: env.WECHAT_PAY_MCH_ID,
+    contract_id: sub.contract_id,
+    contract_termination_remark: "用户在 VoiceDrop App 解除自动续费",
+    version: "1.0",
+  };
+  const response = await fetcher(TERMINATE_CONTRACT_URL, {
+    method: "POST",
+    headers: { "content-type": "text/xml; charset=utf-8" },
+    body: wechatV2Xml(payload, env.WECHAT_PAY_API_V2_KEY),
+  });
+  const body = parseWechatXml(await response.text());
+  if (!response.ok || !callbackData(body) || !verifyWechatV2(body, env.WECHAT_PAY_API_V2_KEY)) {
+    const code = body && (body.err_code || body.return_code || body.result_code) || `http-${response.status}`;
+    throw Object.assign(new Error(body && (body.err_code_des || body.return_msg) || "wechat-contract-termination-failed"), { code, provider: body });
+  }
+  if (body.appid !== env.WECHAT_PAY_APP_ID || body.mch_id !== env.WECHAT_PAY_MCH_ID
+      || (body.contract_id && body.contract_id !== sub.contract_id)) {
+    throw Object.assign(new Error("wechat-contract-termination-invalid-response"), { code: "invalid-provider-response", provider: body });
+  }
+  return body;
+}
+
+async function markWechatContractCancelled(db, sub, now, reason, eventType, payload, message = null, direction = "inbound") {
+  // charging 的申请已经被微信受理，最终仍可能成功回调；只终止尚未提交给微信的订单。
+  await db.prepare(
+    "UPDATE wechat_sub SET status='cancelled', next_charge_at=NULL, cancel_reason=?, cancelled_at=COALESCE(cancelled_at,?), last_event_at=?, last_error_code=NULL, updated_at=? WHERE contract_code=?"
+  ).bind(reason, now, now, now, sub.contract_code).run();
+  await db.prepare(
+    "UPDATE wechat_txn SET status='failed', next_try_at=NULL, failure_code='contract-terminated', last_error_at=?, updated_at=? WHERE contract_code=? AND status IN ('pending','failed')"
+  ).bind(now, now, sub.contract_code).run();
+  await audit(db, { now, direction, event_type: eventType, contract_code: sub.contract_code,
+    user_sub: sub.user_sub, status_before: sub.status, status_after: "cancelled", message, payload });
+}
+
+async function reconcileWechatContract(db, env, sub, now, fetcher) {
+  try {
+    const { state, body } = await queryWechatContract(env, sub, fetcher);
+    if (state === "0") return { active: true };
+    if (state === "1") {
+      // 已经送到微信的 charging 订单仍可能异步回调成功，不能篡改它；只停止尚未申请的订单。
+      const reason = "wechat-query-terminated";
+      await markWechatContractCancelled(db, sub, now, reason, "contract_reconciled_cancelled", body,
+        body.contract_termination_remark || reason, "outbound");
+      return { cancelled: true };
+    }
+    // 9=签约进行中：不能把它当作已生效协议扣款；等待下一次 Cron 再对账。
+    await audit(db, { now, direction: "outbound", event_type: "contract_reconcile_pending", contract_code: sub.contract_code,
+      user_sub: sub.user_sub, status_before: "active", status_after: "active", code: "contract-state-9", payload: body });
+    return { pending: true };
+  } catch (e) {
+    // 查询异常时宁可延后一期申请，也不在协议真实状态未知时触发扣款。
+    await audit(db, { now, direction: "outbound", event_type: "contract_reconcile_failed", contract_code: sub.contract_code,
+      user_sub: sub.user_sub, status_before: "active", status_after: "active",
+      code: String(e.code || "contract-query-failed").slice(0, 64), message: e.message, payload: e.provider });
+    return { unknown: true };
+  }
+}
+
 async function requestCharge(db, env, txn, sub, now, fetcher, origin) {
   if (!txn || !["pending", "failed"].includes(txn.status)) return { skipped: true };
   try {
@@ -234,7 +345,8 @@ async function requestCharge(db, env, txn, sub, now, fetcher, origin) {
 }
 
 async function createDueTransaction(db, sub, env, now) {
-  const start = Number(sub.period_end_at || now);
+  // period_end_at 为空表示新协议尚无已付款周期；其首期起点由 next_charge_at + 24h 推导。
+  const start = Number(sub.period_end_at ?? (sub.next_charge_at != null ? Number(sub.next_charge_at) + CHARGE_LEAD_MS : now));
   const end = addCalendarMonth(start);
   const outTradeNo = tradeNo(sub.contract_code, start);
   await db.prepare(
@@ -261,8 +373,10 @@ async function settlePayment(db, txn, values, now) {
     await db.prepare(
       "UPDATE wechat_txn SET status='paid', wechat_txn_id=?, bucket_id=?, paid_at=?, last_callback_at=?, processing_at=NULL, next_try_at=NULL, updated_at=? WHERE out_trade_no=?"
     ).bind(values.transaction_id || null, bucket && bucket.id || null, now, now, now, txn.out_trade_no).run();
+    // 解约与支付结果回调可能交错到达。此处必须原子地保留已解约状态：实际扣款
+    // 成功仍应给本期算力，但绝不能把 cancelled 协议重新激活或恢复下一次自动扣款。
     await db.prepare(
-      "UPDATE wechat_sub SET status='active', period_start_at=?, period_end_at=?, next_charge_at=?, last_event_at=?, last_error_code=NULL, updated_at=? WHERE contract_code=?"
+      "UPDATE wechat_sub SET status=CASE WHEN status='cancelled' THEN 'cancelled' ELSE 'active' END, period_start_at=?, period_end_at=?, next_charge_at=CASE WHEN status='cancelled' THEN NULL ELSE ? END, last_event_at=?, last_error_code=NULL, updated_at=? WHERE contract_code=?"
     ).bind(txn.period_start_at, txn.period_end_at, Math.max(now, txn.period_end_at - CHARGE_LEAD_MS), now, now, txn.contract_code).run();
     await audit(db, { now, direction: "inbound", event_type: "payment_settled", contract_code: txn.contract_code,
       out_trade_no: txn.out_trade_no, user_sub: txn.user_sub, status_before: "settling", status_after: "paid",
@@ -279,12 +393,20 @@ async function settlePayment(db, txn, values, now) {
 }
 
 // Worker 的 15 分钟 Cron 调用。首期由签约回调立即发起；这里仅处理后续周期和
-// pending/failed 重试。支付成功的最终入账始终由微信回调完成。
+// pending/failed 重试。每次可能扣款前先查询微信协议，避免漏掉解约回调后继续申请。
+// 支付成功的最终入账始终由微信回调完成。
 export async function runWechatPaySchedule(env, now = Date.now(), fetcher = fetch, origin = null) {
   if (!ready(env)) return { skipped: "degraded" };
   const db = env.USAGE;
   const base = origin || publicOrigin(env);
-  const result = { created: 0, requested: 0, failed: 0 };
+  const result = { created: 0, requested: 0, failed: 0, cancelled: 0, deferred: 0 };
+  const contractChecks = new Map();
+  const reconcile = async (sub) => {
+    if (!contractChecks.has(sub.contract_code)) {
+      contractChecks.set(sub.contract_code, reconcileWechatContract(db, env, sub, now, fetcher));
+    }
+    return contractChecks.get(sub.contract_code);
+  };
 
   // 在一次 Worker 中断后的恢复：若已写 ledger，绝不再发钱；否则回到可重试状态。
   const stale = (await db.prepare(
@@ -308,14 +430,30 @@ export async function runWechatPaySchedule(env, now = Date.now(), fetcher = fetc
     "SELECT * FROM wechat_sub WHERE status='active' AND contract_id IS NOT NULL AND next_charge_at IS NOT NULL AND next_charge_at<=? LIMIT 50"
   ).bind(now).all()).results;
   for (const sub of due) {
+    const check = await reconcile(sub);
+    if (!check.active) {
+      if (check.cancelled) result.cancelled++;
+      else result.deferred++;
+      continue;
+    }
     await createDueTransaction(db, sub, env, now);
+    if (sub.period_end_at == null) {
+      await db.prepare("UPDATE wechat_sub SET next_charge_at=NULL, updated_at=? WHERE contract_code=?")
+        .bind(now, sub.contract_code).run();
+    }
     result.created++;
   }
   const pending = (await db.prepare(
-    "SELECT t.*, s.contract_id FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code WHERE t.status IN ('pending','failed') AND t.next_try_at<=? AND s.status='active' LIMIT 50"
+    "SELECT t.*, s.contract_id, s.plan_id FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code WHERE t.status IN ('pending','failed') AND t.next_try_at<=? AND s.status='active' LIMIT 50"
   ).bind(now).all()).results;
   for (const txn of pending) {
-    const sub = { contract_code: txn.contract_code, contract_id: txn.contract_id };
+    const sub = { contract_code: txn.contract_code, contract_id: txn.contract_id, plan_id: txn.plan_id, user_sub: txn.user_sub };
+    const check = await reconcile(sub);
+    if (!check.active) {
+      if (check.cancelled) result.cancelled++;
+      else result.deferred++;
+      continue;
+    }
     const r = await requestCharge(db, env, txn, sub, now, fetcher, base);
     if (r.charged) result.requested++;
     if (r.failed) result.failed++;
@@ -343,6 +481,7 @@ export async function handleWechatPayRoute(url, request, env, fetcher = fetch, n
         "SELECT * FROM wechat_sub WHERE user_sub=? AND status='pending' ORDER BY updated_at DESC LIMIT 1"
       ).bind(scope).first();
       if (!sub) {
+        if (!await wechatPayEnabled(env)) return J({ error: "disabled" }, 403);
         let code = null;
         for (let i = 0; i < 3; i++) {
           const candidate = contractCode(now, () => crypto.getRandomValues(new Uint32Array(2)));
@@ -390,18 +529,31 @@ export async function handleWechatPayRoute(url, request, env, fetcher = fetch, n
       const sub = await env.USAGE.prepare("SELECT * FROM wechat_sub WHERE contract_code=?").bind(code).first();
       if (!sub || (values.plan_id && values.plan_id !== sub.plan_id)) return xmlReply("FAIL", "UNKNOWN CONTRACT");
       if (sub.contract_id && sub.contract_id !== contractId) return xmlReply("FAIL", "CONTRACT CONFLICT");
+      // 已取消的旧协议仍有已付款周期时，新周期严格从旧周期端点开始。首期申请
+      // 固定安排在该端点前 24h；若用户重新签约时已过该时间，直接申请并让这笔
+      // 已实际付款的算力即时到账，避免空窗。这样最多只是短暂存在两笔可用算力。
+      const previous = await env.USAGE.prepare(
+        "SELECT period_end_at FROM wechat_sub WHERE user_sub=? AND contract_code<>? AND status='cancelled' AND period_end_at>? ORDER BY period_end_at DESC LIMIT 1"
+      ).bind(sub.user_sub, code, now).first();
+      const initialStart = previous && Number(previous.period_end_at) || null;
+      const nextChargeAt = initialStart == null ? now : initialStart - CHARGE_LEAD_MS;
       await env.USAGE.prepare(
         "UPDATE wechat_sub SET contract_id=?, openid=?, status='active', period_start_at=NULL, period_end_at=?, next_charge_at=?, signed_at=?, last_event_at=?, last_error_code=NULL, updated_at=? WHERE contract_code=?"
-      ).bind(contractId, values.openid || null, now, now, now, now, now, code).run();
+      ).bind(contractId, values.openid || null, initialStart == null ? now : null, nextChargeAt,
+        now, now, now, code).run();
       await audit(env.USAGE, { now, direction: "inbound", event_type: "contract_signed", contract_code: code,
         user_sub: sub.user_sub, status_before: sub.status, status_after: "active", payload: values });
       // 首期不等 15 分钟 Cron：签约已确认后立刻申请扣款。waitUntil 让微信回调快速
       // 得到 ACK；网络失败会把同一订单标为 failed，之后由独立的 15 分钟 Cron 兜底重试。
       // 没有 ctx 的纯函数调用（例如旧测试/离线脚本）不触发网络副作用。
-      if (ctx && typeof ctx.waitUntil === "function") {
-        const activeSub = { ...sub, contract_id: contractId, status: "active", period_end_at: now };
+      if (ctx && typeof ctx.waitUntil === "function" && nextChargeAt <= now) {
+        const activeSub = { ...sub, contract_id: contractId, status: "active", period_end_at: initialStart == null ? now : null, next_charge_at: nextChargeAt };
         const initialCharge = (async () => {
           const txn = await createDueTransaction(env.USAGE, activeSub, env, now);
+          if (initialStart != null) {
+            await env.USAGE.prepare("UPDATE wechat_sub SET next_charge_at=NULL, updated_at=? WHERE contract_code=?")
+              .bind(now, code).run();
+          }
           await audit(env.USAGE, { now, direction: "internal", event_type: "initial_charge_triggered",
             contract_code: code, out_trade_no: txn.out_trade_no, user_sub: sub.user_sub,
             status_before: "pending", status_after: txn.status });
@@ -444,15 +596,41 @@ export async function handleWechatPayRoute(url, request, env, fetcher = fetch, n
       if (!callbackData(values)) return xmlReply("SUCCESS", "IGNORED");
       const code = values.contract_code || values.out_contract_code;
       const id = values.contract_id || values.contract_no;
-      const row = await env.USAGE.prepare("SELECT contract_id FROM wechat_sub WHERE contract_code=?").bind(code || "").first();
+      const row = await env.USAGE.prepare("SELECT * FROM wechat_sub WHERE contract_code=?").bind(code || "").first();
       if (!row || (id && row.contract_id !== id)) return xmlReply("FAIL", "UNKNOWN CONTRACT");
-      const before = await env.USAGE.prepare("SELECT user_sub,status FROM wechat_sub WHERE contract_code=?").bind(code).first();
       const reason = values.cancel_reason || values.contract_status || "wechat-cancelled";
-      await env.USAGE.prepare("UPDATE wechat_sub SET status='cancelled', next_charge_at=NULL, cancel_reason=?, cancelled_at=?, last_event_at=?, updated_at=? WHERE contract_code=?")
-        .bind(reason, now, now, now, code).run();
-      await audit(env.USAGE, { now, direction: "inbound", event_type: "contract_cancelled", contract_code: code,
-        user_sub: before && before.user_sub, status_before: before && before.status, status_after: "cancelled", message: reason, payload: values });
+      await markWechatContractCancelled(env.USAGE, row, now, reason, "contract_cancelled", values, reason);
       return xmlReply("SUCCESS", "OK");
+    }
+
+    if (url.pathname === "/agent/wechat-pay/cancel" && request.method === "POST") {
+      const scope = await scopeFromToken(bearerToken(request), env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      if (!ready(env)) return J({ error: "degraded" }, 503);
+      const sub = await env.USAGE.prepare(
+        "SELECT * FROM wechat_sub WHERE user_sub=? AND status='active' AND contract_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1"
+      ).bind(scope).first();
+      // 网络重试必须安全：已经成功解约就直接返回成功，不能把旧记录当成错误。
+      if (!sub) {
+        const last = await env.USAGE.prepare(
+          "SELECT status,period_end_at FROM wechat_sub WHERE user_sub=? ORDER BY updated_at DESC LIMIT 1"
+        ).bind(scope).first();
+        if (last && last.status === "cancelled") return J({ ok: true, status: "cancelled", already: true, expires_date: last.period_end_at || null });
+        return J({ error: "no-active-contract" }, 409);
+      }
+      try {
+        const provider = await terminateWechatContract(env, sub, fetcher);
+        await markWechatContractCancelled(env.USAGE, sub, now, "user-cancelled-in-app", "contract_cancelled_by_user", provider,
+          "用户在 App 解除自动续费", "outbound");
+        return J({ ok: true, status: "cancelled", expires_date: sub.period_end_at || null });
+      } catch (e) {
+        await env.USAGE.prepare("UPDATE wechat_sub SET last_event_at=?, last_error_code=?, updated_at=? WHERE contract_code=?")
+          .bind(now, String(e.code || "contract-termination-failed").slice(0, 64), now, sub.contract_code).run();
+        await audit(env.USAGE, { now, direction: "outbound", event_type: "contract_cancel_failed", contract_code: sub.contract_code,
+          user_sub: scope, status_before: sub.status, status_after: sub.status,
+          code: e.code, message: e.message, payload: e.provider });
+        return J({ error: "cancel-unavailable" }, 502);
+      }
     }
 
     if (url.pathname === "/agent/wechat-pay/status" && request.method === "GET") {
@@ -460,14 +638,21 @@ export async function handleWechatPayRoute(url, request, env, fetcher = fetch, n
       if (!scope) return J({ error: "unauthorized" }, 401);
       if (!env.USAGE) return J({ active: false, degraded: true });
       const row = await env.USAGE.prepare(
-        "SELECT contract_code, plan_id, status, period_end_at, cancel_reason, signed_at, cancelled_at, last_error_code FROM wechat_sub WHERE user_sub=? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1"
+        "SELECT contract_code, contract_id, plan_id, status, period_end_at, next_charge_at, cancel_reason, signed_at, cancelled_at, last_error_code FROM wechat_sub WHERE user_sub=? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1"
       ).bind(scope).first();
-      const active = !!(row && row.status === "active" && Number(row.period_end_at || now) > now);
+      // 新签约的首期可能尚未扣款，此时用户的当前权益仍来自已取消的旧周期；
+      // 因此权益到期日不能只看当前协议行。
+      const coverage = await env.USAGE.prepare(
+        "SELECT MAX(period_end_at) AS expires_date FROM wechat_sub WHERE user_sub=? AND status IN ('active','cancelled') AND period_end_at>?"
+      ).bind(scope, now).first();
+      const expiresAt = coverage && coverage.expires_date || row && row.period_end_at || null;
+      const active = Number(expiresAt || 0) > now;
       const sum = active ? await env.USAGE.prepare(
         "SELECT COALESCE(SUM(remaining_uy),0) AS s FROM bucket WHERE user_sub=? AND source='subscription' AND (expires_at IS NULL OR expires_at>?)"
       ).bind(scope, now).first() : { s: 0 };
-      return J({ active, status: row ? row.status : null, plan_id: row ? row.plan_id : null,
-        expires_date: row ? row.period_end_at : null,
+      return J({ active, enabled: await wechatPayEnabled(env), can_cancel: !!(row && row.status === "active" && row.contract_id), status: row ? row.status : null, plan_id: row ? row.plan_id : null,
+        expires_date: expiresAt,
+        scheduled_charge_at: row && row.period_end_at == null ? row.next_charge_at : null,
         cancel_reason: row ? row.cancel_reason : null,
         signed_at: row ? row.signed_at : null, cancelled_at: row ? row.cancelled_at : null,
         // 原始微信错误码/文本只留在 D1 的 wechat_sub / wechat_txn / wechat_event，
