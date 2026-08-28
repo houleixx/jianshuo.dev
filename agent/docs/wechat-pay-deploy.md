@@ -68,7 +68,7 @@ npx wrangler secret put WECHAT_PAY_AMOUNT_FEN
 
 ## 微信售卖开关
 
-微信支付售卖开关与 iOS 的 `config/iap.json` 一致：私有 R2 Bucket 中的 `config/wechat-pay.json` 必须明确写入 `{"enabled":true}` 才开放；文件不存在、读取异常或 JSON 损坏都保持关闭。
+微信支付售卖开关保存在私有 R2 Bucket 的 `config/wechat-pay.json`。首次读取时文件不存在，Worker 会自动写入 `{"enabled":true}` 并开放售卖；读取、解析或写入异常时也默认开放，避免临时 R2 故障误关订阅入口。只有明确写入 `{"enabled":false}` 才关闭新签约入口。
 
 ```json
 {"enabled":false}
