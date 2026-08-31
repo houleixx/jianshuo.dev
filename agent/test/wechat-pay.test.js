@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { fakeD1, usageSql } from "./fakes.js";
 import { anonScopeFromToken } from "../../functions/lib/auth.js";
 import { SUB_GRANT_SUANLI, suanliToUY, uyToSuanli, SIGNUP_GRANT_UY } from "../src/usage.js";
-import { addCalendarMonth, handleWechatPayRoute, runWechatPaySchedule, wechatV2Sign, wechatV2Xml, parseWechatXml } from "../src/wechat-pay.js";
+import { addCalendarMonth, handleWechatPayRoute, runWechatPaySchedule, wechatChargeScheduleAt, wechatV2Sign, wechatV2Xml, parseWechatXml } from "../src/wechat-pay.js";
 
 const SQL = usageSql();
 const TOK = "anon_unittesttoken_abcdefghijklmnop";
@@ -15,6 +15,7 @@ function env(db) {
     FILES: { get: async (key) => key === "config/wechat-pay.json" ? { text: async () => '{"enabled":true}' } : null },
     WECHAT_PAY_MCH_ID: "1900000001", WECHAT_PAY_APP_ID: "wx1234567890", WECHAT_PAY_PLAN_ID: "plan_monthly_19_9",
     WECHAT_PAY_API_V2_KEY: "unit-test-api-key",
+    WECHAT_PAY_CHARGE_MODE: "notify_after_24h",
     WECHAT_PAY_CALLBACK_BASE_URL: "https://jianshuo.dev",
   };
 }
@@ -89,6 +90,12 @@ describe("微信委托代扣的日期与签名", () => {
     expect(new Date(addCalendarMonth(Date.UTC(2024, 0, 31))).toISOString()).toBe("2024-02-29T00:00:00.000Z");
   });
 
+  it("续期申请固定为到期日前第 3 个北京时间自然日 02:00", () => {
+    // 2026-02-28 20:00 北京时间到期 → 2026-02-25 02:00 北京时间申请。
+    const periodEnd = Date.UTC(2026, 1, 28, 12, 0, 0);
+    expect(new Date(wechatChargeScheduleAt(periodEnd)).toISOString()).toBe("2026-02-24T18:00:00.000Z");
+  });
+
   it("V2 回调必须验 MD5 签名，字段重复或实体 XML 会拒绝", () => {
     const values = { return_code: "SUCCESS", result_code: "SUCCESS", out_trade_no: "wd1" };
     const xml = wechatV2Xml(values, "key");
@@ -100,7 +107,7 @@ describe("微信委托代扣的日期与签名", () => {
 });
 
 describe("微信签约、自动续费和入账", () => {
-  it("签约成功回调立刻在 waitUntil 发起首期扣费；15 分钟 Cron 只负责后续/失败兜底", async () => {
+  it("签约成功回调立刻在 waitUntil 发起首期扣费；每日 Cron 只负责后续/失败兜底", async () => {
     const db = fakeD1(SQL); const e = env(db);
     const created = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK });
     const { contract_code } = await created.json();
@@ -213,7 +220,7 @@ describe("微信签约、自动续费和入账", () => {
     expect(event.payload || "").not.toContain("pre_entrustweb_id");
   });
 
-  it("Cron 只用 D1 due 索引生成稳定订单号；失败可重试，成功申请不重复下单", async () => {
+  it("每日 Cron 只用 D1 due 索引生成稳定订单号；失败可重试，微信受理后不重复申请", async () => {
     const db = fakeD1(SQL); const e = env(db); await createAndSign(e, db);
     const calls = [];
     const first = await runWechatPaySchedule(e, NOW, applyFetcher(calls));
@@ -224,7 +231,7 @@ describe("微信签约、自动续费和入账", () => {
     ]);
     const txn = db.prepare("SELECT * FROM wechat_txn").bind().first();
     expect(txn).toMatchObject({ status: "charging", amount_fen: 1990, period_start_at: NOW, period_end_at: addCalendarMonth(NOW) });
-    await runWechatPaySchedule(e, NOW + 5 * 60 * 1000, applyFetcher(calls));
+    await runWechatPaySchedule(e, NOW + 86400000, applyFetcher(calls));
     expect(calls.map((x) => x.url)).toEqual([
       "https://api.mch.weixin.qq.com/papay/querycontract",
       "https://api.mch.weixin.qq.com/pay/pappayapply",
@@ -268,7 +275,7 @@ describe("微信签约、自动续费和入账", () => {
     expect(db.prepare("SELECT status FROM wechat_sub").bind().first().status).toBe("active");
   });
 
-  it("微信明确支付失败会记录原因并在一小时后以同一订单号重试，不会错误发放算力", async () => {
+  it("微信明确支付失败会记录原因，并在次日以同一订单号重试，不会错误发放算力", async () => {
     const db = fakeD1(SQL); const e = env(db); await createAndSign(e, db);
     const calls = [];
     await runWechatPaySchedule(e, NOW, applyFetcher(calls));
@@ -284,7 +291,7 @@ describe("微信签约、自动续费和入账", () => {
     expect(userStatus).toMatchObject({ payment_issue: "payment-failed" });
     expect(userStatus).not.toHaveProperty("last_error_code");
     expect(userStatus).not.toHaveProperty("last_error_message");
-    await runWechatPaySchedule(e, NOW + 60 * 60 * 1000, applyFetcher(calls));
+    await runWechatPaySchedule(e, NOW + 86400000, applyFetcher(calls));
     expect(calls).toHaveLength(4); // 每次重试前都先查询协议，再申请扣款
     expect(db.prepare("SELECT out_trade_no,status FROM wechat_txn").bind().first()).toMatchObject({ out_trade_no: txn.out_trade_no, status: "charging" });
   });
@@ -307,7 +314,7 @@ describe("微信签约、自动续费和入账", () => {
     await call(e, "/agent/wechat-pay/pay-notify", { method: "POST", raw: signed(e, callback) });
     expect(db.prepare("SELECT COUNT(*) AS n FROM bucket WHERE user_sub=? AND source='subscription'").bind(scope).first().n).toBe(1);
     const sub = db.prepare("SELECT * FROM wechat_sub WHERE contract_code=?").bind(code).first();
-    expect(sub.next_charge_at).toBe(addCalendarMonth(NOW) - 86400000);
+    expect(sub.next_charge_at).toBe(wechatChargeScheduleAt(addCalendarMonth(NOW)));
     const event = db.prepare("SELECT * FROM wechat_event WHERE out_trade_no=? AND event_type='payment_settled'").bind(txn.out_trade_no).first();
     expect(event).toMatchObject({ contract_code: code, status_before: "settling", status_after: "paid", wechat_txn_id: "4200000000001" });
     expect(event.payload).toContain("[redacted]"); // 回调仍可排错，但不落可复用签名
@@ -425,14 +432,14 @@ describe("微信签约、自动续费和入账", () => {
     expect(await signedAgain.text()).toContain("SUCCESS");
     expect(background).toHaveLength(0); // 第二份协议不能在签约回调中立即扣款
     const second = db.prepare("SELECT * FROM wechat_sub WHERE contract_code=?").bind(secondCode).first();
-    expect(second).toMatchObject({ status: "active", contract_id: "contract-002", period_start_at: null, period_end_at: null,
-      next_charge_at: oldEnd - 86400000 });
+    expect(second).toMatchObject({ status: "active", contract_id: "contract-002", period_start_at: null, period_end_at: oldEnd,
+      next_charge_at: wechatChargeScheduleAt(oldEnd) });
     expect(db.prepare("SELECT COUNT(*) AS n FROM wechat_txn WHERE contract_code=?").bind(secondCode).first().n).toBe(0);
     const status = await (await call(e, "/agent/wechat-pay/status", { token: TOK }, resubscribeAt)).json();
-    expect(status).toMatchObject({ active: true, status: "active", can_cancel: true, expires_date: oldEnd, scheduled_charge_at: oldEnd - 86400000 });
+    expect(status).toMatchObject({ active: true, status: "active", can_cancel: true, expires_date: oldEnd, scheduled_charge_at: wechatChargeScheduleAt(oldEnd) });
 
     const notYet = [];
-    await runWechatPaySchedule(e, oldEnd - 86400000 - 1, async (url) => { notYet.push(String(url)); throw new Error("不应提前调用微信"); });
+    await runWechatPaySchedule(e, wechatChargeScheduleAt(oldEnd) - 1, async (url) => { notYet.push(String(url)); throw new Error("不应提前调用微信"); });
     expect(notYet).toHaveLength(0);
     const calls = [];
     const fetcher = async (url, init) => {
@@ -446,7 +453,7 @@ describe("微信签约、自动续费和入账", () => {
       expect(String(url)).toBe("https://api.mch.weixin.qq.com/pay/pappayapply");
       return new Response("<xml><return_code><![CDATA[SUCCESS]]></return_code><result_code><![CDATA[SUCCESS]]></result_code></xml>");
     };
-    await runWechatPaySchedule(e, oldEnd - 86400000, fetcher);
+    await runWechatPaySchedule(e, wechatChargeScheduleAt(oldEnd), fetcher);
     expect(calls.map((x) => x.url)).toEqual(["https://api.mch.weixin.qq.com/papay/querycontract", "https://api.mch.weixin.qq.com/pay/pappayapply"]);
     expect(db.prepare("SELECT period_start_at,period_end_at,status FROM wechat_txn WHERE contract_code=?").bind(secondCode).first())
       .toMatchObject({ period_start_at: oldEnd, period_end_at: addCalendarMonth(oldEnd), status: "charging" });
@@ -476,7 +483,7 @@ describe("微信签约、自动续费和入账", () => {
     await Promise.all(background);
     expect(calls.map((x) => x.url)).toEqual(["https://api.mch.weixin.qq.com/pay/pappayapply"]);
     const second = db.prepare("SELECT period_start_at,period_end_at,next_charge_at FROM wechat_sub WHERE contract_code=?").bind(secondCode).first();
-    expect(second).toEqual({ period_start_at: null, period_end_at: null, next_charge_at: null });
+    expect(second).toEqual({ period_start_at: null, period_end_at: oldEnd, next_charge_at: null });
     expect(db.prepare("SELECT period_start_at,period_end_at,status FROM wechat_txn WHERE contract_code=?").bind(secondCode).first())
       .toMatchObject({ period_start_at: oldEnd, period_end_at: addCalendarMonth(oldEnd), status: "charging" });
   });
@@ -486,6 +493,10 @@ describe("微信签约、自动续费和入账", () => {
     expect((await call(e, "/agent/wechat-pay/contract", { method: "POST" })).status).toBe(401);
     const off = { USAGE: db };
     expect((await call(off, "/agent/wechat-pay/contract", { method: "POST", token: TOK })).status).toBe(503);
+    const modeMissing = env(db);
+    delete modeMissing.WECHAT_PAY_CHARGE_MODE;
+    expect((await call(modeMissing, "/agent/wechat-pay/contract", { method: "POST", token: TOK })).status).toBe(503);
+    expect(await runWechatPaySchedule(modeMissing, NOW)).toEqual({ skipped: "degraded" });
     const status = await call(e, "/agent/wechat-pay/status", { token: TOK });
     expect(await status.json()).toMatchObject({ active: false, enabled: true, monthly_suanli: SUB_GRANT_SUANLI });
   });

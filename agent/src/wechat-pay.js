@@ -10,7 +10,9 @@ import { activeIapSubscription } from "./subscription-status.js";
 import { verifySession, anonScopeFromToken, bearerToken } from "../../functions/lib/auth.js";
 
 const DAY_MS = 86400000;
-const CHARGE_LEAD_MS = DAY_MS;              // 委托代扣申请须在本周期结束前至少 24 小时
+const HOUR_MS = 60 * 60 * 1000;
+const CHARGE_LEAD_DAYS = 3;
+const MAX_DAILY_CHARGE_ATTEMPTS = 3;
 const RETRY_MS = 5 * 60 * 1000;
 const STALE_SETTLING_MS = 10 * 60 * 1000;
 const PRE_ENTRUST_TTL_MS = 2 * 60 * 60 * 1000;
@@ -19,6 +21,7 @@ const APPLY_URL = "https://api.mch.weixin.qq.com/pay/pappayapply";
 const QUERY_CONTRACT_URL = "https://api.mch.weixin.qq.com/papay/querycontract";
 const TERMINATE_CONTRACT_URL = "https://api.mch.weixin.qq.com/papay/deletecontract";
 const WECHAT_PAY_CONFIG_KEY = "config/wechat-pay.json";
+const WECHAT_PAY_CHARGE_MODE = "notify_after_24h";
 const J = (x, status = 200) => new Response(JSON.stringify(x), { status, headers: { "content-type": "application/json" } });
 const xmlReply = (code, message) => new Response(
   `<xml><return_code><![CDATA[${code}]]></return_code><return_msg><![CDATA[${message}]]></return_msg></xml>`,
@@ -41,6 +44,16 @@ export function addCalendarMonth(at) {
   const targetMonth = month % 12;
   const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
   return Date.UTC(targetYear, targetMonth, Math.min(d.getUTCDate(), lastDay), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds());
+}
+
+// 微信的「通知后 24 小时自动扣费」模板可全天发起申请。为了给失败留出两次
+// 次日重试，续期申请固定在到期日前第 3 个北京时间自然日的 02:00 运行。
+// 周期本身仍保存为 UTC epoch；这里只把调度时点按北京时间日历换算，避免受
+// Worker 区域或夏令时（中国没有夏令时）影响。
+export function wechatChargeScheduleAt(periodEndAt) {
+  const beijingOffset = 8 * HOUR_MS;
+  const beijingDayStart = Math.floor((Number(periodEndAt) + beijingOffset) / DAY_MS) * DAY_MS - beijingOffset;
+  return beijingDayStart - CHARGE_LEAD_DAYS * DAY_MS + 2 * HOUR_MS;
 }
 
 const md5 = (s) => createHash("md5").update(String(s), "utf8").digest("hex").toUpperCase();
@@ -83,7 +96,10 @@ function amountFen(env) {
 }
 
 function ready(env) {
-  return !!(env.USAGE && env.WECHAT_PAY_MCH_ID && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_PLAN_ID && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_CALLBACK_BASE_URL && amountFen(env));
+  // plan_id 本身不能反查商户后台获批的扣费模式。必须由部署者在确认模板为
+  // 「通知后 24 小时自动扣费」后显式声明，避免误把有 7:00–22:00 限制的
+  // 独立预扣费通知模板接入全天申请逻辑。
+  return !!(env.USAGE && env.WECHAT_PAY_MCH_ID && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_PLAN_ID && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_CALLBACK_BASE_URL && env.WECHAT_PAY_CHARGE_MODE === WECHAT_PAY_CHARGE_MODE && amountFen(env));
 }
 
 // 首次访问时把售卖开关初始化为开启，之后由 R2 中的显式 true/false 控制。R2 读、写或
@@ -336,11 +352,11 @@ async function requestCharge(db, env, txn, sub, now, fetcher, origin) {
     return { charged: true };
   } catch (e) {
     const attempts = Number(txn.attempt_count || 0) + 1;
-    // 上限 1 小时，保留同一 out_trade_no，微信侧也可自然幂等。
-    const delay = Math.min(RETRY_MS * (2 ** Math.min(attempts - 1, 4)), 60 * 60 * 1000);
+    // Cron 每天北京时间 02:00 运行；这里只标记为可重试，下一次 Cron 会以同一
+    // out_trade_no 重试。最多三次（到期日前第 3/2/1 天），不在当天反复打扰用户。
     await db.prepare(
       "UPDATE wechat_txn SET status='failed', next_try_at=?, attempt_count=?, failure_code=?, last_error_at=?, updated_at=? WHERE out_trade_no=?"
-    ).bind(now + delay, attempts, String(e.code || "apply-failed").slice(0, 64), now, now, txn.out_trade_no).run();
+    ).bind(now + DAY_MS, attempts, String(e.code || "apply-failed").slice(0, 64), now, now, txn.out_trade_no).run();
     await db.prepare("UPDATE wechat_sub SET last_event_at=?, last_error_code=?, updated_at=? WHERE contract_code=?")
       .bind(now, String(e.code || "apply-failed").slice(0, 64), now, txn.contract_code).run();
     await audit(db, { now, direction: "outbound", event_type: "charge_request_failed", contract_code: txn.contract_code,
@@ -350,8 +366,8 @@ async function requestCharge(db, env, txn, sub, now, fetcher, origin) {
 }
 
 async function createDueTransaction(db, sub, env, now) {
-  // period_end_at 为空表示新协议尚无已付款周期；其首期起点由 next_charge_at + 24h 推导。
-  const start = Number(sub.period_end_at ?? (sub.next_charge_at != null ? Number(sub.next_charge_at) + CHARGE_LEAD_MS : now));
+  // 首次签约的即时首期传入当前时刻；续签的首期及普通续期均以既有周期端点为起点。
+  const start = Number(sub.period_end_at ?? now);
   const end = addCalendarMonth(start);
   const outTradeNo = tradeNo(sub.contract_code, start);
   await db.prepare(
@@ -368,7 +384,7 @@ async function settlePayment(db, txn, values, now) {
   if (!(lock && lock.meta && lock.meta.changes === 1)) return { ok: true, already: true };
 
   try {
-    // 微信周期严格截止于自然月端点；扣款申请已在该端点前 24 小时发起，
+    // 微信周期严格截止于自然月端点；扣款申请在该端点前三个北京时间自然日发起，
     // 不额外赠送订阅算力的有效期。
     await grantBucket(db, txn.user_sub, suanliToUY(SUB_GRANT_SUANLI), "subscription", txn.period_end_at, now,
       { provider: "wechat", out_trade_no: txn.out_trade_no, transaction_id: values.transaction_id || null });
@@ -382,7 +398,7 @@ async function settlePayment(db, txn, values, now) {
     // 成功仍应给本期算力，但绝不能把 cancelled 协议重新激活或恢复下一次自动扣款。
     await db.prepare(
       "UPDATE wechat_sub SET status=CASE WHEN status='cancelled' THEN 'cancelled' ELSE 'active' END, period_start_at=?, period_end_at=?, next_charge_at=CASE WHEN status='cancelled' THEN NULL ELSE ? END, last_event_at=?, last_error_code=NULL, updated_at=? WHERE contract_code=?"
-    ).bind(txn.period_start_at, txn.period_end_at, Math.max(now, txn.period_end_at - CHARGE_LEAD_MS), now, now, txn.contract_code).run();
+    ).bind(txn.period_start_at, txn.period_end_at, Math.max(now, wechatChargeScheduleAt(txn.period_end_at)), now, now, txn.contract_code).run();
     await audit(db, { now, direction: "inbound", event_type: "payment_settled", contract_code: txn.contract_code,
       out_trade_no: txn.out_trade_no, user_sub: txn.user_sub, status_before: "settling", status_after: "paid",
       wechat_txn_id: values.transaction_id, payload: values });
@@ -397,8 +413,8 @@ async function settlePayment(db, txn, values, now) {
   }
 }
 
-// Worker 的 15 分钟 Cron 调用。首期由签约回调立即发起；这里仅处理后续周期和
-// pending/failed 重试。每次可能扣款前先查询微信协议，避免漏掉解约回调后继续申请。
+// Worker 每天北京时间 02:00 的 Cron 调用。首期由签约回调立即发起；这里仅处理
+// 后续周期和 pending/failed 的次日重试。每次可能扣款前先查询微信协议，避免漏掉解约回调后继续申请。
 // 支付成功的最终入账始终由微信回调完成。
 export async function runWechatPaySchedule(env, now = Date.now(), fetcher = fetch, origin = null) {
   if (!ready(env)) return { skipped: "degraded" };
@@ -449,8 +465,8 @@ export async function runWechatPaySchedule(env, now = Date.now(), fetcher = fetc
     result.created++;
   }
   const pending = (await db.prepare(
-    "SELECT t.*, s.contract_id, s.plan_id FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code WHERE t.status IN ('pending','failed') AND t.next_try_at<=? AND s.status='active' LIMIT 50"
-  ).bind(now).all()).results;
+    "SELECT t.*, s.contract_id, s.plan_id FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code WHERE t.status IN ('pending','failed') AND t.next_try_at<=? AND t.attempt_count<? AND t.period_end_at>? AND s.status='active' LIMIT 50"
+  ).bind(now, MAX_DAILY_CHARGE_ATTEMPTS, now).all()).results;
   for (const txn of pending) {
     const sub = { contract_code: txn.contract_code, contract_id: txn.contract_id, plan_id: txn.plan_id, user_sub: txn.user_sub };
     const check = await reconcile(sub);
@@ -535,24 +551,24 @@ export async function handleWechatPayRoute(url, request, env, fetcher = fetch, n
       if (!sub || (values.plan_id && values.plan_id !== sub.plan_id)) return xmlReply("FAIL", "UNKNOWN CONTRACT");
       if (sub.contract_id && sub.contract_id !== contractId) return xmlReply("FAIL", "CONTRACT CONFLICT");
       // 已取消的旧协议仍有已付款周期时，新周期严格从旧周期端点开始。首期申请
-      // 固定安排在该端点前 24h；若用户重新签约时已过该时间，直接申请并让这笔
+      // 固定安排在该端点前三个北京时间自然日的 02:00；若用户重新签约时已过该时间，直接申请并让这笔
       // 已实际付款的算力即时到账，避免空窗。这样最多只是短暂存在两笔可用算力。
       const previous = await env.USAGE.prepare(
         "SELECT period_end_at FROM wechat_sub WHERE user_sub=? AND contract_code<>? AND status='cancelled' AND period_end_at>? ORDER BY period_end_at DESC LIMIT 1"
       ).bind(sub.user_sub, code, now).first();
       const initialStart = previous && Number(previous.period_end_at) || null;
-      const nextChargeAt = initialStart == null ? now : initialStart - CHARGE_LEAD_MS;
+      const nextChargeAt = initialStart == null ? now : wechatChargeScheduleAt(initialStart);
       await env.USAGE.prepare(
         "UPDATE wechat_sub SET contract_id=?, openid=?, status='active', period_start_at=NULL, period_end_at=?, next_charge_at=?, signed_at=?, last_event_at=?, last_error_code=NULL, updated_at=? WHERE contract_code=?"
-      ).bind(contractId, values.openid || null, initialStart == null ? now : null, nextChargeAt,
+      ).bind(contractId, values.openid || null, initialStart == null ? now : initialStart, nextChargeAt,
         now, now, now, code).run();
       await audit(env.USAGE, { now, direction: "inbound", event_type: "contract_signed", contract_code: code,
         user_sub: sub.user_sub, status_before: sub.status, status_after: "active", payload: values });
-      // 首期不等 15 分钟 Cron：签约已确认后立刻申请扣款。waitUntil 让微信回调快速
-      // 得到 ACK；网络失败会把同一订单标为 failed，之后由独立的 15 分钟 Cron 兜底重试。
+      // 首期不等每日 Cron：签约已确认后立刻申请扣款。waitUntil 让微信回调快速
+      // 得到 ACK；网络失败会把同一订单标为 failed，之后由次日 02:00 Cron 兜底重试。
       // 没有 ctx 的纯函数调用（例如旧测试/离线脚本）不触发网络副作用。
       if (ctx && typeof ctx.waitUntil === "function" && nextChargeAt <= now) {
-        const activeSub = { ...sub, contract_id: contractId, status: "active", period_end_at: initialStart == null ? now : null, next_charge_at: nextChargeAt };
+        const activeSub = { ...sub, contract_id: contractId, status: "active", period_end_at: initialStart == null ? now : initialStart, next_charge_at: nextChargeAt };
         const initialCharge = (async () => {
           const txn = await createDueTransaction(env.USAGE, activeSub, env, now);
           if (initialStart != null) {
@@ -657,7 +673,9 @@ export async function handleWechatPayRoute(url, request, env, fetcher = fetch, n
       ).bind(scope, now).first() : { s: 0 };
       return J({ active, enabled: await wechatPayEnabled(env), can_cancel: !!(row && row.status === "active" && row.contract_id), status: row ? row.status : null, plan_id: row ? row.plan_id : null,
         expires_date: expiresAt,
-        scheduled_charge_at: row && row.period_end_at == null ? row.next_charge_at : null,
+        // 尚未实际扣款的新协议以 period_start_at 为空标识；period_end_at 此时保存
+        // 首期的约定起点，供稳定地计算订单周期，不能再用它判断是否待扣。
+        scheduled_charge_at: row && row.period_start_at == null ? row.next_charge_at : null,
         cancel_reason: row ? row.cancel_reason : null,
         signed_at: row ? row.signed_at : null, cancelled_at: row ? row.cancelled_at : null,
         // 原始微信错误码/文本只留在 D1 的 wechat_sub / wechat_txn / wechat_event，

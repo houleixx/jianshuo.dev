@@ -1712,8 +1712,9 @@ export default {
       })());
       return;
     }
-    if (event.cron === "*/15 * * * *") {
-      // 微信委托代扣独立于探活 Cron：当前周期结束前 24 小时建单，成功回调后才入账。
+    if (event.cron === "0 18 * * *") {
+      // Cloudflare Cron 以 UTC 解释：18:00 UTC 即北京时间次日 02:00。微信当前使用
+      // 「通知后 24 小时自动扣费」模板，可全天提交申请；到期前三个自然日开始，每日一次重试。
       ctx.waitUntil(runWechatPaySchedule(env).catch((e) => console.log("[wechat-pay] schedule failed", String(e))));
       return;
     }

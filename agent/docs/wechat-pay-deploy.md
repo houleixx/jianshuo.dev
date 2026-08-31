@@ -4,7 +4,7 @@
 
 ## 上线前的商户侧准备
 
-1. 在微信支付商户平台将签约入口所用的 AppID 绑定到商户号，并申请获批「委托代扣 / 自动续费」产品和月度 `plan_id`。
+1. 在微信支付商户平台将签约入口所用的 AppID 绑定到商户号，并申请获批「委托代扣 / 自动续费」产品和月度 `plan_id`。**必须确认模板的扣费模式是“通知后 24 小时自动扣费”**，而不是“预扣费通知”；本实现只支持前者，申请扣款可全天发起。
 2. 确认商户获批的是 XML V2 委托代扣接口。本代码固定调用微信官方申请扣款地址 `https://api.mch.weixin.qq.com/pay/pappayapply`。
 3. 在该模板/产品的通知配置中使用下面三个公网 HTTPS 地址：
 
@@ -36,7 +36,7 @@ npm test
 npx wrangler deploy
 ```
 
-`wrangler.jsonc` 配置了独立的 `*/15 * * * *` Cron 扫描 D1 到期协议和重试失败订单；原有 `*/5 * * * *` 只继续负责探活/报警。不需要在 Cloudflare 控制台再手动建 Cron 或 Durable Object Alarm。
+`wrangler.jsonc` 配置了独立的 `0 18 * * *` Cron（Cloudflare Cron 使用 UTC，即北京时间每日 02:00）扫描 D1 到期协议和重试失败订单；原有 `*/5 * * * *` 只继续负责探活/报警。不需要在 Cloudflare 控制台再手动建 Cron 或 Durable Object Alarm。
 
 ## Worker Secrets
 
@@ -47,6 +47,7 @@ npx wrangler secret put WECHAT_PAY_MCH_ID
 npx wrangler secret put WECHAT_PAY_APP_ID
 npx wrangler secret put WECHAT_PAY_PLAN_ID
 npx wrangler secret put WECHAT_PAY_API_V2_KEY
+npx wrangler secret put WECHAT_PAY_CHARGE_MODE # 输入 notify_after_24h
 npx wrangler secret put WECHAT_PAY_CALLBACK_BASE_URL
 ```
 
@@ -65,6 +66,7 @@ npx wrangler secret put WECHAT_PAY_AMOUNT_FEN
 ```
 
 `WECHAT_PAY_API_V2_KEY` 是 XML 请求和回调验签的 API 密钥，不是 APIv3 密钥；两者不可互换。
+`WECHAT_PAY_CHARGE_MODE` 必须精确为 `notify_after_24h`。这不是从 `plan_id` 自动推断的值，而是部署者在微信商户后台确认模板模式后的显式安全确认；缺失或其他值时，Worker 拒绝发起新签约和续费。
 
 ## 微信售卖开关
 
@@ -78,16 +80,16 @@ npx wrangler secret put WECHAT_PAY_AMOUNT_FEN
 
 ## 自动续费与数据行为
 
-- `wechat_sub`：每一份协议一行，`contract_code` 在发起预签约前保存；`pre_entrustweb_id` 与小程序拉起参数只通过本次 HTTPS 响应给已认证 Android，**不写入 D1，也不写入审计载荷**。签约回调补入微信的 `contract_id`。解约行不会删除，用户随后重新订阅会创建新的协议行；仍有 `active` 协议时接口返回 `409 already-subscribed`，避免双扣。若旧的已付款周期尚未结束，新的协议只完成签约，`period_*` 保持为空，复用 `next_charge_at` 记录首期衔接申请时间。
-- `wechat_txn`：每个自然月一期、一个稳定 `out_trade_no`；网络失败在同一订单号上指数退避重试，支付成功回调重复到达也只发一次钱。只保存微信订单号、请求/回调时间、重试次数及最后错误码等当前快照。
+- `wechat_sub`：每一份协议一行，`contract_code` 在发起预签约前保存；`pre_entrustweb_id` 与小程序拉起参数只通过本次 HTTPS 响应给已认证 Android，**不写入 D1，也不写入审计载荷**。签约回调补入微信的 `contract_id`。解约行不会删除，用户随后重新订阅会创建新的协议行；仍有 `active` 协议时接口返回 `409 already-subscribed`，避免双扣。若旧的已付款周期尚未结束，新的协议只完成签约：`period_start_at` 为空，`period_end_at` 保存首期约定起点，`next_charge_at` 保存首期衔接申请时间。
+- `wechat_txn`：每个自然月一期、一个稳定 `out_trade_no`；首次申请失败后在下一个每日任务中以同一订单号重试，最多三次（到期日前第 3/2/1 个北京时间自然日的 02:00）。微信已受理后订单进入 `charging`，绝不重复申请；支付成功回调重复到达也只发一次钱。只保存微信订单号、请求/回调时间、重试次数及最后错误码等当前快照。
 - `wechat_event`：不可变审计日志，记录每次签约、扣费申请、微信回调、失败、结算及解约的协议号、订单号、状态迁移、微信错误文本和已脱敏载荷。排错时按 `contract_code` 或 `out_trade_no` 查询此表。
 - 用户的 `/agent/wechat-pay/status` 不返回微信原始错误码或错误文本，只返回通用 `payment_issue: "payment-failed"`；原始错误只保存在受控的 D1 审计数据中。
-- 同一用户重复请求会复用同一份待签约的 `contract_code`，但每次都由微信创建新的临时预签约会话；会话只存在于 Android 的本次响应中。签约成功回调会通过 Worker `waitUntil` **立即发起首期扣费申请**；15 分钟 Cron 只负责首期失败重试和以后在本周期结束前 **24 小时**发起的续期扣费。
+- 同一用户重复请求会复用同一份待签约的 `contract_code`，但每次都由微信创建新的临时预签约会话；会话只存在于 Android 的本次响应中。签约成功回调会通过 Worker `waitUntil` **立即发起首期扣费申请**；续期则在到期日前第 3 个北京时间自然日的 02:00 发起。当前模板使用微信的「通知后 24 小时自动扣费」模式，因此申请可全天发起；它不是受 7:00–22:00 限制的独立「预扣费通知」模式。
 - Cron 在创建或重试任何后续扣款前，先调用微信 V2 `papay/querycontract` 查询协议。查询结果为“未签约”时，即使解约回调丢失，也会将本地协议标为 `cancelled`、停止未申请订单；查询异常或“签约进行中”时宁可延后，不会盲目发起扣款。已送往微信的 `charging` 订单保留等待其最终支付回调；若它随后成功，仅发放这笔已付款的本期算力，协议仍保持 `cancelled` 且不会恢复下次扣款。
 - 仅收到验签通过且金额匹配的微信成功回调，才发 200 算力。桶到期时间严格为该自然月周期结束，不额外增加宽限。
 - 微信解约回调将协议设为 `cancelled` 并清空 `next_charge_at`，Cron 不会再为它建单。
 - App 内解约与微信侧解约使用同一套状态收敛：微信 `papay/deletecontract` 成功后立即将本地协议设为 `cancelled`，并停止 `pending/failed` 订单；已被微信受理的 `charging` 订单保留等待最终回调。`status.active` 表示当期权益是否仍有效，`can_cancel` 才表示自动续费是否仍可解除。
-- 取消后、旧周期尚未到期又重新签约时，新的首期计划为 `next_charge_at = 旧 period_end_at - 24h`。计划时间未到时，签约回调**不立即申请首期扣款**，由 Cron 到点执行；协议的 `period_end_at` 为空时，Cron 以 `next_charge_at + 24h` 作为首期订单的 `period_start_at`。若用户重签时已经不足 24 小时，则签约回调立即申请首期扣款，成功后可能短暂与旧周期算力重叠。无论何时实际扣款，订单周期都从旧周期端点开始，保证后续自然月首尾衔接。
+- 取消后、旧周期尚未到期又重新签约时，新的首期计划为旧 `period_end_at` 所在日期前第 3 个北京时间自然日的 02:00。计划时间未到时，签约回调**不立即申请首期扣款**，由每日 Cron 到点执行；订单周期仍从旧周期端点开始。若用户重签时已过计划时间，则签约回调立即申请首期扣款，成功后可能短暂与旧周期算力重叠。无论何时实际扣款，订单周期都从旧周期端点开始，保证后续自然月首尾衔接。
 
 ## 上线验证顺序
 
