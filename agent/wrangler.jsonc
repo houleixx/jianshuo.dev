@@ -65,7 +65,7 @@
   ],
 
   "triggers": {
-    "crons": ["0 */6 * * *", "*/5 * * * *", "0 18 * * *"]
+    "crons": ["0 */6 * * *", "*/5 * * * *", "*/15 * * * *"]
   },
 
   "observability": {
@@ -97,7 +97,9 @@
   //   WECHAT_PAY_APP_ID      — 签约入口对应 App / 公众号 / 小程序 AppID
   //   WECHAT_PAY_PLAN_ID     — 审核通过的委托代扣模板 ID
   //   WECHAT_PAY_API_V2_KEY  — 委托代扣 V2 API 密钥（XML 回调/请求验签）
-  //   WECHAT_PAY_APPLY_URL   — 商户获批的委托代扣申请 API 地址
+  //   WECHAT_PAY_CALLBACK_BASE_URL — 显式公网回调 origin
+  //   WECHAT_PAY_CHARGE_MODE — 固定 notify_after_24h
+  //   WECHAT_PAY_QUERY_MODE — 可选 pap，仅已获专用查单权限时设置；默认通用 orderquery
   // Optional:
   //   WECHAT_PAY_AMOUNT_FEN  — 每期金额（分），默认 1990
 }

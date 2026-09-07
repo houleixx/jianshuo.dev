@@ -1670,7 +1670,7 @@ export default {
     return new Response("not found", { status: 404 });
   },
 
-  // CF Cron Triggers: 6 小时一次的挖矿兜底、5 分钟一次报警、15 分钟一次微信续费。
+  // CF Cron Triggers: 6 小时一次的挖矿兜底、5 分钟一次报警、15 分钟一次微信对账与到期任务。
   async scheduled(event, env, ctx) {
     const stub = env.Miner.get(env.Miner.idFromName("miner"));
     if (event.cron === "*/5 * * * *") {
@@ -1712,9 +1712,8 @@ export default {
       })());
       return;
     }
-    if (event.cron === "0 18 * * *") {
-      // Cloudflare Cron 以 UTC 解释：18:00 UTC 即北京时间次日 02:00。微信当前使用
-      // 「通知后 24 小时自动扣费」模板，可全天提交申请；到期前三个自然日开始，每日一次重试。
+    if (event.cron === "*/15 * * * *") {
+      // 每 15 分钟查单/补账/补跑；扣款仍遵循存储的北京时间提前三天计划和按天重试限制。
       ctx.waitUntil(runWechatPaySchedule(env).catch((e) => console.log("[wechat-pay] schedule failed", String(e))));
       return;
     }
