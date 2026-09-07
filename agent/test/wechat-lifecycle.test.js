@@ -485,21 +485,7 @@ it("failed order queries are retained in the audit log", async () => {
   ).toBe("outbound");
 });
 
-it("migration rejects legacy orphan payment buckets rather than double granting", () => {
-  const sql = usageSql(),
-    marker = "-- Ambiguous legacy partial grants";
-  const old = fakeD1(sql.slice(0, sql.indexOf(marker)));
-  old.exec(
-    "INSERT INTO wechat_sub(contract_code,contract_id,user_sub,plan_id,status,created_at,updated_at) VALUES('c','id','u','p','active',1,1)",
-  );
-  old.exec(
-    "INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,attempt_count,created_at,updated_at) VALUES('o','c','u','p',1,1000,1990,'settling',1,1,1)",
-  );
-  old.exec(
-    "INSERT INTO bucket(user_sub,amount_uy,remaining_uy,source,created_at,expires_at) VALUES('u',100,100,'subscription',1,1000)",
-  );
-  expect(() => old.exec(sql.slice(sql.indexOf(marker)))).toThrow(/CHECK/);
-});
+
 
 it("invalid payment times never grant or acknowledge success", async () => {
   const f = setup(),
@@ -531,27 +517,7 @@ it("late payment grants one full month from actual payment time", async () => {
   expect(f.grants()).toBe(1);
 });
 
-it("migration treats legacy submitted failures as unknown until reconciled", () => {
-  const sql = usageSql(),
-    marker = "-- Ambiguous legacy partial grants";
-  const old = fakeD1(sql.slice(0, sql.indexOf(marker)));
-  old.exec(
-    "INSERT INTO wechat_sub(contract_code,contract_id,user_sub,plan_id,status,created_at,updated_at) VALUES('c','id','u','p','cancelled',1,1)",
-  );
-  old.exec(
-    "INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,attempt_count,created_at,updated_at) VALUES('o','c','u','p',1,1000,1990,'failed',1,1,1)",
-  );
-  old.exec(sql.slice(sql.indexOf(marker)));
-  expect(old.prepare("SELECT status FROM wechat_attempt").first().status).toBe(
-    "unknown",
-  );
-  expect(old.prepare("SELECT status FROM wechat_txn").first().status).toBe(
-    "charging",
-  );
-  expect(old.prepare("SELECT status FROM wechat_sub").first().status).toBe(
-    "cancelled",
-  );
-});
+
 
 it("a payment during the scheduler contract query cannot charge the following month", async () => {
   const f = setup(),

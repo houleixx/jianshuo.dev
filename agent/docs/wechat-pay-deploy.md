@@ -36,38 +36,15 @@
 
 预签约仍调用 `/papay/preentrustweb`，扣款固定 `/pay/pappayapply`。新模板由 `WXLaunchMiniProgram` 调起，旧模板按微信权限使用 `WXOpenBusinessWebview` businessType 12。必须用实际商户配置在真机验证 SDK、模板权限和回调可达性。
 
-## 数据迁移与发布顺序
+## 首次上线建表
 
-先在数据库副本执行 `0006_wechat_recovery.sql` 和回归验证。该迁移增加用户周期唯一约束、同时生效协议约束、算力入账唯一约束及扣款尝试表；保留现有订单号和历史数据。
+微信支付功能尚未上线，最终表结构直接定义在 `0005_wechat.sql`，不提供旧微信订单迁移或历史数据修复脚本。首次启用前按项目现有 D1 建表流程执行至 0005，再启用对应 Worker。
 
-迁移前应暂停旧版本微信写入/定时任务并安排维护窗口。完成备份、对账及迁移后再启用新版；不要让旧 Worker 与新 schema 长期混跑。运行项目原有 D1 migrations apply 流程，确保执行至 0006。
-
-迁移会阻止以下情况继续升级：
-
-- 同一用户存在多份 pending/active 协议。
-- 同一用户同一期已有多条逻辑订单。
-- 同一微信周期已有重复入账流水。
-- 历史桶、流水、订单无法确定一一对应，例如只写了 subscription bucket 就中断。
-
-遇到约束失败，先从商户订单、`wechat_event`、`wechat_txn`、`ledger`、`bucket` 对账并修复关联；不要删除已付款历史、删除约束或强行把未知订单改为失败。无法确定桶归属时转人工处理。
-
-可先做这些只读检查：
-
-```sql
-SELECT user_sub, COUNT(*) FROM wechat_sub
-WHERE status IN ('pending','active') GROUP BY user_sub HAVING COUNT(*)>1;
-SELECT user_sub,period_start_at,COUNT(*) FROM wechat_txn
-GROUP BY user_sub,period_start_at HAVING COUNT(*)>1;
-SELECT json_extract(detail,'$.out_trade_no'),COUNT(*) FROM ledger
-WHERE reason='subscription' AND json_extract(detail,'$.provider')='wechat'
-GROUP BY json_extract(detail,'$.out_trade_no') HAVING COUNT(*)>1;
-```
-
-历史已提交但未标记 paid 的订单转为待查单，不当作从未扣款。已有完整桶/流水关联的历史付款恢复为 paid；模糊的部分写入由迁移预检阻止自动处理。
+建表包含用户周期唯一约束、同时生效协议约束、入账唯一约束及扣款尝试表。它们是防止并发重复扣款和发放的组成部分。
 
 ## 调度与恢复
 
-`wrangler.jsonc` 配置每 15 分钟运行对账与到期任务。提高任务频率用于查单、补账和补跑，不改变提前三天的扣款计划与按天重试限制。任务按主键分页，重复执行由数据库条件更新和唯一约束防重。
+`wrangler.jsonc` 配置 `0 18 * * *`，每天北京时间 02:00 运行一次：先查未决订单，再处理到期扣款与重试。首次签约仍即时申请扣款，成功回调即时入账；漏掉回调的订单由次日任务查单补账。任务按主键分页，重复执行由数据库条件更新和唯一约束防重。
 
 - `wechat_txn`：用户周期及其已付权益；`paid` 不能被迟到失败通知覆盖。
 - `wechat_attempt`：不可复用到其他协议的商户订单。`sending/unknown/accepted` 保留待查询，明确失败才允许下一笔尝试。
@@ -95,7 +72,7 @@ Android 从微信返回后应有限轮询状态，同时刷新余额和流水。
 npm test -- --no-cache
 ```
 
-重点回归 `test/wechat-lifecycle.test.js`：重复/并发通知、原子回滚、取消后付款、付款后取消再重签、旧单未决、同号恢复、三次失败、提前发放、分页和迁移预检。
+重点回归 `test/wechat-lifecycle.test.js`：重复/并发通知、原子回滚、取消后付款、付款后取消再重签、旧单未决、同号恢复、三次失败、提前发放、分页和并发扣款时间校验。
 
 真机与商户联调需覆盖：首扣、普通续费的 24 小时通知行为、余额不足、解约重签、成功回调延迟、查单权限和老模板兼容。测试模拟器通过不等同于真实商户验收完成。
 
