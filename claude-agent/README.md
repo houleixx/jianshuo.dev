@@ -24,6 +24,9 @@ browser ──HTTPS+password──▶ Caddy ──▶ Node (this) ──query()�
   in a different cgroup from `claude-agent.service`: deploy/restart/crash of the web process
   never kills a book. On startup the web process only re-launches inflight records whose unit
   is no longer active (VPS reboot, runner OOM).
+- Concurrency: at most `MAX_CONCURRENT_BOOKS` (default 2) book/revise units run at once. New orders are
+  written to `inflight/` with `attempts: 0` and a serialized pump (startup, every 30s, after each order)
+  launches them oldest-first as slots free up; the 202 response carries `queued` / `queue_position`.
 - `src/book-runner.ts` — one job per process: reads the inflight JSON, runs the three-leg engine
   (`src/book-engine.ts`: kimi → codex → claude), then does all the finishing itself
   (`src/bookmeta.ts`: R2 thread registry, refund, APNs, community post) and deletes the inflight file.
@@ -76,8 +79,12 @@ ssh root@66.42.45.128 "systemctl --user -M claude-agent@ stop book-<jobId>"     
 ssh root@66.42.45.128 "ls /opt/claude-agent/inflight"                                        # the same list, as files
 ```
 
-A stopped/cancelled book leaves its inflight file behind; the next `systemctl restart claude-agent`
-re-launches it (up to 2 attempts total), so delete the inflight file too if you really want it gone.
+A stopped/cancelled book leaves its inflight file behind; the pump re-launches it within 30s (up to 2
+attempts total), so delete the inflight file first if you really want it gone.
+
+Caddy note: `systemctl reload caddy` can fail on this box with `Failed to set up mount namespacing:
+/run/systemd/unit-root/tmp` (a systemd sandbox quirk, config is fine). Reload through the admin API instead:
+`caddy reload --config /etc/caddy/Caddyfile`.
 
 ## Local dev
 
