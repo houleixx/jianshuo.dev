@@ -14,7 +14,7 @@ import { INFLIGHT_DIR } from "./env.js";
 import { removeInflight, writeInflight, type Inflight, type InflightCreate, type InflightRevise } from "./inflight.js";
 import { BOOK_LEGS, CODEX_BOOK_PREAMBLE, resumeAfterRestartHint, runBookEngine } from "./book-engine.js";
 import {
-  findBookByJobId, notifyAdmin, notifyBookDone, patchThreadEntry, readBookMeta, refundBook,
+  findBookByJobId, notifyAdmin, notifyBookDone, patchThreadEntry, readBookMetaRetry, refundBook,
   registerBookPost, writeBookMeta, writeUnmatched, type ThreadEntry,
 } from "./bookmeta.js";
 
@@ -65,7 +65,7 @@ async function runCreate(rec: InflightCreate): Promise<void> {
         }
       }
       if (finished) return;
-      const meta = (await readBookMeta(slug)) ?? { slug, scope, author, createdAt: startedAt, thread: [] };
+      const meta = (await readBookMetaRetry(slug, [3000])) ?? { slug, scope, author, createdAt: startedAt, thread: [] };
       if (finished) return;
       if (!meta.thread.some((e) => e.ts === startedAt)) {
         meta.thread.push({
@@ -118,7 +118,7 @@ async function runCreate(rec: InflightCreate): Promise<void> {
     ...(reply ? { reply: reply.slice(0, 4000) } : {}),
   };
   if (slug) {
-    const meta = await readBookMeta(slug);
+    const meta = await readBookMetaRetry(slug);
     if (meta?.thread.some((e) => e.ts === startedAt)) {
       await patchThreadEntry(slug, startedAt, patch);
     } else {

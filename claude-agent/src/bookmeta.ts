@@ -64,23 +64,48 @@ export async function publisherScope(): Promise<string> {
   return (await publisherCreds()).scope;
 }
 
+// 「R2 上没有」与「这次没读到」必须分开（2026-09-12）：以前两者都返回 null，修书路径
+// 拿到 null 就新建一条空 thread 覆盖回 R2——一次 502 就把整本书的对话线抹掉；收尾的
+// patchThreadEntry 读到 null 则静默放弃，条目永远 running、这本书永远 409 busy。
+// 现在：404 → null（真没有）；网络抖动/5xx/坏 JSON → 抛错，调用方自己决定重试或放弃本次写。
 export async function readBookMeta(slug: string): Promise<BookMeta | null> {
+  let missing = false;
+  let failure = "";
   // R2 为真源；?_= 穿透书页路由的 5 分钟边缘缓存（App 轮询 history 要看到实时进度）。
   try {
     const r = await fetch(`https://jianshuo.dev/voicedrop/books/${slug}/_src/bookmeta.json?_=${Date.now()}`);
     if (r.ok) return await r.json();
-  } catch {
-    /* 网络抖动 → 走本地回退 */
+    if (r.status === 404) missing = true;
+    else failure = `http ${r.status}`;
+  } catch (e: any) {
+    failure = String(e?.message ?? e);
   }
-  // 本地老条目：读到即懒迁移上 R2（迁移失败不影响本次返回）。
+  // 本地老条目：R2 确认没有时读到即懒迁移；R2 没读到时本地那份（上次上传失败的回落件）
+  // 反而是最新的，直接用。
   try {
     const legacy = JSON.parse(await readFile(metaPath(slug), "utf8"));
-    writeBookMeta(legacy).catch(() => {});
+    if (missing) writeBookMeta(legacy).catch(() => {});
     return legacy;
   } catch {
-    return null;
+    /* 没有本地件 */
+  }
+  if (missing) return null;
+  throw new Error(`bookmeta unreachable slug=${slug}: ${failure}`);
+}
+
+/** 读登记簿，读不到就退避重试（runner 收尾用：宁可多等一分钟也别丢条目）。 */
+export async function readBookMetaRetry(slug: string, delaysMs: number[] = [2000, 5000, 15000, 30000]): Promise<BookMeta | null> {
+  for (let i = 0; ; i++) {
+    try {
+      return await readBookMeta(slug);
+    } catch (e) {
+      if (i >= delaysMs.length) throw e;
+      console.error(`[bookmeta] read failed slug=${slug}, retry in ${delaysMs[i]}ms:`, e instanceof Error ? e.message : e);
+      await new Promise((r) => setTimeout(r, delaysMs[i]));
+    }
   }
 }
+
 // 进程内低频写，串行化一下防「读-改-写」互相覆盖。跨进程（web 收单 vs runner 收尾）
 // 没有这层保护——但登记簿按 slug 分文件，同一本书同时只有一单在跑（409 busy），
 // 收单与收尾不会碰同一份。上传失败回落本地文件——宁可暂留 VPS 也绝不丢条目
@@ -108,8 +133,9 @@ export function writeBookMeta(meta: BookMeta): Promise<void> {
   metaWriteChain = p.catch(() => {});
   return p as Promise<void>;
 }
+// 改一条状态：读失败会重试（读不到就放弃等于丢掉 status:done，这本书之后永远 busy）。
 export async function patchThreadEntry(slug: string, ts: number, patch: Partial<ThreadEntry>): Promise<void> {
-  const meta = await readBookMeta(slug);
+  const meta = await readBookMetaRetry(slug);
   if (!meta) return;
   const e = meta.thread.find((x) => x.ts === ts);
   if (!e) return;

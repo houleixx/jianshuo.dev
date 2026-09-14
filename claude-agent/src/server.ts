@@ -8,21 +8,22 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile, readdir, stat, unlink } from "node:fs/promises";
-import { createReadStream } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { CODEX_HOME, HOME, INFLIGHT_DIR, MODEL, WORKSPACE } from "./env.js";
 import {
-  writeInflight, removeInflight, listInflight, canRetry, inflightId,
+  writeInflight, removeInflight, listInflight, inflightId, isQueued,
   type Inflight, type InflightCreate, type InflightRevise,
 } from "./inflight.js";
-import { launchBookUnit, isUnitActive, unitName } from "./book-launch.js";
+import { launchBookUnit, listActiveUnits, planLaunches, unitName } from "./book-launch.js";
+import { jsonlLines, jsonlLinesFrom, type LineCursor } from "./jsonl.js";
+import { readJsonBody, BodyError } from "./http-body.js";
 import {
   SLUG_RE, chargeBook, refundBook, notifyAdmin, fetchScope, publisherScope, fetchSrcBook, bookAuthor,
   bookExistsOnline, fetchAuthorName, readBookMeta, writeBookMeta, patchThreadEntry, findBookByJobId,
-  type ThreadEntry,
+  type ThreadEntry, type BookMeta,
 } from "./bookmeta.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,11 @@ const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? "127.0.0.1";
 const MAX_TURNS = Number(process.env.MAX_TURNS ?? 100);
 const MAX_CONCURRENT_RUNS = Number(process.env.MAX_CONCURRENT_RUNS ?? 2);
+// 同时在写的书（含修书）上限：超出的单排队，由 pumpInflight 按先来后到起（见 planLaunches）。
+const MAX_CONCURRENT_BOOKS = Number(process.env.MAX_CONCURRENT_BOOKS ?? 2);
+// 请求体上限：种子最长 2 万字（CJK 约 60KB）；聊天消息给 1MB。
+const BOOK_BODY_LIMIT = 256 * 1024;
+const CHAT_BODY_LIMIT = 1024 * 1024;
 const MAX_RESULT_CHARS = 8000;
 
 // The SDK persists each conversation as <session_id>.jsonl under HOME/.claude/projects/<cwd-slug>/.
@@ -49,6 +55,15 @@ function sse(res: ServerResponse, event: string, data: unknown) {
   if (res.writableEnded || res.destroyed) return;
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+/** 请求体错误（413/400）按状态码答；其他异常 500。响应已发出的情况下什么都不做。 */
+function failJson(res: ServerResponse, err: any) {
+  if (res.headersSent || res.writableEnded) return;
+  const status = err instanceof BodyError ? err.status : 500;
+  // 413 时请求体没读完，明说关连接：别让客户端在同一条连接上继续灌。
+  res.writeHead(status, { "Content-Type": "application/json", ...(status === 413 ? { Connection: "close" } : {}) })
+    .end(JSON.stringify({ error: String(err?.message ?? err).slice(0, 300) }));
 }
 
 function renderToolResult(content: any): string {
@@ -94,38 +109,20 @@ async function findTranscript(id: string): Promise<string | null> {
   return null;
 }
 
-// 大文件防线（2026-08-23）：一个 121MB 的 codex rollout 曾把旧的「readFile 整读 +
-// split("\n")」打爆 node 堆（FATAL heap OOM → core-dump → systemd 重启 → 连带杀死
-// 正在跑的写书 codex 子进程，嘟嘟和小考拉那单就是这么死的）。所有 jsonl 读取一律
-// 流式逐行：内存占用与文件大小无关；单行超 2MB 丢弃（超大 tool 输出，渲染不了）。
-async function* jsonlLines(path: string, maxLineChars = 2 * 1024 * 1024): AsyncGenerator<string> {
-  const stream = createReadStream(path, { encoding: "utf8", highWaterMark: 1 << 20 });
-  let carry = "";
-  let dropping = false;
-  for await (const chunk of stream as unknown as AsyncIterable<string>) {
-    carry += chunk;
-    let i: number;
-    while ((i = carry.indexOf("\n")) >= 0) {
-      const line = carry.slice(0, i);
-      carry = carry.slice(i + 1);
-      if (dropping) { dropping = false; continue; } // 被丢弃超长行的尾巴
-      if (line.trim() && line.length <= maxLineChars) yield line;
-    }
-    if (carry.length > maxLineChars) { carry = ""; dropping = true; }
-  }
-  if (!dropping && carry.trim() && carry.length <= maxLineChars) yield carry;
-}
-// 侧栏每次刷新都要扫全部会话文件——按 (mtime,size) 缓存摘要，扫描只花一次。
-const summaryCache = new Map<string, { mtimeMs: number; size: number; value: any }>();
+// 侧栏每次刷新都要扫全部会话文件——摘要按文件缓存，且**增量续读**（2026-09-12）：
+// 文件是 append-only 的 jsonl，缓存记住读到的字节偏移和累计状态，文件长了只读新增部分。
+// 写书中的 rollout 每几秒都在变，以前按 (mtime,size) 失效就从头重扫百 MB，单核 VPS
+// 持续 30%+ CPU 陪跑几小时。文件变短（被删/重写）→ 从头来。
+type SummaryState = { mtimeMs: number; size: number; cursor: LineCursor; title: string; turns: number; value: any };
+const summaryCache = new Map<string, SummaryState>();
 
 async function summarize(path: string, id: string) {
   const st = await stat(path);
-  const hit = summaryCache.get(path);
+  let hit = summaryCache.get(path);
   if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size)
     return { ...hit.value, running: isRunning(id) };
-  let title = "";
-  let turns = 0;
-  for await (const ln of jsonlLines(path)) {
+  if (!hit || st.size < hit.cursor.offset) hit = { mtimeMs: 0, size: 0, cursor: { offset: 0 }, title: "", turns: 0, value: null };
+  for await (const ln of jsonlLinesFrom(path, hit.cursor)) {
     let o: any;
     try {
       o = JSON.parse(ln);
@@ -135,14 +132,16 @@ async function summarize(path: string, id: string) {
     if (o.type === "user" && !isToolResult(o.message?.content)) {
       const t = textOf(o.message?.content).trim();
       if (t) {
-        turns++;
-        if (!title) title = t;
+        hit.turns++;
+        if (!hit.title) hit.title = t;
       }
     }
   }
-  const value = { id, title: title.slice(0, 80) || "(无标题)", updatedAt: st.mtimeMs, turns };
-  summaryCache.set(path, { mtimeMs: st.mtimeMs, size: st.size, value });
-  return { ...value, running: isRunning(id) };
+  hit.mtimeMs = st.mtimeMs;
+  hit.size = st.size;
+  hit.value = { id, title: hit.title.slice(0, 80) || "(无标题)", updatedAt: st.mtimeMs, turns: hit.turns };
+  summaryCache.set(path, hit);
+  return { ...hit.value, running: isRunning(id) };
 }
 
 async function listSessions() {
@@ -252,11 +251,12 @@ async function codexTaskTitle(t: string): Promise<string | null> {
 
 async function summarizeCodex(path: string) {
   const st = await stat(path);
-  const hit = summaryCache.get(path);
+  let hit = summaryCache.get(path);
   if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.value;
-  let firstUser = "";
-  let turns = 0;
-  for await (const ln of jsonlLines(path)) {
+  if (!hit || st.size < hit.cursor.offset) hit = { mtimeMs: 0, size: 0, cursor: { offset: 0 }, title: "", turns: 0, value: null };
+  // 这里 title 字段存的是 firstUser（原文），展示标题每次文件变了都重算——写书中
+  // book.json 会中途出现，标题跟着从种子变成书名。
+  for await (const ln of jsonlLinesFrom(path, hit.cursor)) {
     let o: any;
     try {
       o = JSON.parse(ln);
@@ -264,105 +264,118 @@ async function summarizeCodex(path: string) {
       continue;
     }
     if (o.type === "event_msg" && o.payload?.type === "user_message") {
-      turns++;
-      if (!firstUser) firstUser = String(o.payload.message ?? "").trim();
+      hit.turns++;
+      if (!hit.title) hit.title = String(o.payload.message ?? "").trim();
     }
   }
+  const firstUser = hit.title;
   let title = (await codexTaskTitle(firstUser)) ?? "";
   if (!title) {
     const i = firstUser.indexOf("任务：");
     title = i >= 0 ? firstUser.slice(i) : firstUser;
   }
-  const value = {
+  hit.mtimeMs = st.mtimeMs;
+  hit.size = st.size;
+  hit.value = {
     id: codexIdOfPath(path),
     title: "📖 " + (title.slice(0, 78) || "(无标题)"),
     updatedAt: st.mtimeMs,
-    turns,
+    turns: hit.turns,
     running: false,
     engine: "codex",
   };
-  summaryCache.set(path, { mtimeMs: st.mtimeMs, size: st.size, value });
-  return value;
+  summaryCache.set(path, hit);
+  return hit.value;
 }
 
 // 回放：翻译成 getSessionMessages 一样的形状。文字走 event_msg（user_message/
 // agent_message），工具卡片走 response_item（function_call/custom_tool_call/
 // web_search_call），输出按 call_id 回填；reasoning 是加密的，跳过。
-// 回看结果缓存（只留一份）：前端对「写书中」的 codex 会话每 12s 轮询跟进（tail -f），
-// 文件没变时只 stat 不重扫——百 MB 级 rollout 重扫一次要数秒 CPU，别每次白花。
-const codexMsgsCache = new Map<string, { mtimeMs: number; size: number; msgs: any[] }>();
+// 回看结果缓存（只留一份）：前端对「写书中」的 codex 会话每 12s 轮询跟进（tail -f）。
+// 文件没变只 stat；变了只从上次的字节偏移续读，解析器状态（msgs/cur/toolIndex）跟着
+// 缓存一起留着——百 MB 级 rollout 重扫一次要数秒 CPU，以前每 12s 白花一次。
+type CodexMsgsState = {
+  mtimeMs: number; size: number; cursor: LineCursor; msgs: any[]; cur: any; toolIndex: Record<string, any>;
+};
+const codexMsgsCache = new Map<string, CodexMsgsState>();
+
+function feedCodexLine(o: any, S: CodexMsgsState) {
+  const push = (item: any) => {
+    if (!S.cur) {
+      S.cur = { role: "assistant", items: [] };
+      S.msgs.push(S.cur);
+    }
+    S.cur.items.push(item);
+  };
+  const p = o.payload ?? {};
+  if (o.type === "event_msg") {
+    if (p.type === "user_message") {
+      const t = String(p.message ?? "").trim();
+      if (t) {
+        S.msgs.push({ role: "user", text: t });
+        S.cur = null;
+      }
+    } else if (p.type === "agent_message" && p.message) {
+      push({ type: "text", text: String(p.message) });
+    }
+  } else if (o.type === "response_item") {
+    if (p.type === "function_call") {
+      let input: any = {};
+      try {
+        input = JSON.parse(p.arguments ?? "{}");
+      } catch {
+        input = { arguments: p.arguments };
+      }
+      const item = { type: "tool", id: p.call_id, name: p.name ?? "tool", input, result: null, isError: false };
+      push(item);
+      if (p.call_id) S.toolIndex[p.call_id] = item;
+    } else if (p.type === "custom_tool_call") {
+      const item = {
+        type: "tool",
+        id: p.call_id,
+        name: p.name ?? "tool",
+        input: { input: String(p.input ?? "") },
+        result: null,
+        isError: false,
+      };
+      push(item);
+      if (p.call_id) S.toolIndex[p.call_id] = item;
+    } else if (p.type === "function_call_output" || p.type === "custom_tool_call_output") {
+      if (p.call_id && S.toolIndex[p.call_id]) S.toolIndex[p.call_id].result = renderToolResult(p.output);
+    } else if (p.type === "web_search_call") {
+      push({
+        type: "tool",
+        id: p.id,
+        name: "web_search",
+        input: { query: p.action?.query ?? "" },
+        result: String(p.status ?? ""),
+        isError: false,
+      });
+    }
+  }
+}
 
 async function getCodexSessionMessages(path: string) {
   const st = await stat(path);
-  const hit = codexMsgsCache.get(path);
-  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.msgs;
-  const msgs: any[] = [];
-  let cur: any = null;
-  const toolIndex: Record<string, any> = {};
-  const push = (item: any) => {
-    if (!cur) {
-      cur = { role: "assistant", items: [] };
-      msgs.push(cur);
-    }
-    cur.items.push(item);
-  };
-  for await (const ln of jsonlLines(path)) {
+  let S = codexMsgsCache.get(path);
+  if (S && S.mtimeMs === st.mtimeMs && S.size === st.size) return S.msgs;
+  if (!S || st.size < S.cursor.offset) {
+    S = { mtimeMs: 0, size: 0, cursor: { offset: 0 }, msgs: [], cur: null, toolIndex: {} };
+    codexMsgsCache.clear(); // 只留最新一份，防多会话轮流看时内存涨
+    codexMsgsCache.set(path, S);
+  }
+  for await (const ln of jsonlLinesFrom(path, S.cursor)) {
     let o: any;
     try {
       o = JSON.parse(ln);
     } catch {
       continue;
     }
-    const p = o.payload ?? {};
-    if (o.type === "event_msg") {
-      if (p.type === "user_message") {
-        const t = String(p.message ?? "").trim();
-        if (t) {
-          msgs.push({ role: "user", text: t });
-          cur = null;
-        }
-      } else if (p.type === "agent_message" && p.message) {
-        push({ type: "text", text: String(p.message) });
-      }
-    } else if (o.type === "response_item") {
-      if (p.type === "function_call") {
-        let input: any = {};
-        try {
-          input = JSON.parse(p.arguments ?? "{}");
-        } catch {
-          input = { arguments: p.arguments };
-        }
-        const item = { type: "tool", id: p.call_id, name: p.name ?? "tool", input, result: null, isError: false };
-        push(item);
-        if (p.call_id) toolIndex[p.call_id] = item;
-      } else if (p.type === "custom_tool_call") {
-        const item = {
-          type: "tool",
-          id: p.call_id,
-          name: p.name ?? "tool",
-          input: { input: String(p.input ?? "") },
-          result: null,
-          isError: false,
-        };
-        push(item);
-        if (p.call_id) toolIndex[p.call_id] = item;
-      } else if (p.type === "function_call_output" || p.type === "custom_tool_call_output") {
-        if (p.call_id && toolIndex[p.call_id]) toolIndex[p.call_id].result = renderToolResult(p.output);
-      } else if (p.type === "web_search_call") {
-        push({
-          type: "tool",
-          id: p.id,
-          name: "web_search",
-          input: { query: p.action?.query ?? "" },
-          result: String(p.status ?? ""),
-          isError: false,
-        });
-      }
-    }
+    feedCodexLine(o, S);
   }
-  codexMsgsCache.clear(); // 只留最新一份，防多会话轮流看时内存涨
-  codexMsgsCache.set(path, { mtimeMs: st.mtimeMs, size: st.size, msgs });
-  return msgs;
+  S.mtimeMs = st.mtimeMs;
+  S.size = st.size;
+  return S.msgs;
 }
 
 // Replay a transcript into the same shape the live UI renders: one assistant
@@ -425,8 +438,10 @@ async function getSessionMessages(id: string) {
 // 认证不走 Caddy basic_auth（Caddyfile 对此路径豁免）：客户端带 VoiceDrop 用户
 // bearer（anon_*/session JWT），拿它去 jianshuo.dev 扣费即验真——app 里零内置密钥。
 
-/** 落档 + 起单。起不来就销档并把错误交给调用方（由它退款/答复）。 */
+/** 起一单（inflight 文件已落盘）。起不来就销档、把错误交给调用方（由它退款/答复）。 */
 async function dispatchJob(rec: Inflight): Promise<{ ok: boolean; unit: string; error: string }> {
+  rec.attempts += 1;
+  rec.launchedAt = Date.now();
   await writeInflight(INFLIGHT_DIR, rec);
   const r = await launchBookUnit(rec);
   if (r.ok) {
@@ -438,36 +453,46 @@ async function dispatchJob(rec: Inflight): Promise<{ ok: boolean; unit: string; 
   return { ok: false, unit: unitName(rec), error: r.error };
 }
 
-// ── 启动巡检（2026-09-08 起，2026-09-11 改判据）───────────────────────────
-// inflight/ 里的文件 = 收单时落的档，runner 引擎返回即删。本进程重启不再杀书，
-// 所以「文件还在」不等于孤儿——先问 systemd 那个单元是否还活着：活着就不碰；
-// 死了（VPS 整机重启、runner 自己崩/OOM）才按次数续跑或放弃。
-async function resumeInflightJobs() {
-  const recs = await listInflight(INFLIGHT_DIR);
-  if (!recs.length) {
-    console.log("[inflight] 没有在飞的任务");
-    return;
-  }
-  for (const rec of recs) {
-    const id = inflightId(rec);
-    if (await isUnitActive(rec)) {
-      console.log(`[inflight] ${id} 仍在 ${unitName(rec)} 里跑，不动`);
-      continue;
-    }
-    if (!canRetry(rec)) {
-      console.log(`[inflight] ${id} 已拉起 ${rec.attempts} 次仍未完成，放弃：标 failed + 退款 + 告警`);
+// ── 泵：inflight/ 就是队列（2026-09-12）──────────────────────────────────
+// 收单只落档（attempts=0），这里按并发上限决定起谁（判定逻辑在 planLaunches，纯函数）：
+//   · 单元活着 → 不碰；
+//   · 起过但单元没了（VPS 整机重启、runner 崩/OOM）→ 次数没到上限就续跑，到了就放弃；
+//   · 排队的 → 有空位就起，先来先起。
+// 什么时候泵：启动 5s 后、每 30s 一次、每次收单后。串行化——两单同时收进来时不会各自
+// 数一遍空位然后一起超额。返回本轮起了/放弃了哪些 id，收单路径靠它回答 App 排没排队。
+let pumpChain: Promise<unknown> = Promise.resolve();
+function pumpInflight(): Promise<{ launched: Set<string>; failed: Set<string>; queued: number }> {
+  const p = pumpChain.then(async () => {
+    const out = { launched: new Set<string>(), failed: new Set<string>(), queued: 0 };
+    const recs = await listInflight(INFLIGHT_DIR);
+    if (!recs.length) return out;
+    const active = await listActiveUnits();
+    const plan = planLaunches(recs, active, MAX_CONCURRENT_BOOKS);
+    out.queued = plan.queued.length;
+    for (const rec of plan.giveUp) {
+      console.log(`[inflight] ${inflightId(rec)} 已拉起 ${rec.attempts} 次仍未完成，放弃：标 failed + 退款 + 告警`);
       await giveUpInflight(rec);
-      continue;
     }
-    rec.attempts += 1;
-    console.log(`[inflight] 单元已不在，续跑 ${id}（第 ${rec.attempts} 次）`);
-    const r = await dispatchJob(rec);
-    if (!r.ok) await giveUpInflight(rec, `续跑起单失败：${r.error}`);
-  }
+    for (const rec of plan.launch) {
+      const id = inflightId(rec);
+      console.log(isQueued(rec) ? `[inflight] 起单 ${id}（在跑 ${active.size}/${MAX_CONCURRENT_BOOKS}）` : `[inflight] 单元已不在，续跑 ${id}（第 ${rec.attempts + 1} 次）`);
+      const r = await dispatchJob(rec);
+      if (r.ok) out.launched.add(id);
+      else {
+        out.failed.add(id);
+        await giveUpInflight(rec, `起单失败：${r.error.slice(0, 200)}`);
+      }
+      active.add(unitName(rec));
+    }
+    if (plan.queued.length) console.log(`[inflight] 排队中 ${plan.queued.length} 单（在跑 ${active.size}/${MAX_CONCURRENT_BOOKS}）`);
+    return out;
+  });
+  pumpChain = p.catch((e) => console.error("[inflight] pump failed", e));
+  return p;
 }
 
 // 放弃一单：登记簿标 failed、退款（ref 幂等）、告警管理员、销档。每步尽力而为。
-async function giveUpInflight(rec: Inflight, why = `服务重启后续跑 ${rec.attempts} 次仍未完成`) {
+async function giveUpInflight(rec: Inflight, why = `拉起 ${rec.attempts} 次仍未完成`) {
   try {
     if (rec.kind === "create") {
       const slug = rec.slug || (await findBookByJobId(rec.jobId))?.book.slug || "";
@@ -509,17 +534,20 @@ async function handleBook(req: IncomingMessage, res: ServerResponse, payload: an
     (await fetchAuthorName(req.headers.authorization));
   const rec: InflightCreate = {
     kind: "create", jobId: randomUUID(), seed, scope: String(charge.body.scope ?? ""), author,
-    auth: req.headers.authorization, startedAt: Date.now(), attempts: 1,
+    auth: req.headers.authorization, startedAt: Date.now(), attempts: 0,
   };
-  const r = await dispatchJob(rec);
-  if (!r.ok) {
-    // 钱已扣、书没起——原数退回，告诉 App 稍后再试。
-    await refundBook(rec.auth, { ref: rec.jobId });
-    await notifyAdmin("写书起单失败", `${seed.slice(0, 40)} · ${r.error.slice(0, 120)}`);
+  await writeInflight(INFLIGHT_DIR, rec);   // 落档即入队；起不起得来由泵说了算
+  const pump = await pumpInflight();
+  if (pump.failed.has(rec.jobId)) {
+    // 钱已扣、书没起——泵里已退款+告警，这里只告诉 App。
     res.writeHead(503, json).end(JSON.stringify({ error: "launch failed" }));
     return;
   }
-  res.writeHead(202, json).end(JSON.stringify({ ok: true, charged_suanli: charge.body.charged_suanli, suanli: charge.body.suanli }));
+  const queued = !pump.launched.has(rec.jobId);
+  res.writeHead(202, json).end(JSON.stringify({
+    ok: true, queued, ...(queued ? { queue_position: pump.queued } : {}),
+    charged_suanli: charge.body.charged_suanli, suanli: charge.body.suanli,
+  }));
 }
 
 
@@ -549,7 +577,14 @@ async function handleBookRevise(req: IncomingMessage, res: ServerResponse, paylo
   // owner 的老书退回对话线登记的 scope；两者皆无 → 只有发布账号本人按存储层所有权
   // 放行（其他人 404，否则任何人都能改别人的书）。放行后补建对话线。
   const srcBook = await fetchSrcBook(slug);
-  let meta = await readBookMeta(slug);
+  let meta: BookMeta | null;
+  try {
+    meta = await readBookMeta(slug);
+  } catch (e: any) {
+    // 登记簿这次没读到 ≠ 没有——照 null 走下去会新建空线覆盖掉整本书的历史。
+    res.writeHead(502, json).end(JSON.stringify({ error: "meta unreachable", detail: String(e?.message ?? e).slice(0, 200) }));
+    return;
+  }
   const owner = String(srcBook?.owner ?? "") || String(meta?.scope ?? "");
   if (owner) {
     if (owner !== requester) {
@@ -578,7 +613,10 @@ async function handleBookRevise(req: IncomingMessage, res: ServerResponse, paylo
     await writeBookMeta(meta);
     console.log(`[revise] registered thread slug=${slug} scope=${meta.scope}`);
   }
-  if (meta.thread.some((e) => e.status === "running")) {
+  // 「同书单飞」两道闸：远端登记簿里有 running 条目（跨进程、跨重启），加本进程的
+  // per-slug 锁（覆盖「读到无 running → 扣费 → 写回 running」这几个 await 的窗口——
+  // 连点两次提交，以前两次都能过，双扣费、两个引擎互相覆盖同一本书）。
+  if (meta.thread.some((e) => e.status === "running") || reviseInFlight.has(slug)) {
     res.writeHead(409, json).end(JSON.stringify({ error: "busy" }));
     return;
   }
@@ -586,30 +624,39 @@ async function handleBookRevise(req: IncomingMessage, res: ServerResponse, paylo
     res.writeHead(200, json).end(JSON.stringify(probe.body));
     return;
   }
-  const charge = await chargeBook(req.headers.authorization, { slug, kind: "revise" }, false);
-  if (charge.status !== 200 || !charge.body?.ok) {
-    res.writeHead(charge.status === 200 ? 502 : charge.status, json).end(JSON.stringify(charge.body));
-    return;
+  reviseInFlight.add(slug);
+  try {
+    const charge = await chargeBook(req.headers.authorization, { slug, kind: "revise" }, false);
+    if (charge.status !== 200 || !charge.body?.ok) {
+      res.writeHead(charge.status === 200 ? 502 : charge.status, json).end(JSON.stringify(charge.body));
+      return;
+    }
+    const entry: ThreadEntry = { ts: Date.now(), kind: "revise", instruction, status: "running" };
+    meta.thread.push(entry);
+    await writeBookMeta(meta);
+    const rec: InflightRevise = {
+      kind: "revise", slug, scope: meta.scope, author: bookAuthor(srcBook, meta), instruction,
+      entryTs: entry.ts, auth: req.headers.authorization, startedAt: entry.ts, attempts: 0,
+    };
+    await writeInflight(INFLIGHT_DIR, rec);
+    const pump = await pumpInflight();
+    const id = inflightId(rec);
+    if (pump.failed.has(id)) {
+      // 泵里已退款+告警；登记簿那条也标掉。
+      await patchThreadEntry(slug, entry.ts, { status: "failed", error: "起单失败" }).catch(() => {});
+      res.writeHead(503, json).end(JSON.stringify({ error: "launch failed" }));
+      return;
+    }
+    const queued = !pump.launched.has(id);
+    res.writeHead(202, json).end(JSON.stringify({
+      ok: true, ts: entry.ts, queued, ...(queued ? { queue_position: pump.queued } : {}),
+      charged_suanli: charge.body.charged_suanli, suanli: charge.body.suanli,
+    }));
+  } finally {
+    reviseInFlight.delete(slug);
   }
-  const entry: ThreadEntry = { ts: Date.now(), kind: "revise", instruction, status: "running" };
-  meta.thread.push(entry);
-  await writeBookMeta(meta);
-  const rec: InflightRevise = {
-    kind: "revise", slug, scope: meta.scope, author: bookAuthor(srcBook, meta), instruction,
-    entryTs: entry.ts, auth: req.headers.authorization, startedAt: entry.ts, attempts: 1,
-  };
-  const r = await dispatchJob(rec);
-  if (!r.ok) {
-    await patchThreadEntry(slug, entry.ts, { status: "failed", error: `起单失败：${r.error.slice(0, 200)}` }).catch(() => {});
-    await refundBook(rec.auth, { ref: `${slug}#${entry.ts}`, kind: "revise" });
-    await notifyAdmin("修书起单失败", `${slug} · ${r.error.slice(0, 120)}`);
-    res.writeHead(503, json).end(JSON.stringify({ error: "launch failed" }));
-    return;
-  }
-  res.writeHead(202, json).end(
-    JSON.stringify({ ok: true, ts: entry.ts, charged_suanli: charge.body.charged_suanli, suanli: charge.body.suanli }),
-  );
 }
+const reviseInFlight = new Set<string>();
 
 // GET /api/book/history?slug=<slug> + 用户 bearer —— 这本书的永久对话线（主人可见）。
 async function handleBookHistory(req: IncomingMessage, res: ServerResponse, slug: string) {
@@ -624,7 +671,13 @@ async function handleBookHistory(req: IncomingMessage, res: ServerResponse, slug
     return;
   }
   const srcBook = await fetchSrcBook(slug);
-  const meta = await readBookMeta(slug);
+  let meta: BookMeta | null;
+  try {
+    meta = await readBookMeta(slug);
+  } catch (e: any) {
+    res.writeHead(502, json).end(JSON.stringify({ error: "meta unreachable", detail: String(e?.message ?? e).slice(0, 200) }));
+    return;
+  }
   // 产权：book.json owner 优先，退回对话线 scope，两者皆无则仅发布账号本人可看。
   const owner = String(srcBook?.owner ?? "") || String(meta?.scope ?? "");
   if (owner && owner !== scope) {
@@ -943,15 +996,8 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.method === "POST" && req.url === "/api/chat/stop") {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
-      let id = "";
-      try {
-        id = String(JSON.parse(body || "{}").sessionId ?? "");
-      } catch {
-        /* fall through to 404 */
-      }
+    readJsonBody(req, 4096).catch(() => ({})).then((payload) => {
+      const id = String(payload?.sessionId ?? "");
       const run = runs.get(id);
       if (run && !run.done) {
         run.ac.abort();
@@ -969,52 +1015,27 @@ const server = createServer((req, res) => {
     });
     return;
   }
+  // 匿名可达的两条书路由（Caddy 豁免 basic_auth）先卡请求体大小再谈别的。
   if (req.method === "POST" && req.url === "/api/book/revise") {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
-      let payload: any;
-      try {
-        payload = JSON.parse(body || "{}");
-      } catch {
-        res.writeHead(400).end("bad json");
-        return;
-      }
-      handleBookRevise(req, res, payload).catch((err) => {
-        res.writeHead(500).end(String(err?.message ?? err));
-      });
-    });
+    readJsonBody(req, BOOK_BODY_LIMIT)
+      .then((payload) => handleBookRevise(req, res, payload))
+      .catch((err) => failJson(res, err));
     return;
   }
   if (req.method === "POST" && req.url === "/api/book") {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
-      let payload: any;
-      try {
-        payload = JSON.parse(body || "{}");
-      } catch {
-        res.writeHead(400).end("bad json");
-        return;
-      }
-      handleBook(req, res, payload).catch((err) => {
-        res.writeHead(500).end(String(err?.message ?? err));
-      });
-    });
+    readJsonBody(req, BOOK_BODY_LIMIT)
+      .then((payload) => handleBook(req, res, payload))
+      .catch((err) => failJson(res, err));
     return;
   }
   if (req.method === "POST" && req.url === "/api/chat") {
-    let body = "";
-    req.on("data", (c) => (body += c));
-    req.on("end", () => {
-      let payload: any;
-      try {
-        payload = JSON.parse(body || "{}");
-      } catch {
-        res.writeHead(400).end("bad json");
-        return;
-      }
-      handleChat(req, res, payload).catch((err) => {
+    readJsonBody(req, CHAT_BODY_LIMIT)
+      .then((payload) => handleChat(req, res, payload))
+      .catch((err) => {
+        if (err instanceof BodyError) {
+          failJson(res, err);
+          return;
+        }
         try {
           sse(res, "error", { message: String(err?.message ?? err) });
           res.end();
@@ -1022,7 +1043,6 @@ const server = createServer((req, res) => {
           /* ignore */
         }
       });
-    });
     return;
   }
   res.writeHead(404, { "Content-Type": "text/plain" });
@@ -1031,8 +1051,9 @@ const server = createServer((req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`claude-agent on http://${HOST}:${PORT}  model=${MODEL}  workspace=${WORKSPACE}`);
-  // 起来几秒再巡检在飞的书：让端口先就绪；单元还活着的一律不碰。
+  // 起来几秒再泵一次在飞的书：让端口先就绪；之后每 30s 一次——单元跑完腾出空位，排队的才起得来。
   setTimeout(() => {
-    resumeInflightJobs().catch((e) => console.error("[inflight] resume failed", e));
+    pumpInflight().catch(() => {});
+    setInterval(() => pumpInflight().catch(() => {}), 30000).unref?.();
   }, 5000);
 });

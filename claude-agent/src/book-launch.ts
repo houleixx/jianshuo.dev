@@ -21,7 +21,7 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { APP_ROOT, INFLIGHT_DIR } from "./env.js";
-import { inflightId, inflightPath, type Inflight } from "./inflight.js";
+import { canRetry, inflightId, inflightPath, isQueued, type Inflight } from "./inflight.js";
 
 const NODE_BIN = process.execPath;
 const RUNNER = join(APP_ROOT, "dist", "book-runner.js");
@@ -123,4 +123,48 @@ export function isUnitActive(rec: Inflight): Promise<boolean> {
     child.on("error", () => resolve(false));
     child.on("close", (code) => resolve(code === 0));
   });
+}
+
+/** 当前在跑的写书/修书单元名集合（不含 .service 后缀）。没有 systemd 返回空集。 */
+export function listActiveUnits(): Promise<Set<string>> {
+  return new Promise((resolve) => {
+    const child = spawn(SYSTEMCTL, ["--user", "list-units", "--plain", "--no-legend", "book-*", "revise-*"], {
+      env: { ...process.env, ...busEnv() },
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let out = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (c: string) => (out += c));
+    child.on("error", () => resolve(new Set()));
+    child.on("close", () => {
+      const set = new Set<string>();
+      for (const ln of out.split("\n")) {
+        const [name, , active] = ln.trim().split(/\s+/);
+        if (name?.endsWith(".service") && active === "active") set.add(name.slice(0, -".service".length));
+      }
+      resolve(set);
+    });
+  });
+}
+
+export type LaunchPlan = { launch: Inflight[]; giveUp: Inflight[]; queued: Inflight[]; running: Inflight[] };
+
+/**
+ * 并发闸门（2026-09-12）：写书曾没有任何上限——9/2 两位用户各点三本，7 个引擎同时起，
+ * 三条腿的配额几分钟内轮流打穿、每本烧几十轮才倒。三腿链只是在给「同时打 7 单」擦屁股。
+ * 现在收单先落档（attempts=0 排队），这里按「在跑的单元数 < 上限」决定起谁：
+ *   · 单元还活着 → running，不碰；
+ *   · 起过但单元没了（VPS 重启/runner 崩）→ 次数没到上限就当续跑候选，到了就 giveUp；
+ *   · 排队的 → 候选。候选按起跑时间先来先起，直到把空位填满。
+ * 纯函数，可单测。
+ */
+export function planLaunches(recs: Inflight[], active: Set<string>, max: number): LaunchPlan {
+  const plan: LaunchPlan = { launch: [], giveUp: [], queued: [], running: [] };
+  let slots = Math.max(0, max - active.size);
+  for (const rec of [...recs].sort((a, b) => a.startedAt - b.startedAt)) {
+    if (active.has(unitName(rec))) { plan.running.push(rec); continue; }
+    if (!isQueued(rec) && !canRetry(rec)) { plan.giveUp.push(rec); continue; }
+    if (slots > 0) { plan.launch.push(rec); slots--; } else plan.queued.push(rec);
+  }
+  return plan;
 }

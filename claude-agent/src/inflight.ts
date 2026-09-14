@@ -28,7 +28,8 @@ export type InflightCreate = {
   auth?: string;
   startedAt: number;     // = 登记簿 thread 条目的 ts，续跑时靠它对上同一条
   slug?: string;         // early-register 拿到后回填，续跑/放弃时省一次反查
-  attempts: number;      // 引擎已被拉起的次数（原跑算第 1 次）
+  attempts: number;      // 引擎已被拉起的次数（0 = 还在排队没起过；原跑算第 1 次）
+  launchedAt?: number;   // 最近一次起单元的时刻（排队中的没有）
 };
 export type InflightRevise = {
   kind: "revise";
@@ -40,11 +41,17 @@ export type InflightRevise = {
   auth?: string;
   startedAt: number;
   attempts: number;
+  launchedAt?: number;
 };
 export type Inflight = InflightCreate | InflightRevise;
 
 /** 原跑 + 续跑各算一次；第 3 次不再试——两次都没跑完，多半不是「被打断」而是书本身有问题。 */
 export const INFLIGHT_MAX_ATTEMPTS = 2;
+
+/** 还在排队、一次都没起过（2026-09-12 起收单先落档，由 pump 按并发上限起单）。 */
+export function isQueued(rec: Inflight): boolean {
+  return rec.attempts === 0;
+}
 
 /** 登记的稳定标识：写书=jobId，修书=slug#entryTs（与退款 ref 同一套，幂等对得上）。 */
 export function inflightId(rec: Inflight): string {
