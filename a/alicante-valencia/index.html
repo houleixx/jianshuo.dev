@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alicante 一日 · Valencia 一到两日 | 2026 年 9 月实地攻略</title>
+<meta name="description" content="Alicante 城内一日逐小时路线 + Valencia 一到两日路线：开放时间、票价、餐厅规则、9 月中下旬活动，全部核实到 2026 年 9 月官方口径。配合西班牙自驾手册 Costa Blanca 段使用。">
+<meta property="og:title" content="Alicante 一日 · Valencia 一到两日">
+<meta property="og:description" content="2026 年 9 月实地攻略：逐小时路线、票价、餐厅规则、当周活动。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --paper:#fbf7f0; --paper2:#f3ece0; --card:#fffdf9;
+    --ink:#2b2a27; --ink2:#5a5650; --soft:#8f877b; --line:rgba(60,50,40,.12);
+    --sea:#1e6f9f; --sea-soft:#dcebf3; --sun:#d9772b; --sun-soft:#fbe7d3;
+    --red:#ff0000;
+  }
+  html{scroll-behavior:smooth;scroll-padding-top:64px}
+  body{background:var(--paper);color:var(--ink);font-family:'Noto Sans SC',sans-serif;line-height:1.75;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:0 18px}
+  h1,h2,h3{font-family:'Noto Serif SC',serif}
+  a{color:var(--sea)}
+  .nav{position:sticky;top:0;z-index:50;background:rgba(251,247,240,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .nav-inner{max-width:900px;margin:0 auto;padding:10px 18px;display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .nav-inner::-webkit-scrollbar{display:none}
+  .nav a{flex:0 0 auto;font-size:.8rem;font-weight:500;color:var(--ink2);text-decoration:none;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);white-space:nowrap}
+  .nav a.ali{border-color:#e9c9ad}.nav a.val{border-color:#bcd6e6}
+  .hero{padding:44px 0 30px;background:linear-gradient(180deg,#fdf9f2,var(--paper))}
+  .kicker{font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sun);font-weight:700;margin-bottom:12px}
+  .hero h1{font-weight:900;font-size:clamp(1.7rem,6vw,2.7rem);line-height:1.25}
+  .hero h1 em{font-style:normal;color:var(--sea)}
+  .lede{margin-top:16px;color:var(--ink2);font-size:1rem;max-width:640px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:.8rem;color:var(--ink2)}
+  .chip b{color:var(--sun)}
+  section{padding:34px 0 8px}
+  .eyebrow{display:block;font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--soft);font-weight:700;margin-bottom:6px}
+  h2{font-weight:900;font-size:clamp(1.35rem,4.2vw,1.8rem);line-height:1.3;margin-bottom:14px}
+  h2 .tag{display:inline-block;vertical-align:middle;font-family:'Noto Sans SC',sans-serif;font-size:.7rem;font-weight:700;padding:2px 9px;border-radius:999px;margin-left:8px;letter-spacing:.06em}
+  .tag.ali{background:var(--sun-soft);color:#a3551b}.tag.val{background:var(--sea-soft);color:var(--sea)}
+  h3{font-weight:600;font-size:1.08rem;margin:26px 0 10px;padding-left:12px;border-left:3px solid var(--sun)}
+  .val h3{border-left-color:var(--sea)}
+  p{margin-bottom:12px;color:var(--ink2)}
+  p b,li b,td b{color:var(--ink);font-weight:700}
+  ul{padding-left:1.2em;margin-bottom:12px;color:var(--ink2)}
+  li{margin-bottom:6px}
+  .note{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:14px 0;font-size:.92rem;color:var(--ink2)}
+  .note.warn{background:#fff4ec;border-color:#f0cdb0}
+  .note.sea{background:#eef5fa;border-color:#c9dfec}
+  .red{color:var(--red);font-weight:700}
+  .tw{overflow-x:auto;margin:10px 0 18px;border-radius:14px;border:1px solid var(--line);background:var(--card)}
+  table{border-collapse:collapse;width:100%;font-size:.88rem;min-width:520px}
+  th,td{padding:9px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);line-height:1.55}
+  th{background:var(--paper2);font-weight:700;color:var(--ink);white-space:nowrap;font-size:.8rem;letter-spacing:.04em}
+  tr:last-child td{border-bottom:none}
+  td.t{white-space:nowrap;font-weight:700;color:var(--sun);font-variant-numeric:tabular-nums}
+  .val td.t{color:var(--sea)}
+  td:first-child{color:var(--ink)}
+  .tw.plan table{min-width:0}
+  .tw.plan td:nth-child(3){color:var(--soft);font-size:.83rem}
+  @media(max-width:560px){.tw.plan td:nth-child(3),.tw.plan th:nth-child(3){display:none}}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 18px}
+  @media(max-width:600px){.grid2{grid-template-columns:1fr}}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:.9rem;color:var(--ink2)}
+  .box h4{font-size:.95rem;color:var(--ink);margin-bottom:6px;font-weight:700}
+  footer{padding:36px 0 50px;color:var(--soft);font-size:.8rem;border-top:1px solid var(--line);margin-top:30px}
+  footer a{color:var(--soft)}
+</style>
+</head>
+<body>
+
+<div class="nav"><div class="nav-inner">
+  <a href="#facts">日历硬事实</a>
+  <a class="ali" href="#ali-plan">Alicante 一日</a>
+  <a class="ali" href="#ali-eat">Alicante 吃</a>
+  <a class="val" href="#val-d1">Valencia 第一日</a>
+  <a class="val" href="#val-d2">Valencia 第二日</a>
+  <a class="val" href="#val-eat">Paella</a>
+  <a href="#move">两城之间</a>
+  <a href="#events">这周活动</a>
+</div></div>
+
+<div class="hero"><div class="wrap">
+  <div class="kicker">2026 · 09 · 14 – 09 · 17 · Costa Blanca 段的两座城</div>
+  <h1><em>Alicante</em> 一日<br>+ <em>Valencia</em> 一到两日</h1>
+  <p class="lede">这份只管两座城的城内。海岸线、罗马遗址、Tabarca、Elche、Xàtiva 都在<a href="/a/spain-drive-2026/#seg5">自驾手册 Costa Blanca 段</a>里，这里不重复。所有开放时间和票价按 2026 年 9 月官网口径核过，核不到的写明「未核」。</p>
+  <div class="chips">
+    <span class="chip">Alicante 城堡 <b>免费</b> · 10:00–20:00</span>
+    <span class="chip">Oceanogràfic 9 月 <b>高季价</b> €43.05</span>
+    <span class="chip">瓦伦西亚大区 <b>无旅游税</b></span>
+    <span class="chip">两城之间 AP-7 <b>全程免费</b> 1h45</span>
+  </div>
+</div></div>
+
+<section id="facts"><div class="wrap">
+  <span class="eyebrow">先看这个</span>
+  <h2>这四天的日历硬事实</h2>
+  <p>两座城的坑都是「星期几」造成的，不是「去不去」造成的。先钉死日期，再排路线。</p>
+  <div class="tw"><table>
+    <tr><th>日期</th><th>Alicante</th><th>Valencia</th></tr>
+    <tr><td><b>9/14 一</b></td><td>MARQ、MACA、Lucentum 全闭。中央市场开（07:00–14:30）。城堡开。<b>只做市场 + 老城 + 城堡 + 海滩</b>，博物馆一个都别排</td><td>市立博物馆多数闭（Lonja、Serranos 照开）。Casa Carmela 开（只午餐）。Bon Aire 开</td></tr>
+    <tr><td><b>9/15 二</b></td><td>全开。MARQ 10–19，MACA 10–20</td><td>全开。<span class="red">Bon Aire（El Palmar）周二休</span></td></tr>
+    <tr><td><b>9/16 三</b></td><td>全开</td><td>全开</td></tr>
+    <tr><td><b>9/17 四</b></td><td>全开</td><td>全开。晚上艺术城「La Noche de Vino y Música」；海滨区 Moros y Cristianos 游行开始（到 9/20）</td></tr>
+    <tr><td><b>任何周日</b></td><td>中央市场关；MARQ 只到 14:00</td><td><span class="red">中央市场关</span>；Casa Carmela 休；大教堂付费参观 14:00 才开；Lonja / Serranos 免费</td></tr>
+  </table></div>
+  <div class="note warn"><b>天气：</b>9 月中旬白天 27–29°C，海水 24–26°C，全年最暖。但 9–10 月是 DANA（gota fría）高发期。每天早上看一眼 AEMET 预警：橙/红 → 不进 barranco、不走低洼公路、路面有水掉头。2024-10-29 瓦伦西亚 DANA 的死者大多死在车里。</div>
+</div></section>
+
+<section id="ali-plan"><div class="wrap">
+  <span class="eyebrow">Alicante · Alacant</span>
+  <h2>Alicante 城内一日 <span class="tag ali">步行 8 km · 不用车</span></h2>
+  <p>Alicante 城很小：<b>市场、老城、城堡、海滩、海滨大道</b>五个点在直径 1.5 公里里，一天走完还有余量。逻辑是：<b>上午走路，中午吃米饭，下午下海或进博物馆，傍晚上城堡，晚上老城喝酒</b>。车全天放在酒店车库。</p>
+
+  <h3>逐小时</h3>
+  <div class="tw plan"><table>
+    <tr><th>时刻</th><th>做什么</th><th>备注</th></tr>
+    <tr><td class="t">08:30</td><td><b>Mercado Central</b>（Av. Alfonso X el Sabio 10）。1921 年现代主义建筑，一楼鱼、地下肉菜。楼上吧台喝咖啡，看红虾和 salazones（腌鱼干：mojama 金枪鱼、hueva 鱼子）</td><td>周一–五 07:00–14:30；周六到 15:00；周日关。买一包 mojama 带走，真空包装</td></tr>
+    <tr><td class="t">09:30</td><td>沿 <b>Rambla de Méndez Núñez</b> 往海边走，右拐进老城 <b>El Barrio</b>：Plaza de la Santísima Faz → <b>Ayuntamiento</b>（巴洛克市政厅，楼梯脚下有西班牙海拔基准点 <b>cota cero</b>，全西班牙的海拔从这块铜牌算起）→ <b>Concatedral de San Nicolás</b>（17 世纪，蓝顶）</td><td>市政厅工作日可进大堂看 cota cero，免费</td></tr>
+    <tr><td class="t">10:30</td><td><b>Basílica de Santa María</b>（建在清真寺上，14 世纪，Alicante 最老的教堂，巴洛克门脸）→ 往上爬进 <b>Barrio de Santa Cruz</b>：白墙、彩色门、花盆、窄阶梯，Alicante 最上镜的一片</td><td>Santa Cruz 是居民区，早上安静，中午后旅行团到。阶梯多，穿平底鞋</td></tr>
+    <tr><td class="t">11:15</td><td>从 Santa Cruz 顶上的 <b>Ermita de Santa Cruz</b> 继续沿 <b>Parque de la Ereta</b> 的步道上到 <b>Castillo de Santa Bárbara</b>（约 25 分钟，有遮阴）。不想走：回到 Postiguet 海滩对面 Av. Juan Bautista Lafora 坐<b>电梯</b>直上</td><td>城堡免费，10:00–20:00，闭馆前 30 分钟停止入场。电梯 €2.70，最后上行=停运前 40 分钟。Ereta 步道 5 月修过，现已完工</td></tr>
+    <tr><td class="t">11:45</td><td><b>城堡</b>：9 世纪穆斯林起造，1248 年 12 月 4 日（圣芭芭拉日）被后来的阿方索十世拿下而得名。三层：顶上 Macho del Castillo 看整个海湾和 Benacantil 岩，中层 16 世纪菲利普二世的堡，下层 18 世纪。从海滩往上看岩壁，能看出一张「摩尔人的脸」（Cara del Moro）</td><td>1 小时够。顶上无遮阴，帽子 + 水</td></tr>
+    <tr><td class="t">13:00</td><td>电梯下到 <b>Playa del Postiguet</b>，走海滨到港口</td><td>电梯下行最后一班=停运前 20 分钟</td></tr>
+    <tr><td class="t">13:30</td><td><b>午饭：米饭</b>。港口 Dársena（工作日 €35 套餐含米饭）或老城 Nou Manolín 吧台。点 <b>arroz a banda</b>（鱼汤饭，配 alioli）或 <b>arroz del senyoret</b>（海鲜去壳的「少爷饭」）。米饭 20 分钟起，两人起做</td><td>见下面「吃」。西班牙人 14:00 才坐下，13:30 进去有位</td></tr>
+    <tr><td class="t">15:30</td><td><b>三选一</b>：① Postiguet 下海（最热的时段交给海）；② <b>MACA</b> 当代艺术馆（免费，Casa de la Asegurada，Sempere 收藏 + Miró / Picasso / Chillida，周一闭）；③ TRAM L4 从 Luceros 去 <b>Playa de San Juan</b>（7 km 长沙滩，27 分钟，€1.45）</td><td>周一只有 ①③。MARQ 已排在手册 9/16 早上，这里不重复</td></tr>
+    <tr><td class="t">18:30</td><td><b>Explanada de España</b>：六百多万块红白黑三色大理石拼成的波浪，四排棕榈。走到头是港口和 <b>The Ocean Race 博物馆</b>（免费，环球帆船赛从这里出发过五届）</td><td>Explanada 的手工艺摊傍晚出来。日落 20:08 左右</td></tr>
+    <tr><td class="t">20:00</td><td>若中午没上城堡，<b>现在上</b>：日落时从 Macho 看港口亮灯，19:30 前必须进门。已上过就去 Puerto 的堤上看日落</td><td>手册 9/14 晚已排城堡夜景，两者取一</td></tr>
+    <tr><td class="t">21:00</td><td><b>老城 tapas</b>：Calle Castaños 与 Calle Labradores 两条街是 Alicante 的「tardeo」和夜生活主街。Sento 站着吃 montaditos（只收现金），El Portal 坐下喝酒</td><td>El Portal 周日–四开到 01:00</td></tr>
+  </table></div>
+
+  <div class="grid2">
+    <div class="box"><h4>只有半天（下午 + 晚上）</h4>市场跳过（下午已关），15:30 Santa Cruz → Ereta 步道 → 城堡 → 电梯下 → Postiguet 下海 → Explanada → Castaños 吃 tapas。3 小时走完主线。</div>
+    <div class="box"><h4>只有一个傍晚</h4>19:00 电梯上城堡（19:30 前进门）→ 看日落 → 电梯下 → Explanada 走到港口 → Nou Manolín 或 El Portal。手册 9/14 晚的安排就是这个。</div>
+  </div>
+
+  <h3>三个不用去的地方</h3>
+  <ul>
+    <li><b>Castillo de San Fernando</b>：拿破仑战争时期修的，从没打过仗，现在是公园里一堆墙，只值 10 分钟。</li>
+    <li><b>Museo de las Hogueras</b>：六月火祭的花车模型，除非你 6 月来过，否则没有语境。</li>
+    <li><b>Benidorm</b>：45 公里外的英国人高楼海滩城，不是这趟的味道。手册里北段的 Altea、Xàbia 已经替它回答了海岸问题。</li>
+  </ul>
+</div></section>
+
+<section id="ali-eat"><div class="wrap">
+  <span class="eyebrow">Alicante · 吃</span>
+  <h2>Alicante 的米饭和吧台 <span class="tag ali">全部确认 2026 营业</span></h2>
+  <p>Alicante 的米饭和 Valencia 的 paella 是两派：<b>Alicante 用鱼汤煮，不放肉，饭要干、锅底要焦（socarrat）</b>；Valencia 的正统 paella 是兔子鸡肉豆角，不放海鲜。别在 Alicante 点「paella valenciana」，也别在 Valencia 把「海鲜 paella」当正统。</p>
+  <div class="tw"><table>
+    <tr><th>店</th><th>吃什么</th><th>人均</th><th>规则</th></tr>
+    <tr><td><b>Nou Manolín</b><br>C/ Villegas 3，老城</td><td>吧台 tapas 天花板：gamba roja、salazones、arroz a banda。2026 年 6 月刚拿「西班牙最佳传统餐厅」</td><td>€40–60</td><td>吧台传统不预订，13:00 前到有位；楼上餐厅可订。姐妹店 Piripi 同一家人</td></tr>
+    <tr><td><b>Dársena</b><br>港口 Marina Deportiva</td><td>菜单上 100 多种米饭，arroz a banda / del senyoret 招牌。Guía Repsol 2026 在册</td><td>€35–50<br>工作日 €35 套餐</td><td>套餐含前菜 + 米饭/肉/鱼 + 甜点 + 饮料。海景位要提前订</td></tr>
+    <tr><td><b>Cervecería Sento</b><br>Rambla 等三家</td><td>站着吃 montaditos（小面包夹一切），几欧一个，本地人的下班站</td><td>€15–20</td><td><span class="red">只收现金</span>。英语有限，指着点</td></tr>
+    <tr><td><b>El Portal Taberna &amp; Wines</b><br>C/ Bilbao 2</td><td>Sergio Sierra 的高端 tapas + 酒单，晚上变酒吧</td><td>€50+（未核）</td><td>周日–四 13:00–01:00，周五六到 02:00。Resy 可订</td></tr>
+    <tr><td><b>La Taberna del Gourmet</b><br>C/ San Fernando 10</td><td>María José San Román（Monastrell 同一集团）的酒馆版：蔬菜、米饭、橄榄油</td><td>€45–60</td><td>2026 米其林指南收录。每天 12:30–23:30 不歇，下午 16:00 也能吃到饭</td></tr>
+  </table></div>
+  <div class="note"><b>点单三句：</b>「Un arroz a banda para dos」（两人份鱼汤饭）；「¿Tiene gamba roja de Dénia? ¿A cuánto el kilo?」（有 Dénia 红虾吗，多少钱一公斤；€80–120/kg，点 medio，半份）；「Una caña y un montadito de pringá」（一小杯生啤 + 一个炖肉 montadito）。</div>
+</div></section>
+
+<section id="val-d1" class="val"><div class="wrap">
+  <span class="eyebrow">Valencia · València</span>
+  <h2>Valencia 第一日：老城 <span class="tag val">步行 7 km · 车入库</span></h2>
+  <p>Valencia 的结构是三层：<b>老城</b>（罗马 Valentia → 穆斯林 Balansiya → 15 世纪丝绸黄金期）、<b>Turia 河床花园</b>（1957 年大水后把河改道，河床变成 9 公里公园）、<b>艺术城 + 海滩</b>（Calatrava 的白色建筑群，河床的尽头）。第一天走老城，第二天走河床到海。</p>
+  <div class="note sea">手册 9/6（周日）排的是老城 + Turia，如果那天已走完 Lonja、大教堂、Serranos，<b>这次直接跳到第二日</b>，把第一日只留「中央市场 + horchata」两件事——因为 9/6 是周日，市场没开。</div>
+
+  <h3>逐小时</h3>
+  <div class="tw plan"><table>
+    <tr><th>时刻</th><th>做什么</th><th>备注</th></tr>
+    <tr><td class="t">08:30</td><td><b>Mercado Central</b>：1928 年现代主义，8000 m²，约 1200 个摊位，欧洲最大的鲜货市场之一。看圆顶的彩色玻璃和瓷砖，买 <b>Valencia 橙</b>、jamón、salazones。中央酒吧站着吃早餐</td><td>周一–六 07:30–15:00，周日关。2026 年 7 月起外立面和穹顶分段修复，可能有脚手架，市场照常营业</td></tr>
+    <tr><td class="t">09:45</td><td>过马路进 <b>La Lonja de la Seda</b>（丝绸交易所，1482–1548，UNESCO）。主厅 24 根扭柱撑起的 17 米高穹顶，Valencia 15 世纪当地中海商业首都时的账房；侧面是 Consolat del Mar 海事法庭</td><td>周一–六 10:00–19:00；周日 10:00–14:00。€2，周日免费，Tourist Card 免费。开门第一批进，30 分钟够</td></tr>
+    <tr><td class="t">10:30</td><td><b>Plaza Redonda</b>（圆广场，19 世纪）→ Plaza de la Reina → <b>大教堂</b>：三个门三种风格（罗曼、哥特、巴洛克），<b>圣杯礼拜堂</b>里那只玛瑙杯是梵蒂冈认可的「最后晚餐圣杯」候选之一；Goya 两幅画</td><td>周一–六 10:00–18:30。博物馆通票 €12 含语音导览；只爬塔 €3。工作日 07:30–10:00 弥撒时段可免费进堂但不能看博物馆区</td></tr>
+    <tr><td class="t">11:30</td><td>爬 <b>Miguelete</b>（Micalet）钟楼：207 级螺旋阶梯，51 米，顶上看整个老城蓝顶和远处艺术城</td><td>€3，10:00–18:45。楼梯窄且单向，中午前人少</td></tr>
+    <tr><td class="t">12:15</td><td>Plaza de la Virgen 喝 <b>horchata</b>：<b>Horchatería Santa Catalina</b>（Plaza Santa Catalina，1 分钟路）。油莎豆（chufa）打的，配 <b>fartons</b>（长条软面包蘸着吃）。夏天的 Valencia 人下午就靠这个</td><td>每天 08:30–21:30。要「una horchata y fartons」，€5 左右。想喝正宗的去第二日的 Alboraya</td></tr>
+    <tr><td class="t">13:00</td><td>钻进 <b>Barrio del Carmen</b>：穆斯林时期的城墙线、Portal de la Valldigna（1400 年的门洞）、街头涂画。走到 <b>Torres de Serranos</b>（1392，老城北门，Valencia 的凯旋门）上去看 Turia</td><td>Serranos 周一–六 10–19，周日 10–14；€2，周日免费</td></tr>
+    <tr><td class="t">14:00</td><td><b>午饭</b>：老城正统 paella 要提前一天订（Navarro）；没订就在 Carmen 吃 tapas，或去 <b>Mercado de Colón</b>（1916 年现代主义市场，现在是咖啡和 horchata 的厅堂）</td><td>见 Paella 表。周日中央市场关时 Colón 照开</td></tr>
+    <tr><td class="t">16:30</td><td>热的时候进石头房子：<b>Iglesia de San Nicolás</b>（「Valencia 的西斯廷」，整面巴洛克天顶画，2016 年修复），或 <b>Museo Nacional de Cerámica</b>（González Martí，雪花石膏门脸的 Marqués de Dos Aguas 宫）</td><td>San Nicolás 约 €10 含语音导览（未核）；陶瓷馆周六下午、周日免费</td></tr>
+    <tr><td class="t">18:30</td><td>下到 <b>Turia 河床</b>，从 Serranos 桥往东走 2 公里到 Palau de la Música，看本地人跑步、踢球、遛狗。这是 Valencia 人的客厅</td><td>日落 20:00 左右。租 Valenbisi 单车 €3.99/天，30 分钟内免费，河床里骑最舒服</td></tr>
+    <tr><td class="t">20:30</td><td><b>Ruzafa</b> 吃晚饭：老城南边的旧工人区，现在是餐厅和酒吧最密的街区。Calle de Cuba、Calle de Sueca 两条街走一遍再选</td><td>晚饭 21:00 起。喝一杯 <b>Agua de Valencia</b>（橙汁 + cava + 金酒伏特加，Café de las Horas 是发源地之一）</td></tr>
+  </table></div>
+</div></section>
+
+<section id="val-d2" class="val"><div class="wrap">
+  <span class="eyebrow">Valencia · 第二日</span>
+  <h2>Valencia 第二日：河床尽头、海、稻田 <span class="tag val">有车更方便</span></h2>
+  <p>这一天的三个点在一条线上：<b>艺术城</b>在河床东端，<b>Malvarrosa 海滩</b>再往东 3 公里，<b>Albufera 泻湖</b>在城南 15 公里。有车的话下午开去 El Palmar，日落划船，晚上回城。没车用 Tourist Card 坐 25 路公交到 El Palmar。</p>
+
+  <h3>逐小时</h3>
+  <div class="tw plan"><table>
+    <tr><th>时刻</th><th>做什么</th><th>备注</th></tr>
+    <tr><td class="t">09:30</td><td><b>Ciudad de las Artes y las Ciencias</b>：Calatrava 1998–2009 的白色骨架建筑群。<b>外面免费，值一小时</b>：Hemisfèric 的眼睛、Umbracle 的棚架、Palau de les Arts 的头盔、Assut de l'Or 的竖琴桥。真正值得买票进去的只有 <b>Oceanogràfic</b>（欧洲最大水族馆，白鲸、鲨鱼隧道、地中海厅）</td><td>Oceanogràfic 高季 10:00–22:00，成人 <b>€43.05</b>（9 月按高季价，比常见引用的 €37 贵）；+Hemisfèric €45.00；三馆联票 €51.25，可分 1–3 天用。科学馆是儿童向，不带孩子跳过</td></tr>
+    <tr><td class="t">12:30</td><td>开车或公交 <b>去 Malvarrosa 海滩</b>（3 km），沿海滨大道走到 Cabanyal 渔村（彩色瓷砖房子，正在士绅化）</td><td>Cabanyal 的 Mercado 周一–六上午开</td></tr>
+    <tr><td class="t">13:30</td><td><b>柴火 paella 午饭</b>：<b>Casa Carmela</b>（1922 年起橙木柴火，Isabel de Villena 155）。paella valenciana 每日限量，<b>必须提前订并等餐厅确认</b>，只做午餐 13:00–16:00，周日休。没订到：海滨的 <b>La Pepica</b>（1898，海明威来过），paella 两人起，45 分钟</td><td>Carmela 电话 +34 963 710 073。两家都要留 2 小时。见 Paella 表</td></tr>
+    <tr><td class="t">16:00</td><td>海滩躺平或下海。Malvarrosa 沙细、坡缓、9 月水温 24°C 以上</td><td>有车的这时候先回酒店拿泳衣也来得及</td></tr>
+    <tr><td class="t">18:00</td><td>开去 <b>El Palmar</b>（CV-500 沿海往南，25 分钟）。Albufera 是西班牙最大的淡水泻湖，四周全是稻田，paella 的米就从这儿来。9 月正是稻子黄的时候</td><td>没车：Plaza de l'Ajuntament 附近 25 路公交到 El Palmar，Tourist Card 含</td></tr>
+    <tr><td class="t">19:15</td><td><b>划船看日落</b>：El Palmar 码头的本地船夫，普通 40–50 分钟 €4–7/人，日落场约 1 小时 €7/人左右。船开进芦苇和稻田之间的水道，太阳落在湖面上</td><td>日落 19:55 左右，19:00 前到码头。不用预订，走到码头找船夫</td></tr>
+    <tr><td class="t">20:30</td><td>El Palmar 晚饭吃 <b>all i pebre</b>（鳗鱼炖蒜椒土豆，Albufera 的菜）。要吃 paella 得中午来：Bon Aire 只做午餐 13:30–15:45，周二休</td><td>El Palmar 村里几十家饭馆，湖边的 Bon Aire 和 Mateu 名气最大</td></tr>
+  </table></div>
+
+  <div class="grid2">
+    <div class="box"><h4>Valencia 只有一天怎么办</h4>上午老城主线（市场 → Lonja → 大教堂 + 钟楼 → horchata → Serranos），13:30 Casa Carmela 或 La Pepica 吃 paella，下午 Malvarrosa 下海，18:00 开去 El Palmar 划船看日落，回城 Ruzafa 喝一杯。艺术城只看外面（顺路 15 分钟）。</div>
+    <div class="box"><h4>Horchata 朝圣（可选，半小时）</h4><b>Horchatería Daniel</b>，Alboraya（Av. de l'Orxata 41，1949 年起）。Alboraya 就是 chufa 的产地，地铁 L3 到 Alboraia-Palmaret 步行 5 分钟，开车 15 分钟。周一–四 10:00–22:00，周末更晚。</div>
+  </div>
+</div></section>
+
+<section id="val-eat" class="val"><div class="wrap">
+  <span class="eyebrow">Valencia · Paella</span>
+  <h2>Paella 六家的规则 <span class="tag val">全部确认 2026 营业</span></h2>
+  <p>正统 <b>paella valenciana</b>：鸡、兔、garrofó 白豆、ferraura 扁豆、番茄、藏红花、迷迭香，柴火，锅要平要大，饭要一指厚。<b>只在中午吃，两人起做，要等 45 分钟</b>——这三条是每家的共同规则，跟名气无关。晚上写着 paella 的店都是给游客的。</p>
+  <div class="tw"><table>
+    <tr><th>店</th><th>特点</th><th>人均</th><th>规则</th></tr>
+    <tr><td><b>Casa Carmela</b><br>Malvarrosa，1922</td><td>橙木柴火，Valencia 人自己带外地朋友去的地方</td><td>约 €50 起（未核官方）</td><td>只午餐 13:00–16:00，<span class="red">周日休</span>。paella valenciana 每日限量，必须提前订，餐厅确认才算。+34 963 710 073</td></tr>
+    <tr><td><b>La Pepica</b><br>Malvarrosa 海滨，1898</td><td>海明威、索罗亚、皇室都坐过，海景大厅</td><td>€35–50，最低消费 €30/人</td><td>paella 两人起，必须预订，45 分钟。官网可在线订</td></tr>
+    <tr><td><b>Casa Roberto</b><br>C/ Mestre Gozalbo 19，Ruzafa 边</td><td>市内老派家庭馆，Valencia 人的周日饭</td><td>€50–60</td><td>西语电话预订，paella 要提前订并付 €10/人定金（抵账单）。休息日未核</td></tr>
+    <tr><td><b>Navarro</b><br>C/ Arzobispo Mayoral 5，市中心</td><td>市政厅广场旁，老城里最稳的一家</td><td>€45–60</td><td>传统 paella <b>提前一天</b>订</td></tr>
+    <tr><td><b>Bon Aire</b><br>El Palmar，1982</td><td>湖边稻田里的柴火 paella，配 all i pebre</td><td>€35–45（未核）</td><td>厨房 13:30–15:45 只午餐，<span class="red">周二休</span>。官网强烈建议提前订米饭，湖景桌不保证</td></tr>
+    <tr><td><b>Levante</b><br>Benisanó，1968</td><td>柴火派的另一座山头，25 公里外的村子</td><td>€30–40；含城堡参观套餐 €35</td><td>要开车。午餐为主。不顺 Xàtiva 方向，只有专门去</td></tr>
+  </table></div>
+  <div class="note sea"><b>没订到任何一家的兜底：</b>老城任何一家在中午写着「arroz del día」的本地小馆，点 arroz al horno（烤箱饭，Xàtiva 的菜）或 fideuà（用短面代替米的海鲜「paella」，Gandia 发明的），不会错。</div>
+</div></section>
+
+<section id="move"><div class="wrap">
+  <span class="eyebrow">Logistics</span>
+  <h2>两城之间与城内交通</h2>
+  <div class="tw"><table>
+    <tr><th>项</th><th>结论</th></tr>
+    <tr><td><b>自驾 Alicante ↔ Valencia</b></td><td>AP-7 全程 170 km / 1h45，<b>免费</b>（含 2026-02-15 起免费的 Alicante 环城段）。两城 ZBE 低排放区只限无环保标签车，租赁车有 C/ECO 标签，零动作</td></tr>
+    <tr><td><b>火车（如果丢掉车）</b></td><td>Alicante Terminal ↔ <b>Valencia Joaquín Sorolla</b>（高铁站，不是老站 Nord；Sorolla 到 Nord 有免费接驳，步行 10–15 分钟）。Euromed / Iryo / Ouigo 每天 8–9 班直达，最快 1h55，一般 2h–2h20，€10–15 起、常规 €20–40。ALSA 巴士 2h30，€8.50–10 起，每天 30 多班</td></tr>
+    <tr><td><b>Valencia 停车</b></td><td>老城不开车进去。酒店车库或老城边缘公共车库（Plaza de la Reina、Mercado Central 下面有），按天计费。第二日去海滩、El Palmar 都有免费或便宜的路边位</td></tr>
+    <tr><td><b>Valencia Tourist Card</b></td><td>24h €15 / 48h €20 / 72h €25：公交地铁电车无限乘（含机场线）、市立博物馆免费、Lonja / Serranos 免费、主要景点最高 5 折、送一份 tapa + 饮料。<b>有车的话不一定划算</b>，只有两天走老城 + 公交去 El Palmar 才值</td></tr>
+    <tr><td><b>Valenbisi 单车</b></td><td>1 天票 €3.99，每次前 30 分钟免费，276 个站，24 小时。信用卡预授权最高 €150。Turia 河床全程骑行道，从 Serranos 到艺术城 6 公里 25 分钟</td></tr>
+    <tr><td><b>Alicante TRAM</b></td><td>L4 Luceros → Playa de San Juan，27 分钟，€1.45；L3 到 El Campello。城内其他全靠走</td></tr>
+    <tr><td><b>机场（备用）</b></td><td>ALC → 市中心 C6 巴士 €3.85，25 分钟，终点 Puerta del Mar；出租车 €20–27。VLC → 市中心地铁 L3/L5 约 20 分钟，€4.80 + 卡费 €1–2</td></tr>
+    <tr><td><b>旅游税</b></td><td>瓦伦西亚大区 2023 年 11 月废止了还没生效的旅游税，2026 年住宿<b>不收</b>（加泰罗尼亚收）</td></tr>
+  </table></div>
+</div></section>
+
+<section id="events"><div class="wrap">
+  <span class="eyebrow">9 月 14–27 日</span>
+  <h2>这两周碰得上的活动</h2>
+  <div class="tw"><table>
+    <tr><th>日期</th><th>城</th><th>活动</th></tr>
+    <tr><td>9/13–20</td><td>Valencia</td><td><b>BBVA Open Internacional</b>，WTA 125 女子网球，Sporting Club de Tenis</td></tr>
+    <tr><td><b>9/17 四</b></td><td>Valencia</td><td><b>La Noche de Vino y Música</b>：艺术城里葡萄酒 + 美食 + 现场音乐。如果 9/17 晚在 Valencia，这是当晚的答案</td></tr>
+    <tr><td>9/17–20</td><td>Valencia</td><td><b>Moros y Cristianos del Marítimo</b> 30 周年：海滨区（Cabanyal / Malvarrosa）摩尔人与基督徒游行。跟手册里 711 / 1492 那条伊斯兰线索接上</td></tr>
+    <tr><td>9/17–25</td><td>Valencia</td><td><b>Abierto Valencia</b> 当代艺术周，画廊开放，免费</td></tr>
+    <tr><td>每周五</td><td>Valencia</td><td>Berklee Valencia 免费音乐会 @ 艺术城</td></tr>
+    <tr><td>9/18 · 9/19 · 9/27</td><td>Valencia</td><td>Roig Arena：Hijos de la Ruina / El Arrebato / The Sisters of Mercy</td></tr>
+    <tr><td><b>9/19 六</b></td><td>Alicante</td><td><b>Quintana en Vendimia</b> 第三届：Poeta Quintana 街 36 家酒庄的葡萄酒集市</td></tr>
+    <tr><td>9 月</td><td>Alicante</td><td>Candlelight 烛光音乐会系列 @ MARQ（Hans Zimmer / Vivaldi / Morricone 主题，具体日期未核）</td></tr>
+    <tr><td>9/26–27</td><td>Dénia</td><td>D*na Festival 美食节（Dénia 是 UNESCO 美食创意城市）</td></tr>
+    <tr><td>9/27 起</td><td>Alicante</td><td>Otoño en Parques：公园里的马戏 / 戏剧，免费，到 10/25</td></tr>
+  </table></div>
+  <p>两城 9 月都没有大 fiesta：Alicante 的 Hogueras 在 6 月，Valencia 的 Fallas 在 3 月。这反而是好事，酒店不贵，市场不挤。</p>
+</div></section>
+
+<footer><div class="wrap">
+  2026-09-14 核实。官网口径：castillodesantabarbara.com · marqalicante.com · cruceroskontiki.com · oceanografic.org · museocatedralvalencia.com · mercadocentralvalencia.es · casa-carmela.com · lapepica.com · restaurantebonaire.com · visitvalencia.com · valenciabonita.es。标「未核」的项以现场为准。<br>
+  配合 <a href="/a/spain-drive-2026/#seg5">西班牙自驾手册 · Costa Blanca 段</a> 使用。<a href="/a/">← 全部页面</a>
+</div></footer>
+
+</body>
+</html>
