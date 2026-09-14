@@ -4,6 +4,11 @@
 
 lab.jianshuo.dev {
 	encode gzip
+	# 请求体上限在门口就卡：/api/book 匿名可达，node 侧另有 256KB 上限（server.ts），
+	# 这里让 Caddy 先答 413，免得 node 中途关连接被 Caddy 报成 502。
+	request_body {
+		max_size 2MB
+	}
 
 	# /api/book* 走 App 自己的 VoiceDrop bearer（服务端扣费即准入），豁免密码门。
 	@needsauth not path /api/book /api/book/*
