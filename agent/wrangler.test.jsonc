@@ -40,6 +40,6 @@
   ],
 
   // 测试 Worker 只保留微信续费 Cron，避免意外运行挖矿/探活任务。
-  "triggers": { "crons": ["*/15 * * * *"] },
+  "triggers": { "crons": ["0 18 * * *"] },
   "observability": { "enabled": true, "head_sampling_rate": 1 }
 }

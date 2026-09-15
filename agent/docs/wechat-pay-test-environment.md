@@ -72,7 +72,7 @@ npx wrangler secret put WECHAT_PAY_AMOUNT_FEN --config wrangler.test.jsonc
 
 - 测试 D1/R2、Worker 名称、Durable Objects 与正式环境完全隔离。
 - 微信委托代扣没有沙箱；测试模板/真实测试微信号仍会产生真实小额扣款。
-- 测试 Worker 只启用每 15 分钟微信 Cron，不运行挖矿或探活 Cron。
+- 测试 Worker 只启用每天北京时间 02:00（`0 18 * * *`）微信 Cron，不运行挖矿或探活 Cron。
 
 ## 5. GitHub 自动部署
 
@@ -88,3 +88,16 @@ npx wrangler secret put WECHAT_PAY_AMOUNT_FEN --config wrangler.test.jsonc
 - `CLOUDFLARE_TEST_ACCOUNT_ID`：测试 Cloudflare 账号 ID。
 
 该 Token 仅授权测试账号的 Workers、Pages、D1、R2 与 Worker Routes 写入权限。不要复用正式 `CLOUDFLARE_API_TOKEN`，也不要把微信支付密钥写进 GitHub 工作流或配置文件。
+
+## 6. 2026-09-15 发布兼容处理
+
+新实现使用每日北京时间 02:00 的 Cron；测试配置应与 `src/index.js` 中的事件匹配。
+微信模板相关配置仍需按 `wechat-pay-deploy.md` 配置，包括显式声明
+`WECHAT_PAY_CHARGE_MODE=notify_after_24h`（须先确认获批模板模式）。产品介绍页无需这些配置。
+
+此次测试库此前已经执行旧版 `0005_wechat.sql`，因此自动迁移不会重跑同名文件。
+发布前确认测试库微信协议和订单均为零，对现有测试库执行一次增量结构对齐：
+补充 `wechat_txn` 的 `max_attempts`、`entitlement_start_at`、`entitlement_end_at`，
+以及新版 0005 中的 `wechat_attempt`、`bucket.wechat_order` 和对应唯一约束、索引。
+没有删除数据库、表或业务记录；生产首次建库继续使用功能分支中的完整 0005。
+增量结构在本地 SQLite 中验证与全新执行 0005 的表字段和索引一致。
