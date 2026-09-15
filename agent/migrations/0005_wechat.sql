@@ -1,5 +1,5 @@
 -- migrations/0005_wechat.sql — 微信委托代扣（自动续费）
--- 钱仍由 bucket/ledger 统一记账；本迁移只保存微信签约和每期扣费的可审计状态。
+-- 钱仍由 bucket/ledger 统一记账；本脚本初始化微信签约、周期、扣款尝试及入账防重约束。
 
 CREATE TABLE IF NOT EXISTS wechat_sub (
   contract_code     TEXT PRIMARY KEY,       -- 商户生成、签约前先落库的唯一标识
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS wechat_sub (
   status            TEXT NOT NULL,          -- pending|active|cancelled|expired
   period_start_at   INTEGER,                -- 当前（已付款）周期起点，ms epoch
   period_end_at     INTEGER,                -- 当前周期终点，按自然月计算，ms epoch
-  next_charge_at    INTEGER,                -- 下一次发起扣费申请的时间（周期结束前 24 小时）
+  next_charge_at    INTEGER,                -- 下一次发起扣费申请的时间（到期前三个北京时间自然日 02:00）
   cancel_reason     TEXT,
   signed_at         INTEGER,
   cancelled_at      INTEGER,
@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_wechat_sub_user ON wechat_sub(user_sub);
 CREATE INDEX IF NOT EXISTS idx_wechat_sub_due ON wechat_sub(status, next_charge_at);
 
 CREATE TABLE IF NOT EXISTS wechat_txn (
-  out_trade_no       TEXT PRIMARY KEY,      -- 商户订单号；同一期稳定不变，重试不重复下单
+  out_trade_no       TEXT PRIMARY KEY,      -- 逻辑周期编号；跨协议保持同一用户周期唯一
   contract_code      TEXT NOT NULL,
   user_sub           TEXT NOT NULL,
   plan_id            TEXT NOT NULL,
@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS wechat_txn (
   processing_at      INTEGER,
   next_try_at        INTEGER,
   attempt_count      INTEGER NOT NULL DEFAULT 0,
+  max_attempts       INTEGER NOT NULL DEFAULT 3,
+  entitlement_start_at INTEGER,
+  entitlement_end_at INTEGER,
   failure_code       TEXT,
   last_error_at      INTEGER,
   created_at         INTEGER NOT NULL,
@@ -47,7 +50,7 @@ CREATE TABLE IF NOT EXISTS wechat_txn (
 );
 CREATE INDEX IF NOT EXISTS idx_wechat_txn_due ON wechat_txn(status, next_try_at);
 CREATE INDEX IF NOT EXISTS idx_wechat_txn_contract ON wechat_txn(contract_code, period_start_at);
--- 15 分钟订阅任务会恢复超过处理时限的结算订单；避免订单历史增长后扫描整张表。
+-- 保留处理状态索引，便于审计与故障排查。
 CREATE INDEX IF NOT EXISTS idx_wechat_txn_settling ON wechat_txn(status, processing_at);
 
 -- 不可变审计日志：协议/订单表只存当前快照；排错需要知道每一次回调、申请和状态转换。
@@ -70,3 +73,27 @@ CREATE TABLE IF NOT EXISTS wechat_event (
 CREATE INDEX IF NOT EXISTS idx_wechat_event_contract ON wechat_event(contract_code, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wechat_event_trade ON wechat_event(out_trade_no, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_wechat_event_user ON wechat_event(user_sub, created_at DESC);
+
+-- 功能首次上线即采用最终表结构，不需要兼容历史微信订单。
+CREATE UNIQUE INDEX idx_wechat_one_live_contract ON wechat_sub(user_sub) WHERE status IN ('pending','active');
+CREATE UNIQUE INDEX idx_wechat_user_cycle ON wechat_txn(user_sub,period_start_at);
+ALTER TABLE bucket ADD COLUMN wechat_order TEXT;
+CREATE UNIQUE INDEX idx_bucket_wechat_order ON bucket(wechat_order) WHERE wechat_order IS NOT NULL;
+CREATE UNIQUE INDEX idx_ledger_wechat_order ON ledger(json_extract(detail,'$.out_trade_no'))
+ WHERE reason='subscription' AND json_extract(detail,'$.provider')='wechat';
+-- wechat_txn is the logical user billing cycle; attempts are immutable merchant orders.
+CREATE TABLE wechat_attempt (
+ out_trade_no TEXT PRIMARY KEY,
+ cycle_no TEXT NOT NULL,
+ contract_code TEXT NOT NULL,
+ contract_id TEXT NOT NULL,
+ status TEXT NOT NULL, -- sending|unknown|accepted|failed|paid|refunded
+ attempt_no INTEGER NOT NULL,
+ resubmit_count INTEGER NOT NULL DEFAULT 0,
+ next_query_at INTEGER,
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ UNIQUE(cycle_no,attempt_no)
+);
+CREATE INDEX idx_wechat_attempt_query ON wechat_attempt(status,next_query_at);
+CREATE UNIQUE INDEX idx_wechat_attempt_open ON wechat_attempt(cycle_no) WHERE status IN ('sending','unknown','accepted','paid','refunded');

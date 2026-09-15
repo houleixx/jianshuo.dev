@@ -32,6 +32,7 @@ import { editGate, claudeCostUY, imageCostUY, bookCostUY, BOOK_SUANLI, bookRevis
 import { ensureAccount, balanceUY, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, referralLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleIapRoute } from "./iap.js";
+import { handleWechatPayProductRoute } from "./wechat-pay-product.js";
 import { handleWechatPayRoute, runWechatPaySchedule } from "./wechat-pay.js";
 import { handleSubscriptionStatusRoute } from "./subscription-status.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
@@ -1080,6 +1081,8 @@ export async function handleUsageRoute(url, request, env) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const productPage = handleWechatPayProductRoute(url, request);
+    if (productPage) return productPage;
 
     // ── /agent/llm-health ── admin: probe the direct Anthropic path AND the
     // ENAM relay DO (colo + a 1-token call each), so a geo-block regression is
@@ -1670,7 +1673,7 @@ export default {
     return new Response("not found", { status: 404 });
   },
 
-  // CF Cron Triggers: 6 小时一次的挖矿兜底、5 分钟一次报警、15 分钟一次微信续费。
+  // CF Cron Triggers: 6 小时一次的挖矿兜底、5 分钟一次报警、每天北京时间 02:00 微信对账与到期任务。
   async scheduled(event, env, ctx) {
     const stub = env.Miner.get(env.Miner.idFromName("miner"));
     if (event.cron === "*/5 * * * *") {
@@ -1712,8 +1715,8 @@ export default {
       })());
       return;
     }
-    if (event.cron === "*/15 * * * *") {
-      // 微信委托代扣独立于探活 Cron：当前周期结束前 24 小时建单，成功回调后才入账。
+    if (event.cron === "0 18 * * *") {
+      // Cloudflare Cron 使用 UTC：18:00 UTC 即北京时间次日 02:00，每日查单并处理到期扣款。
       ctx.waitUntil(runWechatPaySchedule(env).catch((e) => console.log("[wechat-pay] schedule failed", String(e))));
       return;
     }
