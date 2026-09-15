@@ -41,7 +41,7 @@ import { coreGetReport } from '../../lib/core-db.js';
 // 搜索还要抠 41 本老书的目录页，不缓存扛不住。
 import {
   PUBLISHER, PUBLISHER_SCOPE, SHELF_CACHE_KEY, SHELF_CACHE_TTL_MS,
-  CATEGORY_ORDER, normalizeCategory, invalidateShelf,
+  CATEGORY_ORDER, normalizeCategory, invalidateShelf, shelfCacheState,
 } from '../../lib/books-shelf.js';
 // 类目真源 = 各书 `_src/book.json` 的 category（写书 skill 规划大纲时自报；存量 209 本
 // 于 2026-09-15 批量回填）。此前代码里那张 59 本的手写映射表已删——不认的词当没写。
@@ -53,7 +53,7 @@ const TYPES = {
   webp: 'image/webp', gif: 'image/gif', zip: 'application/zip', cbz: 'application/vnd.comicbook+zip',
 };
 
-export async function onRequest({ request, env, params }) {
+export async function onRequest({ request, env, params, waitUntil }) {
   const segments = Array.isArray(params.path) ? params.path : (params.path ? [params.path] : []);
   let rel = decodeURIComponent(segments.join('/'));
   if (rel.includes('..') || rel.startsWith('/')) return notFound();
@@ -73,9 +73,9 @@ export async function onRequest({ request, env, params }) {
   // 索引页：/books 或 /books/（?format=json 给 App 吃结构化数据）
   if (!rel) {
     const format = new URL(request.url).searchParams.get('format');
-    if (format === 'json') return indexJSON(env, request);
-    if (format === 'search') return searchJSON(env, request);
-    return index(env);
+    if (format === 'json') return indexJSON(env, request, waitUntil);
+    if (format === 'search') return searchJSON(env, request, waitUntil);
+    return index(env, waitUntil);
   }
 
   // 整本书打印视图（/books/<slug>/print）：封面+导读+全部章节拼一页、分页 CSS、
@@ -485,21 +485,39 @@ async function scrapeLegacyToc(env, slug) {
   return out;
 }
 
-/// 全量清单，R2 缓存优先（builtAt 在 TTL 内才算）；没有/过期就现算并写回。
-/// 写回失败不影响本次响应——最多下次再算一遍。
-async function readShelf(env) {
+/// 全量清单，R2 缓存优先：fresh 直接用；stale（被上传作废 / 超 TTL）先把旧的给出去，
+/// 同时 waitUntil 后台重算写回（全量重算 15 秒，不能让访客等）；没有缓存才同步现算。
+/// 后台重算前先在缓存上盖 rebuildingAt，一分钟内并发的请求不再各起一次重算（两个
+/// 请求同时读到 stale 仍可能双跑，有界、无害）。写回失败不影响本次响应。
+const REBUILD_LOCK_MS = 60 * 1000;
+const writeShelf = (env, doc) =>
+  env.FILES.put(SHELF_CACHE_KEY, JSON.stringify(doc), { httpMetadata: { contentType: 'application/json' } });
+async function readShelf(env, waitUntil) {
+  let cached = null;
   try {
     const o = await env.FILES.get(SHELF_CACHE_KEY);
-    if (o) {
-      const c = JSON.parse(await o.text());
-      if (c && Array.isArray(c.books) && Date.now() - (Number(c.builtAt) || 0) < SHELF_CACHE_TTL_MS) return c.books;
+    if (o) cached = JSON.parse(await o.text());
+  } catch {}
+  const state = shelfCacheState(cached);
+  if (state === 'fresh') return cached.books;
+  if (state === 'stale') {
+    const locked = Date.now() - (Number(cached.rebuildingAt) || 0) < REBUILD_LOCK_MS;
+    if (!locked) {
+      const rebuild = (async () => {
+        try {
+          await writeShelf(env, { ...cached, rebuildingAt: Date.now() });
+          const books = await buildShelf(env);
+          await writeShelf(env, { builtAt: Date.now(), books });
+        } catch (e) {
+          console.log('[books] shelf rebuild failed', String(e?.message || e));
+        }
+      })();
+      if (typeof waitUntil === 'function') waitUntil(rebuild); else rebuild.catch(() => {});
     }
-  } catch {}
+    return cached.books;
+  }
   const books = await buildShelf(env);
-  try {
-    await env.FILES.put(SHELF_CACHE_KEY, JSON.stringify({ builtAt: Date.now(), books }),
-      { httpMetadata: { contentType: 'application/json' } });
-  } catch {}
+  try { await writeShelf(env, { builtAt: Date.now(), books }); } catch {}
   return books;
 }
 
@@ -508,8 +526,8 @@ const visibleTo = (books, viewerScope) =>
   books.filter((b) => !b.hidden || (!!viewerScope && b.owner === viewerScope));
 
 /// 书架条目（HTML 书架与 ?format=json 共用）。
-async function collectBooks(env, viewerScope = '') {
-  const all = await readShelf(env);
+async function collectBooks(env, viewerScope = '', waitUntil) {
+  const all = await readShelf(env, waitUntil);
   // hidden 书主人例外（2026-08-23）：带登录态且 owner == 请求者时仍列出、条目标
   // hidden——App 书架贴「隐藏」角标；别人看不见。
   return visibleTo(all, viewerScope).map((b) => {
@@ -603,12 +621,12 @@ async function setHidden(env, request, slug) {
 
 /// JSON 索引（iOS 图书馆）。cover / chapters / createdAt 已在 collectBooks 里
 /// 随全量列举一并算好，这里直接吐。
-async function indexJSON(env, request) {
+async function indexJSON(env, request, waitUntil) {
   // 登录态（可选）：带 bearer 时把「自己的 hidden 书」也列出（条目带 hidden:true），
   // App 书架据此贴「隐藏」角标。带个人内容的响应 no-store——绝不进共享缓存
   // （CF 边缘 / EdgeOne 都不许把带登录态的书单缓存到别人头上）。
   const scope = await viewerScope(env, request);
-  const books = await collectBooks(env, scope);
+  const books = await collectBooks(env, scope, waitUntil);
   return new Response(JSON.stringify({ books }), {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
@@ -625,9 +643,9 @@ async function indexJSON(env, request) {
 /// 搜索索引（书架页搜索框懒加载）：书名/作者/类目页面上已有，这里补副标题、导读、
 /// 章节标题+一句 brief——两百本约两三百 KB，浏览器里子串匹配就够，中文不用分词。
 /// 可见性口径与书单完全一致（自己的 hidden 书带 token 才进）。
-async function searchJSON(env, request) {
+async function searchJSON(env, request, waitUntil) {
   const scope = await viewerScope(env, request);
-  const all = await readShelf(env);
+  const all = await readShelf(env, waitUntil);
   const books = visibleTo(all, scope).map((b) => ({
     slug: b.slug, title: b.title, author: b.author, category: b.category,
     sub: b.subtitle || '', intro: b.intro || '', toc: Array.isArray(b.toc) ? b.toc : [],
@@ -644,8 +662,8 @@ async function searchJSON(env, request) {
 
 // 与 iOS BooksShelfView.swift 一比一：色值 / 圆角 / 间距 / 阴影都从那边抄，
 // 改任何一边都要同步另一边。SwiftUI shadow(radius:r) ≈ CSS blur 2r。
-async function index(env) {
-  const books = await collectBooks(env);
+async function index(env, waitUntil) {
+  const books = await collectBooks(env, '', waitUntil);
 
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const metaLine = (b) => {

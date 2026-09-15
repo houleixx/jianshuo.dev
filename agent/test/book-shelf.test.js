@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { fakeEnv } from "./fakes.js";
 import { onRequest } from "../../functions/voicedrop/books/[[path]].js";
 import { anonScopeFromToken } from "../../functions/lib/auth.js";
-import { PUBLISHER, SHELF_CACHE_KEY, CATEGORY_ORDER, touchesShelf } from "../../functions/lib/books-shelf.js";
+import { PUBLISHER, SHELF_CACHE_KEY, CATEGORY_ORDER, touchesShelf, invalidateShelf } from "../../functions/lib/books-shelf.js";
 
 const OWNER_TOK = "anon_owner_token_abcdefghijklmnop";
 const srcKey = (slug) => `${PUBLISHER}${slug}/_src/book.json`;
@@ -37,11 +37,14 @@ async function shelfEnv() {
   });
 }
 
-function call(env, { format, token } = {}) {
+// bg 收集 waitUntil 里的后台重算，测试里 `await Promise.all(bg)` 等它跑完。
+function call(env, { format, token, bg } = {}) {
   const url = `https://voicedrop.cn/books/${format ? `?format=${format}` : ""}`;
   const req = new Request(url, { headers: token ? { Authorization: "Bearer " + token } : {} });
-  return onRequest({ request: req, env, params: { path: [] } });
+  return onRequest({ request: req, env, params: { path: [] }, waitUntil: (p) => { if (bg) bg.push(p); } });
 }
+const titleOf = (books, slug) => books.find((b) => b.slug === slug).title;
+const cacheDoc = (env) => JSON.parse(env.FILES._store.get(SHELF_CACHE_KEY));
 
 describe("书架类目", () => {
   it("category 只认八个词，别的当没写；导航按固定顺序只列有书的类目", async () => {
@@ -61,31 +64,85 @@ describe("书架类目", () => {
 });
 
 describe("书架缓存", () => {
-  it("第一次请求后缓存落 R2；book.json 偷偷改了但没失效 → 仍旧读缓存；删缓存 → 现算", async () => {
+  it("第一次请求同步现算并落 R2；book.json 偷偷改了但没失效 → 仍旧读缓存；删缓存 → 再同步现算", async () => {
     const env = await shelfEnv();
     expect(env.FILES._store.has(SHELF_CACHE_KEY)).toBe(false);
     let { books } = await (await call(env, { format: "json" })).json();
     expect(env.FILES._store.has(SHELF_CACHE_KEY)).toBe(true);
-    expect(books.find((b) => b.slug === "entropy").title).toBe("entropy 的书");
+    expect(titleOf(books, "entropy")).toBe("entropy 的书");
 
     env.FILES._store.set(srcKey("entropy"), newBook("entropy", { title: "改过的书名", category: "科学" }));
     ({ books } = await (await call(env, { format: "json" })).json());
-    expect(books.find((b) => b.slug === "entropy").title).toBe("entropy 的书");
+    expect(titleOf(books, "entropy")).toBe("entropy 的书");
 
     await env.FILES.delete(SHELF_CACHE_KEY);
     ({ books } = await (await call(env, { format: "json" })).json());
-    expect(books.find((b) => b.slug === "entropy").title).toBe("改过的书名");
+    expect(titleOf(books, "entropy")).toBe("改过的书名");
   });
 
-  it("过期缓存（builtAt 超过 TTL）不算数", async () => {
+  it("作废 = 盖 staleAt：下一次请求先拿旧清单、后台重算；重算完再请求才是新的", async () => {
     const env = await shelfEnv();
     await call(env, { format: "json" });
-    const cached = JSON.parse(env.FILES._store.get(SHELF_CACHE_KEY));
+    env.FILES._store.set(srcKey("entropy"), newBook("entropy", { title: "改过的书名", category: "科学" }));
+    await invalidateShelf(env);
+    expect(cacheDoc(env).staleAt).toBeTruthy();
+    expect(cacheDoc(env).books.length).toBeGreaterThan(0);   // 旧清单还在，没被删
+
+    const bg = [];
+    let { books } = await (await call(env, { format: "json", bg })).json();
+    expect(titleOf(books, "entropy")).toBe("entropy 的书");   // 先给旧的
+    expect(bg.length).toBe(1);                                // 起了一次后台重算
+
+    await Promise.all(bg);
+    expect(cacheDoc(env).staleAt).toBeUndefined();
+    expect(cacheDoc(env).rebuildingAt).toBeUndefined();
+    ({ books } = await (await call(env, { format: "json" })).json());
+    expect(titleOf(books, "entropy")).toBe("改过的书名");
+  });
+
+  it("重算锁：一分钟内已有人在重算 → 不再起第二次；锁过期 → 照起", async () => {
+    const env = await shelfEnv();
+    await call(env, { format: "json" });
+    const doc = cacheDoc(env);
+    env.FILES._store.set(SHELF_CACHE_KEY, JSON.stringify({ ...doc, staleAt: Date.now(), rebuildingAt: Date.now() - 10 * 1000 }));
+    let bg = [];
+    let r = await call(env, { format: "json", bg });
+    expect(r.status).toBe(200);
+    expect(bg.length).toBe(0);
+    expect(JSON.parse(env.FILES._store.get(SHELF_CACHE_KEY)).staleAt).toBeTruthy();  // 没人动它
+
+    env.FILES._store.set(SHELF_CACHE_KEY, JSON.stringify({ ...doc, staleAt: Date.now(), rebuildingAt: Date.now() - 2 * 60 * 1000 }));
+    bg = [];
+    r = await call(env, { format: "json", bg });
+    expect(bg.length).toBe(1);
+    await Promise.all(bg);
+    expect(cacheDoc(env).staleAt).toBeUndefined();
+  });
+
+  it("超过 TTL 的缓存同样先用后算", async () => {
+    const env = await shelfEnv();
+    await call(env, { format: "json" });
+    const cached = cacheDoc(env);
     cached.builtAt = Date.now() - 2 * 60 * 60 * 1000;
     env.FILES._store.set(SHELF_CACHE_KEY, JSON.stringify(cached));
     env.FILES._store.set(srcKey("entropy"), newBook("entropy", { title: "改过的书名", category: "科学" }));
-    const { books } = await (await call(env, { format: "json" })).json();
-    expect(books.find((b) => b.slug === "entropy").title).toBe("改过的书名");
+    const bg = [];
+    let { books } = await (await call(env, { format: "json", bg })).json();
+    expect(titleOf(books, "entropy")).toBe("entropy 的书");
+    await Promise.all(bg);
+    ({ books } = await (await call(env, { format: "json" })).json());
+    expect(titleOf(books, "entropy")).toBe("改过的书名");
+  });
+
+  it("没有 waitUntil（本地/测试）也不会挂：重算自己跑完", async () => {
+    const env = await shelfEnv();
+    await call(env, { format: "json" });
+    await invalidateShelf(env);
+    const req = new Request("https://voicedrop.cn/books/?format=json");
+    const r = await onRequest({ request: req, env, params: { path: [] } });
+    expect(r.status).toBe(200);
+    for (let i = 0; i < 20 && cacheDoc(env).staleAt; i++) await new Promise((res) => setTimeout(res, 5));
+    expect(cacheDoc(env).staleAt).toBeUndefined();
   });
 
   it("缓存是全量（含 hidden 书），按请求者过滤：匿名看不到 hidden，主人看得到", async () => {
@@ -101,21 +158,21 @@ describe("书架缓存", () => {
   it("隐藏开关写完 book.json 顺手作废缓存", async () => {
     const env = await shelfEnv();
     await call(env, { format: "json" });
-    expect(env.FILES._store.has(SHELF_CACHE_KEY)).toBe(true);
+    expect(cacheDoc(env).staleAt).toBeUndefined();
     const req = new Request("https://voicedrop.cn/books/entropy/hidden", {
       method: "POST", headers: { Authorization: "Bearer " + OWNER_TOK }, body: JSON.stringify({ hidden: true }),
     });
     // entropy 没 owner → 归发布者，OWNER_TOK 不是主人 → 403，不该动缓存
     let r = await onRequest({ request: req, env, params: { path: ["entropy", "hidden"] } });
     expect(r.status).toBe(403);
-    expect(env.FILES._store.has(SHELF_CACHE_KEY)).toBe(true);
+    expect(cacheDoc(env).staleAt).toBeUndefined();
     // secret 是主人的 → 200，缓存作废
     const req2 = new Request("https://voicedrop.cn/books/secret/hidden", {
       method: "POST", headers: { Authorization: "Bearer " + OWNER_TOK }, body: JSON.stringify({ hidden: false }),
     });
     r = await onRequest({ request: req2, env, params: { path: ["secret", "hidden"] } });
     expect(r.status).toBe(200);
-    expect(env.FILES._store.has(SHELF_CACHE_KEY)).toBe(false);
+    expect(cacheDoc(env).staleAt).toBeTruthy();
   });
 
   it("touchesShelf：书文件夹下任何 key 都算，别的 scope / books 根本身不算", () => {
