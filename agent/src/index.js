@@ -32,6 +32,7 @@ import { editGate, claudeCostUY, imageCostUY, bookCostUY, BOOK_SUANLI, bookRevis
 import { ensureAccount, balanceUY, debit, editCount, getLedger, grantBucket, allAccounts, mintLedger, referralLedger, usageSummary } from "./usage_store.js";
 import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleIapRoute } from "./iap.js";
+import { handleWechatPayProductRoute } from "./wechat-pay-product.js";
 import { handleWechatPayRoute, runWechatPaySchedule } from "./wechat-pay.js";
 import { handleSubscriptionStatusRoute } from "./subscription-status.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
@@ -1080,6 +1081,8 @@ export async function handleUsageRoute(url, request, env) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    const productPage = handleWechatPayProductRoute(url, request);
+    if (productPage) return productPage;
 
     // ── /agent/llm-health ── admin: probe the direct Anthropic path AND the
     // ENAM relay DO (colo + a 1-token call each), so a geo-block regression is
