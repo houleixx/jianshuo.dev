@@ -22,50 +22,29 @@ import { coreGetReport } from '../../lib/core-db.js';
 //                      voicedrop.cn 落地页），有 cover.jpg 铺封面图，没有的用布面缺省
 //                      封面（封面色按 slug 哈希稳定分配），书脊/页口/投影一比一复刻。
 //                      改这边样式记得同步看 iOS 那份，两边保持一致。
-//                      网页版另加：顶部类目导航（六词：商业/身心/人文/投资/AI/故事，
-//                      样式对齐社区 tabRow）+ 书名下类目小标签；iOS 暂无此导航。
+//                      网页版另加：搜索框（书名/作者/章节，纯前端，章节索引懒加载
+//                      ?format=search）+ 顶部类目导航（八词，见 lib/books-shelf.js，
+//                      样式对齐社区 tabRow）+ 书名下类目小标签；iOS 暂无搜索与导航。
 // GET /books/?format=json → 同一份索引的 JSON 版（iOS「写书」tab 图书馆用）：
-//                      {books:[{slug,title,main,sub,c,c2,author,cover,coverAt,chapters,createdAt}]}。
+//                      {books:[{slug,title,main,sub,c,c2,author,category,cover,coverAt,chapters,createdAt}]}。
 //                      coverAt = cover.jpg 的上传时间戳，书架 <img> 用它当 ?v= 破缓存。
-//                      cover = 该书文件夹里有没有 cover.jpg；chapters = 顶层
-//                      章节 html 数（排除 index/intro）。
+//                      cover = 该书文件夹里有没有 cover.jpg；chapters = done 的章节数。
+// GET /books/?format=search → 搜索索引：{books:[{slug,title,author,category,sub,intro,
+//                      toc:[{t,b}]}]}，sub = 副标题、intro = 导读钩子、toc = 章节标题+
+//                      一句 brief。新书取 book.json，老书（没有 chapters 清单）抠目录页。
 // GET /books/<name>  → 文件本体，inline 展示；html/md/txt 只缓存 5 分钟（书会
 //                      反复重发迭代），其余（pdf/图片等大文件）缓存一天。
-
-const PUBLISHER = 'users/anon-ae209ac53499d51d513425503bd134b0/books/';
-// 发布者账号 scope（去掉尾段 books/）：存量老书没有 _src/book.json、拿不到 owner，
-// 一律回落到这个账号——公开书架历来就是发布者(建硕)名下，无主老书归它，仍显示「王建硕」。
-const PUBLISHER_SCOPE = PUBLISHER.replace(/books\/$/, '');
-
-// 类目（2026-08-17 定的六个词）：书架导航 + 每本书的标签。
-// 新书优先读自己 index.html 里的 <meta name="category" content="…">（写书 skill
-// 以后可自报类目）；没有的落到这张手工映射表；两边都没有就不挂标签、只出现在「全部」。
-const CATEGORY_ORDER = ['商业', '身心', '人文', '投资', 'AI', '故事'];
-const CATEGORY_OF = (() => {
-  const groups = {
-    商业: ['who-actually-sees-your-post', 'us-tax-machine', 'zhu-rongji-the-engineer',
-      'dragon-restaurant-as-a-system', 'beauty-store-growth-flywheel', 'the-memory-titan',
-      'musk-slogan-or-cash', 'miners-neocloud-gambit', 'hynix-survivor-saga',
-      'microsoft-buy-and-not-build', 'oracle-cloud-gamble', 'software-survivors-2000',
-      'positive-marginal-cost', 'software-empires', 'us-software-history'],
-    身心: ['dont-wait-for-retirement', 'sitting-still-mechanism', 'judgment', 'zhengji-xinfa',
-      'yandu-jizhu', 'action-first', 'energy-thread', '400-gram-fast', 'walking-home',
-      'the-god-you-build', 'sleep-drift', 'entropy'],
-    人文: ['nordic-shaped-by-ice-and-sea', 'art-as-human-evidence',
-      'higashino-keigo-engineering-mystery', 'homer-odyssey-for-moviegoers', 'nanfeng-xizhou',
-      'secret-banquet-kitchen', 'troy-luoyang-order-collapse', 'japan-countryside-philosophy',
-      'tcm-analysis', 'bazi', 'jingangjing'],
-    投资: ['pm-edge-in-markets', 'reading-a-company-google-buffett', 'how-money-moves', 'jingzu',
-      'stock-101', 'why-did-he-sell', 'options-trading', 'market-cap', 'money'],
-    AI: ['the-line-ai-cant-cross', 'why-your-major-lied', 'pm-full-stack-ai', 'beyond-code',
-      'dev-leverage', 'shoucuo-llm'],
-    故事: ['meow-team-saves-the-moon', 'backflow-shanghai-flood', 'mountain-night-letters',
-      'meow-squad-resilience', 'aetheria', 'tangmusan'],
-  };
-  const map = {};
-  for (const [cat, slugs] of Object.entries(groups)) for (const s of slugs) map[s] = cat;
-  return map;
-})();
+//
+// 书架清单缓存（2026-09-15）：以上三种索引都从 readShelf() 拿同一份全量清单——R2 里
+// 一份 JSON（SHELF_CACHE_KEY，1 小时 TTL），任何写进 books/<slug>/ 的上传（files API）
+// 和这里的隐藏开关都会删掉它。此前每刷一次书架都逐本读 book.json（两百多次 R2 读），
+// 搜索还要抠 41 本老书的目录页，不缓存扛不住。
+import {
+  PUBLISHER, PUBLISHER_SCOPE, SHELF_CACHE_KEY, SHELF_CACHE_TTL_MS,
+  CATEGORY_ORDER, normalizeCategory, invalidateShelf,
+} from '../../lib/books-shelf.js';
+// 类目真源 = 各书 `_src/book.json` 的 category（写书 skill 规划大纲时自报；存量 209 本
+// 于 2026-09-15 批量回填）。此前代码里那张 59 本的手写映射表已删——不认的词当没写。
 
 const TYPES = {
   pdf: 'application/pdf', epub: 'application/epub+zip', mobi: 'application/x-mobipocket-ebook',
@@ -93,8 +72,10 @@ export async function onRequest({ request, env, params }) {
 
   // 索引页：/books 或 /books/（?format=json 给 App 吃结构化数据）
   if (!rel) {
-    const wantJSON = new URL(request.url).searchParams.get('format') === 'json';
-    return wantJSON ? indexJSON(env, request) : index(env);
+    const format = new URL(request.url).searchParams.get('format');
+    if (format === 'json') return indexJSON(env, request);
+    if (format === 'search') return searchJSON(env, request);
+    return index(env);
   }
 
   // 整本书打印视图（/books/<slug>/print）：封面+导读+全部章节拼一页、分页 CSS、
@@ -429,7 +410,10 @@ const splitTitle = (t) => {
 /// 全量列文件夹考古时间戳」已废——那套是每刷 ~350 次 R2 操作、9 秒的元凶。
 /// listing 必须 cursor 翻页：R2 delimited list 按「扫过的 key 数」截断，不是按
 /// 返回的前缀数（admin/llm 页曾因此冻在 2026-07-13）。
-async function collectBooks(env, viewerScope = '') {
+/// 全量清单（不分请求者、含 hidden 书与 owner）：每本
+/// {slug,title,author,category,hidden,owner,cover,coverAt,chapters,createdAt,subtitle,intro,toc}。
+/// 这是缓存的那份；collectBooks / searchJSON 再按请求者过滤、按用途裁字段。
+async function buildShelf(env) {
   const slugs = [];
   let cursor;
   do {
@@ -448,10 +432,6 @@ async function collectBooks(env, viewerScope = '') {
     // 失败/流产任务只留 _src 空壳、没有 createdAt → 不上架（幽灵书拦截，语义与
     // 旧的「看 index.html 存在」一致）。
     if (!b || !b.createdAt) return null;
-    // hidden 书主人例外（2026-08-23）：带登录态且 owner == 请求者时仍列出、条目标
-    // hidden——App 书架贴「隐藏」角标；别人看不见。
-    const hidden = b.hidden === true;
-    if (hidden && !(viewerScope && b.owner === viewerScope)) return null;
     // 作者：book.json 自报优先；没有的按书主人 owner 显示 profile.name（没设置则
     // id 前 6 位大写），owner 缺失的老书回落发布者账号（ae209ac5 → 建硕）。
     let author = String(b.author || '').trim().slice(0, 20);
@@ -460,27 +440,91 @@ async function collectBooks(env, viewerScope = '') {
       catch {}
     }
     const title = String(b.title || slug);
-    const category = String(b.category || CATEGORY_OF[slug] || '').slice(0, 8);
-    // 章节数：chapters 数组数 done（新书）；迁移补录的老书存的是数值 chaptersCount。
-    const chapters = Array.isArray(b.chapters)
-      ? b.chapters.filter((x) => x && x.status === 'done').length
-      : (Number(b.chaptersCount) || 0);
-    const [main, sub] = splitTitle(title);
-    const [c, c2] = colorOf(slug);
-    // mine：这本是不是请求者自己的。App 的 ⋯ 菜单据此决定「隐藏本书 / 修改这本书」
-    // 显不显示——ShelfBook 里原本没有任何归属字段，客户端无从判断（2026-08-31：
-    // 建硕在别人的书上点隐藏，服务端 403，App 只能笼统说「没改成」）。归属口径与
-    // setHidden 一致：owner 缺失的老书算发布者的。匿名访客一律不带。
-    const mine = !!viewerScope && (b.owner || PUBLISHER_SCOPE) === viewerScope;
-    return { slug, title, main, sub, c, c2, author, category,
+    const category = normalizeCategory(b.category);
+    // 章节：chapters 数组数 done（新书）；迁移补录的老书存的是数值 chaptersCount。
+    const list = Array.isArray(b.chapters) ? b.chapters.filter((x) => x && x.status === 'done') : null;
+    const chapters = list ? list.length : (Number(b.chaptersCount) || 0);
+    // 搜索用的目录：新书直接用 book.json 的 done 章节；老书没有清单，抠目录页。
+    let subtitle = String(b.subtitle || '').trim();
+    let intro = String(b.introTeaser || '').trim();
+    let toc;
+    if (list) {
+      toc = list.map((x) => ({ t: String(x.title || '').trim(), b: String(x.brief || '').trim() }));
+    } else {
+      const s = await scrapeLegacyToc(env, slug);
+      toc = s.toc; subtitle = subtitle || s.sub; intro = intro || s.intro;
+    }
+    // 归属口径与 setHidden 一致：owner 缺失的老书算发布者的。
+    return { slug, title, author, category, hidden: b.hidden === true, owner: b.owner || PUBLISHER_SCOPE,
              cover: b.cover === true, coverAt: Number(b.coverAt) || 0,
-             chapters, createdAt: Number(b.createdAt) || 0,
-             ...(hidden ? { hidden: true } : {}),
-             ...(mine ? { mine: true } : {}) };
+             chapters, createdAt: Number(b.createdAt) || 0, subtitle, intro, toc };
   }))).filter(Boolean);
   // 时间倒序：最新的书在最前面（同龄兜底按书名，保证顺序稳定）。
   books.sort((a, b) => (b.createdAt - a.createdAt) || String(a.title).localeCompare(String(b.title), 'zh'));
   return books;
+}
+
+/// 老书（2026-08-15 `_src` 上线前发的 41 本）的目录页：<p class="sub">副题、introcard 里
+/// 的 <p> 导读、每行 <span class="t"><b>章题</b><p>一句</p></span>。最老的几本模板不同、
+/// 抠不到章节就空着——书名副题已足够搜。抠不到绝不 throw。
+const untag = (s) => String(s || '').replace(/<[^>]+>/g, '')
+  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  .replace(/\s+/g, ' ').trim();
+async function scrapeLegacyToc(env, slug) {
+  const out = { sub: '', intro: '', toc: [] };
+  try {
+    const o = await env.FILES.get(`${PUBLISHER}${slug}/index.html`);
+    if (!o) return out;
+    const t = await o.text();
+    out.sub = untag((/class="sub"[^>]*>(.*?)<\//s.exec(t) || [])[1]);
+    out.intro = untag((/class="introcard".*?<p>(.*?)<\/p>/s.exec(t) || [])[1]);
+    for (const m of t.matchAll(/<span class="t">\s*<b>(.*?)<\/b>\s*(?:<p>(.*?)<\/p>)?/gs)) {
+      out.toc.push({ t: untag(m[1]), b: untag(m[2]) });
+    }
+  } catch {}
+  return out;
+}
+
+/// 全量清单，R2 缓存优先（builtAt 在 TTL 内才算）；没有/过期就现算并写回。
+/// 写回失败不影响本次响应——最多下次再算一遍。
+async function readShelf(env) {
+  try {
+    const o = await env.FILES.get(SHELF_CACHE_KEY);
+    if (o) {
+      const c = JSON.parse(await o.text());
+      if (c && Array.isArray(c.books) && Date.now() - (Number(c.builtAt) || 0) < SHELF_CACHE_TTL_MS) return c.books;
+    }
+  } catch {}
+  const books = await buildShelf(env);
+  try {
+    await env.FILES.put(SHELF_CACHE_KEY, JSON.stringify({ builtAt: Date.now(), books }),
+      { httpMetadata: { contentType: 'application/json' } });
+  } catch {}
+  return books;
+}
+
+/// 请求者能看到的书（hidden 书只有主人看得到）。
+const visibleTo = (books, viewerScope) =>
+  books.filter((b) => !b.hidden || (!!viewerScope && b.owner === viewerScope));
+
+/// 书架条目（HTML 书架与 ?format=json 共用）。
+async function collectBooks(env, viewerScope = '') {
+  const all = await readShelf(env);
+  // hidden 书主人例外（2026-08-23）：带登录态且 owner == 请求者时仍列出、条目标
+  // hidden——App 书架贴「隐藏」角标；别人看不见。
+  return visibleTo(all, viewerScope).map((b) => {
+    const [main, sub] = splitTitle(b.title);
+    const [c, c2] = colorOf(b.slug);
+    // mine：这本是不是请求者自己的。App 的 ⋯ 菜单据此决定「隐藏本书 / 修改这本书」
+    // 显不显示——ShelfBook 里原本没有任何归属字段，客户端无从判断（2026-08-31：
+    // 建硕在别人的书上点隐藏，服务端 403，App 只能笼统说「没改成」）。归属口径与
+    // setHidden 一致：owner 缺失的老书算发布者的。匿名访客一律不带。
+    const mine = !!viewerScope && b.owner === viewerScope;
+    return { slug: b.slug, title: b.title, main, sub, c, c2, author: b.author, category: b.category,
+             cover: b.cover, coverAt: b.coverAt, chapters: b.chapters, createdAt: b.createdAt,
+             ...(b.hidden ? { hidden: true } : {}),
+             ...(mine ? { mine: true } : {}) };
+  });
 }
 
 const jsonResp = (x, status = 200) => new Response(JSON.stringify(x), {
@@ -542,6 +586,7 @@ async function setHidden(env, request, slug) {
   if (hidden) doc.hidden = true; else delete doc.hidden;
   await env.FILES.put(key, JSON.stringify(doc, null, 2),
     { httpMetadata: { contentType: 'application/json' } });
+  await invalidateShelf(env);   // 这里直接写 R2、不经 files API，得自己作废书架缓存
   // 社区索引同步（2026-09-06）：书架和社区是两套存储——只改 book.json 的话书从书架
   // 消失了，社区 feed 里那张书卡还挂着（feed 查的是 community_posts 的 WHERE hidden=0），
   // 隐藏只做了一半。取消隐藏不能无脑写 0：被举报的帖子也是靠这一列压着的，回落查一次
@@ -577,6 +622,26 @@ async function indexJSON(env, request) {
   });
 }
 
+/// 搜索索引（书架页搜索框懒加载）：书名/作者/类目页面上已有，这里补副标题、导读、
+/// 章节标题+一句 brief——两百本约两三百 KB，浏览器里子串匹配就够，中文不用分词。
+/// 可见性口径与书单完全一致（自己的 hidden 书带 token 才进）。
+async function searchJSON(env, request) {
+  const scope = await viewerScope(env, request);
+  const all = await readShelf(env);
+  const books = visibleTo(all, scope).map((b) => ({
+    slug: b.slug, title: b.title, author: b.author, category: b.category,
+    sub: b.subtitle || '', intro: b.intro || '', toc: Array.isArray(b.toc) ? b.toc : [],
+  }));
+  return new Response(JSON.stringify({ books }), {
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': scope ? 'no-store' : 'public, max-age=300',
+      Vary: 'Authorization',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+}
+
 // 与 iOS BooksShelfView.swift 一比一：色值 / 圆角 / 间距 / 阴影都从那边抄，
 // 改任何一边都要同步另一边。SwiftUI shadow(radius:r) ≈ CSS blur 2r。
 async function index(env) {
@@ -594,7 +659,7 @@ async function index(env) {
     const face = b.cover
       ? `<img src="${href}cover.jpg?v=${b.coverAt}" alt="" loading="lazy">`
       : `<span class="cloth"><b>${esc(b.main)}</b><i></i>${b.sub ? `<small>${esc(b.sub)}</small>` : ''}</span>`;
-    return `<a class="cell" href="${href}" title="${esc(b.title)}" data-cat="${esc(b.category)}">` +
+    return `<a class="cell" href="${href}" title="${esc(b.title)}" data-cat="${esc(b.category)}" data-slug="${esc(b.slug)}" data-author="${esc(b.author)}">` +
       `<span class="cover" style="--c:${b.c};--c2:${b.c2}">${face}<i class="spine"></i><i class="edge"></i></span>` +
       `<span class="cap"><b>${esc(b.main)}</b><small>${metaLine(b)}</small></span></a>`;
   };
@@ -673,8 +738,28 @@ async function index(env) {
   /* 书名下的小类目标签：随 cap small 一行，浅棕描边小胶囊。 */
   .tag{display:inline-block;font-size:10.5px;line-height:1;color:#8A7F6C;
     border:1px solid #D8CCB6;border-radius:8px;padding:2.5px 6px;vertical-align:1px}
+  /* 搜索框：奶油白圆角条，与「写书」空格同一套浅底；输入后右侧出 × 清除。 */
+  .search{display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;
+    background:#F3ECE0;border:1px solid #E3D7C2;border-radius:12px}
+  .search svg{flex:none;width:15px;height:15px;stroke:#A89E8E;fill:none;stroke-width:2;stroke-linecap:round}
+  .search input{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-size:15px;
+    color:#2A2521;outline:none;-webkit-appearance:none;appearance:none}
+  .search input::placeholder{color:#A89E8E}
+  .search input::-webkit-search-cancel-button{display:none}
+  .search .clr{display:none;flex:none;border:0;width:18px;height:18px;border-radius:50%;
+    background:#D8CCB6;color:#fff;font-size:13px;line-height:18px;padding:0;cursor:pointer}
+  .search.has .clr{display:block}
+  .empty{color:#A89E8E;text-align:center;padding:44px 0 20px;font-size:14px}
+  /* 章节命中提示：只匹配到章节而不是书名时，在类目行下多出一行「第三章 · …」 */
+  .hit{display:block;margin-top:2px;font-size:12px;color:#8A7F6C;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style></head>
 <body><main>
+<form class="search" id="search" onsubmit="return false">
+  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+  <input id="q" type="search" placeholder="搜书名、作者、章节" autocomplete="off" autocorrect="off" spellcheck="false">
+  <button type="button" class="clr" id="qclr" aria-label="清除">×</button>
+</form>
 <nav class="tabs">${tabs}</nav>
 <div id="shelf">
 ${rows.join('\n')}
@@ -684,12 +769,50 @@ ${rows.join('\n')}
 (function(){
   var tabs=document.querySelectorAll('.tabs a');
   var shelf=document.getElementById('shelf');
+  var form=document.getElementById('search'),q=document.getElementById('q'),qclr=document.getElementById('qclr');
   var all=[].slice.call(shelf.querySelectorAll('a.cell'));
   var write=all.shift();                       // 第一格「写书」入口，任何类目下都在
-  function render(cat){
-    var list=all.filter(function(c){return !cat||c.getAttribute('data-cat')===cat;});
-    var cells=[write].concat(list);
+  var cat='';                                  // 当前类目 tab
+  var idx=null,idxLoading=false;               // 章节索引：第一次打字才拉 ?format=search
+  all.forEach(function(c){
+    c._q=((c.getAttribute('title')||'')+' '+(c.getAttribute('data-author')||'')+' '+(c.getAttribute('data-cat')||'')).toLowerCase();
+  });
+  // 章节索引里的命中：返回命中的章节标题（书名没中、章节中了时页面上提示一行），没中 false。
+  function tocHit(e,kw){
+    if(!e)return false;
+    if((e.sub||'').toLowerCase().indexOf(kw)>=0||(e.intro||'').toLowerCase().indexOf(kw)>=0)return true;
+    var toc=e.toc||[];
+    for(var i=0;i<toc.length;i++){
+      if(((toc[i].t||'')+' '+(toc[i].b||'')).toLowerCase().indexOf(kw)>=0)return toc[i].t||true;
+    }
+    return false;
+  }
+  function setHit(c,text){
+    var old=c.querySelector('.hit');
+    if(old)old.parentNode.removeChild(old);
+    if(text&&typeof text==='string'){
+      var h=document.createElement('span');h.className='hit';h.textContent=text;
+      c.querySelector('.cap').appendChild(h);
+    }
+  }
+  function render(){
+    var kw=q.value.trim().toLowerCase();
+    form.classList.toggle('has',!!kw);
+    var list=all.filter(function(c){
+      if(cat&&c.getAttribute('data-cat')!==cat)return false;
+      if(!kw){setHit(c,null);return true;}
+      if(c._q.indexOf(kw)>=0){setHit(c,null);return true;}
+      var h=idx?tocHit(idx[c.getAttribute('data-slug')],kw):false;
+      if(h){setHit(c,h);return true;}
+      return false;
+    });
+    var cells=kw?list:[write].concat(list);   // 搜索时只出结果，不带「写书」格
     shelf.textContent='';
+    if(!cells.length){
+      var em=document.createElement('div');em.className='empty';
+      em.textContent=idxLoading?'正在翻章节…':'没有找到「'+q.value.trim()+'」';
+      shelf.appendChild(em);return;
+    }
     for(var i=0;i<cells.length;i+=2){
       var row=document.createElement('div');row.className='row';
       row.appendChild(cells[i]);
@@ -699,12 +822,22 @@ ${rows.join('\n')}
       shelf.appendChild(bar);
     }
   }
+  function loadIndex(){
+    if(idx||idxLoading)return;
+    idxLoading=true;
+    fetch(location.pathname+'?format=search').then(function(r){return r.json();}).then(function(d){
+      idx={};(d.books||[]).forEach(function(b){idx[b.slug]=b;});
+    }).catch(function(){idx={};}).then(function(){idxLoading=false;render();});
+  }
+  q.addEventListener('input',function(){if(q.value.trim())loadIndex();render();});
+  qclr.addEventListener('click',function(){q.value='';render();q.focus();});
   [].forEach.call(tabs,function(t){
     t.addEventListener('click',function(e){
       e.preventDefault();
       [].forEach.call(tabs,function(x){x.classList.remove('on');});
       t.classList.add('on');
-      render(t.getAttribute('data-cat'));
+      cat=t.getAttribute('data-cat')||'';
+      render();
     });
   });
 })();

@@ -35,6 +35,7 @@ cat ~/.claude/skills/wjs-voicedrop-writing-explainary-book/SKILL.md
 - **调用方若已在任务里指定了类型**（如 lab 的 /api/book 传了 `type`/`kind`），按它来，别自作主张改类型。
 - **没指定就自己判断**；实在拿不准偏向科普书。判断完在 `book.json` 写上 `"type"` 字段（`explainary` / `childrens` / `novel`），`build.mjs` 会据此调整页脚/默认副标注等通用文案。
 - 选定后**通篇只用这一种写法**——不要在一本书里混搭三种风格。
+- **类目（`category`）也在这一步定**，八选一：`商业` / `投资` / `AI` / `科学` / `人文` / `身心` / `生活` / `故事`。`childrens` 和 `novel` 一律「故事」；科普书按主题：投资偏市场、金钱、估值；商业偏经营、产业、公司史、产品；AI 偏人工智能与软件；科学偏数理、自然、工程科普；人文偏历史、艺术、哲学、制度；身心偏健康、修行、心态、习惯；生活偏吃喝、旅行、玩乐、家事。只能用这八个词，不要自造；不写的书只出现在书架「全部」里，不挂标签。
 
 ---
 
@@ -82,6 +83,7 @@ reviews/01.json      # 第 1 章的评审意见（留痕，便于重写）
   "jobId": "（调用任务里给的 jobId，原样抄进来——服务端登记簿靠它对号，漏了这本书就没有主人）",
   "owner": "（调用任务里给的 owner scope，原样抄进来——产权真源，谁能在线修改这本书以此为准；服务端也会兜底补）",
   "type": "explainary",                    // explainary | childrens | novel，决定通用文案（页脚/默认副标注）；缺省当 explainary
+  "category": "科学",                       // 书架类目，八选一：商业 / 投资 / AI / 科学 / 人文 / 身心 / 生活 / 故事（见上面「类目」一条）
   "slug": "entropy",                       // 决定 books/<slug>/ 文件夹与 /voicedrop/books/<slug>/ 路径；小写、连字符、别撞已有的
   "title": "熵：为什么一切都在变乱",
   "subtitle": "从洗牌到宇宙热寂，一个工程师能摸到的无序",
@@ -111,7 +113,7 @@ reviews/01.json      # 第 1 章的评审意见（留痕，便于重写）
 
 ### 1. 建筑师写大纲（1 个 agent）
 
-按写作 skill 的大纲要求 spawn 一个 agent，产出：书名、slug、subtitle、切入角度、章节清单（每章 `no / title / 一句 brief`）、tint/dark 配色、一句 introTeaser。把结果落成 `book.json`（全部章节先标 `planned`；写上 `type`）。
+按写作 skill 的大纲要求 spawn 一个 agent，产出：书名、slug、subtitle、切入角度、章节清单（每章 `no / title / 一句 brief`）、tint/dark 配色、一句 introTeaser。把结果落成 `book.json`（全部章节先标 `planned`；写上 `type` 和 `category`）。
 
 ### 2. 先发一个骨架（第一次「有进展就发」）
 

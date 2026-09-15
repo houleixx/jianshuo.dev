@@ -88,7 +88,11 @@ const srcName = f => `_src/${f}`;
 // ——不这么做的话，任何一次发布（换封面 / 刷目录 / 重发单章）都会把隐藏抹平：
 // 2026-09-06《装睡的人》就是隐藏当晚被「上封面」那一步顶回书架的。
 // 顺手回写工作目录，让本地那份不再继续漂着。
-async function mergeLiveHidden(b) {
+//
+// category（2026-09-15 起）同一条路：存量书的类目是在线上批量回填的，工作目录那份
+// 根本没这个字段；本地**没写**就从线上接过来，本地**写了**以本地为准（修书指令
+// 「把这本归到投资」改的正是工作目录这份，得让它能发出去）。
+async function mergeLiveFields(b) {
   let live;
   try {
     const r = await fetch(`${publicUrl(b.slug, srcName("book.json"))}?_=${Date.now()}`);
@@ -96,15 +100,23 @@ async function mergeLiveHidden(b) {
     live = await r.json();
   } catch { return; }                         // 读不到线上不卡发布：宁可漏一次也不能让发书失败
   if (!live || !live.slug) return;            // 不像 book.json 就当没读到
+  const changed = [];
   const want = live.hidden === true;
-  if (want === (b.hidden === true)) return;
-  if (want) b.hidden = true; else delete b.hidden;
+  if (want !== (b.hidden === true)) {
+    if (want) b.hidden = true; else delete b.hidden;
+    changed.push(`hidden ← 线上（${want}）`);
+  }
+  if (!b.category && typeof live.category === "string" && live.category) {
+    b.category = live.category;
+    changed.push(`category ← 线上（${live.category}）`);
+  }
+  if (!changed.length) return;
   try { writeFileSync(join(workdir, "book.json"), JSON.stringify(b, null, 2) + "\n"); } catch {}
-  console.log(`ok  hidden ← 线上（${want}）`);
+  for (const c of changed) console.log(`ok  ${c}`);
 }
 
 async function syncBookJson(b) {
-  await mergeLiveHidden(b);
+  await mergeLiveFields(b);
   await upload(b.slug, srcName("book.json"), JSON.stringify(b, null, 2) + "\n", "application/json");
 }
 

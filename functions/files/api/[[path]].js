@@ -29,6 +29,7 @@ import { readStyleDoc, writeStyleDoc, setStyleHead, resolveStyle, parseStyleMark
 import { sanitizeSeg, sha256hex, timingSafeEqual, bytesToB64url, b64urlToBytes, b64urlToString, b64url, hmacSign, verifySession, anonScopeFromToken, bearerToken, hasVerifiedBinding } from "../../lib/auth.js";
 import { checkArticlesShareable } from "../../lib/moderation.js";
 import { upsertCommunityPost, deleteCommunityPost, setCommunityPostHidden } from "../../lib/community-index.js";
+import { touchesShelf, invalidateShelf } from "../../lib/books-shelf.js";
 import { coreLoadPromptShares, coreDeleteUserData, coreListArticles, coreReplaceArticles, coreUpsertRecording, coreDeleteRecording, coreListRecordings, coreReplaceRecordings, coreGetIdentity, corePutIdentity, coreUpsertProfile, coreGetProfile, corePutPushToken, corePutReport, coreDeleteReport, coreGetReport, corePendingReportIds, coreListReports } from "../../lib/core-db.js";
 
 // Miner sidecars that live under articles/ and end in .json but are NOT article
@@ -1170,6 +1171,9 @@ async function handleRequest(context) {
     const putRes = await env.FILES.put(key, request.body, {
       httpMetadata: { contentType: request.headers.get('Content-Type') || 'application/octet-stream' },
     });
+    // 书文件夹下任何写入（build.mjs 发书/换封面/改 book.json、类目回填）→ 书架缓存作废，
+    // 下次 /voicedrop/books 现算。不作废的话新书/新类目最迟一小时后才出现。
+    if (touchesShelf(key)) await invalidateShelf(env);
     // 新录音同步进录音索引（GET /recordings 直出它）。key 形态对用户/admin 通用。
     const mRec = /^(users\/[^/]+\/)(VoiceDrop-[^/]+\.m4a)$/.exec(key);
     if (mRec) {
