@@ -1,0 +1,17 @@
+{
+  "name": "voicedrop-gateway-test",
+  "main": "index.mjs",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "voicedrop-test.baixing.work", "custom_domain": true }
+  ],
+  "services": [
+    { "binding": "AGENT", "service": "voicedrop-agent-test" },
+    { "binding": "RECO", "service": "voicedrop-reco-test" }
+  ],
+  "vars": {
+    "PAGES_ORIGIN": "https://voicedrop-test.pages.dev"
+  }
+}

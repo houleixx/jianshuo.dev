@@ -13,6 +13,7 @@ on:
       - 'wrangler.test.jsonc'
       - 'agent/**'
       - 'reco/**'
+      - 'infra/voicedrop-gateway/**'
       - '.github/workflows/deploy-test.yml'
   workflow_dispatch:
 
@@ -74,3 +75,5 @@ jobs:
       - name: Deploy test Reco Worker
         working-directory: reco
         run: npx -y wrangler@4 deploy --config wrangler.test.jsonc
+      - name: Deploy unified test gateway
+        run: npx -y wrangler@4 deploy --config infra/voicedrop-gateway/wrangler.test.jsonc
