@@ -24,7 +24,6 @@ const QUERY_CONTRACT_URL = "https://api.mch.weixin.qq.com/papay/querycontract";
 const TERMINATE_CONTRACT_URL =
   "https://api.mch.weixin.qq.com/papay/deletecontract";
 const WECHAT_PAY_CONFIG_KEY = "config/wechat-pay.json";
-const WECHAT_PAY_CHARGE_MODE = "notify_after_24h";
 const J = (x, status = 200) =>
   new Response(JSON.stringify(x), {
     status,
@@ -137,9 +136,7 @@ function amountFen(env) {
 }
 
 function ready(env) {
-  // plan_id 本身不能反查商户后台获批的扣费模式。必须由部署者在确认模板为
-  // 「通知后 24 小时自动扣费」后显式声明，避免误把有 7:00–22:00 限制的
-  // 独立预扣费通知模板接入全天申请逻辑。
+  // 当前扣款流程固定使用「通知后 24 小时自动扣费」模板，不另设模式开关。
   return !!(
     env.USAGE &&
     env.WECHAT_PAY_MCH_ID &&
@@ -147,7 +144,6 @@ function ready(env) {
     env.WECHAT_PAY_PLAN_ID &&
     env.WECHAT_PAY_API_V2_KEY &&
     env.WECHAT_PAY_CALLBACK_BASE_URL &&
-    env.WECHAT_PAY_CHARGE_MODE === WECHAT_PAY_CHARGE_MODE &&
     amountFen(env)
   );
 }
