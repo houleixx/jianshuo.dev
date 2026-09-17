@@ -6,6 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   // 使用 Worker 自动生成的 workers.dev 地址，无需自定义 Route。
   "workers_dev": true,
+  // 保留控制台设置的测试商户参数与一分钱金额。
+  "keep_vars": true,
 
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "voicedrop-test-files" }
