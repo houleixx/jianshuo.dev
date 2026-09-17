@@ -98,7 +98,6 @@
   //   WECHAT_PAY_PLAN_ID     — 审核通过的委托代扣模板 ID
   //   WECHAT_PAY_API_V2_KEY  — 委托代扣 V2 API 密钥（XML 回调/请求验签）
   //   WECHAT_PAY_CALLBACK_BASE_URL — 显式公网回调 origin
-  //   WECHAT_PAY_CHARGE_MODE — 固定 notify_after_24h
   //   WECHAT_PAY_QUERY_MODE — 可选 pap，仅已获专用查单权限时设置；默认通用 orderquery
   // Optional:
   //   WECHAT_PAY_AMOUNT_FEN  — 每期金额（分），默认 1990

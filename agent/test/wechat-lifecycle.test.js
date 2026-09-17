@@ -20,7 +20,6 @@ function setup() {
     WECHAT_PAY_PLAN_ID: "plan",
     WECHAT_PAY_API_V2_KEY: "test-key",
     WECHAT_PAY_CALLBACK_BASE_URL: "https://example.test",
-    WECHAT_PAY_CHARGE_MODE: "notify_after_24h",
   };
   let state = "USERPAYING";
   const fetcher = async (url, init) => {

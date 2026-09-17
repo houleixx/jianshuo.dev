@@ -15,7 +15,6 @@ function env(db) {
     FILES: { get: async (key) => key === "config/wechat-pay.json" ? { text: async () => '{"enabled":true}' } : null },
     WECHAT_PAY_MCH_ID: "1900000001", WECHAT_PAY_APP_ID: "wx1234567890", WECHAT_PAY_PLAN_ID: "plan_monthly_19_9",
     WECHAT_PAY_API_V2_KEY: "unit-test-api-key",
-    WECHAT_PAY_CHARGE_MODE: "notify_after_24h",
     WECHAT_PAY_CALLBACK_BASE_URL: "https://jianshuo.dev",
   };
 }
@@ -222,7 +221,7 @@ describe("微信签约、自动续费和入账", () => {
     expect(event.payload || "").not.toContain("pre_entrustweb_id");
   });
 
-  it("每日 Cron 只用 D1 due 索引生成稳定订单号；失败可重试，微信受理后不重复申请", async () => {
+  it("无需额外扣费模式配置，签约及 Cron 正常运行；失败可重试，微信受理后不重复申请", async () => {
     const db = fakeD1(SQL); const e = env(db); await createAndSign(e, db);
     const calls = [];
     const first = await runWechatPaySchedule(e, NOW, applyFetcher(calls));
@@ -492,15 +491,22 @@ describe("微信签约、自动续费和入账", () => {
       .toMatchObject({ period_start_at: oldEnd, period_end_at: addCalendarMonth(oldEnd), status: "charging" });
   });
 
+  it.each([
+    "USAGE", "WECHAT_PAY_MCH_ID", "WECHAT_PAY_APP_ID", "WECHAT_PAY_PLAN_ID",
+    "WECHAT_PAY_API_V2_KEY", "WECHAT_PAY_CALLBACK_BASE_URL",
+  ])("缺少必要配置 %s 时仍拒绝签约并跳过调度", async (key) => {
+    const e = env(fakeD1(SQL));
+    delete e[key];
+    expect((await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK })).status).toBe(503);
+    expect(await runWechatPaySchedule(e, NOW)).toEqual({ skipped: "degraded" });
+  });
+
   it("状态接口沿用 iAP 的订阅桶口径；无 token / 配置不全分别拒绝或降级", async () => {
     const db = fakeD1(SQL); const e = env(db);
     expect((await call(e, "/agent/wechat-pay/contract", { method: "POST" })).status).toBe(401);
     const off = { USAGE: db };
     expect((await call(off, "/agent/wechat-pay/contract", { method: "POST", token: TOK })).status).toBe(503);
-    const modeMissing = env(db);
-    delete modeMissing.WECHAT_PAY_CHARGE_MODE;
-    expect((await call(modeMissing, "/agent/wechat-pay/contract", { method: "POST", token: TOK })).status).toBe(503);
-    expect(await runWechatPaySchedule(modeMissing, NOW)).toEqual({ skipped: "degraded" });
+    expect(await runWechatPaySchedule(off, NOW)).toEqual({ skipped: "degraded" });
     const status = await call(e, "/agent/wechat-pay/status", { token: TOK });
     expect(await status.json()).toMatchObject({ active: false, enabled: true, monthly_suanli: SUB_GRANT_SUANLI });
   });
