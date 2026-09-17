@@ -1,0 +1,20 @@
+{
+  "hostname": "voicedrop-test.baixing.work",
+  "pages_project": "voicedrop-test",
+  "dns": {
+    "type": "CNAME",
+    "name": "voicedrop-test.baixing.work",
+    "content": "voicedrop-test.pages.dev",
+    "proxied": true
+  },
+  "worker_routes": [
+    {
+      "pattern": "voicedrop-test.baixing.work/agent/*",
+      "script": "voicedrop-agent-test"
+    },
+    {
+      "pattern": "voicedrop-test.baixing.work/reco/*",
+      "script": "voicedrop-reco-test"
+    }
+  ]
+}

@@ -2,6 +2,9 @@
   "name": "voicedrop-test",
   "pages_build_output_dir": ".",
   "compatibility_date": "2026-06-01",
+  "vars": {
+    "VOICEDROP_PUBLIC_HOST": "voicedrop-test.baixing.work"
+  },
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "voicedrop-test-files" }
   ],

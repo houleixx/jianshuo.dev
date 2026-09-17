@@ -23,7 +23,7 @@ jobs:
           forbidden=()
           while IFS= read -r path; do
             case "$path" in
-              wrangler.test.jsonc|agent/wrangler.test.jsonc|reco/wrangler.test.jsonc|infra/voicedrop-gateway/wrangler.test.jsonc|.github/workflows/deploy-test.yml|agent/docs/wechat-pay-test-environment.md)
+              wrangler.test.jsonc|agent/wrangler.test.jsonc|reco/wrangler.test.jsonc|infra/voicedrop-routing.test.json|.github/workflows/deploy-test.yml|agent/docs/wechat-pay-test-environment.md)
                 forbidden+=("$path")
                 ;;
             esac
