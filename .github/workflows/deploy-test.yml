@@ -76,4 +76,14 @@ jobs:
         working-directory: reco
         run: npx -y wrangler@4 deploy --config wrangler.test.jsonc
       - name: Deploy unified test gateway
-        run: npx -y wrangler@4 deploy --config infra/voicedrop-gateway/wrangler.test.jsonc
+        # The domain is provisioned using an account with zone route permissions.
+        # Keep that binding; the CI token only needs to update the Worker itself.
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const dir = 'infra/voicedrop-gateway';
+          const config = JSON.parse(fs.readFileSync(`${dir}/wrangler.test.jsonc`, 'utf8'));
+          delete config.routes;
+          fs.writeFileSync(`${dir}/.wrangler-ci.json`, JSON.stringify(config));
+          NODE
+          npx -y wrangler@4 deploy --config infra/voicedrop-gateway/.wrangler-ci.json
