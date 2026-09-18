@@ -8,7 +8,7 @@
   "workers_dev": true,
   // 保留控制台设置的测试商户参数与一分钱金额。
   "keep_vars": true,
-  "vars": { "WECHAT_PAY_SINGLE_TEST_ENABLED": "true" },
+  "vars": { "WECHAT_PAY_SINGLE_TEST_ENABLED": "false" },
 
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "voicedrop-test-files" }
