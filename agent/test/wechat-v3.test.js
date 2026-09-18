@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { generateKeyPairSync, sign, verify, createCipheriv } from 'node:crypto';
 import { wechatV3Request, wechatV3AppPayParams, decryptWechatV3Notification, verifyWechatV3, wechatV3Ready } from '../src/wechat-v3.js';
-import { handleWechatPayRoute, wechatV2Xml, runWechatPaySchedule } from '../src/wechat-pay.js';
+import { handleWechatPayRoute, runWechatPaySchedule } from '../src/wechat-pay.js';
 import { fakeD1, usageSql } from './fakes.js';
 const NOW = Date.UTC(2026, 8, 18, 4);
 const merchant = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -10,7 +10,7 @@ const credentials = {
   WECHAT_PAY_APP_ID:'app', WECHAT_PAY_MCH_ID:'mch', WECHAT_PAY_PLAN_ID:'223558', WECHAT_PAY_AMOUNT_FEN:'1',
   WECHAT_PAY_MCH_PRIVATE_KEY:merchant.privateKey.export({type:'pkcs8',format:'pem'}), WECHAT_PAY_MCH_SERIAL_NO:'MERCHANT_SERIAL',
   WECHAT_PAY_PUBLIC_KEY:platform.publicKey.export({type:'spki',format:'pem'}), WECHAT_PAY_PUBLIC_KEY_ID:'PUB_KEY_ID_TEST',
-  WECHAT_PAY_API_V3_KEY:'12345678901234567890123456789012', WECHAT_PAY_API_V2_KEY:'v2-test-only',
+  WECHAT_PAY_API_V3_KEY:'12345678901234567890123456789012',
   WECHAT_PAY_CALLBACK_BASE_URL:'https://example.test',
 };
 function headers(raw, at=NOW) {
@@ -54,9 +54,8 @@ function fixture() {
     const r=await handleWechatPayRoute(url,new Request(url,{method:body===null?'GET':'POST',headers:{Authorization:'Bearer anon_unittesttoken_abcdefghijklmnop',...Object.fromEntries(new Headers(customHeaders))},...(body===null?{}:{body})}),env,fetcher,time,{waitUntil:p=>jobs.push(p)});
     await Promise.all(jobs); return r;
   }
-  async function signing(c,time=NOW) {return call('contract-notify',wechatV2Xml({return_code:'SUCCESS',result_code:'SUCCESS',mch_id:'mch',appid:'app',change_type:'ADD',contract_code:c,contract_id:'contract-id',plan_id:'223558',openid:'payer'},env.WECHAT_PAY_API_V2_KEY),{},time);}
   async function pay(extra={},time=NOW) {const n=notification(paid(extra),time);return call('app-pay-notify',n.raw,n.headers,time);}
-  return {env,db,requests,txn,paid,call,signing,pay,fetcher,setState:v=>state=v,failCreate:()=>failCreate=true,
+  return {env,db,requests,txn,paid,call,pay,fetcher,setState:v=>state=v,failCreate:()=>failCreate=true,
     grants:()=>db.prepare("SELECT COUNT(*) n FROM bucket WHERE source='subscription'").first().n};
 }
 it('signs exact V3 HTTP and APP SDK messages with merchant RSA key',async()=>{
@@ -89,27 +88,12 @@ it('creates correct one-cent APP-with-contract request and resumes only that mer
   expect(payload.contract_info.plan_id).toBe('223558');
   expect(payload.contract_info.contract_appid).toBe(payload.appid);
   expect(payload.notify_url).toBe('https://example.test/agent/wechat-pay/app-pay-notify');
-  expect(payload.contract_info.contract_notify_url).toBe('https://example.test/agent/wechat-pay/contract-notify');
+  expect(payload.contract_info).not.toHaveProperty('contract_notify_url');
   expect(Object.keys(payload).sort()).toEqual(['appid','mchid','description','out_trade_no','time_expire','notify_url','amount','contract_info'].sort());
   const again=await (await f.call('checkout','{}',{},NOW+1000)).json();
   expect(again.pay_params.prepayId).toBe(first.pay_params.prepayId);
   expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
   expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
-});
-for(const paymentFirst of [true,false]) it(`settles once with paymentFirst=${paymentFirst} and never issues a second first debit`,async()=>{
-  const f=fixture(), c=(await (await f.call('checkout','{}')).json()).contract_code;
-  if(paymentFirst) expect((await f.pay()).status).toBe(204);
-  await f.signing(c,NOW+1000);
-  if(!paymentFirst) expect((await f.pay({},NOW+1000)).status).toBe(204);
-  expect((await f.pay({},NOW+2000)).status).toBe(204);
-  await f.signing(c,NOW+2000);
-  expect(f.grants()).toBe(1);
-  const sub=f.db.prepare('SELECT * FROM wechat_sub').first();
-  expect(sub.status).toBe('active'); expect(sub.period_start_at).not.toBeNull();
-  expect(sub.next_charge_at).toBeGreaterThan(NOW+20*86400000);
-  await runWechatPaySchedule(f.env,NOW+3000,f.fetcher);
-  expect(f.requests.some(r=>r.url.includes('pappayapply'))).toBe(false);
-  expect((await f.call('checkout','{}',{},NOW+4000)).status).toBe(409);
 });
 it('paid but unsigned order gives coverage without claiming auto-renewal or accepting another payment',async()=>{
   const f=fixture();await f.call('checkout','{}');await f.pay();
@@ -128,10 +112,10 @@ it('recovers a lost callback by signed V3 query',async()=>{
   expect((await (await f.call('status',null,{},NOW+1000)).json()).active).toBe(true);
   expect(f.grants()).toBe(1);await f.pay({},NOW+2000);expect(f.grants()).toBe(1);
 });
-it('keeps unknown first payments out of automatic V2 deduction retries',async()=>{
+it('keeps unknown first payments out of automatic deduction retries',async()=>{
   const f=fixture();f.failCreate();expect((await f.call('checkout','{}')).status).toBe(502);
   await runWechatPaySchedule(f.env,NOW+1000,f.fetcher);
-  expect(f.requests.some(r=>r.url.includes('pappayapply'))).toBe(false);
+  expect(f.requests.every(r=>r.url.includes('/v3/'))).toBe(true);
   expect(f.grants()).toBe(0);
 });
 it('closes expired unpaid checkout before allowing a new order',async()=>{

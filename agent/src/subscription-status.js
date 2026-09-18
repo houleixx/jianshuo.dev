@@ -18,8 +18,11 @@ export async function activeIapSubscription(db, userSub, now = Date.now()) {
 
 async function activeWechatSubscription(db, userSub, now) {
   return await db.prepare(
-    "SELECT period_end_at FROM wechat_sub WHERE user_sub=? AND status IN ('active','cancelled') AND period_end_at>? ORDER BY period_end_at DESC LIMIT 1"
-  ).bind(userSub, now).first();
+    `SELECT MAX(period_end_at) AS period_end_at FROM (
+      SELECT period_end_at FROM wechat_sub WHERE user_sub=? AND status IN ('active','cancelled') AND period_end_at>?
+      UNION ALL SELECT entitlement_end_at FROM wechat_txn WHERE user_sub=? AND status='paid' AND entitlement_end_at>?
+    ) HAVING MAX(period_end_at) IS NOT NULL`
+  ).bind(userSub, now, userSub, now).first();
 }
 
 export async function handleSubscriptionStatusRoute(url, request, env, now = Date.now()) {
