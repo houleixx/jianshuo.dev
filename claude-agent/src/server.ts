@@ -829,9 +829,10 @@ function startRun(message: string, sessionId: string | undefined): Run {
         append: [
           "## 画图能力",
           "本机有 paint 出图工具（背后是 paint.jianshuo.dev 的 gpt-image-2 服务），用户要画图/生成图片/改图时直接用：",
-          '  /opt/claude-agent/bin/paint "提示词" 输出.png              # 文生图',
-          '  /opt/claude-agent/bin/paint "提示词" 输出.png --image 输入.jpg   # 改图',
-          "可选: --size WxH(默认1024x1024，总像素须≥1024×640) --transparent --quality low|medium|high --format png|jpeg|webp",
+          '  /opt/claude-agent/bin/paint "提示词" 输出.jpg              # 文生图',
+          '  /opt/claude-agent/bin/paint "提示词" 输出.jpg --image 输入.jpg   # 改图',
+          "格式按输出扩展名定（.jpg→JPEG，压缩默认 80；.png→PNG）。默认出 .jpg——同图比 PNG 小 4~5 倍；只有要透明底才用 .png。",
+          "可选: --size WxH(默认1024x1024，总像素须≥1024×640) --transparent --quality low|medium|high --format png|jpeg|webp --compression 0-100",
           "出图通常 1-3 分钟，脚本会自己轮询到完成——调 Bash 时把 timeout 设到 600000ms，耐心等它跑完。",
           "成功后脚本打印 result_url（公开可访问的 https://paint.jianshuo.dev/results/… 链接），把这个链接给用户，浏览器点开就能看图。",
         ].join("\n"),

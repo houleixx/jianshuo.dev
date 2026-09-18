@@ -14,7 +14,7 @@
 //   node build.mjs chapter <workdir> <NN>     # 渲染并发布 第 NN 章       → books/<slug>/NN.html
 //   node build.mjs done    <workdir> <NN>     # 【过审即发】标 done + 落盘 book.json + 发该章 + 刷新目录（一步到位）
 //   node build.mjs status  <workdir>          # 【断点续跑】列出每章 done/待发/待写 + 导读是否落盘
-//   node build.mjs asset   <workdir> <本地图片> [目标名]  # 上传插图/封面到 books/<slug>/（图片按扩展名回类型）
+//   node build.mjs asset   <workdir> <本地图片> [目标名]  # 上传插图/封面到 books/<slug>/（只收 JPG，PNG 拒收——书里的图一律 JPG q80）
 //   （封面：把图存成 <workdir>/cover.jpg 并 asset 上传为 cover.jpg —— 只作为文件放在书目录里供别的工具取用，不嵌进正文页）
 //   node build.mjs pull    <workdir> <slug>   # 【修书起手式】从线上 _src 源稿镜像重建工作目录
 //   node build.mjs all     <workdir>          # index+intro+全部 done 的章节，最后打印公开 URL
@@ -270,11 +270,32 @@ if (!cmd || !workdir) { console.error("用法见文件头注释"); process.exit(
 const book = cmd === "pull" ? null : JSON.parse(readFileSync(join(workdir, "book.json"), "utf8"));
 const readFrag = p => { try { return readFileSync(join(workdir, p), "utf8"); } catch { return ""; } };
 
-const CTYPE = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
+// 书里的图一律 JPG q80（2026-09-18 起）：同一张插图 PNG 约 2.4MB、JPG q80 约 0.5MB，
+// 全书架差 1.3GB，离线下载和弱网翻页都吃这个差价。PNG 在这里直接拒收，不做静默转码——
+// 让出图那一步就落对格式（paint 按扩展名定格式，.jpg 默认 compression 80）。
+const CTYPE = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg" };
+const JPEG_MAGIC = [0xff, 0xd8, 0xff];
+const PNG_REF = /\b(?:src|href)\s*=\s*["'][^"']*\.png(?:[?#][^"']*)?["']/i;
+function refusePngRefs(what, html) {
+  const m = html.match(PNG_REF);
+  if (!m) return;
+  console.error(`拒绝发布${what}：正文里引用了 PNG（${m[0]}）。`);
+  console.error(`  书里的图一律 JPG：重出图存成 .jpg（paint "…" pNN.jpg），正文改引用 pNN.jpg，再 asset 上传。`);
+  process.exit(1);
+}
 async function uploadAsset(localPath, destName) {
   const ext = (destName.match(/\.[a-z]+$/i) || [""])[0].toLowerCase();
   const ct = CTYPE[ext];
-  if (!ct) { console.error(`目标名扩展不支持：${destName}（用 .png/.jpg/.jpeg/.webp）`); process.exit(1); }
+  if (!ct) {
+    console.error(`拒绝上传 ${destName}：书里的图一律 JPG q80（目标名用 .jpg）。`);
+    console.error(`  出图时直接落 JPG：paint "…" ${destName.replace(/\.[a-z]+$/i, "")}.jpg（按扩展名定格式，默认 compression 80）。`);
+    process.exit(1);
+  }
+  const head = readFileSync(localPath).subarray(0, 3);
+  if (!JPEG_MAGIC.every((b, i) => head[i] === b)) {
+    console.error(`拒绝上传 ${localPath}：文件内容不是 JPEG（只改了扩展名？）。用 paint 重出成 .jpg，别手工改名。`);
+    process.exit(1);
+  }
   const key = `books/${book.slug}/${destName}`;
   const r = await fetch(`${API}/upload/${key}`, {
     method: "PUT",
@@ -303,6 +324,7 @@ async function doIndex() {
 }
 async function doIntro() {
   const b = readFrag("intro.html"); if (!b) { console.error("缺 intro.html"); process.exit(1); }
+  refusePngRefs("导读", b);
   await upload(book.slug, fileName.intro, renderIntro(book, b));
   await upload(book.slug, srcName("intro.html"), b);
 }
@@ -318,6 +340,7 @@ async function doChapter(no) {
     console.error(`  把正文写进这个文件再重跑；别让空章带着 done 上线。`);
     process.exit(1);
   }
+  refusePngRefs(`第 ${pad(no)} 章`, b);
   await upload(book.slug, chFile(no), renderChapter(book, no, b));
   await upload(book.slug, srcName(chFile(no)), b);
   await syncBookJson(book);   // 只重发单章也要让 _src 有入口，下次 pull 才不用手工重建

@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # paint — 调本机 paint 服务（127.0.0.1:8788，即 paint.jianshuo.dev）出图。
-# 文生图:  paint "提示词" 输出.png
-# 改图:    paint "提示词" 输出.png --image 输入.jpg
-# 选项:    --size WxH(默认1024x1024) --transparent --quality low|medium|high --format png|jpeg|webp
+# 文生图:  paint "提示词" 输出.jpg
+# 改图:    paint "提示词" 输出.jpg --image 输入.jpg
+# 选项:    --size WxH(默认1024x1024) --transparent --quality low|medium|high --format png|jpeg|webp --compression 0-100
+# 格式不给就按输出文件扩展名定：.jpg/.jpeg→jpeg、.webp→webp、其余→png。
+# jpeg/webp 不给 --compression 一律 80（2026-09-18 起书里的图统一 JPG q80，PNG 大 4~5 倍没有必要）。
 # 成功时输出结果文件路径 + 公开 result_url；出图通常 1-3 分钟，脚本自轮询直到完成。
 set -euo pipefail
 
 API=${PAINT_API:-http://127.0.0.1:8788}
 TOKEN=${PAINT_API_TOKEN:?PAINT_API_TOKEN not set}
 
-PROMPT=${1:?usage: paint "prompt" out.png [--image in.jpg] [--size WxH] [--transparent] [--quality q] [--format f]}
+PROMPT=${1:?usage: paint "prompt" out.jpg [--image in.jpg] [--size WxH] [--transparent] [--quality q] [--format f] [--compression n]}
 OUT=${2:?output file required}
 shift 2
 
-SIZE=1024x1024 TRANSPARENT=false QUALITY="" FORMAT="" IMAGE=""
+SIZE=1024x1024 TRANSPARENT=false QUALITY="" FORMAT="" COMPRESSION="" IMAGE=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --image) IMAGE=$2; shift 2 ;;
@@ -21,20 +23,31 @@ while [[ $# -gt 0 ]]; do
     --transparent) TRANSPARENT=true; shift ;;
     --quality) QUALITY=$2; shift 2 ;;
     --format) FORMAT=$2; shift 2 ;;
+    --compression) COMPRESSION=$2; shift 2 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
+if [[ -z $FORMAT ]]; then
+  case ${OUT,,} in
+    *.jpg|*.jpeg) FORMAT=jpeg ;;
+    *.webp) FORMAT=webp ;;
+    *) FORMAT=png ;;
+  esac
+fi
+if [[ -z $COMPRESSION && $FORMAT != png ]]; then COMPRESSION=80; fi
+
 BODY=$(node -e '
 const fs = require("fs");
-const [prompt, size, transparent, quality, format, image] = process.argv.slice(1);
+const [prompt, size, transparent, quality, format, compression, image] = process.argv.slice(1);
 const b = { prompt, size };
 if (transparent === "true") b.transparent = true;
 if (quality) b.quality = quality;
 if (format) b.format = format;
+if (compression) b.compression = Number(compression);
 if (image) b.image_b64 = fs.readFileSync(image).toString("base64");
 process.stdout.write(JSON.stringify(b));
-' "$PROMPT" "$SIZE" "$TRANSPARENT" "$QUALITY" "$FORMAT" "$IMAGE")
+' "$PROMPT" "$SIZE" "$TRANSPARENT" "$QUALITY" "$FORMAT" "$COMPRESSION" "$IMAGE")
 
 JOB_ID=$(printf '%s' "$BODY" | curl -sS -X POST "$API/api/jobs" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \

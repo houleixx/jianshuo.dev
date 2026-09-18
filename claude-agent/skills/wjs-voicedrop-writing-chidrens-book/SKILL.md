@@ -31,7 +31,7 @@ description: 「写一本书」时绘本 / 图画书的写法模块——读者�
 - 一本绘本通常 **12–20 页**（对应 `chapters` 12–20 项）。
 - 每页正文 HTML 片段 = **一张图 + 一到两句话**：
   ```html
-  <figure><img src="p01.png"><figcaption></figcaption></figure>
+  <figure><img src="p01.jpg"><figcaption></figcaption></figure>
   <p>小熊醒来了，天还灰灰的。</p>
   ```
 - `book.json`：`type: "childrens"`，`tagline` 建议留空或 `"一本图画书"`，`meta` 写年龄段（如 `"适合 3–6 岁 · 亲子共读"`），`tint/dark` 用明亮温暖的色。**顶层必须写 `"hidden": true`**——绘本缺省不上架（书架不出，直链可看），主人验收满意后修书去掉这行才上架。
@@ -54,7 +54,7 @@ Spawn 一个 agent，产出书名、slug、subtitle（一句话故事钩子）�
 给写手：本页 `no / brief` + 全书故事线（知道前后页，保持句式与主角一致）+ 读者画像与文风铁律。要求：
 
 - **输出格式**：一段 `<article>` 里的 HTML 片段，通常就是 **一个 `<figure><img>` + 一到两句 `<p>`**。可用标签：`<p> <figure><img><figcaption> <strong>`（拟声词/关键词可加粗）。
-- **图片**：绘本**每页都要图**，但正文片段里只写相对文件名占位（如 `<img src="p01.png">`），**图在最后一遍统一 paint 生成**（见下「插图」）。写手同时给出这一页的**画面描述**（写进 `reviews` 或单独记，供出图用）。
+- **图片**：绘本**每页都要图**，但正文片段里只写相对文件名占位（如 `<img src="p01.jpg">`，**一律 `.jpg`**），**图在最后一遍统一 paint 生成**（见下「插图」）。写手同时给出这一页的**画面描述**（写进 `reviews` 或单独记，供出图用）。
 - 字数：一页通常 **8–40 字**，最多两句。
 - 不写 `<h1>`、不写内联 `style`、不编造真实图片 URL。
 - 存到 `chapters/NN.html`。
@@ -90,7 +90,8 @@ Spawn 一个 agent，产出书名、slug、subtitle（一句话故事钩子）�
   - HTML 的 `<p>` 正文**照旧保留**（与图里文字一致）——有声书管线和搜索/复制靠 DOM 文字，不能只存在图里。
 - **画面描述**来自写手给的那一句；paint 提示词 = 统一风格前缀 + 主角/道具参照要点 + 本页画面 + 图内文字（引号原句）。
 - 尺寸随版式（绘本图可用较方或横构图，`--size 1024x1024` 或 `1536x1024`）。
-- 流程：`paint "<统一风格 + 本页画面 + 无字>" book-<slug>/p01.png --quality high` → `build.mjs asset book-<slug> p01.png p01.png` → 该页 HTML 已引用 `p01.png` → `build.mjs done book-<slug> NN`。
+- 流程：`paint "<统一风格 + 本页画面 + 无字>" book-<slug>/p01.jpg --quality high` → `build.mjs asset book-<slug> p01.jpg p01.jpg` → 该页 HTML 已引用 `p01.jpg` → `build.mjs done book-<slug> NN`。
+- **插图一律 JPG q80，不出 PNG**：paint 按输出扩展名定格式，存成 `.jpg` 就是 JPEG、压缩默认 80，不用另加参数。同一张图 PNG 约 2.4MB、JPG q80 约 0.5MB，读者弱网翻页和离线下载都靠这个差价。`build.mjs` 有硬闸：`asset` 拒收 `.png`（也拒收改了扩展名的假 JPG），正文引用 `.png` 的页拒绝发布——被拒了就重出成 `.jpg`，别绕。`refs.png` 是不上传的工作文件，保持 PNG 无妨。
 
 ---
 
