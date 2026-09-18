@@ -61,7 +61,7 @@ export async function handlePromptLab(request, env, url) {
       resp = await globalThis.fetch(`${paintBase}/api/jobs`, {
         method: "POST",
         headers: { Authorization: `Bearer ${env.PAINT_API_TOKEN}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: body.prompt, size, format: "jpeg", xmp_meta: xmpMeta }),
+        body: JSON.stringify({ prompt: body.prompt, size, format: "jpeg", compression: 80, xmp_meta: xmpMeta }),
       });
     } catch { resp = null; }
     if (!resp || (resp.status !== 202 && resp.status !== 200)) return J({ error: "paint-unavailable", status: resp?.status || 0 }, 502);

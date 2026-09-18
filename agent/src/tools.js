@@ -396,6 +396,9 @@ async function postPaintJob(ctx, { prompt, newKey, oldKey, size }) {
     prompt,
     size: snapSize(size, "1024x1024"), // 对齐 16 的倍数：paint 拒绝非 16 倍数的宽高
     format: "jpeg",
+    // 显式钉 q80（2026-09-18，与书架插图同一标准）。不传就吃出图 CLI 的默认（实测 75），
+    // 那是会随 CLI 升级漂走的东西；只对 jpeg/webp 有效，format 改回 png 时必须一起删。
+    compression: 80,
     callback_url: `${origin}/agent/paint-callback`,
     callback_token: env.PAINT_CALLBACK_TOKEN,
     callback_meta: meta,

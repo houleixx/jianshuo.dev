@@ -1573,7 +1573,7 @@ export default {
         if (!r.ok) return J({ error: `fetch_result_${r.status}` }, 502);
         // R2.put 要求 body 有已知长度；fetch 的响应体流长度未知（paint /results 无 Content-Length），
         // 必须先缓冲成 ArrayBuffer，否则抛 "Provided readable stream must have a known length"。
-        await env.FILES.put(fullNew, await r.arrayBuffer(), { httpMetadata: { contentType: r.headers.get("content-type") || "image/png" } });
+        await env.FILES.put(fullNew, await r.arrayBuffer(), { httpMetadata: { contentType: r.headers.get("content-type") || "image/jpeg" } });
         await debit(env.USAGE, m.scope, imageCostUY(), "image-edit", { jobId: body.job_id || null, newKey: m.newKey }, Date.now());
       } else {
         // 失败：写原图副本（保留原图可见），不扣费

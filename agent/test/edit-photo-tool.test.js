@@ -96,6 +96,7 @@ describe("edit_photo tool", () => {
     expect(calls.paint.body.prompt).toBe("make it an ad");
     expect(calls.paint.body.size).toBe("1024x1024");
     expect(calls.paint.body.format).toBe("jpeg");
+    expect(calls.paint.body.compression).toBe(80); // 钉 q80，不吃 CLI 默认
     expect(calls.paint.body.image_url).toBe(`https://vd.test/files/api/photo/${SCOPE}${OLD}`);
     expect(calls.paint.body.callback_url).toBe("https://vd.test/agent/paint-callback");
     expect(calls.paint.body.callback_token).toBe("cbtok");
