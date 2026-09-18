@@ -34,7 +34,6 @@ import { handleMintRoutes, feedQuote } from "./mint.js";
 import { handleIapRoute } from "./iap.js";
 import { handleWechatPayProductRoute } from "./wechat-pay-product.js";
 import { handleWechatPayRoute, runWechatPaySchedule } from "./wechat-pay.js";
-import { handleWechatSinglePayRoute } from "./wechat-single-pay.js";
 import { handleSubscriptionStatusRoute } from "./subscription-status.js";
 import { handleReferralRoutes, publishMintRate } from "./referral.js";
 import { handlePromptShareRoutes, shareStates } from "./prompt-share.js";
@@ -1669,7 +1668,6 @@ export default {
     // 跨渠道订阅状态：iOS 购买前与 Android 订阅页都只需查这一个安全摘要。
     { const r = await handleSubscriptionStatusRoute(url, request, env); if (r) return r; }
     // 微信委托代扣（签约回调 / 支付回调 / 状态）—— src/wechat-pay.js
-    { const r = await handleWechatSinglePayRoute(url, request, env); if (r) return r; }
     { const r = await handleWechatPayRoute(url, request, env, fetch, Date.now(), ctx); if (r) return r; }
 
     return new Response("not found", { status: 404 });
