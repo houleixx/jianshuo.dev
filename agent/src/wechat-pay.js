@@ -239,7 +239,7 @@ async function settlePayment(db, txn, values, now) {
       .bind(now, values.out_trade_no),
     db
       .prepare(
-        `UPDATE wechat_txn SET status='paid',wechat_txn_id=?,bucket_id=(SELECT id FROM bucket WHERE wechat_order=?),paid_at=?,last_callback_at=?,processing_at=NULL,next_try_at=NULL,failure_code=NULL,entitlement_start_at=?,entitlement_end_at=?,updated_at=? WHERE out_trade_no=? AND status!='paid'`,
+        `UPDATE wechat_txn SET status='paid',wechat_txn_id=?,bucket_id=(SELECT id FROM bucket WHERE wechat_order=?),paid_at=?,last_callback_at=?,failure_code=NULL,entitlement_start_at=?,entitlement_end_at=?,updated_at=? WHERE out_trade_no=? AND status!='paid'`,
       )
       .bind(
         values.transaction_id,
@@ -253,7 +253,7 @@ async function settlePayment(db, txn, values, now) {
       ),
     db
       .prepare(
-        `UPDATE wechat_sub SET period_start_at=?,period_end_at=?,next_charge_at=NULL,last_event_at=?,last_error_code=NULL,updated_at=?
+        `UPDATE wechat_sub SET period_start_at=?,period_end_at=?,last_event_at=?,last_error_code=NULL,updated_at=?
       WHERE contract_code=? AND changes()=1 AND (period_start_at IS NULL OR period_end_at<=?)`,
       )
       .bind(
@@ -328,7 +328,7 @@ async function reconcileAppCheckout(env, txn, now, fetcher) {
   else if (['CLOSED', 'REVOKED', 'PAYERROR'].includes(data.trade_state)) {
     await env.USAGE.batch([
       env.USAGE.prepare("UPDATE wechat_attempt SET status='failed',next_query_at=NULL,updated_at=? WHERE out_trade_no=? AND status IN ('sending','unknown','accepted')").bind(now,txn.out_trade_no),
-      env.USAGE.prepare("UPDATE wechat_txn SET status='failed',next_try_at=NULL,failure_code=?,updated_at=? WHERE out_trade_no=? AND status='charging' AND changes()=1").bind(data.trade_state,now,txn.out_trade_no),
+      env.USAGE.prepare("UPDATE wechat_txn SET status='failed',failure_code=?,updated_at=? WHERE out_trade_no=? AND status='charging' AND changes()=1").bind(data.trade_state,now,txn.out_trade_no),
     ]);
   } else if (data.trade_state === 'REFUND') {
     await env.USAGE.prepare("UPDATE wechat_attempt SET status='refunded',next_query_at=NULL,updated_at=? WHERE out_trade_no=? AND status!='paid'")
@@ -373,8 +373,8 @@ async function appCheckout(env, scope, now, fetcher) {
   if (!txn) {
     const no = tradeNo(`app:${sub.contract_code}`, 0);
     await db.batch([
-      db.prepare(`INSERT OR IGNORE INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,attempt_count,max_attempts,payment_kind,checkout_expires_at,request_serial,created_at,updated_at)
-        VALUES(?,?,?,?,?,?,?,'charging',1,1,'app',?,?,?,?)`)
+      db.prepare(`INSERT OR IGNORE INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,payment_kind,checkout_expires_at,request_serial,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,'charging','app',?,?,?,?)`)
         .bind(no, sub.contract_code, scope, sub.plan_id, now, addCalendarMonth(now), amountFen(env), now + 30 * 60 * 1000, requestSerial(now), now, now),
       db.prepare(`INSERT OR IGNORE INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,next_query_at,created_at,updated_at)
         SELECT out_trade_no,out_trade_no,contract_code,?,'unknown',1,?,?,? FROM wechat_txn WHERE out_trade_no=? AND payment_kind='app'`)
@@ -482,7 +482,7 @@ export async function handleWechatPayRoute(
         if (attempt) await reconcilePayment(env.USAGE, env, attempt, now, fetcher);
       }
       const row = await env.USAGE.prepare(
-        "SELECT contract_code, contract_id, plan_id, status, period_start_at, period_end_at, next_charge_at, cancel_reason, signed_at, cancelled_at, last_error_code FROM wechat_sub WHERE user_sub=? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1",
+        "SELECT contract_code, contract_id, plan_id, status, period_start_at, period_end_at, cancel_reason, signed_at, cancelled_at, last_error_code FROM wechat_sub WHERE user_sub=? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1",
       )
         .bind(scope)
         .first();
