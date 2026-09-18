@@ -1677,6 +1677,7 @@ export default {
   async scheduled(event, env, ctx) {
     const stub = env.Miner.get(env.Miner.idFromName("miner"));
     if (event.cron === "*/5 * * * *") {
+      ctx.waitUntil(runWechatPaySchedule(env).catch(e=>console.log('[wechat-pay] reconcile failed',String(e))));
       ctx.waitUntil((async () => {
         // 探活 voicedrop.cn(备案接入点)。挂了 → 推送报警,含回滚提示。
         try {
@@ -1715,7 +1716,7 @@ export default {
       })());
       return;
     }
-    if (event.cron === "0 18 * * *") {
+    if (event.cron === "0 18 * * *" || event.cron === "*/15 * * * *") {
       // Cloudflare Cron 使用 UTC：18:00 UTC 即北京时间次日 02:00，每日查单并处理到期扣款。
       ctx.waitUntil(runWechatPaySchedule(env).catch((e) => console.log("[wechat-pay] schedule failed", String(e))));
       return;

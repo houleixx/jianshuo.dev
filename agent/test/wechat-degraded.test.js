@@ -4,7 +4,7 @@ import { fakeD1, usageSql } from './fakes.js';
 import { handleWechatPayRoute, runWechatPaySchedule } from '../src/wechat-pay.js';
 import { it } from 'vitest';
 import { handleSubscriptionStatusRoute } from '../src/subscription-status.js';
-it('preserves paid V3 orders and credit while retiring recurring transport and contract callbacks', async () => {
+it('preserves V3 payments but disables lifecycle operations when V2 credentials are missing', async () => {
 const now=Date.now();
 const merchant=generateKeyPairSync('rsa',{modulusLength:2048});
 const platform=generateKeyPairSync('rsa',{modulusLength:2048});
@@ -49,11 +49,11 @@ const sharedUrl=new URL('https://example.test/agent/subscription/status');
 const shared=await handleSubscriptionStatusRoute(sharedUrl,new Request(sharedUrl,{headers:{Authorization:'Bearer anon_unittesttoken_abcdefghijklmnop'}}),env,now);
 assert.equal((await shared.json()).active,true,'verified paid coverage must protect all clients from duplicate subscriptions');
 const before=await db.prepare('SELECT * FROM wechat_sub').first();
-assert.equal((await call('cancel','{}')).status,501);
+assert.equal((await call('cancel','{}')).status,503);
 assert.deepEqual(await db.prepare('SELECT * FROM wechat_sub').first(),before);
 const status=await(await call('status')).json();assert.equal(status.active,true);assert.equal(status.renewal_available,false);assert.equal(status.can_cancel,false);
-for(const path of ['contract','pay-notify'])assert.equal((await call(path,'<xml/>')).status,404);
-for(const path of ['contract-notify','cancel-notify'])assert.equal((await call(path,'<xml/>')).status,400);
+for(const path of ['contract'])assert.equal((await call(path,'<xml/>')).status,404);
+for(const path of ['pay-notify','contract-notify','cancel-notify'])assert.match(await(await call(path,'<xml/>')).text(),/FAIL/);
 await db.prepare("UPDATE wechat_sub SET status='active',contract_id='existing'").run();
 await runWechatPaySchedule(env,now+40*86400000,fetcher);assert.equal(requests,1);
 });
