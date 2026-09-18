@@ -100,7 +100,7 @@ it('paid but unsigned order gives coverage without claiming auto-renewal or acce
   const status=await (await f.call('status')).json();
   expect(status.active).toBe(true); expect(status.status).toBe('pending');expect(status.can_cancel).toBe(false);
   expect(status.checkout_paid).toBe(true);expect(status.checkout_pending).toBe(false);
-  expect(f.db.prepare('SELECT next_charge_at FROM wechat_sub').first().next_charge_at).toBeNull();
+  expect(status.scheduled_charge_at).toBeNull(); expect(status.renewal_available).toBe(false);
   expect((await f.call('checkout','{}')).status).toBe(409);
 });
 it.each([{amount:{total:2,currency:'CNY'}},{appid:'other'},{mchid:'other'},{trade_type:'JSAPI'}])('rejects authenticated mismatched payment %j',async extra=>{

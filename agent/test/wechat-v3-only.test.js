@@ -53,6 +53,6 @@ assert.equal((await call('cancel','{}')).status,501);
 assert.deepEqual(await db.prepare('SELECT * FROM wechat_sub').first(),before);
 const status=await(await call('status')).json();assert.equal(status.active,true);assert.equal(status.renewal_available,false);assert.equal(status.can_cancel,false);
 for(const path of ['contract','contract-notify','cancel-notify','pay-notify'])assert.equal((await call(path,'<xml/>')).status,404);
-await db.prepare("UPDATE wechat_sub SET status='active',contract_id='existing',next_charge_at=1").run();
+await db.prepare("UPDATE wechat_sub SET status='active',contract_id='existing'").run();
 await runWechatPaySchedule(env,now+40*86400000,fetcher);assert.equal(requests,1);
 });
