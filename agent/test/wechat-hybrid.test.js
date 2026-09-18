@@ -207,3 +207,9 @@ it('pagination renews every due user beyond the first page without duplicating p
  f.time(due);await f.cron();expect(f.attempts()).toHaveLength(61);await f.cron();
  expect(f.requests.filter(r=>r.url.endsWith('pappayapply'))).toHaveLength(61);
 });
+
+it('new customers are not reported as paused renewals and existing customers see their agreed price',async()=>{
+ const f=fixture();expect((await(await f.call('status')).json()).renewal_stopped).toBe(false);
+ await f.start();f.env.WECHAT_PAY_AMOUNT_FEN='1990';expect((await(await f.call('status')).json()).amount_fen).toBe(1);
+ await f.call('cancel','{}');expect((await(await f.call('status')).json()).amount_fen).toBe(1990);
+});

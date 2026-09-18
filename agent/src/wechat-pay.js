@@ -1455,11 +1455,14 @@ export async function handleWechatPayRoute(
             .bind(scope, now)
             .first()
         : { s: 0 };
+      const currentPrice=row && ['pending','active'].includes(row.status)
+        ? await env.USAGE.prepare("SELECT amount_fen FROM wechat_txn WHERE contract_code=? AND status IN ('charging','paid') ORDER BY created_at DESC LIMIT 1").bind(row.contract_code).first()
+        : null;
       return J({
         active,
         checkout_pending: !!(await env.USAGE.prepare("SELECT 1 FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code WHERE t.user_sub=? AND t.payment_kind='app' AND t.status='charging' AND s.status IN ('pending','active') LIMIT 1").bind(scope).first()),
         checkout_paid: !!(row && await env.USAGE.prepare("SELECT 1 FROM wechat_txn WHERE contract_code=? AND payment_kind='app' AND status='paid' LIMIT 1").bind(row.contract_code).first()),
-        amount_fen: amountFen(env),
+        amount_fen: currentPrice?.amount_fen || amountFen(env),
         enabled: await wechatPayEnabled(env),
         can_cancel: lifecycleReady(env) && !!row && ['pending','active'].includes(row.status),
         renewal_available: lifecycleReady(env) && !!env.WECHAT_PAY_CALLBACK_BASE_URL && !!amountFen(env),
@@ -1479,7 +1482,7 @@ export async function handleWechatPayRoute(
         // 客户端只得到稳定、可展示的通用状态，避免暴露支付通道内部信息。
         payment_issue: row && row.last_error_code ? "payment-failed" : null,
         payment_pending: !!(await unresolvedUserOrder(env.USAGE, scope)),
-        renewal_stopped: !lifecycleReady(env) || !row || row.status!=='active' || !!row.cancel_requested_at || row.next_charge_at==null,
+        renewal_stopped: !!row && row.status==='active' && (!lifecycleReady(env) || !!row.cancel_requested_at || row.next_charge_at==null),
         sub_suanli: Math.round(uyToSuanli((sum && sum.s) || 0) * 10) / 10,
         monthly_suanli: SUB_GRANT_SUANLI,
       });
