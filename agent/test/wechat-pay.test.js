@@ -108,6 +108,28 @@ describe("微信委托代扣的日期与签名", () => {
 });
 
 describe("微信签约、自动续费和入账", () => {
+  it("扣款仅发送官方字段，使用协议 ID 关联模板并保留本地模板记录", async () => {
+    const db = fakeD1(SQL); const e = env(db);
+    e.WECHAT_PAY_AMOUNT_FEN = "1";
+    const preCalls = [];
+    const created = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK }, NOW, precontractFetcher(preCalls));
+    const { contract_code } = await created.json();
+    expect(parseWechatXml(preCalls[0].init.body).plan_id).toBe(e.WECHAT_PAY_PLAN_ID);
+    const calls = []; const jobs = [];
+    await call(e, "/agent/wechat-pay/contract-notify", {
+      method: "POST", raw: signed(e, { return_code: "SUCCESS", result_code: "SUCCESS", contract_code, contract_id: "contract-test", plan_id: e.WECHAT_PAY_PLAN_ID, openid: "test-payer" }),
+    }, NOW, applyFetcher(calls), { waitUntil(p) { jobs.push(p); } });
+    await Promise.all(jobs);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://api.mch.weixin.qq.com/pay/pappayapply");
+    const payload = parseWechatXml(calls[0].init.body);
+    const allowed = new Set("appid mch_id nonce_str sign body detail attach out_trade_no total_fee fee_type spbill_create_ip goods_tag notify_url trade_type contract_id".split(" "));
+    expect(Object.keys(payload).filter(key => !allowed.has(key))).toEqual([]);
+    expect(payload).toMatchObject({ contract_id: "contract-test", total_fee: "1", trade_type: "PAP" });
+    expect(db.prepare("SELECT plan_id FROM wechat_sub WHERE contract_code=?").bind(contract_code).first().plan_id).toBe(e.WECHAT_PAY_PLAN_ID);
+    expect(db.prepare("SELECT plan_id,amount_fen FROM wechat_txn WHERE contract_code=?").bind(contract_code).first()).toMatchObject({ plan_id: e.WECHAT_PAY_PLAN_ID, amount_fen: 1 });
+  });
+
   it("签约成功回调立刻在 waitUntil 发起首期扣费；每日 Cron 只负责后续/失败兜底", async () => {
     const db = fakeD1(SQL); const e = env(db);
     const created = await call(e, "/agent/wechat-pay/contract", { method: "POST", token: TOK });

@@ -339,8 +339,8 @@ async function postApply(env, txn, sub, fetcher, origin) {
     fee_type: "CNY",
     trade_type: "PAP",
     notify_url: `${origin}/agent/wechat-pay/pay-notify`,
+    // 微信通过签约成功后的协议 ID 关联模板；扣款接口不接收 plan_id。
     contract_id: sub.contract_id,
-    plan_id: txn.plan_id,
     attach: JSON.stringify({
       provider: "wechat",
       contract_code: txn.contract_code,
