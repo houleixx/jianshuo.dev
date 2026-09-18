@@ -21,6 +21,7 @@ function fixture() {
  const fetcher=async(url,init)=>{
   const p=init.body?.startsWith('<')?parseWechatXml(init.body):init.body?JSON.parse(init.body):{};
   requests.push({url,p}); if(onRequest)await onRequest(url,p);
+  if(url.endsWith('/preentrustweb'))return xml({pre_entrustweb_id:'pre-id',miniprogram_username:'gh_test',miniprogram_path:'pages/index?pre_entrustweb_id=pre-id&sign_scene=app'});
   if(url.endsWith('/app-with-contract'))return json({prepay_id:'prepay-'+p.out_trade_no});
   if(url.endsWith('/querycontract')) {
    expect(p.contract_id || p.plan_id).toBeTruthy();
@@ -107,7 +108,7 @@ it('cancel timeout durably stops new debits; later query confirms cancellation a
  f.contractState('1');f.time(wechatChargeScheduleAt(end)+16*60000);await f.cron();
  expect(f.sub().status).toBe('cancelled');expect(f.grants()).toBe(1);expect(f.first().entitlement_end_at).toBe(end);
 });
-it.each([10,40])('cancel then reopen at day %i keeps prior paid coverage and allows one new V3 payment',async days=>{
+it.each([40])('cancel then reopen at day %i keeps prior paid coverage and allows one new V3 payment',async days=>{
  const f=fixture();await f.start();const end=f.first().entitlement_end_at;
  expect((await f.call('cancel','{}')).status).toBe(200);expect((await f.call('cancel','{}')).status).toBe(200);
  f.time(NOW+days*DAY);f.contractState('0');expect((await f.call('checkout','{}')).status).toBe(200);await f.pay();await f.contract();
@@ -212,4 +213,79 @@ it('new customers are not reported as paused renewals and existing customers see
  const f=fixture();expect((await(await f.call('status')).json()).renewal_stopped).toBe(false);
  await f.start();f.env.WECHAT_PAY_AMOUNT_FEN='1990';expect((await(await f.call('status')).json()).amount_fen).toBe(1);
  await f.call('cancel','{}');expect((await(await f.call('status')).json()).amount_fen).toBe(1990);
+});
+
+it('unexpired reactivation restores authorization without another checkout, payment or credit; next cycle renews once',async()=>{
+ const f=fixture();await f.start();const original=f.first(),end=original.entitlement_end_at;
+ await f.call('cancel','{}');f.time(NOW+10*DAY);f.contractState('9');
+ expect((await(await f.call('status')).json()).restore_authorization).toBe(true);
+ const body=await(await f.call('checkout','{"restore_only":true}')).json();
+ expect(body.checkout_mode).toBe('restore-authorization');expect(body.pay_params).toBeUndefined();
+ expect(body.wechat_mini_program_path).toBe('pages/index?pre_entrustweb_id=pre-id&sign_scene=app');
+ const code=f.sub().contract_code;
+ await f.call('checkout','{"restore_only":true}');expect(f.sub().contract_code).toBe(code);
+ expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
+ f.contractState('0');await f.contract();await f.contract();await f.cron();
+ expect(f.grants()).toBe(1);expect(f.sub().period_end_at).toBe(end);expect(f.attempts()).toHaveLength(0);
+ expect(f.sub().next_charge_at).toBe(wechatChargeScheduleAt(end));
+ f.env.WECHAT_PAY_AMOUNT_FEN='1990';f.time(f.sub().next_charge_at);await f.cron();
+ expect(f.attempts()).toHaveLength(1);const a=f.attempts()[0];
+ expect(f.requests.filter(r=>r.url.endsWith('pappayapply'))[0].p.total_fee).toBe('1');
+ f.time(a.created_at+DAY);await f.notify('pay-notify',f.payment(a.out_trade_no));
+ expect(f.grants()).toBe(2);expect(f.sub().period_start_at).toBe(end);
+});
+it('restore-only intent never becomes a paid checkout after coverage expires',async()=>{
+ const f=fixture();await f.start();await f.call('cancel','{}');f.time(NOW+40*DAY);
+ const response=await f.call('checkout','{"restore_only":true}');expect(response.status).toBe(409);
+ expect((await response.json()).error).toBe('coverage-changed');expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
+});
+it('failed pure signing cannot silently fall back to APP payment, and cancellation stays terminal',async()=>{
+ const f=fixture();await f.start();await f.call('cancel','{}');f.time(NOW+DAY);f.contractState('9');
+ f.onRequest(url=>{if(url.endsWith('preentrustweb'))throw new Error('timeout');});
+ expect((await f.call('checkout','{}')).status).toBe(502);
+ expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
+ await f.call('cancel','{}');await f.contract();
+ expect(f.sub().status).toBe('cancelled');expect(f.sub().next_charge_at).toBeNull();expect(f.grants()).toBe(1);
+});
+it('lost pure signing callback is recovered without charging an already-paid period',async()=>{
+ const f=fixture();await f.start();await f.call('cancel','{}');f.time(NOW+DAY);f.contractState('9');
+ await f.call('checkout','{}');f.contractState('0');await f.cron();
+ expect(f.sub().status).toBe('active');expect(f.sub().next_charge_at).not.toBeNull();expect(f.grants()).toBe(1);expect(f.attempts()).toHaveLength(0);
+});
+it('re-signing after failed renewal can start one new attempt for the next unpaid cycle',async()=>{
+ const f=fixture();await f.start();f.time(f.sub().next_charge_at);await f.cron();
+ await f.notify('pay-notify',f.payment(f.attempts()[0].out_trade_no,{result_code:'FAIL',err_code:'NOTENOUGH'}));
+ await f.call('cancel','{}');f.time(f.first().entitlement_end_at-DAY);f.contractState('9');
+ await f.call('checkout','{}');f.contractState('0');await f.contract();await f.cron();await f.cron();
+ expect(f.attempts()).toHaveLength(2);expect(new Set(f.attempts().map(a=>a.out_trade_no)).size).toBe(2);
+ expect(f.grants()).toBe(1);
+});
+
+it('parallel pure-sign requests share one agreement and cannot turn into a payment order',async()=>{
+ const f=fixture();await f.start();await f.call('cancel','{}');f.time(NOW+DAY);f.contractState('9');
+ const responses=await Promise.all([f.call('checkout','{}'),f.call('checkout','{}')]);
+ const bodies=await Promise.all(responses.map(r=>r.json()));
+ expect(bodies.map(b=>b.checkout_mode)).toEqual(['restore-authorization','restore-authorization']);
+ expect(bodies[0].contract_code).toBe(bodies[1].contract_code);
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(2);
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
+});
+it('signing after the carried paid period expires still deducts only the next cycle and grants a full paid month',async()=>{
+ const f=fixture();await f.start();const end=f.first().entitlement_end_at;
+ await f.call('cancel','{}');f.time(end-60000);f.contractState('9');await f.call('checkout','{}');
+ f.time(end+60000);f.contractState('0');await f.contract();await f.cron();
+ expect(f.attempts()).toHaveLength(1);const a=f.attempts()[0];
+ await f.notify('pay-notify',f.payment(a.out_trade_no));
+ expect(f.grants()).toBe(2);expect(f.sub().period_start_at).toBe(end+60000);
+ expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
+});
+it('pre-sign response must be signed and contain unmodified mini-program parameters',async()=>{
+ const f=fixture();await f.start();await f.call('cancel','{}');f.time(NOW+DAY);f.contractState('9');
+ const url=new URL('https://example.test/agent/wechat-pay/checkout');
+ for(const response of [new Response('<xml><return_code>SUCCESS</return_code></xml>'),f.xml({pre_entrustweb_id:'id'})]) {
+  const result=await handleWechatPayRoute(url,new Request(url,{method:'POST',headers:{Authorization:'Bearer anon_unittesttoken_abcdefghijklmnop'},body:'{}'}),f.env,async()=>response,NOW+DAY);
+  expect(result.status).toBe(502);
+ }
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
 });

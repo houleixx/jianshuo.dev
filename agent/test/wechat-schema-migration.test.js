@@ -104,3 +104,13 @@ it('restores lifecycle fields additively without inventing authorization or rese
  expect(db.prepare('SELECT COUNT(*) n FROM wechat_attempt').first().n).toBe(2);
  expect(db.prepare('PRAGMA integrity_check').first().integrity_check).toBe('ok');
 });
+
+it('adds restoration metadata without fabricating paid periods or modifying historic orders',()=>{
+ const name='0011_wechat_resume_authorization.sql',db=fakeD1(usageSql({before:name}));
+ db.exec("INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,created_at,updated_at) VALUES('old','u','p','active',100,100)");
+ const before=db.prepare('SELECT * FROM wechat_sub').first();
+ db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+ expect(db.prepare('SELECT * FROM wechat_sub').first()).toEqual({...before,resume_order:null,renewal_amount_fen:null});
+ expect(db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(0);
+ expect(()=>db.exec("UPDATE wechat_sub SET renewal_amount_fen=0")).toThrow();
+});
