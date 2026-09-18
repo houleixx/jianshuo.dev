@@ -1,5 +1,6 @@
--- migrations/0005_wechat.sql — 微信委托代扣（自动续费）
--- 钱仍由 bucket/ledger 统一记账；本脚本初始化微信签约、周期、扣款尝试及入账防重约束。
+-- migrations/0005_wechat.sql — 微信支付：V3 首期支付并签约 + V2 订阅生命周期
+-- 空库按 0001–0005 顺序初始化；本脚本不用于升级已执行过旧版微信迁移的数据库。
+-- 钱仍由 bucket/ledger 统一记账；复用 V2 字段，仅为 APP 支付并签约增加四个订单字段。
 
 CREATE TABLE IF NOT EXISTS wechat_sub (
   contract_code     TEXT PRIMARY KEY,       -- 商户生成、签约前先落库的唯一标识
@@ -46,6 +47,10 @@ CREATE TABLE IF NOT EXISTS wechat_txn (
   last_error_at      INTEGER,
   created_at         INTEGER NOT NULL,
   updated_at         INTEGER NOT NULL,
+  payment_kind       TEXT NOT NULL DEFAULT 'deduct', -- app 首期支付；deduct 后续代扣
+  prepay_id          TEXT,                  -- APP 调起支付的预支付标识
+  checkout_expires_at INTEGER,              -- 首期支付订单过期时间，ms epoch
+  request_serial     TEXT,                  -- 支付并签约请求序号
   UNIQUE(contract_code, period_start_at)
 );
 CREATE INDEX IF NOT EXISTS idx_wechat_txn_due ON wechat_txn(status, next_try_at);
@@ -76,7 +81,8 @@ CREATE INDEX IF NOT EXISTS idx_wechat_event_user ON wechat_event(user_sub, creat
 
 -- 功能首次上线即采用最终表结构，不需要兼容历史微信订单。
 CREATE UNIQUE INDEX idx_wechat_one_live_contract ON wechat_sub(user_sub) WHERE status IN ('pending','active');
-CREATE UNIQUE INDEX idx_wechat_user_cycle ON wechat_txn(user_sub,period_start_at);
+-- 已明确失败的周期允许重新签约后重建；仍在处理和已付款周期保持唯一。
+CREATE UNIQUE INDEX idx_wechat_user_cycle ON wechat_txn(user_sub,period_start_at) WHERE status != 'failed';
 ALTER TABLE bucket ADD COLUMN wechat_order TEXT;
 CREATE UNIQUE INDEX idx_bucket_wechat_order ON bucket(wechat_order) WHERE wechat_order IS NOT NULL;
 CREATE UNIQUE INDEX idx_ledger_wechat_order ON ledger(json_extract(detail,'$.out_trade_no'))

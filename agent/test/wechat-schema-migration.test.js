@@ -1,141 +1,71 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { fakeD1, usageSql } from './fakes.js';
 
-const migration = '0008_wechat_v3_cleanup.sql';
-const cleanup = readFileSync(new URL('../migrations/' + migration, import.meta.url), 'utf8');
-const removed = {
-  wechat_sub: ['openid', 'next_charge_at'],
-  wechat_txn: ['charge_requested_at', 'processing_at', 'next_try_at', 'attempt_count', 'max_attempts', 'last_error_at'],
-  wechat_attempt: ['resubmit_count'],
-};
-const retiredIndexes = ['idx_wechat_sub_due', 'idx_wechat_txn_due', 'idx_wechat_txn_settling'];
-const tables = ['wechat_sub', 'wechat_txn', 'wechat_attempt', 'wechat_event', 'account', 'bucket', 'ledger'];
-const rows = (db, table) => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all().results;
-const indexes = db => db.prepare("SELECT name, sql FROM sqlite_master WHERE type='index' ORDER BY name").all().results;
-
-function checkSchema(db) {
-  for (const [table, fields] of Object.entries(removed)) {
-    const names = db.prepare(`PRAGMA table_info(${table})`).all().results.map(c => c.name);
-    for (const field of fields) expect(names).not.toContain(field);
-  }
-  for (const name of retiredIndexes) expect(indexes(db).map(i => i.name)).not.toContain(name);
+it('initializes an empty database with one WeChat script and no fabricated payment or credit', () => {
+  const files = readdirSync(new URL('../migrations/', import.meta.url)).filter(n => n.includes('wechat'));
+  expect(files).toEqual(['0005_wechat.sql']);
+  const db = fakeD1(usageSql());
+  for (const table of ['wechat_sub', 'wechat_txn', 'wechat_attempt', 'wechat_event', 'account', 'bucket', 'ledger'])
+    expect(db.prepare(`SELECT COUNT(*) n FROM ${table}`).first().n).toBe(0);
   expect(db.prepare('PRAGMA integrity_check').first().integrity_check).toBe('ok');
-}
-
-it('preserves the historical V3 cleanup migration', () => {
-  const db = fakeD1(usageSql({before:'0010_wechat_subscription_lifecycle.sql'}));
-  checkSchema(db);
-  expect(db.prepare('PRAGMA table_info(wechat_txn)').all().results.map(c => c.name))
-    .toEqual(expect.arrayContaining(['prepay_id', 'request_serial', 'payment_kind', 'entitlement_end_at']));
 });
 
-it('upgrades populated schemas without changing retained orders, audit history, balances or uniqueness', () => {
-  const db = fakeD1(usageSql({ before: migration }));
-  db.exec(`
-    INSERT INTO wechat_sub(contract_code,contract_id,user_sub,plan_id,openid,status,period_start_at,period_end_at,next_charge_at,created_at,updated_at)
-      VALUES('legacy','wx-contract','old-user','plan','old-openid','cancelled',100,200,180,100,150);
-    INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,sign_mode,created_at,updated_at)
-      VALUES('app','new-user','plan','pending','app',300,300);
-    INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,wechat_txn_id,paid_at,entitlement_start_at,entitlement_end_at,charge_requested_at,processing_at,next_try_at,attempt_count,max_attempts,last_error_at,created_at,updated_at)
-      VALUES('paid','legacy','old-user','plan',100,200,1,'paid','wx-paid',110,110,210,100,105,180,2,3,108,100,110);
-    INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,payment_kind,prepay_id,checkout_expires_at,request_serial,created_at,updated_at)
-      VALUES('pending','app','new-user','plan',300,400,1,'charging','app','prepay-test',350,'123456',300,300);
-    INSERT INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,resubmit_count,next_query_at,created_at,updated_at)
-      VALUES('paid','paid','legacy','wx-contract','paid',1,2,NULL,100,110),
-            ('pending','pending','app','','accepted',1,0,320,300,300);
-    INSERT INTO wechat_event(contract_code,out_trade_no,user_sub,direction,event_type,code,message,payload,created_at)
-      VALUES('legacy','paid','old-user','inbound','payment_settled','SUCCESS','historic payment','{"amount":1}',110);
-    INSERT INTO account(user_sub,balance_uy,granted_uy,spent_uy,created_at,updated_at)
-      VALUES('old-user',150,200,50,100,120);
-    INSERT INTO bucket(user_sub,amount_uy,remaining_uy,source,created_at,expires_at,wechat_order)
-      VALUES('old-user',200,150,'subscription',110,210,'paid');
+it('allows a new agreement after cancellation but prevents concurrent live agreements', () => {
+  const db = fakeD1(usageSql());
+  const insert = code => db.prepare(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,created_at,updated_at)
+    VALUES(?,'user','plan','pending',100,100)`).bind(code).run();
+  insert('first');
+  expect(() => insert('second')).toThrow(/UNIQUE constraint/);
+  db.exec("UPDATE wechat_sub SET status='active'");
+  expect(() => insert('second')).toThrow(/UNIQUE constraint/);
+  db.exec("UPDATE wechat_sub SET status='cancelled'");
+  insert('second');
+  expect(db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(2);
+});
+
+it('allows replacement of a failed cycle but rejects duplicate live or paid user periods', () => {
+  const db = fakeD1(usageSql());
+  const insert = (order, status) => db.prepare(`INSERT INTO wechat_txn
+    (out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
+    VALUES(?,?,'user','plan',100,200,1,?,100,100)`).bind(order, order, status).run();
+  insert('closed', 'failed');
+  insert('replacement', 'charging');
+  expect(() => insert('duplicate', 'pending')).toThrow(/UNIQUE constraint/);
+  expect(() => db.exec("UPDATE wechat_txn SET status='paid' WHERE out_trade_no='closed'")).toThrow(/UNIQUE constraint/);
+  db.exec("UPDATE wechat_txn SET status='paid' WHERE out_trade_no='replacement'");
+  expect(() => insert('duplicate', 'charging')).toThrow(/UNIQUE constraint/);
+  expect(db.prepare("SELECT payment_kind,prepay_id,checkout_expires_at,request_serial FROM wechat_txn WHERE out_trade_no='replacement'").first())
+    .toEqual({payment_kind:'deduct', prepay_id:null, checkout_expires_at:null, request_serial:null});
+});
+
+it('allows a new attempt after definite failure while preventing parallel attempts or reused attempt numbers', () => {
+  const db = fakeD1(usageSql());
+  const insert = (order, number) => db.prepare(`INSERT INTO wechat_attempt
+    (out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,created_at,updated_at)
+    VALUES(?,'cycle','contract','wx-contract','sending',?,100,100)`).bind(order, number).run();
+  insert('first', 1);
+  expect(() => insert('second', 2)).toThrow(/UNIQUE constraint/);
+  db.exec("UPDATE wechat_attempt SET status='failed'");
+  expect(() => insert('reused', 1)).toThrow(/UNIQUE constraint/);
+  insert('second', 2);
+  db.exec("UPDATE wechat_attempt SET status='paid' WHERE out_trade_no='second'");
+  expect(() => insert('third', 3)).toThrow(/UNIQUE constraint/);
+});
+
+it('prevents reuse of WeChat transaction IDs and duplicate bucket or ledger grants', () => {
+  const db = fakeD1(usageSql());
+  db.exec(`INSERT INTO wechat_txn
+    (out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,wechat_txn_id,created_at,updated_at)
+    VALUES('first','contract','user','plan',100,200,1,'paid','wx-paid',100,100),
+          ('next','contract','user','plan',200,300,1,'pending',NULL,200,200);
+    INSERT INTO bucket(user_sub,amount_uy,remaining_uy,source,created_at,wechat_order)
+      VALUES('user',200,200,'subscription',100,'first');
     INSERT INTO ledger(user_sub,ts,kind,amount_uy,reason,detail,balance_uy)
-      VALUES('old-user',110,'grant',200,'subscription','{"provider":"wechat","out_trade_no":"paid"}',200);
-  `);
-  const expected = Object.fromEntries(tables.map(table => [table, rows(db, table).map(row =>
-    Object.fromEntries(Object.entries(row).filter(([key]) => !(removed[table] || []).includes(key))))]));
-  const expectedIndexes = indexes(db).filter(i => !retiredIndexes.includes(i.name));
-  db.exec(cleanup);
-  checkSchema(db);
-  for (const table of tables) expect(rows(db, table)).toEqual(expected[table]);
-  expect(indexes(db)).toEqual(expectedIndexes);
-  expect(() => db.exec("UPDATE wechat_txn SET wechat_txn_id='wx-paid' WHERE out_trade_no='pending'"))
-    .toThrow(/UNIQUE constraint/);
-  expect(() => db.exec("INSERT INTO bucket(user_sub,amount_uy,remaining_uy,source,created_at,wechat_order) VALUES('old-user',200,200,'subscription',120,'paid')"))
-    .toThrow(/UNIQUE constraint/);
-  expect(() => db.exec("INSERT INTO ledger(user_sub,ts,kind,amount_uy,reason,detail,balance_uy) SELECT user_sub,ts,kind,amount_uy,reason,detail,balance_uy FROM ledger"))
-    .toThrow(/UNIQUE constraint/);
-  expect(() => db.exec("INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,created_at,updated_at) VALUES('duplicate','new-user','plan','pending',300,300)"))
-    .toThrow(/UNIQUE constraint/);
-  expect(() => db.exec("INSERT INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,created_at,updated_at) VALUES('duplicate','pending','app','','accepted',2,300,300)"))
-    .toThrow(/UNIQUE constraint/);
-});
-
-it('adds independent contract verification without trusting historical rows or weakening live cycle uniqueness',()=>{
-  const name='0009_wechat_contract_events.sql';
-  const db=fakeD1(usageSql({before:name}));
-  db.exec(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,created_at,updated_at)
-    VALUES('old','u','p','active',100,100);
-    INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
-    VALUES('closed','old','u','p',100,200,1,'failed',100,100);`);
-  db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
-  expect(db.prepare('SELECT contract_verified_at FROM wechat_sub').first().contract_verified_at).toBeNull();
-  const insert=(order,contract)=>db.exec(`INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
-    VALUES('${order}','${contract}','u','p',100,200,1,'charging',100,100)`);
-  insert('retry','new');
-  expect(()=>insert('duplicate','another')).toThrow(/UNIQUE constraint/);
-  expect(()=>db.exec("UPDATE wechat_txn SET status='paid' WHERE out_trade_no='closed'")).toThrow(/UNIQUE constraint/);
-  expect(db.prepare('PRAGMA integrity_check').first().integrity_check).toBe('ok');
-});
-
-it('restores lifecycle fields additively without inventing authorization or resetting consumed attempts',()=>{
- const name='0010_wechat_subscription_lifecycle.sql',db=fakeD1(usageSql({before:name}));
- db.exec(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,sign_mode,created_at,updated_at)
- VALUES('c','u','p','active','app',100,100);
- INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
- VALUES('cycle','c','u','p',100,200,1,'charging',100,100);
- INSERT INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,created_at,updated_at)
- VALUES('one','cycle','c','id','failed',1,100,100),('two','cycle','c','id','unknown',2,100,100);`);
- db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
- expect(db.prepare('SELECT status,contract_verified_at,next_charge_at FROM wechat_sub').first()).toEqual({status:'active',contract_verified_at:null,next_charge_at:null});
- expect(db.prepare('SELECT attempt_count,next_try_at FROM wechat_txn').first()).toEqual({attempt_count:2,next_try_at:null});
- expect(db.prepare("SELECT resubmit_count FROM wechat_attempt WHERE out_trade_no='two'").first().resubmit_count).toBe(3);
- expect(db.prepare('SELECT COUNT(*) n FROM wechat_attempt').first().n).toBe(2);
- expect(db.prepare('PRAGMA integrity_check').first().integrity_check).toBe('ok');
-});
-
-it('adds restoration metadata without fabricating paid periods or modifying historic orders',()=>{
- const name='0011_wechat_resume_authorization.sql',db=fakeD1(usageSql({before:name}));
- db.exec("INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,created_at,updated_at) VALUES('old','u','p','active',100,100)");
- const before=db.prepare('SELECT * FROM wechat_sub').first();
- db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
- expect(db.prepare('SELECT * FROM wechat_sub').first()).toEqual({...before,resume_order:null,renewal_amount_fen:null});
- expect(db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(0);
- expect(()=>db.exec("UPDATE wechat_sub SET renewal_amount_fen=0")).toThrow();
-});
-
-it('compacts cancellation intent and restored prices into the original V2 tables without granting credit',()=>{
- const name='0012_wechat_compact_state_prepare.sql', db=fakeD1(usageSql({before:name}));
- const boundary=Date.UTC(2028,0,31,10,20,30,123);
- db.prepare(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,sign_mode,created_at,updated_at)
-   VALUES('old','u','p','cancelled','app',100,100)`).run();
- db.prepare(`INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,
- amount_fen,status,paid_at,entitlement_start_at,entitlement_end_at,created_at,updated_at)
- VALUES('paid','old','u','p',100,?,1,'paid',100,100,?,100,100)`).bind(boundary,boundary).run();
- db.prepare(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,period_start_at,period_end_at,
- resume_order,renewal_amount_fen,cancel_requested_at,contract_query_at,created_at,updated_at)
- VALUES('resume','u','p','pending',100,?,'paid',1990,200,901000,200,200)`).bind(boundary).run();
- const original=rows(db,'wechat_txn')[0];
- db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
- expect(rows(db,'wechat_txn')[0]).toEqual(original);
- const sub=db.prepare("SELECT * FROM wechat_sub WHERE contract_code='resume'").first();
- expect(sub.cancel_reason).toBe('user-request-pending');expect(sub.next_charge_at).toBeNull();expect(sub.last_event_at).toBe(1000);
- const draft=db.prepare("SELECT * FROM wechat_txn WHERE contract_code='resume'").first();
- expect(draft.amount_fen).toBe(1990);expect(draft.status).toBe('pending');expect(draft.attempt_count).toBe(0);
- expect(draft.period_start_at).toBe(boundary);expect(draft.period_end_at).toBe(Date.UTC(2028,1,29,10,20,30,123));
- expect(draft.out_trade_no.length).toBe(32);
- for(const table of ['bucket','ledger','wechat_attempt'])expect(rows(db,table)).toHaveLength(0);
- db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
- expect(rows(db,'wechat_txn')).toHaveLength(2);
+      VALUES('user',100,'grant',200,'subscription','{"provider":"wechat","out_trade_no":"first"}',200);`);
+  expect(() => db.exec("UPDATE wechat_txn SET wechat_txn_id='wx-paid' WHERE out_trade_no='next'")).toThrow(/UNIQUE constraint/);
+  expect(() => db.exec(`INSERT INTO bucket(user_sub,amount_uy,remaining_uy,source,created_at,wechat_order)
+    VALUES('user',200,200,'subscription',100,'first')`)).toThrow(/UNIQUE constraint/);
+  expect(() => db.exec(`INSERT INTO ledger(user_sub,ts,kind,amount_uy,reason,detail,balance_uy)
+    SELECT user_sub,ts,kind,amount_uy,reason,detail,balance_uy FROM ledger`)).toThrow(/UNIQUE constraint/);
 });
