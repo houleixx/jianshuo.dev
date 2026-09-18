@@ -190,7 +190,7 @@ it('cancelled but unresolved payment blocks creating a second agreement',async()
   expect((await f.call('checkout','{}',{},NOW+2000)).status).toBe(409);
   expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(1);
 });
-it.each([10,40])('reopening after cancellation at day %i preserves coverage and grants one full new month',async day=>{
+it.each([40])('reopening after cancellation at day %i preserves coverage and grants one full new month',async day=>{
   const f=fixture();await f.call('checkout','{}');await f.pay();
   const oldEnd=f.txn().entitlement_end_at;
   await agreement(f,'TERMINATED',NOW+1000);
@@ -209,20 +209,26 @@ it('expiry alone never implies an unknown agreement was terminated',async()=>{
   expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(1);
 });
 
-it('expired replacement checkout releases only a verified closed order at the same future boundary',async()=>{
+it('expired replacement checkout releases only a verified closed order',async()=>{
   const f=fixture();await f.call('checkout','{}');await f.pay();
-  const end=f.txn().entitlement_end_at;
   await agreement(f,'TERMINATED',NOW+1000);
-  const time=NOW+10*86400000;
+  const time=NOW+40*86400000;
   expect((await f.call('checkout','{}',{},time)).status).toBe(200);
   const abandoned=f.txn().out_trade_no;
-  expect(f.txn().period_start_at).toBe(end);
+  expect(f.txn().period_start_at).toBe(time);
   await f.call('status',null,{},time+31*60000);
   expect(f.txn().status).toBe('failed');
   expect((await f.call('checkout','{}',{},time+32*60000)).status).toBe(200);
   expect(f.txn().out_trade_no).not.toBe(abandoned);
-  expect(f.txn().period_start_at).toBe(end);
+  expect(f.txn().period_start_at).toBe(time+32*60000);
   expect(f.db.prepare("SELECT COUNT(*) n FROM wechat_txn WHERE status='charging'").first().n).toBe(1);
+  expect(f.grants()).toBe(1);
+});
+it('unexpired cancellation cannot charge another month when pure signing credentials are absent',async()=>{
+  const f=fixture();await f.call('checkout','{}');await f.pay();
+  await agreement(f,'TERMINATED',NOW+1000);
+  expect((await f.call('checkout','{}',{},NOW+10*86400000)).status).toBe(503);
+  expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
   expect(f.grants()).toBe(1);
 });
 it('unsigned closure cannot release the unresolved order or its cycle',async()=>{
