@@ -28,7 +28,7 @@ export async function wechatV3Request(env, method, path, payload, fetcher = fetc
   const authorization = `WECHATPAY2-SHA256-RSA2048 mchid="${env.WECHAT_PAY_MCH_ID}",nonce_str="${nonce}",timestamp="${timestamp}",serial_no="${env.WECHAT_PAY_MCH_SERIAL_NO}",signature="${signature}"`;
   const response = await fetcher('https://api.mch.weixin.qq.com' + path, {
     method, headers: { Authorization: authorization, Accept: 'application/json',
-      'Content-Type': 'application/json', 'Wechatpay-Serial': env.WECHAT_PAY_PUBLIC_KEY_ID },
+      'Content-Type': 'application/json', 'User-Agent': 'VoiceDrop-Agent/1.0', 'Wechatpay-Serial': env.WECHAT_PAY_PUBLIC_KEY_ID },
     ...(body ? { body } : {}), signal: AbortSignal.timeout(15000), redirect: 'manual',
   });
   // Workerd supports manual/follow only. Never forward merchant authorization to a redirect target.

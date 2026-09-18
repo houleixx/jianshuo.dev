@@ -25,6 +25,9 @@ export default { async fetch(request, env) {
     const data = await wechatV3Request(config, 'POST', '/v3/pay/transactions/app-with-contract',
       {amount:{total:1}}, async (url, init) => {
         const outgoing = new Request(url, init);
+        if (!outgoing.headers.get('User-Agent') || outgoing.headers.get('Accept') !== 'application/json'
+          || outgoing.headers.get('Content-Type') !== 'application/json' || !outgoing.headers.get('Authorization'))
+          throw new Error('missing-wechat-required-headers');
         if (outgoing.redirect !== 'manual') throw new Error('unsafe-redirect-mode');
         const status = Number(new URL(request.url).pathname.slice(1)) || 200;
         if (status >= 300) return new Response('', {status, headers:{Location:'https://unexpected.example/'}});
