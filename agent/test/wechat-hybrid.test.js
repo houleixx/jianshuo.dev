@@ -304,3 +304,53 @@ it('an ADD/query response arriving during cancellation cannot erase durable canc
  expect((await(await f.call('status')).json()).cancel_pending).toBe(true);
  f.time(f.first().entitlement_end_at);await f.cron();expect(f.attempts()).toHaveLength(0);
 });
+
+
+it('paid unsigned customer can authorize the SAME agreement without another payment or grant',async()=>{
+ const f=fixture();await f.call('checkout','{}');await f.pay();f.contractState('9');
+ const original=f.first(),code=f.sub().contract_code;
+ expect((await(await f.call('status')).json()).restore_authorization).toBe(true);
+ const responses=await Promise.all([f.call('checkout','{"restore_only":true}'),f.call('checkout','{"restore_only":true}')]);
+ for(const response of responses) {
+  expect(response.status).toBe(200);const body=await response.json();
+  expect(body.checkout_mode).toBe('restore-authorization');expect(body.contract_code).toBe(code);expect(body.pay_params).toBeUndefined();
+ }
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(1);
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
+ expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
+ expect(f.requests.filter(r=>r.url.endsWith('preentrustweb')).every(r=>r.p.contract_code===code)).toBe(true);
+ expect(f.grants()).toBe(1);expect(f.sub().next_charge_at).toBeNull();
+ f.contractState('0');await f.contract();await f.contract();await f.cron();
+ expect(f.sub().period_end_at).toBe(original.entitlement_end_at);expect(f.grants()).toBe(1);expect(f.attempts()).toHaveLength(0);
+ expect(f.sub().next_charge_at).toBe(wechatChargeScheduleAt(original.entitlement_end_at));
+ f.time(f.sub().next_charge_at);await f.cron();expect(f.attempts()).toHaveLength(1);
+});
+it('paid unsigned authorization failures and expiry never create another APP payment',async()=>{
+ const f=fixture();await f.call('checkout','{}');await f.pay();f.contractState('9');
+ f.onRequest(url=>{if(url.endsWith('preentrustweb'))throw new Error('timeout');});
+ expect((await f.call('checkout','{"restore_only":true}')).status).toBe(502);
+ expect(f.grants()).toBe(1);expect(f.sub().next_charge_at).toBeNull();
+ f.time(f.first().entitlement_end_at+1);
+ expect((await(await f.call('status')).json()).restore_authorization).toBe(false);
+ expect((await f.call('checkout','{"restore_only":true}')).status).toBe(409);
+ expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
+});
+it('paid authorization rechecks existing signing and respects cancellation intent',async()=>{
+ for(const mode of ['signed','cancel-pending']) {
+  const f=fixture();await f.call('checkout','{}');await f.pay();
+  if(mode==='cancel-pending') {
+   f.contractState('9');f.db.prepare("UPDATE wechat_sub SET cancel_reason='user-request-pending'").run();
+  }
+  expect((await f.call('checkout','{"restore_only":true}')).status).toBe(409);
+  expect(f.requests.filter(r=>r.url.endsWith('preentrustweb'))).toHaveLength(0);
+  expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
+ }
+});
+it('uncertain contract query may only reopen same authorization, never create a replacement agreement',async()=>{
+ const f=fixture();await f.call('checkout','{}');await f.pay();const code=f.sub().contract_code;
+ f.onRequest(url=>{if(url.endsWith('querycontract'))throw new Error('unconfirmed query');});
+ const response=await f.call('checkout','{"restore_only":true}');expect(response.status).toBe(200);
+ expect((await response.json()).contract_code).toBe(code);expect(f.grants()).toBe(1);
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(1);
+ expect(f.sub().next_charge_at).toBeNull();
+});
