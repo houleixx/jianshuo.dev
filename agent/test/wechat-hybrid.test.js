@@ -103,7 +103,7 @@ it('known failures retry on later days with new orders, stop after three, and ig
 });
 it('cancel timeout durably stops new debits; later query confirms cancellation and preserves coverage',async()=>{
  const f=fixture();await f.start();const end=f.first().entitlement_end_at;f.failCancel(true);
- expect((await f.call('cancel','{}')).status).toBe(502);expect(f.sub().cancel_requested_at).toBeTruthy();
+ expect((await f.call('cancel','{}')).status).toBe(502);expect(f.sub().cancel_reason).toBe('user-request-pending');
  f.time(wechatChargeScheduleAt(end));await f.cron();expect(f.attempts()).toHaveLength(0);
  f.contractState('1');f.time(wechatChargeScheduleAt(end)+16*60000);await f.cron();
  expect(f.sub().status).toBe('cancelled');expect(f.grants()).toBe(1);expect(f.first().entitlement_end_at).toBe(end);
@@ -200,8 +200,8 @@ it('unknown signing callback can be cancelled with the original merchant code',a
 it('pagination renews every due user beyond the first page without duplicating pending orders',async()=>{
  const f=fixture();await f.start();const original=f.sub(), paid=f.first(),due=original.next_charge_at;
  for(let i=0;i<60;i++) {
-  f.db.prepare(`INSERT INTO wechat_sub(contract_code,contract_id,user_sub,plan_id,status,sign_mode,period_start_at,period_end_at,next_charge_at,created_at,updated_at)
-    VALUES(?,?,?,'223558','active','app',?,?,?,?,?)`).bind('extra'+i,'id'+i,'user'+i,paid.entitlement_start_at,paid.entitlement_end_at,due,NOW,NOW).run();
+  f.db.prepare(`INSERT INTO wechat_sub(contract_code,contract_id,user_sub,plan_id,status,period_start_at,period_end_at,next_charge_at,created_at,updated_at)
+    VALUES(?,?,?,'223558','active',?,?,?,?,?)`).bind('extra'+i,'id'+i,'user'+i,paid.entitlement_start_at,paid.entitlement_end_at,due,NOW,NOW).run();
   f.db.prepare(`INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,payment_kind,paid_at,entitlement_start_at,entitlement_end_at,created_at,updated_at)
     VALUES(?,?,?,'223558',?,?,1,'paid','app',?,?,?,?,?)`).bind('paid'+i,'extra'+i,'user'+i,paid.period_start_at,paid.period_end_at,NOW,paid.entitlement_start_at,paid.entitlement_end_at,NOW,NOW).run();
  }
@@ -225,7 +225,7 @@ it('unexpired reactivation restores authorization without another checkout, paym
  const code=f.sub().contract_code;
  await f.call('checkout','{"restore_only":true}');expect(f.sub().contract_code).toBe(code);
  expect(f.requests.filter(r=>r.url.endsWith('app-with-contract'))).toHaveLength(1);
- expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn WHERE payment_kind=\'app\'').first().n).toBe(1);
  f.contractState('0');await f.contract();await f.contract();await f.cron();
  expect(f.grants()).toBe(1);expect(f.sub().period_end_at).toBe(end);expect(f.attempts()).toHaveLength(0);
  expect(f.sub().next_charge_at).toBe(wechatChargeScheduleAt(end));
@@ -269,7 +269,7 @@ it('parallel pure-sign requests share one agreement and cannot turn into a payme
  expect(bodies.map(b=>b.checkout_mode)).toEqual(['restore-authorization','restore-authorization']);
  expect(bodies[0].contract_code).toBe(bodies[1].contract_code);
  expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(2);
- expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn WHERE payment_kind=\'app\'').first().n).toBe(1);
 });
 it('signing after the carried paid period expires still deducts only the next cycle and grants a full paid month',async()=>{
  const f=fixture();await f.start();const end=f.first().entitlement_end_at;
@@ -287,5 +287,20 @@ it('pre-sign response must be signed and contain unmodified mini-program paramet
   const result=await handleWechatPayRoute(url,new Request(url,{method:'POST',headers:{Authorization:'Bearer anon_unittesttoken_abcdefghijklmnop'},body:'{}'}),f.env,async()=>response,NOW+DAY);
   expect(result.status).toBe(502);
  }
- expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
+ expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn WHERE payment_kind=\'app\'').first().n).toBe(1);
+});
+
+it('unexpired reauthorization stores the price in an unpaid next-cycle order without creating a debit attempt',async()=>{
+ const f=fixture();await f.start();await f.call('cancel','{}');f.time(NOW+DAY);f.contractState('9');
+ f.env.WECHAT_PAY_AMOUNT_FEN='2';await f.call('checkout','{}');
+ const draft=f.db.prepare("SELECT * FROM wechat_txn WHERE payment_kind='deduct'").first();
+ expect(draft.status).toBe('pending');expect(draft.amount_fen).toBe(2);expect(draft.attempt_count).toBe(0);
+ expect(draft.period_start_at).toBe(f.first().entitlement_end_at);expect(f.attempts()).toHaveLength(0);expect(f.grants()).toBe(1);
+ f.env.WECHAT_PAY_AMOUNT_FEN='1990';expect((await(await f.call('status')).json()).amount_fen).toBe(2);
+});
+it('an ADD/query response arriving during cancellation cannot erase durable cancellation intent',async()=>{
+ const f=fixture();await f.start();f.failCancel(true);expect((await f.call('cancel','{}')).status).toBe(502);
+ await f.contract();expect(f.sub().cancel_reason).toBe('user-request-pending');
+ expect((await(await f.call('status')).json()).cancel_pending).toBe(true);
+ f.time(f.first().entitlement_end_at);await f.cron();expect(f.attempts()).toHaveLength(0);
 });
