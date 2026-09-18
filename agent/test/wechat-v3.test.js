@@ -22,12 +22,12 @@ function response(data,at=NOW,status=200) {
   const raw = status === 204 ? '' : JSON.stringify(data);
   return new Response(status===204?null:raw,{status,headers:headers(raw,at)});
 }
-function notification(data,at=NOW) {
+function notification(data,at=NOW,eventType='TRANSACTION.SUCCESS') {
   const nonce='123456789012', aad='transaction';
   const cipher=createCipheriv('aes-256-gcm',Buffer.from(credentials.WECHAT_PAY_API_V3_KEY),Buffer.from(nonce));
   cipher.setAAD(Buffer.from(aad));
   const ciphertext=Buffer.concat([cipher.update(JSON.stringify(data)),cipher.final(),cipher.getAuthTag()]).toString('base64');
-  const raw=JSON.stringify({event_type:'TRANSACTION.SUCCESS',resource:{algorithm:'AEAD_AES_256_GCM',nonce,associated_data:aad,ciphertext}});
+  const raw=JSON.stringify({event_type:eventType,resource:{algorithm:'AEAD_AES_256_GCM',nonce,associated_data:aad,ciphertext}});
   return {raw,headers:headers(raw,at)};
 }
 function fixture() {
@@ -88,7 +88,7 @@ it('creates correct one-cent APP-with-contract request and resumes only that mer
   expect(payload.contract_info.plan_id).toBe('223558');
   expect(payload.contract_info.contract_appid).toBe(payload.appid);
   expect(payload.notify_url).toBe('https://example.test/agent/wechat-pay/app-pay-notify');
-  expect(payload.contract_info).not.toHaveProperty('contract_notify_url');
+  expect(payload.contract_info.contract_notify_url).toBe('https://example.test/agent/wechat-pay/contract-notify');
   expect(Object.keys(payload).sort()).toEqual(['appid','mchid','description','out_trade_no','time_expire','notify_url','amount','contract_info'].sort());
   const again=await (await f.call('checkout','{}',{},NOW+1000)).json();
   expect(again.pay_params.prepayId).toBe(first.pay_params.prepayId);
@@ -139,4 +139,97 @@ it('a concurrent retry cannot create two first orders',async()=>{
   expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(1);
   const orders=f.requests.filter(r=>r.url.endsWith('app-with-contract')).map(r=>JSON.parse(r.init.body).out_trade_no);
   expect(new Set(orders).size).toBe(1);
+});
+
+async function agreement(f, state, time=NOW, overrides={}) {
+  const sub=f.db.prepare('SELECT * FROM wechat_sub ORDER BY created_at DESC LIMIT 1').first();
+  const data={mchid:'mch',appid:'app',plan_id:223558,out_contract_code:sub.contract_code,
+    contract_id:'wx-agreement-'+sub.contract_code,contract_state:state,
+    contract_signed_time:new Date(sub.created_at).toISOString(),
+    ...(state==='TERMINATED'?{contract_terminate_info:{contract_terminated_time:new Date(time).toISOString(),contract_termination_mode:'USER_TERMINATE'}}:{}),
+    ...overrides};
+  const n=notification(data,time,state==='TERMINATED'?'ENTRUST.TERMINATE':'ENTRUST.SIGN');
+  return f.call(state==='TERMINATED'?'cancel-notify':'contract-notify',n.raw,n.headers,time);
+}
+it('V3 signed agreement does not grant credit and duplicate sign/terminate notifications are idempotent',async()=>{
+  const f=fixture();await f.call('checkout','{}');
+  for(let i=0;i<3;i++)expect((await agreement(f,'SIGNED')).status).toBe(204);
+  expect(f.grants()).toBe(0);
+  expect(f.db.prepare('SELECT status FROM wechat_sub').first().status).toBe('active');
+  await f.pay(); const end=f.txn().entitlement_end_at;
+  for(let i=0;i<3;i++)expect((await agreement(f,'TERMINATED',NOW+1000)).status).toBe(204);
+  const status=await(await f.call('status',null,{},NOW+2000)).json();
+  expect(status.status).toBe('cancelled');expect(status.contract_status_known).toBe(true);
+  expect(status.active).toBe(true);expect(status.expires_date).toBe(end);expect(f.grants()).toBe(1);
+});
+it('termination before payment and a delayed sign never revive a cancelled agreement',async()=>{
+  const f=fixture();await f.call('checkout','{}');
+  expect((await agreement(f,'TERMINATED',NOW+1000)).status).toBe(204);
+  expect((await agreement(f,'SIGNED',NOW+2000)).status).toBe(204);
+  await f.pay({},NOW+3000);
+  expect(f.db.prepare('SELECT status FROM wechat_sub').first().status).toBe('cancelled');
+  expect(f.grants()).toBe(1);
+  expect((await(await f.call('status',null,{},NOW+4000)).json()).active).toBe(true);
+});
+it.each([{mchid:'wrong'},{appid:'wrong'},{plan_id:1},{out_contract_code:'unknown'},
+  {contract_signed_time:'invalid'},{contract_signed_time:new Date(NOW+3600000).toISOString()}])
+('rejects mismatched authenticated agreement %j without changing state',async extra=>{
+  const f=fixture();await f.call('checkout','{}');
+  expect((await agreement(f,'SIGNED',NOW,extra)).status).not.toBe(204);
+  expect(f.db.prepare('SELECT status FROM wechat_sub').first().status).toBe('pending');
+  expect(f.grants()).toBe(0);
+});
+it('agreement callback cannot be used as a payment notification',async()=>{
+  const f=fixture();await f.call('checkout','{}');
+  const n=notification(f.paid(),NOW,'ENTRUST.SIGN');
+  expect((await f.call('app-pay-notify',n.raw,n.headers)).status).toBe(400);
+  expect(f.grants()).toBe(0);
+});
+it('cancelled but unresolved payment blocks creating a second agreement',async()=>{
+  const f=fixture();await f.call('checkout','{}');await agreement(f,'TERMINATED',NOW+1000);
+  expect((await f.call('checkout','{}',{},NOW+2000)).status).toBe(409);
+  expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(1);
+});
+it.each([10,40])('reopening after cancellation at day %i preserves coverage and grants one full new month',async day=>{
+  const f=fixture();await f.call('checkout','{}');await f.pay();
+  const oldEnd=f.txn().entitlement_end_at;
+  await agreement(f,'TERMINATED',NOW+1000);
+  const time=NOW+day*86400000;
+  expect((await f.call('checkout','{}',{},time)).status).toBe(200);
+  expect(f.txn().period_start_at).toBe(Math.max(oldEnd,time));
+  expect((await f.pay({transaction_id:'wx-second',success_time:new Date(time).toISOString()},time)).status).toBe(204);
+  expect(f.txn().entitlement_start_at).toBe(Math.max(oldEnd,time));
+  expect(f.grants()).toBe(2);
+  expect(f.db.prepare("SELECT COUNT(*) n FROM ledger WHERE reason='subscription'").first().n).toBe(2);
+});
+it('expiry alone never implies an unknown agreement was terminated',async()=>{
+  const f=fixture();await f.call('checkout','{}');await f.pay();
+  const result=await f.call('checkout','{}',{},NOW+40*86400000);
+  expect(result.status).toBe(409);expect((await result.json()).error).toBe('contract-status-unavailable');
+  expect(f.db.prepare('SELECT COUNT(*) n FROM wechat_sub').first().n).toBe(1);
+});
+
+it('expired replacement checkout releases only a verified closed order at the same future boundary',async()=>{
+  const f=fixture();await f.call('checkout','{}');await f.pay();
+  const end=f.txn().entitlement_end_at;
+  await agreement(f,'TERMINATED',NOW+1000);
+  const time=NOW+10*86400000;
+  expect((await f.call('checkout','{}',{},time)).status).toBe(200);
+  const abandoned=f.txn().out_trade_no;
+  expect(f.txn().period_start_at).toBe(end);
+  await f.call('status',null,{},time+31*60000);
+  expect(f.txn().status).toBe('failed');
+  expect((await f.call('checkout','{}',{},time+32*60000)).status).toBe(200);
+  expect(f.txn().out_trade_no).not.toBe(abandoned);
+  expect(f.txn().period_start_at).toBe(end);
+  expect(f.db.prepare("SELECT COUNT(*) n FROM wechat_txn WHERE status='charging'").first().n).toBe(1);
+  expect(f.grants()).toBe(1);
+});
+it('unsigned closure cannot release the unresolved order or its cycle',async()=>{
+  const f=fixture();await f.call('checkout','{}');
+  const url=new URL('https://example.test/agent/wechat-pay/status');
+  await handleWechatPayRoute(url,new Request(url,{headers:{Authorization:'Bearer anon_unittesttoken_abcdefghijklmnop'}}),
+    f.env,async()=>new Response(JSON.stringify({...f.paid(),trade_state:'CLOSED'})),NOW+31*60000);
+  expect(f.txn().status).toBe('charging');
+  expect(f.db.prepare('SELECT status FROM wechat_attempt').first().status).toBe('accepted');
 });

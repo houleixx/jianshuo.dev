@@ -71,3 +71,20 @@ it('upgrades populated schemas without changing retained orders, audit history, 
   expect(() => db.exec("INSERT INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,created_at,updated_at) VALUES('duplicate','pending','app','','accepted',2,300,300)"))
     .toThrow(/UNIQUE constraint/);
 });
+
+it('adds independent contract verification without trusting historical rows or weakening live cycle uniqueness',()=>{
+  const name='0009_wechat_contract_events.sql';
+  const db=fakeD1(usageSql({before:name}));
+  db.exec(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,created_at,updated_at)
+    VALUES('old','u','p','active',100,100);
+    INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
+    VALUES('closed','old','u','p',100,200,1,'failed',100,100);`);
+  db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+  expect(db.prepare('SELECT contract_verified_at FROM wechat_sub').first().contract_verified_at).toBeNull();
+  const insert=(order,contract)=>db.exec(`INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
+    VALUES('${order}','${contract}','u','p',100,200,1,'charging',100,100)`);
+  insert('retry','new');
+  expect(()=>insert('duplicate','another')).toThrow(/UNIQUE constraint/);
+  expect(()=>db.exec("UPDATE wechat_txn SET status='paid' WHERE out_trade_no='closed'")).toThrow(/UNIQUE constraint/);
+  expect(db.prepare('PRAGMA integrity_check').first().integrity_check).toBe('ok');
+});

@@ -54,10 +54,10 @@ export function wechatV3AppPayParams(env, prepayId, now = Date.now()) {
     prepayId, packageValue: 'Sign=WXPay', nonceStr, timeStamp,
     sign: rsaSign(env, `${env.WECHAT_PAY_APP_ID}\n${timeStamp}\n${nonceStr}\n${prepayId}\n`) };
 }
-export function decryptWechatV3Notification(env, headers, raw, now = Date.now()) {
+export function decryptWechatV3Event(env, headers, raw, allowedEvents, now = Date.now()) {
   if (!verifyWechatV3(env, headers, raw, now)) throw new Error('invalid-v3-notification-signature');
   const envelope = JSON.parse(raw), r = envelope.resource;
-  if (envelope.event_type !== 'TRANSACTION.SUCCESS' || !r || r.algorithm !== 'AEAD_AES_256_GCM')
+  if (!allowedEvents.includes(envelope.event_type) || !r || r.algorithm !== 'AEAD_AES_256_GCM')
     throw new Error('unexpected-v3-notification');
   const key = Buffer.from(env.WECHAT_PAY_API_V3_KEY || '', 'utf8');
   if (key.length !== 32) throw new Error('invalid-v3-key');
@@ -66,5 +66,9 @@ export function decryptWechatV3Notification(env, headers, raw, now = Date.now())
   const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(r.nonce, 'utf8'));
   decipher.setAuthTag(encrypted.subarray(-16));
   decipher.setAAD(Buffer.from(r.associated_data || '', 'utf8'));
-  return JSON.parse(Buffer.concat([decipher.update(encrypted.subarray(0, -16)), decipher.final()]).toString('utf8'));
+  return { eventType: envelope.event_type, data: JSON.parse(Buffer.concat([decipher.update(encrypted.subarray(0, -16)), decipher.final()]).toString('utf8')) };
+}
+
+export function decryptWechatV3Notification(env, headers, raw, now = Date.now()) {
+  return decryptWechatV3Event(env, headers, raw, ['TRANSACTION.SUCCESS'], now).data;
 }
