@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // A Map-backed R2 bucket mock — only the methods our tools use.
@@ -137,10 +137,14 @@ export function fakeD1(migrationSql) {
   };
 }
 
-// 读取 usage 相关全部迁移（0001–0005），供 fakeD1 建一个全表的库。
-export function usageSql() {
-  const f = (name) => readFileSync(fileURLToPath(new URL("../migrations/" + name, import.meta.url)), "utf8");
-  return f("0001_usage.sql") + "\n" + f("0002_buckets.sql") + "\n" + f("0003_mint.sql") + "\n" + f("0004_iap.sql") + "\n" + f("0005_wechat.sql") + "\n" + f("0007_wechat_app_contract.sql");
+// Apply the actual migration chain; `before` builds an earlier schema for upgrade tests.
+export function usageSql({ before = null } = {}) {
+  const dir = new URL("../migrations/", import.meta.url);
+  return readdirSync(dir)
+    .filter(name => name.endsWith(".sql") && (!before || name < before))
+    .sort()
+    .map(name => readFileSync(new URL(name, dir), "utf8"))
+    .join("\n");
 }
 
 // voicedrop-core 库全部迁移（P1: refhits/invites/share_stats/prompt_shares；
