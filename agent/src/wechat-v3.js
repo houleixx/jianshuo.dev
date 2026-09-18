@@ -29,8 +29,13 @@ export async function wechatV3Request(env, method, path, payload, fetcher = fetc
   const response = await fetcher('https://api.mch.weixin.qq.com' + path, {
     method, headers: { Authorization: authorization, Accept: 'application/json',
       'Content-Type': 'application/json', 'Wechatpay-Serial': env.WECHAT_PAY_PUBLIC_KEY_ID },
-    ...(body ? { body } : {}), signal: AbortSignal.timeout(15000), redirect: 'error',
+    ...(body ? { body } : {}), signal: AbortSignal.timeout(15000), redirect: 'manual',
   });
+  // Workerd supports manual/follow only. Never forward merchant authorization to a redirect target.
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    throw new Error('unexpected-v3-redirect');
+  }
   const raw = await response.text();
   const verified = verifyWechatV3(env, response.headers, raw, now);
   let data; try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('invalid-v3-response'); }
