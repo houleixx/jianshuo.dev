@@ -4,6 +4,7 @@
 // bucket + ledger。已验签的成功回调和查单结果共用原子入账入口，重复回调与 Cron 重试
 // 都以用户周期为幂等键；每次明确失败后的替代扣款有独立、不可变的商户订单。
 import { createHash } from "node:crypto";
+import { wechatV3Ready, wechatV3Request, wechatV3AppPayParams, decryptWechatV3Notification } from "./wechat-v3.js";
 import { SUB_GRANT_SUANLI, suanliToUY, uyToSuanli } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
 import { activeIapSubscription } from "./subscription-status.js";
@@ -193,6 +194,8 @@ function auditPayload(payload) {
     "key",
     "pre_entrustweb_id",
     "miniprogram_path",
+    "prepay_id",
+    "pay_params",
   ]) {
     if (k in copy) copy[k] = "[redacted]";
   }
@@ -607,6 +610,7 @@ async function unresolvedUserOrder(db, userSub) {
 async function requestCharge(db, env, txn, sub, now, fetcher, origin) {
   if (
     !txn ||
+    txn.payment_kind === "app" ||
     !["pending", "failed"].includes(txn.status) ||
     Number(txn.attempt_count) >= Number(txn.max_attempts) ||
     wechatChargeScheduleAt(txn.period_start_at) > now
@@ -947,6 +951,10 @@ async function reconcilePayment(db, env, attempt, now, fetcher) {
     .first();
   if (!txn || txn.status === "paid") return;
   try {
+    if (txn.payment_kind === "app") {
+      await reconcileAppCheckout(env, txn, now, fetcher);
+      return;
+    }
     const response = await fetcher(
       env.WECHAT_PAY_QUERY_MODE === "pap"
         ? "https://api.mch.weixin.qq.com/pay/paporderquery"
@@ -1139,7 +1147,7 @@ export async function runWechatPaySchedule(
       await db
         .prepare(
           `SELECT t.*,s.contract_id FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code
-      WHERE t.status IN ('pending','failed') AND t.next_try_at<=? AND t.attempt_count<t.max_attempts AND t.period_end_at>? AND s.status='active' AND t.out_trade_no>? ORDER BY t.out_trade_no LIMIT 50`,
+      WHERE t.payment_kind='deduct' AND t.status IN ('pending','failed') AND t.next_try_at<=? AND t.attempt_count<t.max_attempts AND t.period_end_at>? AND s.status='active' AND t.out_trade_no>? ORDER BY t.out_trade_no LIMIT 50`,
         )
         .bind(now, now, cursor)
         .all()
@@ -1169,11 +1177,144 @@ export async function runWechatPaySchedule(
   await db
     .prepare(
       `UPDATE wechat_sub SET next_charge_at=NULL,last_error_code='retry-exhausted',updated_at=? WHERE status='active'
-    AND EXISTS(SELECT 1 FROM wechat_txn t WHERE t.contract_code=wechat_sub.contract_code AND t.status='failed' AND (t.attempt_count>=t.max_attempts OR t.period_end_at<=?))`,
+    AND EXISTS(SELECT 1 FROM wechat_txn t WHERE t.contract_code=wechat_sub.contract_code AND t.payment_kind='deduct' AND t.status='failed' AND (t.attempt_count>=t.max_attempts OR t.period_end_at<=?))`,
     )
     .bind(now, now)
     .run();
   return result;
+}
+
+// 首期 APP 付款和周期代扣使用同一套原子入账；未付款的 APP 订单绝不能进入代扣重试。
+async function settleAppCheckout(env, txn, data, now) {
+  if (txn.payment_kind !== 'app' || data.appid !== env.WECHAT_PAY_APP_ID ||
+      data.mchid !== env.WECHAT_PAY_MCH_ID || data.out_trade_no !== txn.out_trade_no ||
+      data.trade_type !== 'APP' || data.trade_state !== 'SUCCESS' ||
+      !data.transaction_id || data.amount?.total !== txn.amount_fen || data.amount?.currency !== 'CNY')
+    throw new Error('app-payment-mismatch');
+  const at = Date.parse(data.success_time);
+  if (!Number.isFinite(at)) throw new Error('invalid-payment-time');
+  const timeEnd = new Date(at + 8 * HOUR_MS).toISOString().slice(0, 19).replace(/[-:T]/g, '');
+  return settlePayment(env.USAGE, txn, {
+    out_trade_no: txn.out_trade_no, transaction_id: data.transaction_id,
+    total_fee: data.amount.total, time_end: timeEnd,
+  }, now);
+}
+
+async function reconcileAppCheckout(env, txn, now, fetcher) {
+  const data = await wechatV3Request(env, 'GET',
+    `/v3/pay/transactions/out-trade-no/${encodeURIComponent(txn.out_trade_no)}?mchid=${encodeURIComponent(env.WECHAT_PAY_MCH_ID)}`,
+    null, fetcher, now);
+  if (data.appid !== env.WECHAT_PAY_APP_ID || data.mchid !== env.WECHAT_PAY_MCH_ID ||
+      data.out_trade_no !== txn.out_trade_no) throw new Error('app-query-mismatch');
+  if (data.trade_state === 'SUCCESS') await settleAppCheckout(env, txn, data, now);
+  else if (['CLOSED', 'REVOKED', 'PAYERROR'].includes(data.trade_state)) {
+    await failAttempt(env.USAGE, txn.out_trade_no, now, data.trade_state, false);
+  } else if (data.trade_state === 'REFUND') {
+    await env.USAGE.prepare("UPDATE wechat_attempt SET status='refunded',next_query_at=NULL,updated_at=? WHERE out_trade_no=? AND status!='paid'")
+      .bind(now, txn.out_trade_no).run();
+  } else if (!['NOTPAY', 'USERPAYING'].includes(data.trade_state)) throw new Error('unknown-app-payment-state');
+  await env.USAGE.prepare("UPDATE wechat_attempt SET next_query_at=? WHERE out_trade_no=? AND status IN ('sending','unknown','accepted')")
+    .bind(now + QUERY_INTERVAL, txn.out_trade_no).run();
+  return data.trade_state;
+}
+
+async function appCheckout(env, scope, now, fetcher) {
+  const db = env.USAGE;
+  if (!ready(env) || !wechatV3Ready(env)) return J({ error: 'degraded' }, 503);
+  if (await activeIapSubscription(db, scope, now)) return J({ error: 'already-subscribed' }, 409);
+  if (!(await wechatPayEnabled(env))) return J({ error: 'disabled' }, 403);
+  let sub = await db.prepare("SELECT * FROM wechat_sub WHERE user_sub=? AND status IN ('pending','active') LIMIT 1").bind(scope).first();
+  let txn = sub && await db.prepare("SELECT * FROM wechat_txn WHERE contract_code=? AND payment_kind='app' ORDER BY created_at DESC LIMIT 1").bind(sub.contract_code).first();
+  if (txn?.status === 'paid') return J({ error: 'already-subscribed' }, 409);
+  if (txn && txn.status === 'failed' && sub.status === 'pending') {
+    await db.prepare("UPDATE wechat_sub SET status='expired',updated_at=? WHERE contract_code=? AND status='pending'").bind(now, sub.contract_code).run();
+    sub = null; txn = null;
+  }
+  if (sub?.status === 'active' && (!txn || txn.status !== 'charging')) return J({ error: 'already-subscribed' }, 409);
+  const other = await db.prepare(`SELECT a.out_trade_no FROM wechat_attempt a JOIN wechat_txn t ON t.out_trade_no=a.cycle_no
+    WHERE t.user_sub=? AND a.status IN ('sending','unknown','accepted','refunded') AND t.out_trade_no!=? LIMIT 1`)
+    .bind(scope, txn?.out_trade_no || '').first();
+  if (other) return J({ error: 'payment-pending' }, 409);
+  if (!sub) {
+    const code = contractCode(now);
+    await db.prepare("INSERT OR IGNORE INTO wechat_sub(contract_code,user_sub,plan_id,status,sign_mode,created_at,updated_at) VALUES(?,?,?,'pending','app',?,?)")
+      .bind(code, scope, env.WECHAT_PAY_PLAN_ID, now, now).run();
+    sub = await db.prepare("SELECT * FROM wechat_sub WHERE user_sub=? AND status IN ('pending','active') LIMIT 1").bind(scope).first();
+    if (!sub || sub.status !== 'pending') return J({ error: 'already-subscribed' }, 409);
+  }
+  if (sub.sign_mode !== 'app') {
+    // 延用同一商户协议号，避免在旧纯签约结果未知时创建第二份授权。
+    const changed = await db.prepare("UPDATE wechat_sub SET sign_mode='app',updated_at=? WHERE contract_code=? AND status='pending'")
+      .bind(now, sub.contract_code).run();
+    if (changed.meta.changes !== 1) return J({ error: 'already-subscribed' }, 409);
+    sub.sign_mode = 'app';
+  }
+  if (!txn) {
+    const no = tradeNo(`app:${sub.contract_code}`, 0);
+    await db.batch([
+      db.prepare(`INSERT OR IGNORE INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,attempt_count,max_attempts,payment_kind,checkout_expires_at,request_serial,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,'charging',1,1,'app',?,?,?,?)`)
+        .bind(no, sub.contract_code, scope, sub.plan_id, now, addCalendarMonth(now), amountFen(env), now + 30 * 60 * 1000, requestSerial(now), now, now),
+      db.prepare(`INSERT OR IGNORE INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,next_query_at,created_at,updated_at)
+        SELECT out_trade_no,out_trade_no,contract_code,?,'unknown',1,?,?,? FROM wechat_txn WHERE out_trade_no=? AND payment_kind='app'`)
+        .bind(sub.contract_id || '', now + QUERY_INTERVAL, now, now, no),
+    ]);
+    txn = await db.prepare("SELECT * FROM wechat_txn WHERE out_trade_no=?").bind(no).first();
+  }
+  if (!txn || txn.status !== 'charging') return J({ error: 'payment-pending' }, 409);
+  try {
+    if (txn.prepay_id || txn.created_at < now) {
+      let state;
+      try { state = await reconcileAppCheckout(env, txn, now, fetcher); }
+      // Only retry the SAME order; never infer payment from an unsigned error.
+      catch (e) {
+        if (e.code !== 'ORDER_NOT_EXIST') throw e;
+        if (!txn.prepay_id && txn.checkout_expires_at <= now) {
+          // A creation timeout can leave no WeChat order. Retry the same order number with a fresh expiry.
+          txn.checkout_expires_at = now + 30 * 60 * 1000;
+          await db.prepare("UPDATE wechat_txn SET checkout_expires_at=? WHERE out_trade_no=? AND status='charging' AND prepay_id IS NULL")
+            .bind(txn.checkout_expires_at, txn.out_trade_no).run();
+        }
+      }
+      if (state === 'SUCCESS') return J({ error: 'already-subscribed' }, 409);
+      if (state && state !== 'NOTPAY') return J({ error: 'payment-pending' }, 409);
+    }
+    if (txn.checkout_expires_at <= now) {
+      // 先由微信确认关单，再允许新订单；不因本地超时擅自换单。
+      await wechatV3Request(env, 'POST', `/v3/pay/transactions/out-trade-no/${encodeURIComponent(txn.out_trade_no)}/close`,
+        { mchid: env.WECHAT_PAY_MCH_ID }, fetcher, now);
+      await reconcileAppCheckout(env, txn, now, fetcher);
+      return J({ error: 'checkout-expired' }, 409);
+    }
+    if (!txn.prepay_id) {
+      const result = await wechatV3Request(env, 'POST', '/v3/pay/transactions/app-with-contract', {
+        appid: env.WECHAT_PAY_APP_ID, mchid: env.WECHAT_PAY_MCH_ID,
+        description: 'VoiceDrop 包月算力', out_trade_no: txn.out_trade_no,
+        time_expire: new Date(txn.checkout_expires_at).toISOString(),
+        notify_url: `${publicOrigin(env)}/agent/wechat-pay/app-pay-notify`,
+        amount: { total: txn.amount_fen, currency: 'CNY' },
+        contract_info: { plan_id: txn.plan_id, contract_mchid: env.WECHAT_PAY_MCH_ID,
+          contract_appid: env.WECHAT_PAY_APP_ID, contract_code: sub.contract_code,
+          request_serial: txn.request_serial,
+          contract_display_account: String(env.WECHAT_PAY_CONTRACT_DISPLAY_ACCOUNT || 'VoiceDrop 包月算力').slice(0,64),
+          contract_notify_url: `${publicOrigin(env)}/agent/wechat-pay/contract-notify` },
+      }, fetcher, now);
+      if (typeof result.prepay_id !== 'string' || !result.prepay_id || result.prepay_id.length > 128) throw new Error('invalid-prepay-response');
+      txn.prepay_id = result.prepay_id;
+      await db.batch([
+        db.prepare("UPDATE wechat_txn SET prepay_id=?,updated_at=? WHERE out_trade_no=? AND status='charging'").bind(txn.prepay_id, now, txn.out_trade_no),
+        db.prepare("UPDATE wechat_attempt SET status='accepted',updated_at=? WHERE out_trade_no=? AND status IN ('unknown','sending')").bind(now, txn.out_trade_no),
+      ]);
+      await audit(db, { now, direction:'outbound', event_type:'app_checkout_created',contract_code:sub.contract_code,out_trade_no:txn.out_trade_no,user_sub:scope,payload:{amount_fen:txn.amount_fen,plan_id:txn.plan_id} });
+    }
+    // 用户回到 APP 后只查询服务端结果，不相信客户端 SDK 的付款成功标志。
+    return J({ ok:true, checkout_mode:'app-with-contract', contract_code:sub.contract_code,
+      expires_at:txn.checkout_expires_at, amount_fen:txn.amount_fen,
+      pay_params:wechatV3AppPayParams(env, txn.prepay_id, now) });
+  } catch (e) {
+    await audit(db, { now, direction:'outbound', event_type:'app_checkout_failed',contract_code:sub.contract_code,out_trade_no:txn.out_trade_no,user_sub:scope,code:e.code || 'unconfirmed',message:e.providerMessage || e.message });
+    return J({ error:'checkout-unavailable' }, 502);
+  }
 }
 
 export async function handleWechatPayRoute(
@@ -1186,6 +1327,23 @@ export async function handleWechatPayRoute(
 ) {
   if (!url.pathname.startsWith("/agent/wechat-pay/")) return null;
   try {
+    if (url.pathname === "/agent/wechat-pay/checkout" && request.method === "POST") {
+      const scope = await scopeFromToken(bearerToken(request), env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      return await appCheckout(env, scope, now, fetcher);
+    }
+    if (url.pathname === "/agent/wechat-pay/app-pay-notify" && request.method === "POST") {
+      if (!env.USAGE || !wechatV3Ready(env)) return J({ code:"FAIL", message:"UNAVAILABLE" }, 503);
+      let data;
+      try { data = decryptWechatV3Notification(env, request.headers, await request.text(), now); }
+      catch { return J({ code:"FAIL", message:"INVALID NOTIFICATION" }, 400); }
+      const txn = await env.USAGE.prepare("SELECT * FROM wechat_txn WHERE out_trade_no=? AND payment_kind='app'").bind(data.out_trade_no || '').first();
+      if (!txn) return J({ code:"FAIL", message:"UNKNOWN ORDER" }, 400);
+      try { await settleAppCheckout(env, txn, data, now); }
+      catch { return J({ code:"FAIL", message:"PAYMENT NOT CONFIRMED" }, 500); }
+      return new Response(null, { status:204 });
+    }
+
     if (
       url.pathname === "/agent/wechat-pay/contract" &&
       request.method === "POST"
@@ -1263,6 +1421,7 @@ export async function handleWechatPayRoute(
           payload: { plan_id: env.WECHAT_PAY_PLAN_ID },
         });
       }
+      if (sub.sign_mode === "app") return J({ error:"payment-pending" }, 409);
       const origin = publicOrigin(env, url);
       const serial = requestSerial(now);
       try {
@@ -1356,9 +1515,9 @@ export async function handleWechatPayRoute(
         .first();
       const initialStart = previous?.period_end_at || null;
       const nextChargeAt =
-        initialStart == null ? now : wechatChargeScheduleAt(initialStart);
+        initialStart == null ? (sub.sign_mode === "app" ? null : now) : wechatChargeScheduleAt(initialStart);
       const changed = await env.USAGE.prepare(
-        "UPDATE wechat_sub SET contract_id=?,openid=?,status='active',period_start_at=NULL,period_end_at=?,next_charge_at=?,signed_at=?,last_event_at=?,last_error_code=NULL,updated_at=? WHERE contract_code=? AND status='pending'",
+        "UPDATE wechat_sub SET contract_id=?,openid=?,status='active',period_start_at=CASE WHEN sign_mode='app' THEN period_start_at ELSE NULL END,period_end_at=CASE WHEN sign_mode='app' THEN period_end_at ELSE ? END,next_charge_at=CASE WHEN sign_mode='app' THEN next_charge_at ELSE ? END,signed_at=?,last_event_at=?,last_error_code=NULL,updated_at=? WHERE contract_code=? AND status='pending' AND sign_mode=?",
       )
         .bind(
           contractId,
@@ -1369,10 +1528,23 @@ export async function handleWechatPayRoute(
           now,
           now,
           code,
+          sub.sign_mode,
         )
         .run();
-      if (changed.meta.changes !== 1)
-        return xmlReply("SUCCESS", "ALREADY PROCESSED");
+      if (changed.meta.changes !== 1) {
+        const current = await env.USAGE.prepare("SELECT status FROM wechat_sub WHERE contract_code=?").bind(code).first();
+        return current?.status === 'pending' ? xmlReply("FAIL", "RETRY") : xmlReply("SUCCESS", "ALREADY PROCESSED");
+      }
+      if (sub.sign_mode === "app") {
+        const paidSub = await env.USAGE.prepare("SELECT period_start_at,period_end_at FROM wechat_sub WHERE contract_code=?").bind(code).first();
+        if (paidSub.period_start_at != null) {
+          await env.USAGE.prepare("UPDATE wechat_sub SET next_charge_at=? WHERE contract_code=? AND status='active' AND period_end_at=? AND next_charge_at IS NULL")
+            .bind(wechatChargeScheduleAt(paidSub.period_end_at), code, paidSub.period_end_at).run();
+        }
+        await env.USAGE.prepare("UPDATE wechat_attempt SET contract_id=? WHERE contract_code=? AND contract_id='' AND cycle_no IN (SELECT out_trade_no FROM wechat_txn WHERE payment_kind='app')")
+          .bind(contractId, code).run();
+      }
+
       await audit(env.USAGE, {
         now,
         direction: "inbound",
@@ -1390,7 +1562,7 @@ export async function handleWechatPayRoute(
         ready(env) &&
         ctx &&
         typeof ctx.waitUntil === "function" &&
-        nextChargeAt <= now
+        sub.sign_mode !== "app" && nextChargeAt != null && nextChargeAt <= now
       ) {
         const activeSub = {
           ...sub,
@@ -1463,7 +1635,7 @@ export async function handleWechatPayRoute(
         )
           .bind(attempt.cycle_no)
           .first());
-      if (!txn) return xmlReply("FAIL", "ORDER MISMATCH");
+      if (!txn || txn.payment_kind === "app") return xmlReply("FAIL", "ORDER MISMATCH");
       // 失败通知通常没有 total_fee；成功通知则必须金额完全一致才能入账。
       if (
         callbackData(values) &&
@@ -1624,6 +1796,11 @@ export async function handleWechatPayRoute(
       const scope = await scopeFromToken(bearerToken(request), env);
       if (!scope) return J({ error: "unauthorized" }, 401);
       if (!env.USAGE) return J({ active: false, degraded: true });
+      const appTxn = await env.USAGE.prepare("SELECT * FROM wechat_txn WHERE user_sub=? AND payment_kind='app' AND status='charging' ORDER BY created_at DESC LIMIT 1").bind(scope).first();
+      if (appTxn && wechatV3Ready(env)) {
+        const attempt = await env.USAGE.prepare("SELECT * FROM wechat_attempt WHERE out_trade_no=?").bind(appTxn.out_trade_no).first();
+        if (attempt) await reconcilePayment(env.USAGE, env, attempt, now, fetcher);
+      }
       const row = await env.USAGE.prepare(
         "SELECT contract_code, contract_id, plan_id, status, period_start_at, period_end_at, next_charge_at, cancel_reason, signed_at, cancelled_at, last_error_code FROM wechat_sub WHERE user_sub=? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1",
       )
@@ -1647,6 +1824,9 @@ export async function handleWechatPayRoute(
         : { s: 0 };
       return J({
         active,
+        checkout_pending: !!(await env.USAGE.prepare("SELECT 1 FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code WHERE t.user_sub=? AND t.payment_kind='app' AND t.status='charging' AND s.status IN ('pending','active') LIMIT 1").bind(scope).first()),
+        checkout_paid: !!(row && await env.USAGE.prepare("SELECT 1 FROM wechat_txn WHERE contract_code=? AND payment_kind='app' AND status='paid' LIMIT 1").bind(row.contract_code).first()),
+        amount_fen: amountFen(env),
         enabled: await wechatPayEnabled(env),
         can_cancel: !!(row && row.status === "active" && row.contract_id),
         status: row ? row.status : null,
