@@ -23,8 +23,8 @@ function checkSchema(db) {
   expect(db.prepare('PRAGMA integrity_check').first().integrity_check).toBe('ok');
 }
 
-it('builds the V3 schema from the full migration chain', () => {
-  const db = fakeD1(usageSql());
+it('preserves the historical V3 cleanup migration', () => {
+  const db = fakeD1(usageSql({before:'0010_wechat_subscription_lifecycle.sql'}));
   checkSchema(db);
   expect(db.prepare('PRAGMA table_info(wechat_txn)').all().results.map(c => c.name))
     .toEqual(expect.arrayContaining(['prepay_id', 'request_serial', 'payment_kind', 'entitlement_end_at']));
@@ -70,4 +70,37 @@ it('upgrades populated schemas without changing retained orders, audit history, 
     .toThrow(/UNIQUE constraint/);
   expect(() => db.exec("INSERT INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,created_at,updated_at) VALUES('duplicate','pending','app','','accepted',2,300,300)"))
     .toThrow(/UNIQUE constraint/);
+});
+
+it('adds independent contract verification without trusting historical rows or weakening live cycle uniqueness',()=>{
+  const name='0009_wechat_contract_events.sql';
+  const db=fakeD1(usageSql({before:name}));
+  db.exec(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,created_at,updated_at)
+    VALUES('old','u','p','active',100,100);
+    INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
+    VALUES('closed','old','u','p',100,200,1,'failed',100,100);`);
+  db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+  expect(db.prepare('SELECT contract_verified_at FROM wechat_sub').first().contract_verified_at).toBeNull();
+  const insert=(order,contract)=>db.exec(`INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
+    VALUES('${order}','${contract}','u','p',100,200,1,'charging',100,100)`);
+  insert('retry','new');
+  expect(()=>insert('duplicate','another')).toThrow(/UNIQUE constraint/);
+  expect(()=>db.exec("UPDATE wechat_txn SET status='paid' WHERE out_trade_no='closed'")).toThrow(/UNIQUE constraint/);
+  expect(db.prepare('PRAGMA integrity_check').first().integrity_check).toBe('ok');
+});
+
+it('restores lifecycle fields additively without inventing authorization or resetting consumed attempts',()=>{
+ const name='0010_wechat_subscription_lifecycle.sql',db=fakeD1(usageSql({before:name}));
+ db.exec(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,sign_mode,created_at,updated_at)
+ VALUES('c','u','p','active','app',100,100);
+ INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,created_at,updated_at)
+ VALUES('cycle','c','u','p',100,200,1,'charging',100,100);
+ INSERT INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,created_at,updated_at)
+ VALUES('one','cycle','c','id','failed',1,100,100),('two','cycle','c','id','unknown',2,100,100);`);
+ db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+ expect(db.prepare('SELECT status,contract_verified_at,next_charge_at FROM wechat_sub').first()).toEqual({status:'active',contract_verified_at:null,next_charge_at:null});
+ expect(db.prepare('SELECT attempt_count,next_try_at FROM wechat_txn').first()).toEqual({attempt_count:2,next_try_at:null});
+ expect(db.prepare("SELECT resubmit_count FROM wechat_attempt WHERE out_trade_no='two'").first().resubmit_count).toBe(3);
+ expect(db.prepare('SELECT COUNT(*) n FROM wechat_attempt').first().n).toBe(2);
+ expect(db.prepare('PRAGMA integrity_check').first().integrity_check).toBe('ok');
 });
