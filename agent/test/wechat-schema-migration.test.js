@@ -114,3 +114,28 @@ it('adds restoration metadata without fabricating paid periods or modifying hist
  expect(db.prepare('SELECT COUNT(*) n FROM wechat_txn').first().n).toBe(0);
  expect(()=>db.exec("UPDATE wechat_sub SET renewal_amount_fen=0")).toThrow();
 });
+
+it('compacts cancellation intent and restored prices into the original V2 tables without granting credit',()=>{
+ const name='0012_wechat_compact_state_prepare.sql', db=fakeD1(usageSql({before:name}));
+ const boundary=Date.UTC(2028,0,31,10,20,30,123);
+ db.prepare(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,sign_mode,created_at,updated_at)
+   VALUES('old','u','p','cancelled','app',100,100)`).run();
+ db.prepare(`INSERT INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,
+ amount_fen,status,paid_at,entitlement_start_at,entitlement_end_at,created_at,updated_at)
+ VALUES('paid','old','u','p',100,?,1,'paid',100,100,?,100,100)`).bind(boundary,boundary).run();
+ db.prepare(`INSERT INTO wechat_sub(contract_code,user_sub,plan_id,status,period_start_at,period_end_at,
+ resume_order,renewal_amount_fen,cancel_requested_at,contract_query_at,created_at,updated_at)
+ VALUES('resume','u','p','pending',100,?,'paid',1990,200,901000,200,200)`).bind(boundary).run();
+ const original=rows(db,'wechat_txn')[0];
+ db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+ expect(rows(db,'wechat_txn')[0]).toEqual(original);
+ const sub=db.prepare("SELECT * FROM wechat_sub WHERE contract_code='resume'").first();
+ expect(sub.cancel_reason).toBe('user-request-pending');expect(sub.next_charge_at).toBeNull();expect(sub.last_event_at).toBe(1000);
+ const draft=db.prepare("SELECT * FROM wechat_txn WHERE contract_code='resume'").first();
+ expect(draft.amount_fen).toBe(1990);expect(draft.status).toBe('pending');expect(draft.attempt_count).toBe(0);
+ expect(draft.period_start_at).toBe(boundary);expect(draft.period_end_at).toBe(Date.UTC(2028,1,29,10,20,30,123));
+ expect(draft.out_trade_no.length).toBe(32);
+ for(const table of ['bucket','ledger','wechat_attempt'])expect(rows(db,table)).toHaveLength(0);
+ db.exec(readFileSync(new URL('../migrations/'+name,import.meta.url),'utf8'));
+ expect(rows(db,'wechat_txn')).toHaveLength(2);
+});
