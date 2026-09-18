@@ -1287,7 +1287,10 @@ async function resumeAuthorization(env, scope, now, fetcher, sub, paid) {
     sub=await db.prepare("SELECT * FROM wechat_sub WHERE user_sub=? AND status IN ('pending','active') LIMIT 1").bind(scope).first();
   }
   if(!sub || sub.status!=='pending' || cancelPending(sub))return J({error:'already-subscribed'},409);
-  const draft=await authorizationDraft(db,sub);
+  // Paid-but-unsigned APP checkout keeps its original agreement and paid period.
+  // Reopening authorization never creates another transaction or grants credits.
+  const draft=await authorizationDraft(db,sub) ||
+    (paid?.contract_code===sub.contract_code && paid.status==='paid' && paid.entitlement_end_at>now ? paid : null);
   if(!draft)return J({error:'payment-pending'},409);
   const payload={appid:env.WECHAT_PAY_APP_ID,mch_id:env.WECHAT_PAY_MCH_ID,plan_id:sub.plan_id,
     contract_code:sub.contract_code,request_serial:requestSerial(now),contract_display_account:'VoiceDrop 包月算力',
@@ -1321,9 +1324,19 @@ async function appCheckout(env, scope, now, fetcher, restoreOnly = false) {
   if(sub && lifecycleReady(env) && (txn?.status==='paid' || sub.status==='active')) {
     const checked=await reconcileWechatContract(db,env,sub,now,fetcher);
     if(checked.cancelled) {sub=null;txn=null;}
+    else sub=await db.prepare('SELECT * FROM wechat_sub WHERE contract_code=?').bind(sub.contract_code).first();
   }
-  if (txn?.status === 'paid') return J({ error: Number(txn.entitlement_end_at) > now
-    ? 'already-subscribed' : 'contract-status-unavailable' }, 409);
+  if (txn?.status === 'paid') {
+    if(cancelPending(sub))return J({error:'cancel-pending'},409);
+    if(restoreOnly && sub?.status==='pending' && !sub.contract_id && txn.entitlement_end_at>now) {
+      if(await unresolvedUserOrder(db,scope))return J({error:'payment-pending'},409);
+      // Even an inconclusive query may only reopen this SAME agreement. Never replace it,
+      // infer consent, or fall back to another paid checkout.
+      return resumeAuthorization(env,scope,now,fetcher,sub,txn);
+    }
+    return J({ error: Number(txn.entitlement_end_at) > now
+      ? 'already-subscribed' : restoreOnly ? 'coverage-changed' : 'contract-status-unavailable' }, 409);
+  }
   if (txn && txn.status === 'failed' && sub.status === 'pending') {
     if(lifecycleReady(env)) {
       const checked=await reconcileWechatContract(db,env,sub,now,fetcher);
@@ -1513,12 +1526,13 @@ export async function handleWechatPayRoute(
       const currentPrice=row && ['pending','active'].includes(row.status)
         ? await env.USAGE.prepare("SELECT amount_fen FROM wechat_txn WHERE contract_code=? AND status IN ('pending','charging','paid') ORDER BY created_at DESC LIMIT 1").bind(row.contract_code).first()
         : null;
+      const checkoutPaid=!!(row && await env.USAGE.prepare("SELECT 1 FROM wechat_txn WHERE contract_code=? AND payment_kind='app' AND status='paid' LIMIT 1").bind(row.contract_code).first());
       return J({
         active,
         checkout_pending: !!(await env.USAGE.prepare("SELECT 1 FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code WHERE t.user_sub=? AND t.payment_kind='app' AND t.status='charging' AND s.status IN ('pending','active') LIMIT 1").bind(scope).first()),
-        checkout_paid: !!(row && await env.USAGE.prepare("SELECT 1 FROM wechat_txn WHERE contract_code=? AND payment_kind='app' AND status='paid' LIMIT 1").bind(row.contract_code).first()),
+        checkout_paid: checkoutPaid,
         amount_fen: currentPrice?.amount_fen || amountFen(env),
-        restore_authorization: (row?.status==='pending' && !!(await authorizationDraft(env.USAGE,row))) || (active && (!row || row.status==='cancelled')),
+        restore_authorization: (row?.status==='pending' && (!!(await authorizationDraft(env.USAGE,row)) || (active && checkoutPaid && !row.contract_id))) || (active && (!row || row.status==='cancelled')),
         contract_code: row?.contract_code || null,
         enabled: await wechatPayEnabled(env),
         can_cancel: lifecycleReady(env) && !!row && ['pending','active'].includes(row.status),
