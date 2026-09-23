@@ -96,7 +96,7 @@
   //   WECHAT_PAY_MCH_ID      — 微信支付商户号
   //   WECHAT_PAY_APP_ID      — 签约入口对应 App / 公众号 / 小程序 AppID
   //   WECHAT_PAY_PLAN_ID     — 审核通过的委托代扣模板 ID
-  //   WECHAT_PAY_API_V2_KEY — 纯签约、首期及周期代扣、查单、查约、解约及 XML 通知验签（Secret）
+  //   WECHAT_PAY_API_V2_KEY — 支付并签约、纯签约、周期代扣、查单、查约、解约及 XML 通知验签（Secret）
   //   WECHAT_PAY_CALLBACK_BASE_URL — 显式公网回调 origin
   // Optional:
   //   WECHAT_PAY_AMOUNT_FEN  — 每期金额（分），默认 1990
