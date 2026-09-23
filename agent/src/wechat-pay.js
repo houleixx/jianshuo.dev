@@ -1,10 +1,9 @@
-// src/wechat-pay.js — V3 APP 首期支付并签约；V2 协议管理、周期扣款；统一原子入账。
+// src/wechat-pay.js — 微信委托代扣（¥19.9/月 → 每月 200 算力）。
 //
 // 跟 iap.js 一样：支付渠道自己的表只保存「协议 / 订单」；实际算力一律走
 // bucket + ledger。已验签的成功回调和查单结果共用原子入账入口，重复回调与 Cron 重试
-// 都以用户周期为幂等键；未确认的订单始终复用同一商户订单号。
+// 都以用户周期为幂等键；每次明确失败后的替代扣款有独立、不可变的商户订单。
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { wechatV3Ready, wechatV3Request, wechatV3AppPayParams, decryptWechatV3Notification, decryptWechatV3Event } from "./wechat-v3.js";
 import { SUB_GRANT_SUANLI, suanliToUY, uyToSuanli } from "./usage.js";
 import { ensureAccount } from "./usage_store.js";
 import { activeIapSubscription } from "./subscription-status.js";
@@ -14,20 +13,28 @@ import {
   bearerToken,
 } from "../../functions/lib/auth.js";
 
-const DAY_MS = 86400000, HOUR_MS = 3600000, CHARGE_LEAD_DAYS = 3;
-const APPLY_URL = 'https://api.mch.weixin.qq.com/pay/pappayapply';
-const QUERY_CONTRACT_URL = 'https://api.mch.weixin.qq.com/papay/querycontract';
-const TERMINATE_CONTRACT_URL = 'https://api.mch.weixin.qq.com/papay/deletecontract';
-const CANCEL_PENDING = 'user-request-pending';
-const cancelPending = sub => sub?.status !== 'cancelled' && sub?.cancel_reason === CANCEL_PENDING;
-const contractKnown = sub => !!sub && ((!!sub.contract_id && sub.signed_at != null) || (sub.status === 'cancelled' && sub.cancelled_at != null));
-const QUERY_INTERVAL = 15 * 60 * 1000;
+const DAY_MS = 86400000;
+const HOUR_MS = 60 * 60 * 1000;
+const CHARGE_LEAD_DAYS = 3;
+const PRE_ENTRUST_TTL_MS = 2 * 60 * 60 * 1000;
+const DEFAULT_PRECONTRACT_URL =
+  "https://api.mch.weixin.qq.com/papay/preentrustweb";
+const APPLY_URL = "https://api.mch.weixin.qq.com/pay/pappayapply";
+const QUERY_CONTRACT_URL = "https://api.mch.weixin.qq.com/papay/querycontract";
+const TERMINATE_CONTRACT_URL =
+  "https://api.mch.weixin.qq.com/papay/deletecontract";
 const WECHAT_PAY_CONFIG_KEY = "config/wechat-pay.json";
 const J = (x, status = 200) =>
   new Response(JSON.stringify(x), {
     status,
     headers: { "content-type": "application/json" },
   });
+const xmlReply = (code, message) =>
+  new Response(
+    `<xml><return_code><![CDATA[${code}]]></return_code><return_msg><![CDATA[${message}]]></return_msg></xml>`,
+    { status: 200, headers: { "content-type": "text/xml; charset=utf-8" } },
+  );
+
 async function scopeFromToken(tok, env) {
   if (!tok) return null;
   if (env.SESSION_SECRET) {
@@ -59,6 +66,10 @@ export function addCalendarMonth(at) {
   );
 }
 
+// 微信的「通知后 24 小时自动扣费」模板可全天发起申请。为了给失败留出两次
+// 次日重试，续期申请固定在到期日前第 3 个北京时间自然日的 02:00 运行。
+// 周期本身仍保存为 UTC epoch；这里只把调度时点按北京时间日历换算，避免受
+// Worker 区域或夏令时（中国没有夏令时）影响。
 export function wechatChargeScheduleAt(periodEndAt) {
   const beijingOffset = 8 * HOUR_MS;
   const beijingDayStart =
@@ -125,24 +136,19 @@ export function verifyWechatV2(params, apiKey) {
     return actual.length===expected.length && timingSafeEqual(actual,expected);
   } catch { return false; }
 }
-function xmlReply(code, message) {
-  return new Response(`<xml><return_code><![CDATA[${code}]]></return_code><return_msg><![CDATA[${message}]]></return_msg></xml>`,{headers:{'content-type':'text/xml; charset=utf-8'}});
-}
-function callbackData(p) { return p?.return_code==='SUCCESS' && p.result_code==='SUCCESS'; }
-function lifecycleReady(env) { return !!(env.USAGE && env.WECHAT_PAY_API_V2_KEY && env.WECHAT_PAY_APP_ID && env.WECHAT_PAY_MCH_ID); }
-
 function amountFen(env) {
   const n = Number(env.WECHAT_PAY_AMOUNT_FEN ?? 1990);
   return Number.isInteger(n) && n > 0 ? n : 0;
 }
 
 function ready(env) {
+  // 当前扣款流程固定使用「通知后 24 小时自动扣费」模板，不另设模式开关。
   return !!(
     env.USAGE &&
     env.WECHAT_PAY_MCH_ID &&
     env.WECHAT_PAY_APP_ID &&
     env.WECHAT_PAY_PLAN_ID &&
-    wechatV3Ready(env) &&
+    env.WECHAT_PAY_API_V2_KEY &&
     env.WECHAT_PAY_CALLBACK_BASE_URL &&
     amountFen(env)
   );
@@ -150,7 +156,7 @@ function ready(env) {
 
 // 首次访问时把售卖开关初始化为开启，之后由 R2 中的显式 true/false 控制。R2 读、写或
 // 解析异常时仍默认开启，避免临时存储故障把客户端订阅入口误关掉。它仅阻止新签约，
-// 不影响已有订单的支付回调和状态查询。
+// 不影响已有协议的续费、回调和状态查询。
 export async function wechatPayEnabled(env) {
   try {
     const obj = env.FILES && (await env.FILES.get(WECHAT_PAY_CONFIG_KEY));
@@ -177,6 +183,10 @@ function publicOrigin(env, url) {
   return String(env.WECHAT_PAY_CALLBACK_BASE_URL).replace(/\/$/, "");
 }
 
+function precontractUrl(env) {
+  return String(env.WECHAT_PAY_PRECONTRACT_URL || DEFAULT_PRECONTRACT_URL);
+}
+
 // 审计记录不保存可复用的签名/随机串；其余微信字段保留，才能把商户订单、微信订单、
 // 协议状态与某一次 Cron/回调串起来排错。日志写入失败绝不能阻断真实支付流程。
 function auditPayload(payload) {
@@ -187,8 +197,8 @@ function auditPayload(payload) {
     "nonce_str",
     "api_key",
     "key",
-    "prepay_id",
-    "pay_params",
+    "pre_entrustweb_id",
+    "miniprogram_path",
   ]) {
     if (k in copy) copy[k] = "[redacted]";
   }
@@ -224,7 +234,7 @@ async function audit(db, event) {
 function tradeNo(contractCode, periodStart) {
   // 微信商户订单号最多 32 字符。输入稳定，重跑 Cron / 网络重试一定还是同一订单号。
   return (
-    "wd" + createHash("md5").update(`${contractCode}:${periodStart}`).digest("hex").slice(0, 30)
+    "wd" + md5(`${contractCode}:${periodStart}`).slice(0, 30).toLowerCase()
   );
 }
 
@@ -240,292 +250,87 @@ function contractCode(now, random = null) {
   return `wdc${Number(now).toString(36)}${n}`.slice(0, 64);
 }
 
+function callbackData(params) {
+  return (
+    params &&
+    params.return_code === "SUCCESS" &&
+    params.result_code === "SUCCESS"
+  );
+}
+
 function requestSerial(now) {
   // 13 位毫秒时间 + 5 位随机数，始终是非零、未超 int64 上限的纯数字。
   const random = crypto.getRandomValues(new Uint32Array(1))[0] % 100000;
   return `${Math.floor(Number(now))}${String(random).padStart(5, "0")}`;
 }
 
-async function unresolvedUserOrder(db, userSub) {
-  return db
-    .prepare(
-      `SELECT a.out_trade_no FROM wechat_attempt a JOIN wechat_txn t ON t.out_trade_no=a.cycle_no WHERE t.user_sub=? AND a.status IN ('sending','unknown','accepted','refunded') LIMIT 1`,
-    )
-    .bind(userSub)
-    .first();
+function contractResponse(contractCode, provider, expiresAt) {
+  // 这是唯一给 Android 的签约数据：不泄露商户号、模板、回调地址、签名、密钥或微信完整响应。
+  return J({
+    ok: true,
+    contract_code: contractCode,
+    pre_entrustweb_id: provider.pre_entrustweb_id,
+    wechat_mini_program_username: provider.miniprogram_username || null,
+    wechat_mini_program_path: provider.miniprogram_path || null,
+    expires_at: expiresAt,
+  });
 }
 
-// Coverage survives cancellation and must be carried into a replacement agreement.
-async function coverageEnd(db, userSub, excludingOrder = '') {
-  const row = await db.prepare(`SELECT MAX(expires_at) AS end_at FROM (
-    SELECT entitlement_end_at AS expires_at FROM wechat_txn
-      WHERE user_sub=? AND status='paid' AND out_trade_no!=?
-    UNION ALL SELECT period_end_at AS expires_at FROM wechat_sub
-      WHERE user_sub=? AND period_start_at IS NOT NULL AND status IN ('active','cancelled')
-  )`).bind(userSub, excludingOrder, userSub).first();
-  return Number(row?.end_at || 0);
-}
-
-// V3 agreement events never grant credit. Only verified payment results can do so.
-// An agreement code is never reused after termination: delayed SIGN cannot revive it.
-async function applyContractEvent(env, eventType, data, now) {
-  const db = env.USAGE;
-  const sub = await db.prepare('SELECT * FROM wechat_sub WHERE contract_code=?')
-    .bind(data.out_contract_code || '').first();
-  const signedAt = Date.parse(data.contract_signed_time);
-  const terminated = eventType === 'ENTRUST.TERMINATE';
-  const terminatedAt = terminated ? Date.parse(data.contract_terminate_info?.contract_terminated_time) : null;
-  const eventAt = terminated ? terminatedAt : signedAt;
-  if (!sub || data.mchid !== env.WECHAT_PAY_MCH_ID || data.appid !== env.WECHAT_PAY_APP_ID ||
-      String(data.plan_id) !== String(sub.plan_id) || typeof data.contract_id !== 'string' || !data.contract_id ||
-      (sub.contract_id && sub.contract_id !== data.contract_id) || (sub.openid && data.openid && sub.openid!==data.openid) ||
-      data.contract_state !== (terminated ? 'TERMINATED' : 'SIGNED') ||
-      !Number.isFinite(signedAt) || !Number.isFinite(eventAt) || eventAt < signedAt ||
-      signedAt < sub.created_at - 5 * 60 * 1000 || eventAt > now + 5 * 60 * 1000)
-    throw new Error('contract-notification-mismatch');
-  const status = terminated ? 'cancelled' : 'active';
-  // Conditions are rechecked by SQLite at write time, including concurrent notifications.
-  await db.batch([
-    db.prepare(`UPDATE wechat_sub SET contract_id=?,status=?,signed_at=?,cancelled_at=?,
-      cancel_reason=CASE WHEN ?='cancelled' THEN ? ELSE cancel_reason END,last_event_at=?,updated_at=?
-      WHERE contract_code=? AND (contract_id IS NULL OR contract_id=?)
-      AND COALESCE(cancelled_at,signed_at,0)<=?
-      AND (?=1 OR status IN ('pending','active'))`)
-      .bind(data.contract_id,status,signedAt,terminatedAt,status,
-        terminated ? String(data.contract_terminate_info?.contract_termination_mode || 'TERMINATED') : null,
-        now,now,sub.contract_code,data.contract_id,eventAt,terminated ? 1 : 0),
-    db.prepare(`UPDATE wechat_attempt SET contract_id=? WHERE contract_code=? AND contract_id='' AND changes()>0`)
-      .bind(data.contract_id,sub.contract_code),
-    db.prepare(`UPDATE wechat_sub SET openid=COALESCE(openid,?),next_charge_at=CASE WHEN status='cancelled' THEN NULL ELSE next_charge_at END
-      WHERE contract_code=? AND contract_id=?`).bind(data.openid || null,sub.contract_code,data.contract_id),
-    db.prepare(`UPDATE wechat_txn SET status='failed',next_try_at=NULL,failure_code='contract-terminated',updated_at=?
-      WHERE contract_code=? AND payment_kind='deduct' AND status IN ('pending','failed')
-      AND EXISTS(SELECT 1 FROM wechat_sub WHERE contract_code=? AND status='cancelled')`).bind(now,sub.contract_code,sub.contract_code),
-  ]);
-  await armRenewal(db,sub.contract_code,now);
-  await audit(db, { now, direction:'inbound',event_type:eventType,contract_code:sub.contract_code,
-    user_sub:sub.user_sub,payload:{contract_id:data.contract_id,contract_state:data.contract_state,event_at:eventAt} });
-}
-
-// Scheduling state belongs to the subscription, not to V2 or V3. Never infer a paid period from a signature alone.
-async function armRenewal(db, code, now) {
-  const sub=await db.prepare('SELECT * FROM wechat_sub WHERE contract_code=?').bind(code).first();
-  if(!sub || sub.status!=='active' || !sub.contract_id || sub.period_start_at==null ||
-     cancelPending(sub) || sub.last_error_code || !contractKnown(sub)) return;
-  await db.prepare(`UPDATE wechat_sub SET next_charge_at=? WHERE contract_code=? AND status='active'
-    AND COALESCE(cancel_reason,'')!='user-request-pending' AND next_charge_at IS NULL AND last_error_code IS NULL AND period_end_at=?
-    AND NOT EXISTS(SELECT 1 FROM wechat_txn WHERE contract_code=? AND payment_kind='deduct' AND status='failed')`)
-    .bind(wechatChargeScheduleAt(sub.period_end_at),code,sub.period_end_at,code).run();
-}
-function contractTime(value, now) {
-  const m=/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(value || '');
-  if(!m) throw new Error('invalid-contract-time');
-  return paidTime(m.slice(1).join(''),now);
-}
-async function reconcileWechatContract(db,env,sub,now,fetcher) {
-  if(!lifecycleReady(env))return {unknown:true};
-  await db.prepare('UPDATE wechat_sub SET last_event_at=? WHERE contract_code=?').bind(now,sub.contract_code).run();
-  try {
-    const {state,body}=await queryWechatContract(env,sub,fetcher);
-    if(state==='9')return {pending:true};
-    if(sub.openid && body.openid!==sub.openid)throw new Error('contract-payer-mismatch');
-    const signedAt=contractTime(body.contract_signed_time,now);
-    const eventAt=state==='1' ? contractTime(body.contract_terminated_time,now) : signedAt;
-    await applyContractEvent(env,state==='1'?'ENTRUST.TERMINATE':'ENTRUST.SIGN',{
-      mchid:body.mch_id,appid:body.appid,plan_id:body.plan_id,out_contract_code:body.contract_code,
-      contract_id:body.contract_id,contract_state:state==='1'?'TERMINATED':'SIGNED',
-      contract_signed_time:new Date(signedAt).toISOString(),openid:body.openid,
-      ...(state==='1'?{contract_terminate_info:{contract_terminated_time:new Date(eventAt).toISOString(),contract_termination_mode:body.contract_termination_mode}}:{})
-    },now);
-    const current=await db.prepare('SELECT * FROM wechat_sub WHERE contract_code=?').bind(sub.contract_code).first();
-    return {active:current.status==='active' && !cancelPending(current),cancelled:current.status==='cancelled',sub:current};
-  } catch(e) {
-    await audit(db,{now,event_type:'contract_reconcile_failed',contract_code:sub.contract_code,user_sub:sub.user_sub,code:e.code,message:e.message});
-    return {unknown:true};
-  }
-}
-async function cancelContract(env,sub,now,fetcher) {
-  const db=env.USAGE;
-  // Durable intent is written before the network call and gates every new/resubmitted debit.
-  await db.prepare(`UPDATE wechat_sub SET cancel_reason='user-request-pending',next_charge_at=NULL,last_event_at=?,updated_at=?
-    WHERE contract_code=? AND status IN ('active','pending')`).bind(now,now,sub.contract_code).run();
-  try {
-    if(!sub.contract_id) {
-      const checked=await reconcileWechatContract(db,env,sub,now,fetcher);
-      if(checked.cancelled)return true;
-      sub=await db.prepare('SELECT * FROM wechat_sub WHERE contract_code=?').bind(sub.contract_code).first();
-      // Unknown callback state can still be terminated by the original plan + merchant contract code.
-    }
-    const provider=await terminateWechatContract(env,sub,fetcher);
-    await markWechatContractCancelled(db,sub,now,'user-request','contract_cancelled',provider,null,'outbound');
-    return true;
-  } catch(e) {
-    const checked=await reconcileWechatContract(db,env,sub,now,fetcher);
-    if(checked.cancelled)return true;
-    await audit(db,{now,event_type:'contract_cancel_failed',contract_code:sub.contract_code,user_sub:sub.user_sub,code:e.code,message:e.message});
-    return false;
-  }
-}
-async function settleDeductPayment(db,txn,values,now) {
-  if(txn.payment_kind!=='deduct' || (values.trade_state && values.trade_state!=='SUCCESS') || (values.fee_type && values.fee_type!=='CNY') ||
-     (values.trade_type && values.trade_type!=='PAP'))throw new Error('deduct-payment-mismatch');
-  const at=paidTime(values.time_end,now);
-  return settlePayment(db,txn,{...values,amount:{total:Number(values.total_fee)},success_time:new Date(at).toISOString()},now);
-}
-async function handleXmlNotification(env,path,raw,now) {
-  if(!lifecycleReady(env))return xmlReply('FAIL','UNAVAILABLE');
-  const v=parseWechatXml(raw);
-  if(!verifyWechatV2(v,env.WECHAT_PAY_API_V2_KEY) || v.mch_id!==env.WECHAT_PAY_MCH_ID ||
-      (v.appid && v.appid!==env.WECHAT_PAY_APP_ID))return xmlReply('FAIL','BAD SIGN OR MERCHANT');
-  if(path.endsWith('/pay-notify')) {
-    const a=await env.USAGE.prepare('SELECT * FROM wechat_attempt WHERE out_trade_no=?').bind(v.out_trade_no || '').first();
-    const txn=a && await env.USAGE.prepare('SELECT * FROM wechat_txn WHERE out_trade_no=?').bind(a.cycle_no).first();
-    if(!txn || txn.payment_kind!=='deduct' || v.appid!==env.WECHAT_PAY_APP_ID ||
-       v.contract_id!==a.contract_id)return xmlReply('FAIL','PAYMENT MISMATCH');
-    if(callbackData(v)) {
-      if(v.contract_id!==a.contract_id) return xmlReply('FAIL','CONTRACT MISMATCH');
-      await settleDeductPayment(env.USAGE,txn,v,now);
-    } else if(v.return_code==='SUCCESS' && v.result_code==='FAIL') {
-      await failAttempt(env.USAGE,a.out_trade_no,now,v.err_code || 'payment-failed');
-    } else return xmlReply('FAIL','UNKNOWN PAYMENT RESULT');
-    return xmlReply('SUCCESS','OK');
-  }
-  if(!callbackData(v))return xmlReply('FAIL','UNCONFIRMED CONTRACT');
-  if(!['ADD','DELETE'].includes(v.change_type) || !v.openid) return xmlReply('FAIL','WRONG EVENT');
-  const sub=await env.USAGE.prepare('SELECT * FROM wechat_sub WHERE contract_code=?').bind(v.contract_code || '').first();
-  if(!sub || (sub.openid && sub.openid!==v.openid))return xmlReply('FAIL','UNKNOWN CONTRACT');
-  const at=contractTime(v.operate_time,now), terminated=v.change_type==='DELETE';
-  await applyContractEvent(env,terminated?'ENTRUST.TERMINATE':'ENTRUST.SIGN',{
-    mchid:v.mch_id,appid:env.WECHAT_PAY_APP_ID,plan_id:v.plan_id,out_contract_code:v.contract_code,
-    contract_id:v.contract_id,openid:v.openid,contract_state:terminated?'TERMINATED':'SIGNED',
-    contract_signed_time:new Date(terminated ? sub.signed_at ?? at : at).toISOString(),
-    ...(terminated?{contract_terminate_info:{contract_terminated_time:new Date(at).toISOString(),contract_termination_mode:v.contract_termination_mode}}:{})
-  },now);
-  return xmlReply('SUCCESS','OK');
-}
-
-async function settlePayment(db, txn, values, now) {
-  const attempt = await db
-    .prepare("SELECT * FROM wechat_attempt WHERE out_trade_no=?")
-    .bind(values.out_trade_no)
-    .first();
-  if (!attempt || attempt.cycle_no !== txn.out_trade_no)
-    throw new Error("unknown-payment-attempt");
+async function postPrecontract(
+  env,
+  sub,
+  now,
+  origin,
+  fetcher,
+  requestSerialValue,
+) {
+  const payload = {
+    appid: env.WECHAT_PAY_APP_ID,
+    mch_id: env.WECHAT_PAY_MCH_ID,
+    plan_id: sub.plan_id,
+    contract_code: sub.contract_code,
+    request_serial: requestSerialValue,
+    contract_display_account: String(
+      env.WECHAT_PAY_CONTRACT_DISPLAY_ACCOUNT || "VoiceDrop 包月算力",
+    ).slice(0, 128),
+    notify_url: `${origin}/agent/wechat-pay/contract-notify`,
+    version: "1.0",
+    sign_type: "MD5",
+    timestamp: String(Math.floor(now / 1000)),
+    return_app: "Y",
+  };
+  const response = await fetcher(precontractUrl(env), {
+    method: "POST",
+    signal: AbortSignal.timeout(15000),
+    headers: { "content-type": "text/xml; charset=utf-8" },
+    body: wechatV2Xml(payload, env.WECHAT_PAY_API_V2_KEY),
+  });
+  const body = parseWechatXml(await response.text());
   if (
-    !values.transaction_id ||
-    Number(values.amount.total) !== Number(txn.amount_fen)
-  )
-    throw new Error("payment-mismatch");
-  if (attempt.status === 'refunded') throw new Error('refund-review-required');
-  if (txn.status === "paid") return { ok: true, already: true };
-  const paidAt = Date.parse(values.success_time);
-  if (!Number.isFinite(paidAt) || paidAt > now + 5 * 60 * 1000) throw new Error('invalid-payment-time');
-  // Early renewals keep their future boundary. A genuinely late first/recovery payment buys a full month from payment time.
-  const start = Math.max(txn.period_start_at, paidAt, await coverageEnd(db, txn.user_sub, txn.out_trade_no));
-  const end =
-    start === txn.period_start_at ? txn.period_end_at : addCalendarMonth(start);
-  const amount = suanliToUY(SUB_GRANT_SUANLI);
-  await ensureAccount(db, txn.user_sub, now);
-  const detail = JSON.stringify({
-    provider: "wechat",
-    out_trade_no: txn.out_trade_no,
-    merchant_order: values.out_trade_no,
-    transaction_id: values.transaction_id,
-  });
-  const missingLedger =
-    "NOT EXISTS(SELECT 1 FROM ledger WHERE reason='subscription' AND json_extract(detail,'$.provider')='wechat' AND json_extract(detail,'$.out_trade_no')=?)";
-  // D1 batch is atomic: bucket, ledger, account, order and subscription either all commit or all roll back.
-  await db.batch([
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO bucket(user_sub,amount_uy,remaining_uy,source,created_at,expires_at,wechat_order)
-      SELECT ?,?,?,'subscription',?,?,? WHERE ${missingLedger}`,
-      )
-      .bind(
-        txn.user_sub,
-        amount,
-        amount,
-        now,
-        end,
-        txn.out_trade_no,
-        txn.out_trade_no,
-      ),
-    db
-      .prepare(
-        `UPDATE account SET granted_uy=granted_uy+?,balance_uy=(SELECT COALESCE(SUM(remaining_uy),0) FROM bucket WHERE user_sub=? AND (expires_at IS NULL OR expires_at>?)),updated_at=? WHERE user_sub=? AND ${missingLedger}`,
-      )
-      .bind(amount, txn.user_sub, now, now, txn.user_sub, txn.out_trade_no),
-    db
-      .prepare(
-        `INSERT INTO ledger(user_sub,ts,kind,amount_uy,reason,detail,balance_uy)
-      SELECT ?,?,'grant',?,'subscription',?,(SELECT balance_uy FROM account WHERE user_sub=?) WHERE ${missingLedger}`,
-      )
-      .bind(txn.user_sub, now, amount, detail, txn.user_sub, txn.out_trade_no),
-    db
-      .prepare(
-        "UPDATE wechat_attempt SET status='paid',next_query_at=NULL,updated_at=? WHERE out_trade_no=?",
-      )
-      .bind(now, values.out_trade_no),
-    db
-      .prepare(
-        `UPDATE wechat_txn SET next_try_at=NULL,processing_at=NULL,status='paid',wechat_txn_id=?,bucket_id=(SELECT id FROM bucket WHERE wechat_order=?),paid_at=?,last_callback_at=?,failure_code=NULL,entitlement_start_at=?,entitlement_end_at=?,updated_at=? WHERE out_trade_no=? AND status!='paid'`,
-      )
-      .bind(
-        values.transaction_id,
-        txn.out_trade_no,
-        paidAt,
-        now,
-        start,
-        end,
-        now,
-        txn.out_trade_no,
-      ),
-    db
-      .prepare(
-        `UPDATE wechat_sub SET next_charge_at=NULL,period_start_at=?,period_end_at=?,last_error_code=NULL,updated_at=?
-      WHERE contract_code=? AND changes()=1 AND (period_start_at IS NULL OR period_end_at<=?)`,
-      )
-      .bind(
-        start,
-        end,
-        now,
-        attempt.contract_code,
-        end,
-      ),
-  ]);
-  await armRenewal(db,attempt.contract_code,now);
-  await audit(db, {
-    now,
-    direction: "inbound",
-    event_type: "payment_settled",
-    contract_code: attempt.contract_code,
-    out_trade_no: values.out_trade_no,
-    user_sub: txn.user_sub,
-    status_before: "settling",
-    status_after: "paid",
-    wechat_txn_id: values.transaction_id,
-    payload: values,
-  });
-  return { ok: true, granted: true };
-}
-
-async function reconcileAppPayment(db, env, attempt, now, fetcher) {
-  const txn = await db.prepare("SELECT * FROM wechat_txn WHERE out_trade_no=? AND payment_kind='app'").bind(attempt.cycle_no).first();
-  if (!txn || txn.status === 'paid') return;
-  try {
-    const state = await reconcileAppCheckout(env, txn, now, fetcher);
-    if (state === 'NOTPAY' && txn.checkout_expires_at <= now) {
-      await wechatV3Request(env,'POST',`/v3/pay/transactions/out-trade-no/${encodeURIComponent(txn.out_trade_no)}/close`,
-        {mchid:env.WECHAT_PAY_MCH_ID},fetcher,now);
-      await reconcileAppCheckout(env,txn,now,fetcher);
-    }
+    !response.ok ||
+    !callbackData(body) ||
+    !verifyWechatV2(body, env.WECHAT_PAY_API_V2_KEY)
+  ) {
+    const code =
+      (body && (body.err_code || body.return_code || body.result_code)) ||
+      `http-${response.status}`;
+    const message =
+      (body && (body.err_code_des || body.return_msg || body.err_code)) ||
+      "wechat-precontract-failed";
+    throw Object.assign(new Error(message), { code, provider: body });
   }
-  catch (e) {
-    await audit(db, { now, event_type:'app_query_failed',out_trade_no:txn.out_trade_no,
-      contract_code:txn.contract_code,user_sub:txn.user_sub,code:e.code,message:e.message });
+  if (
+    body.appid !== env.WECHAT_PAY_APP_ID ||
+    body.mch_id !== env.WECHAT_PAY_MCH_ID ||
+    !body.pre_entrustweb_id
+  ) {
+    throw Object.assign(new Error("wechat-precontract-invalid-response"), {
+      code: "invalid-provider-response",
+      provider: body,
+    });
   }
+  return body;
 }
-
 
 async function postApply(env, txn, sub, fetcher, origin) {
   const payload = {
@@ -550,7 +355,6 @@ async function postApply(env, txn, sub, fetcher, origin) {
   };
   const response = await fetcher(APPLY_URL, {
     method: "POST",
-    redirect: "manual",
     signal: AbortSignal.timeout(15000),
     headers: { "content-type": "text/xml; charset=utf-8" },
     body: wechatV2Xml(payload, env.WECHAT_PAY_API_V2_KEY),
@@ -587,12 +391,11 @@ async function queryWechatContract(env, sub, fetcher) {
   const payload = {
     appid: env.WECHAT_PAY_APP_ID,
     mch_id: env.WECHAT_PAY_MCH_ID,
-    ...(sub.contract_id ? {contract_id:sub.contract_id} : {plan_id:sub.plan_id,contract_code:sub.contract_code}),
+    contract_id: sub.contract_id,
     version: "1.0",
   };
   const response = await fetcher(QUERY_CONTRACT_URL, {
     method: "POST",
-    redirect: "manual",
     signal: AbortSignal.timeout(15000),
     headers: { "content-type": "text/xml; charset=utf-8" },
     body: wechatV2Xml(payload, env.WECHAT_PAY_API_V2_KEY),
@@ -617,8 +420,9 @@ async function queryWechatContract(env, sub, fetcher) {
   if (
     body.appid !== env.WECHAT_PAY_APP_ID ||
     body.mch_id !== env.WECHAT_PAY_MCH_ID ||
-    !body.contract_id || (sub.contract_id && body.contract_id !== sub.contract_id) ||
-    body.plan_id !== String(sub.plan_id) || body.contract_code !== sub.contract_code
+    body.contract_id !== sub.contract_id ||
+    (body.plan_id && body.plan_id !== sub.plan_id) ||
+    (body.contract_code && body.contract_code !== sub.contract_code)
   ) {
     throw Object.assign(new Error("wechat-contract-query-invalid-response"), {
       code: "invalid-provider-response",
@@ -642,13 +446,12 @@ async function terminateWechatContract(env, sub, fetcher) {
   const payload = {
     appid: env.WECHAT_PAY_APP_ID,
     mch_id: env.WECHAT_PAY_MCH_ID,
-    ...(sub.contract_id ? {contract_id:sub.contract_id} : {plan_id:sub.plan_id,contract_code:sub.contract_code}),
+    contract_id: sub.contract_id,
     contract_termination_remark: "用户在 VoiceDrop App 解除自动续费",
     version: "1.0",
   };
   const response = await fetcher(TERMINATE_CONTRACT_URL, {
     method: "POST",
-    redirect: "manual",
     signal: AbortSignal.timeout(15000),
     headers: { "content-type": "text/xml; charset=utf-8" },
     body: wechatV2Xml(payload, env.WECHAT_PAY_API_V2_KEY),
@@ -673,7 +476,7 @@ async function terminateWechatContract(env, sub, fetcher) {
   if (
     body.appid !== env.WECHAT_PAY_APP_ID ||
     body.mch_id !== env.WECHAT_PAY_MCH_ID ||
-    (sub.contract_id && body.contract_id && body.contract_id !== sub.contract_id)
+    (body.contract_id && body.contract_id !== sub.contract_id)
   ) {
     throw Object.assign(
       new Error("wechat-contract-termination-invalid-response"),
@@ -719,8 +522,59 @@ async function markWechatContractCancelled(
   });
 }
 
+async function reconcileWechatContract(db, env, sub, now, fetcher) {
+  try {
+    const { state, body } = await queryWechatContract(env, sub, fetcher);
+    if (state === "0") return { active: true };
+    if (state === "1") {
+      // 已经送到微信的 charging 订单仍可能异步回调成功，不能篡改它；只停止尚未申请的订单。
+      const reason = "wechat-query-terminated";
+      await markWechatContractCancelled(
+        db,
+        sub,
+        now,
+        reason,
+        "contract_reconciled_cancelled",
+        body,
+        body.contract_termination_remark || reason,
+        "outbound",
+      );
+      return { cancelled: true };
+    }
+    // 9=签约进行中：不能把它当作已生效协议扣款；等待下一次 Cron 再对账。
+    await audit(db, {
+      now,
+      direction: "outbound",
+      event_type: "contract_reconcile_pending",
+      contract_code: sub.contract_code,
+      user_sub: sub.user_sub,
+      status_before: "active",
+      status_after: "active",
+      code: "contract-state-9",
+      payload: body,
+    });
+    return { pending: true };
+  } catch (e) {
+    // 查询异常时宁可延后一期申请，也不在协议真实状态未知时触发扣款。
+    await audit(db, {
+      now,
+      direction: "outbound",
+      event_type: "contract_reconcile_failed",
+      contract_code: sub.contract_code,
+      user_sub: sub.user_sub,
+      status_before: "active",
+      status_after: "active",
+      code: String(e.code || "contract-query-failed").slice(0, 64),
+      message: e.message,
+      payload: e.provider,
+    });
+    return { unknown: true };
+  }
+}
 
+// Accepted and unknown requests keep their merchant order until a signed terminal result arrives.
 const OPEN_ATTEMPTS = "('sending','unknown','accepted')";
+const QUERY_INTERVAL = 15 * 60 * 1000;
 const PERMANENT_APPLY_ERRORS = new Set([
   "PARAM_ERROR",
   "SIGN_ERROR",
@@ -747,10 +601,22 @@ function paidTime(value, fallback) {
   return at;
 }
 
+async function unresolvedUserOrder(db, userSub) {
+  // Existing APP orders must be resolved before switching this user to V2.
+  const appOrder = await db.prepare("SELECT out_trade_no FROM wechat_txn WHERE user_sub=? AND payment_kind='app' AND status IN ('pending','charging','settling') LIMIT 1")
+    .bind(userSub).first();
+  if (appOrder) return appOrder;
+  return db
+    .prepare(
+      `SELECT a.out_trade_no FROM wechat_attempt a JOIN wechat_txn t ON t.out_trade_no=a.cycle_no WHERE t.user_sub=? AND a.status IN ('sending','unknown','accepted','refunded') LIMIT 1`,
+    )
+    .bind(userSub)
+    .first();
+}
+
 async function requestCharge(db, env, txn, sub, now, fetcher, origin) {
   if (
-    !txn ||
-    txn.payment_kind === "app" ||
+    !txn || txn.payment_kind === "app" ||
     !["pending", "failed"].includes(txn.status) ||
     Number(txn.attempt_count) >= Number(txn.max_attempts) ||
     wechatChargeScheduleAt(txn.period_start_at) > now
@@ -766,7 +632,7 @@ async function requestCharge(db, env, txn, sub, now, fetcher, origin) {
         `UPDATE wechat_txn SET status='charging', processing_at=?, attempt_count=attempt_count+1, next_try_at=NULL, updated_at=?
       WHERE out_trade_no=? AND status IN ('pending','failed') AND attempt_count=? AND attempt_count<max_attempts
       AND next_try_at<=? AND period_end_at>?
-      AND EXISTS(SELECT 1 FROM wechat_sub WHERE contract_code=? AND status='active' AND COALESCE(cancel_reason,'')!='user-request-pending' AND signed_at IS NOT NULL AND contract_id IS NOT NULL AND next_charge_at<=?)
+      AND EXISTS(SELECT 1 FROM wechat_sub WHERE contract_code=? AND status='active' AND next_charge_at<=?)
       AND NOT EXISTS(SELECT 1 FROM wechat_attempt a JOIN wechat_txn t ON t.out_trade_no=a.cycle_no WHERE t.user_sub=? AND a.status IN ('sending','unknown','accepted','refunded'))`,
       )
       .bind(
@@ -893,9 +759,9 @@ async function failAttempt(db, merchantOrder, now, code, retry = true) {
       ),
     db
       .prepare(
-        "UPDATE wechat_sub SET last_error_code=?,updated_at=? WHERE contract_code=? AND EXISTS(SELECT 1 FROM wechat_txn WHERE out_trade_no=? AND status='failed')",
+        "UPDATE wechat_sub SET last_error_code=?,last_event_at=?,updated_at=? WHERE contract_code=? AND EXISTS(SELECT 1 FROM wechat_txn WHERE out_trade_no=? AND status='failed')",
       )
-      .bind(code, now, attempt.contract_code, attempt.cycle_no),
+      .bind(code, now, now, attempt.contract_code, attempt.cycle_no),
   ]);
   if (!retry)
     await db
@@ -918,11 +784,11 @@ async function createDueTransaction(db, sub, env, now) {
   // A payment callback may have advanced coverage while the scheduler queried WeChat.
   sub = await db
     .prepare(
-      "SELECT * FROM wechat_sub WHERE contract_code=? AND status='active' AND COALESCE(cancel_reason,'')!='user-request-pending' AND signed_at IS NOT NULL AND contract_id IS NOT NULL AND next_charge_at<=?",
+      "SELECT * FROM wechat_sub WHERE contract_code=? AND status='active' AND next_charge_at<=?",
     )
     .bind(sub.contract_code, now)
     .first();
-  if (!sub || sub.period_start_at == null) return null;
+  if (!sub) return null;
   if (await unresolvedUserOrder(db, sub.user_sub)) return null;
   const coverage = await db
     .prepare(
@@ -935,17 +801,9 @@ async function createDueTransaction(db, sub, env, now) {
     Number(coverage?.end || 0),
   );
   if (wechatChargeScheduleAt(start) > now) return null;
-  // A scheduler outage may span more than a month. Keep the stable billing boundary/order ID,
-  // but allow recovery now; the verified payment time determines the actual full-month entitlement.
-  const end = addCalendarMonth(Math.max(start,now));
-  const draft=await db.prepare("SELECT * FROM wechat_txn WHERE contract_code=? AND period_start_at=? AND payment_kind='deduct' LIMIT 1").bind(sub.contract_code,start).first();
-  let purchased=draft || await db.prepare("SELECT amount_fen FROM wechat_txn WHERE contract_code=? AND status='paid' ORDER BY paid_at DESC LIMIT 1").bind(sub.contract_code).first();
-  if(!purchased || !Number.isInteger(purchased.amount_fen) || purchased.amount_fen<=0)return null;
-  // Reuse the authorization's existing unpaid order, including drafts backfilled during upgrade.
-  let no = draft?.out_trade_no || tradeNo(sub.user_sub, start);
-  const previous=await db.prepare('SELECT contract_code,status FROM wechat_txn WHERE out_trade_no=?').bind(no).first();
-  if(!draft && previous && previous.contract_code!==sub.contract_code && previous.status==='failed')
-    no=tradeNo(sub.contract_code,start);
+  const end = addCalendarMonth(start);
+  // The user and fixed billing boundary identify a cycle; changing authorization cannot create a second cycle.
+  const no = tradeNo(sub.user_sub, start);
   await db
     .prepare(
       `INSERT OR IGNORE INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,next_try_at,created_at,updated_at)
@@ -958,40 +816,153 @@ async function createDueTransaction(db, sub, env, now) {
       sub.plan_id,
       start,
       end,
-      purchased.amount_fen,
+      amountFen(env),
       now,
       now,
       now,
     )
     .run();
-  // A user can finish authorization long after opening it. Keep the billing boundary, but refresh an unsubmitted draft's end.
-  await db.prepare("UPDATE wechat_txn SET period_end_at=? WHERE out_trade_no=? AND status='pending' AND attempt_count=0")
-    .bind(end,no).run();
   let txn = await db
-    .prepare("SELECT * FROM wechat_txn WHERE out_trade_no=?")
-    .bind(no)
+    .prepare("SELECT * FROM wechat_txn WHERE user_sub=? AND period_start_at=?")
+    .bind(sub.user_sub, start)
     .first();
-  return txn?.contract_code===sub.contract_code ? txn : null;
+  // An explicitly re-signed authorization may resume a terminally failed cycle; all previous attempts remain auditable.
+  if (
+    txn &&
+    txn.contract_code !== sub.contract_code &&
+    ["pending", "failed"].includes(txn.status)
+  ) {
+    await db
+      .prepare(
+        "UPDATE wechat_txn SET contract_code=?,status='pending',next_try_at=?,max_attempts=attempt_count+3,updated_at=? WHERE out_trade_no=? AND status IN ('pending','failed')",
+      )
+      .bind(sub.contract_code, now, now, txn.out_trade_no)
+      .run();
+    txn = await db
+      .prepare("SELECT * FROM wechat_txn WHERE out_trade_no=?")
+      .bind(txn.out_trade_no)
+      .first();
+  }
+  return txn;
 }
 
+async function settlePayment(db, txn, values, now) {
+  const attempt = await db
+    .prepare("SELECT * FROM wechat_attempt WHERE out_trade_no=?")
+    .bind(values.out_trade_no)
+    .first();
+  if (!attempt || attempt.cycle_no !== txn.out_trade_no)
+    throw new Error("unknown-payment-attempt");
+  if (
+    !values.transaction_id ||
+    Number(values.total_fee) !== Number(txn.amount_fen)
+  )
+    throw new Error("payment-mismatch");
+  if (txn.status === "paid") return { ok: true, already: true };
+  const paidAt = paidTime(values.time_end, now);
+  // Early renewals keep their future boundary. A genuinely late first/recovery payment buys a full month from payment time.
+  const start = Math.max(txn.period_start_at, paidAt);
+  const end =
+    start === txn.period_start_at ? txn.period_end_at : addCalendarMonth(start);
+  const amount = suanliToUY(SUB_GRANT_SUANLI);
+  await ensureAccount(db, txn.user_sub, now);
+  const detail = JSON.stringify({
+    provider: "wechat",
+    out_trade_no: txn.out_trade_no,
+    merchant_order: values.out_trade_no,
+    transaction_id: values.transaction_id,
+  });
+  const missingLedger =
+    "NOT EXISTS(SELECT 1 FROM ledger WHERE reason='subscription' AND json_extract(detail,'$.provider')='wechat' AND json_extract(detail,'$.out_trade_no')=?)";
+  // D1 batch is atomic: bucket, ledger, account, order and subscription either all commit or all roll back.
+  await db.batch([
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO bucket(user_sub,amount_uy,remaining_uy,source,created_at,expires_at,wechat_order)
+      SELECT ?,?,?,'subscription',?,?,? WHERE ${missingLedger}`,
+      )
+      .bind(
+        txn.user_sub,
+        amount,
+        amount,
+        now,
+        end,
+        txn.out_trade_no,
+        txn.out_trade_no,
+      ),
+    db
+      .prepare(
+        `UPDATE account SET granted_uy=granted_uy+?,balance_uy=(SELECT COALESCE(SUM(remaining_uy),0) FROM bucket WHERE user_sub=? AND (expires_at IS NULL OR expires_at>?)),updated_at=? WHERE user_sub=? AND ${missingLedger}`,
+      )
+      .bind(amount, txn.user_sub, now, now, txn.user_sub, txn.out_trade_no),
+    db
+      .prepare(
+        `INSERT INTO ledger(user_sub,ts,kind,amount_uy,reason,detail,balance_uy)
+      SELECT ?,?,'grant',?,'subscription',?,(SELECT balance_uy FROM account WHERE user_sub=?) WHERE ${missingLedger}`,
+      )
+      .bind(txn.user_sub, now, amount, detail, txn.user_sub, txn.out_trade_no),
+    db
+      .prepare(
+        "UPDATE wechat_attempt SET status='paid',next_query_at=NULL,updated_at=? WHERE out_trade_no=?",
+      )
+      .bind(now, values.out_trade_no),
+    db
+      .prepare(
+        `UPDATE wechat_txn SET status='paid',wechat_txn_id=?,bucket_id=(SELECT id FROM bucket WHERE wechat_order=?),paid_at=?,last_callback_at=?,processing_at=NULL,next_try_at=NULL,failure_code=NULL,entitlement_start_at=?,entitlement_end_at=?,updated_at=? WHERE out_trade_no=? AND status!='paid'`,
+      )
+      .bind(
+        values.transaction_id,
+        txn.out_trade_no,
+        paidAt,
+        now,
+        start,
+        end,
+        now,
+        txn.out_trade_no,
+      ),
+    db
+      .prepare(
+        `UPDATE wechat_sub SET period_start_at=?,period_end_at=?,next_charge_at=CASE WHEN status='active' THEN ? ELSE NULL END,last_event_at=?,last_error_code=NULL,updated_at=?
+      WHERE contract_code=? AND changes()=1 AND (period_start_at IS NULL OR period_end_at<=?)`,
+      )
+      .bind(
+        start,
+        end,
+        wechatChargeScheduleAt(end),
+        now,
+        now,
+        attempt.contract_code,
+        end,
+      ),
+  ]);
+  await audit(db, {
+    now,
+    direction: "inbound",
+    event_type: "payment_settled",
+    contract_code: attempt.contract_code,
+    out_trade_no: values.out_trade_no,
+    user_sub: txn.user_sub,
+    status_before: "settling",
+    status_after: "paid",
+    wechat_txn_id: values.transaction_id,
+    payload: values,
+  });
+  return { ok: true, granted: true };
+}
 
 async function reconcilePayment(db, env, attempt, now, fetcher) {
   const txn = await db
     .prepare("SELECT * FROM wechat_txn WHERE out_trade_no=?")
     .bind(attempt.cycle_no)
     .first();
-  if (!txn || txn.status === "paid") return;
+  if (!txn || txn.payment_kind === "app" || txn.status === "paid") return;
   try {
-  if (txn.payment_kind === 'app') {
-    if(wechatV3Ready(env)) await reconcileAppPayment(db,env,attempt,now,fetcher);
-    return;
-  }
-  if(!lifecycleReady(env)) return;
     const response = await fetcher(
-      "https://api.mch.weixin.qq.com/pay/orderquery",
+      env.WECHAT_PAY_QUERY_MODE === "pap"
+        ? "https://api.mch.weixin.qq.com/pay/paporderquery"
+        : "https://api.mch.weixin.qq.com/pay/orderquery",
       {
         method: "POST",
-        redirect: "manual",
         signal: AbortSignal.timeout(15000),
         headers: { "content-type": "text/xml; charset=utf-8" },
         body: wechatV2Xml(
@@ -1018,14 +989,14 @@ async function reconcilePayment(db, env, attempt, now, fetcher) {
     ) {
       const sub = await db
         .prepare(
-          "SELECT * FROM wechat_sub WHERE contract_code=? AND status='active' AND COALESCE(cancel_reason,'')!='user-request-pending'",
+          "SELECT * FROM wechat_sub WHERE contract_code=? AND status='active'",
         )
         .bind(attempt.contract_code)
         .first();
       // Recovery after commit-before-send. Re-send ONLY the same merchant order and original amount/authorization.
       // A missing order is never grounds for creating a replacement order under a new authorization.
       if (
-        sub && sub.contract_id===attempt.contract_id &&
+        sub &&
         attempt.resubmit_count < 3 &&
         attempt.created_at + QUERY_INTERVAL <= now &&
         attempt.next_query_at <= now &&
@@ -1033,7 +1004,7 @@ async function reconcilePayment(db, env, attempt, now, fetcher) {
       ) {
         const claimed = await db
           .prepare(
-            "UPDATE wechat_attempt SET status='sending',resubmit_count=resubmit_count+1,next_query_at=?,updated_at=? WHERE out_trade_no=? AND status IN ('sending','unknown') AND next_query_at<=? AND resubmit_count<3 AND EXISTS(SELECT 1 FROM wechat_sub s WHERE s.contract_code=wechat_attempt.contract_code AND s.status='active' AND COALESCE(s.cancel_reason,'')!='user-request-pending')",
+            "UPDATE wechat_attempt SET status='sending',resubmit_count=resubmit_count+1,next_query_at=?,updated_at=? WHERE out_trade_no=? AND status IN ('sending','unknown') AND next_query_at<=? AND resubmit_count<3",
           )
           .bind(now + QUERY_INTERVAL, now, attempt.out_trade_no, now)
           .run();
@@ -1068,7 +1039,7 @@ async function reconcilePayment(db, env, attempt, now, fetcher) {
     if (body.trade_state === "SUCCESS") {
       if (body.contract_id && body.contract_id !== attempt.contract_id)
         throw new Error("order-contract-mismatch");
-      await settleDeductPayment(db, txn, body, now);
+      await settlePayment(db, txn, body, now);
     } else if (
       ["CLOSED", "PAY_FAIL", "PAYERROR", "REVOKED"].includes(body.trade_state)
     ) {
@@ -1122,7 +1093,7 @@ export async function runWechatPaySchedule(
   origin = null,
   reconcileOnly = false,
 ) {
-  if (!env.USAGE) return { skipped: 'degraded' };
+  if (!ready(env)) return { skipped: "degraded" };
   const db = env.USAGE,
     result = { created: 0, requested: 0, failed: 0, cancelled: 0, deferred: 0 };
   let cursor = "";
@@ -1139,23 +1110,7 @@ export async function runWechatPaySchedule(
     for (const a of rows) await reconcilePayment(db, env, a, now, fetcher);
     cursor = rows[rows.length - 1].out_trade_no;
   }
-  if (!lifecycleReady(env)) return {...result,renewal_available:false};
-  // Recover paid contracts even when every signing callback was lost. Cancel intent survives process failures.
-  let contractCursor='';
-  while(true) {
-    const contracts=(await db.prepare(`SELECT * FROM wechat_sub WHERE status IN ('pending','active')
-      AND (last_event_at IS NULL OR last_event_at<=?) AND contract_code>?
-      AND (period_start_at IS NOT NULL OR cancel_reason='user-request-pending')
-      ORDER BY contract_code LIMIT 50`).bind(now-QUERY_INTERVAL,contractCursor).all()).results;
-    if(!contracts.length)break;
-    for(const sub of contracts) {
-      if(cancelPending(sub)) await cancelContract(env,sub,now,fetcher);
-      else await reconcileWechatContract(db,env,sub,now,fetcher);
-    }
-    contractCursor=contracts.at(-1).contract_code;
-  }
   if (reconcileOnly) return result;
-  if(!env.WECHAT_PAY_CALLBACK_BASE_URL || !amountFen(env)) return {...result,renewal_available:false};
   const checks = new Map();
   const check = async (sub) => {
     if (!checks.has(sub.contract_code))
@@ -1194,7 +1149,7 @@ export async function runWechatPaySchedule(
       await db
         .prepare(
           `SELECT t.*,s.contract_id FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code
-      WHERE t.payment_kind='deduct' AND t.status IN ('pending','failed') AND t.next_try_at<=? AND t.attempt_count<t.max_attempts AND t.period_end_at>? AND s.status='active' AND t.out_trade_no>? ORDER BY t.out_trade_no LIMIT 50`,
+      WHERE t.status IN ('pending','failed') AND t.next_try_at<=? AND t.attempt_count<t.max_attempts AND t.period_end_at>? AND s.status='active' AND t.out_trade_no>? ORDER BY t.out_trade_no LIMIT 50`,
         )
         .bind(now, now, cursor)
         .all()
@@ -1224,208 +1179,11 @@ export async function runWechatPaySchedule(
   await db
     .prepare(
       `UPDATE wechat_sub SET next_charge_at=NULL,last_error_code='retry-exhausted',updated_at=? WHERE status='active'
-    AND EXISTS(SELECT 1 FROM wechat_txn t WHERE t.contract_code=wechat_sub.contract_code AND t.payment_kind='deduct' AND t.status='failed' AND (t.attempt_count>=t.max_attempts OR t.period_end_at<=?))`,
+    AND EXISTS(SELECT 1 FROM wechat_txn t WHERE t.contract_code=wechat_sub.contract_code AND t.status='failed' AND (t.attempt_count>=t.max_attempts OR t.period_end_at<=?))`,
     )
     .bind(now, now)
     .run();
   return result;
-}
-
-async function settleAppCheckout(env, txn, data, now) {
-  if (txn.payment_kind !== 'app' || data.appid !== env.WECHAT_PAY_APP_ID ||
-      data.mchid !== env.WECHAT_PAY_MCH_ID || data.out_trade_no !== txn.out_trade_no ||
-      data.trade_type !== 'APP' || data.trade_state !== 'SUCCESS' ||
-      !data.transaction_id || data.amount?.total !== txn.amount_fen || data.amount?.currency !== 'CNY')
-    throw new Error('app-payment-mismatch');
-  return settlePayment(env.USAGE, txn, data, now);
-}
-
-async function reconcileAppCheckout(env, txn, now, fetcher) {
-  const data = await wechatV3Request(env, 'GET',
-    `/v3/pay/transactions/out-trade-no/${encodeURIComponent(txn.out_trade_no)}?mchid=${encodeURIComponent(env.WECHAT_PAY_MCH_ID)}`,
-    null, fetcher, now);
-  if (data.appid !== env.WECHAT_PAY_APP_ID || data.mchid !== env.WECHAT_PAY_MCH_ID ||
-      data.out_trade_no !== txn.out_trade_no) throw new Error('app-query-mismatch');
-  if (data.trade_state === 'SUCCESS') await settleAppCheckout(env, txn, data, now);
-  else if (['CLOSED', 'REVOKED', 'PAYERROR'].includes(data.trade_state)) {
-    await env.USAGE.batch([
-      env.USAGE.prepare("UPDATE wechat_attempt SET status='failed',next_query_at=NULL,updated_at=? WHERE out_trade_no=? AND status IN ('sending','unknown','accepted')").bind(now,txn.out_trade_no),
-      env.USAGE.prepare("UPDATE wechat_txn SET status='failed',failure_code=?,updated_at=? WHERE out_trade_no=? AND status='charging' AND changes()=1").bind(data.trade_state,now,txn.out_trade_no),
-    ]);
-  } else if (data.trade_state === 'REFUND') {
-    await env.USAGE.prepare("UPDATE wechat_attempt SET status='refunded',next_query_at=NULL,updated_at=? WHERE out_trade_no=? AND status!='paid'")
-      .bind(now, txn.out_trade_no).run();
-  } else if (!['NOTPAY', 'USERPAYING'].includes(data.trade_state)) throw new Error('unknown-app-payment-state');
-  await env.USAGE.prepare("UPDATE wechat_attempt SET next_query_at=? WHERE out_trade_no=? AND status IN ('sending','unknown','accepted')")
-    .bind(now + QUERY_INTERVAL, txn.out_trade_no).run();
-  return data.trade_state;
-}
-
-async function authorizationDraft(db, sub) {
-  if(!sub || sub.period_start_at==null)return null;
-  return db.prepare(`SELECT * FROM wechat_txn WHERE contract_code=? AND payment_kind='deduct'
-    AND status='pending' AND attempt_count=0 ORDER BY period_start_at LIMIT 1`).bind(sub.contract_code).first();
-}
-
-// Restore authorization against existing paid coverage; this endpoint never creates an APP payment.
-async function resumeAuthorization(env, scope, now, fetcher, sub, paid) {
-  const db=env.USAGE;
-  if(!lifecycleReady(env))return J({error:'degraded'},503);
-  if(!sub) {
-    const code=contractCode(now), boundary=paid.entitlement_end_at;
-    await db.batch([
-      db.prepare(`INSERT OR IGNORE INTO wechat_sub(contract_code,user_sub,plan_id,status,
-        period_start_at,period_end_at,created_at,updated_at) VALUES(?,?,?,'pending',?,?,?,?)`)
-        .bind(code,scope,env.WECHAT_PAY_PLAN_ID,paid.entitlement_start_at,boundary,now,now),
-      db.prepare(`INSERT OR IGNORE INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,
-        period_start_at,period_end_at,amount_fen,status,next_try_at,created_at,updated_at)
-        SELECT ?,contract_code,user_sub,plan_id,?,?,?,'pending',?,?,? FROM wechat_sub
-        WHERE contract_code=? AND status='pending'`)
-        .bind(tradeNo(`restore:${code}`,boundary),boundary,addCalendarMonth(boundary),amountFen(env),
-          wechatChargeScheduleAt(boundary),now,now,code),
-    ]);
-    sub=await db.prepare("SELECT * FROM wechat_sub WHERE user_sub=? AND status IN ('pending','active') LIMIT 1").bind(scope).first();
-  }
-  if(!sub || sub.status!=='pending' || cancelPending(sub))return J({error:'already-subscribed'},409);
-  // Paid-but-unsigned APP checkout keeps its original agreement and paid period.
-  // Reopening authorization never creates another transaction or grants credits.
-  const draft=await authorizationDraft(db,sub) ||
-    (paid?.contract_code===sub.contract_code && paid.status==='paid' && paid.entitlement_end_at>now ? paid : null);
-  if(!draft)return J({error:'payment-pending'},409);
-  const payload={appid:env.WECHAT_PAY_APP_ID,mch_id:env.WECHAT_PAY_MCH_ID,plan_id:sub.plan_id,
-    contract_code:sub.contract_code,request_serial:requestSerial(now),contract_display_account:'VoiceDrop 包月算力',
-    notify_url:`${publicOrigin(env)}/agent/wechat-pay/contract-notify`,version:'1.0',sign_type:'MD5',
-    timestamp:String(Math.floor(now/1000)),return_app:'Y'};
-  try {
-    const response=await fetcher('https://api.mch.weixin.qq.com/papay/preentrustweb',{
-      method:'POST',redirect:'manual',signal:AbortSignal.timeout(15000),
-      headers:{'content-type':'text/xml; charset=utf-8'},body:wechatV2Xml(payload,env.WECHAT_PAY_API_V2_KEY)});
-    const body=parseWechatXml(await response.text());
-    if(!response.ok || !callbackData(body) || !verifyWechatV2(body,env.WECHAT_PAY_API_V2_KEY) ||
-      body.appid!==env.WECHAT_PAY_APP_ID || body.mch_id!==env.WECHAT_PAY_MCH_ID || !body.pre_entrustweb_id ||
-      !body.miniprogram_username || !body.miniprogram_path)throw new Error('precontract-unconfirmed');
-    // Pass the provider's SDK parameters unchanged. A launch response is not agreement confirmation.
-    return J({ok:true,checkout_mode:'restore-authorization',contract_code:sub.contract_code,
-      wechat_mini_program_username:body.miniprogram_username,wechat_mini_program_path:body.miniprogram_path,
-      expires_at:now+2*HOUR_MS,amount_fen:draft.amount_fen});
-  } catch(e) {
-    await audit(db,{now,event_type:'resume_authorization_failed',contract_code:sub.contract_code,user_sub:scope,message:e.message});
-    return J({error:'authorization-unavailable'},502);
-  }
-}
-
-async function appCheckout(env, scope, now, fetcher, restoreOnly = false) {
-  const db = env.USAGE;
-  if (!ready(env) || !wechatV3Ready(env)) return J({ error: 'degraded' }, 503);
-  if (await activeIapSubscription(db, scope, now)) return J({ error: 'already-subscribed' }, 409);
-  if (!(await wechatPayEnabled(env))) return J({ error: 'disabled' }, 403);
-  let sub = await db.prepare("SELECT * FROM wechat_sub WHERE user_sub=? AND status IN ('pending','active') LIMIT 1").bind(scope).first();
-  let txn = sub && await db.prepare("SELECT * FROM wechat_txn WHERE contract_code=? AND payment_kind='app' ORDER BY created_at DESC LIMIT 1").bind(sub.contract_code).first();
-  if(sub && lifecycleReady(env) && (txn?.status==='paid' || sub.status==='active')) {
-    const checked=await reconcileWechatContract(db,env,sub,now,fetcher);
-    if(checked.cancelled) {sub=null;txn=null;}
-    else sub=await db.prepare('SELECT * FROM wechat_sub WHERE contract_code=?').bind(sub.contract_code).first();
-  }
-  if (txn?.status === 'paid') {
-    if(cancelPending(sub))return J({error:'cancel-pending'},409);
-    if(restoreOnly && sub?.status==='pending' && !sub.contract_id && txn.entitlement_end_at>now) {
-      if(await unresolvedUserOrder(db,scope))return J({error:'payment-pending'},409);
-      // Even an inconclusive query may only reopen this SAME agreement. Never replace it,
-      // infer consent, or fall back to another paid checkout.
-      return resumeAuthorization(env,scope,now,fetcher,sub,txn);
-    }
-    return J({ error: Number(txn.entitlement_end_at) > now
-      ? 'already-subscribed' : restoreOnly ? 'coverage-changed' : 'contract-status-unavailable' }, 409);
-  }
-  if (txn && txn.status === 'failed' && sub.status === 'pending') {
-    if(lifecycleReady(env)) {
-      const checked=await reconcileWechatContract(db,env,sub,now,fetcher);
-      if(!checked.cancelled)return J({error:checked.active?'already-subscribed':'contract-status-unavailable'},409);
-    }
-    await db.prepare("UPDATE wechat_sub SET status='expired',updated_at=? WHERE contract_code=? AND status='pending'").bind(now, sub.contract_code).run();
-    sub = null; txn = null;
-  }
-  if (sub?.status === 'active' && (!txn || txn.status !== 'charging')) return J({ error: 'already-subscribed' }, 409);
-  const other = await db.prepare(`SELECT a.out_trade_no FROM wechat_attempt a JOIN wechat_txn t ON t.out_trade_no=a.cycle_no
-    WHERE t.user_sub=? AND a.status IN ('sending','unknown','accepted','refunded') AND t.out_trade_no!=? LIMIT 1`)
-    .bind(scope, txn?.out_trade_no || '').first();
-  if (other) return J({ error: 'payment-pending' }, 409);
-  if(cancelPending(sub))return J({error:'cancel-pending'},409);
-  const paid=await db.prepare("SELECT * FROM wechat_txn WHERE user_sub=? AND status='paid' AND entitlement_end_at>? ORDER BY entitlement_end_at DESC LIMIT 1").bind(scope,now).first();
-  if(!txn && ((await authorizationDraft(db,sub)) || (!sub && paid)))return resumeAuthorization(env,scope,now,fetcher,sub,paid);
-  if(restoreOnly)return J({error:'coverage-changed'},409);
-  // A previous pure-signing session may still be live in WeChat. Never convert its agreement to a paid checkout.
-  if(sub && !txn)return J({error:'contract-status-unavailable'},409);
-  if (!sub) {
-    const code = contractCode(now), no = tradeNo(`app:${code}`,0);
-    const periodStart = Math.max(now, await coverageEnd(db, scope));
-    await db.batch([
-      db.prepare("INSERT OR IGNORE INTO wechat_sub(contract_code,user_sub,plan_id,status,created_at,updated_at) VALUES(?,?,?,'pending',?,?)")
-        .bind(code,scope,env.WECHAT_PAY_PLAN_ID,now,now),
-      db.prepare(`INSERT OR IGNORE INTO wechat_txn(out_trade_no,contract_code,user_sub,plan_id,period_start_at,period_end_at,amount_fen,status,payment_kind,checkout_expires_at,request_serial,created_at,updated_at)
-        SELECT ?,contract_code,user_sub,plan_id,?,?,?,'charging','app',?,?,?,? FROM wechat_sub WHERE contract_code=? AND status='pending'`)
-        .bind(no,periodStart,addCalendarMonth(periodStart),amountFen(env),now+30*60*1000,requestSerial(now),now,now,code),
-      db.prepare(`INSERT OR IGNORE INTO wechat_attempt(out_trade_no,cycle_no,contract_code,contract_id,status,attempt_no,next_query_at,created_at,updated_at)
-        SELECT out_trade_no,out_trade_no,contract_code,'','unknown',1,?,?,? FROM wechat_txn WHERE out_trade_no=? AND payment_kind='app'`)
-        .bind(now+QUERY_INTERVAL,now,now,no),
-    ]);
-    sub=await db.prepare("SELECT * FROM wechat_sub WHERE user_sub=? AND status IN ('pending','active') LIMIT 1").bind(scope).first();
-    txn=sub && await db.prepare("SELECT * FROM wechat_txn WHERE contract_code=? AND payment_kind='app' ORDER BY created_at DESC LIMIT 1").bind(sub.contract_code).first();
-  }
-  if (!txn || txn.status !== 'charging') return J({ error: 'payment-pending' }, 409);
-  try {
-    if (txn.prepay_id || txn.created_at < now) {
-      let state;
-      try { state = await reconcileAppCheckout(env, txn, now, fetcher); }
-      // Only retry the SAME order; never infer payment from an unsigned error.
-      catch (e) {
-        if (e.code !== 'ORDER_NOT_EXIST') throw e;
-        if (!txn.prepay_id && txn.checkout_expires_at <= now) {
-          // A creation timeout can leave no WeChat order. Retry the same order number with a fresh expiry.
-          txn.checkout_expires_at = now + 30 * 60 * 1000;
-          await db.prepare("UPDATE wechat_txn SET checkout_expires_at=? WHERE out_trade_no=? AND status='charging' AND prepay_id IS NULL")
-            .bind(txn.checkout_expires_at, txn.out_trade_no).run();
-        }
-      }
-      if (state === 'SUCCESS') return J({ error: 'already-subscribed' }, 409);
-      if (state && state !== 'NOTPAY') return J({ error: 'payment-pending' }, 409);
-    }
-    if (txn.checkout_expires_at <= now) {
-      // 先由微信确认关单，再允许新订单；不因本地超时擅自换单。
-      await wechatV3Request(env, 'POST', `/v3/pay/transactions/out-trade-no/${encodeURIComponent(txn.out_trade_no)}/close`,
-        { mchid: env.WECHAT_PAY_MCH_ID }, fetcher, now);
-      await reconcileAppCheckout(env, txn, now, fetcher);
-      return J({ error: 'checkout-expired' }, 409);
-    }
-    if (!txn.prepay_id) {
-      const result = await wechatV3Request(env, 'POST', '/v3/pay/transactions/app-with-contract', {
-        appid: env.WECHAT_PAY_APP_ID, mchid: env.WECHAT_PAY_MCH_ID,
-        description: 'VoiceDrop 包月算力', out_trade_no: txn.out_trade_no,
-        time_expire: new Date(txn.checkout_expires_at).toISOString(),
-        notify_url: `${publicOrigin(env)}/agent/wechat-pay/app-pay-notify`,
-        amount: { total: txn.amount_fen, currency: 'CNY' },
-        contract_info: { plan_id: txn.plan_id, contract_mchid: env.WECHAT_PAY_MCH_ID,
-          contract_appid: env.WECHAT_PAY_APP_ID, contract_code: sub.contract_code,
-          request_serial: txn.request_serial,
-          contract_notify_url: `${publicOrigin(env)}/agent/wechat-pay/contract-notify`,
-          contract_display_account: String(env.WECHAT_PAY_CONTRACT_DISPLAY_ACCOUNT || 'VoiceDrop 包月算力').slice(0,64) },
-      }, fetcher, now);
-      if (typeof result.prepay_id !== 'string' || !result.prepay_id || result.prepay_id.length > 128) throw new Error('invalid-prepay-response');
-      txn.prepay_id = result.prepay_id;
-      await db.batch([
-        db.prepare("UPDATE wechat_txn SET prepay_id=?,updated_at=? WHERE out_trade_no=? AND status='charging'").bind(txn.prepay_id, now, txn.out_trade_no),
-        db.prepare("UPDATE wechat_attempt SET status='accepted',updated_at=? WHERE out_trade_no=? AND status IN ('unknown','sending')").bind(now, txn.out_trade_no),
-      ]);
-      await audit(db, { now, direction:'outbound', event_type:'app_checkout_created',contract_code:sub.contract_code,out_trade_no:txn.out_trade_no,user_sub:scope,payload:{amount_fen:txn.amount_fen,plan_id:txn.plan_id} });
-    }
-    // 用户回到 APP 后只查询服务端结果，不相信客户端 SDK 的付款成功标志。
-    return J({ ok:true, checkout_mode:'app-with-contract', contract_code:sub.contract_code,
-      expires_at:txn.checkout_expires_at, amount_fen:txn.amount_fen,
-      pay_params:wechatV3AppPayParams(env, txn.prepay_id, now) });
-  } catch (e) {
-    await audit(db, { now, direction:'outbound', event_type:'app_checkout_failed',contract_code:sub.contract_code,out_trade_no:txn.out_trade_no,user_sub:scope,code:e.code || 'unconfirmed',message:e.providerMessage || e.message });
-    return J({ error:'checkout-unavailable' }, 502);
-  }
 }
 
 export async function handleWechatPayRoute(
@@ -1438,51 +1196,437 @@ export async function handleWechatPayRoute(
 ) {
   if (!url.pathname.startsWith("/agent/wechat-pay/")) return null;
   try {
-    if (url.pathname === "/agent/wechat-pay/checkout" && request.method === "POST") {
+    if (
+      url.pathname === "/agent/wechat-pay/contract" &&
+      request.method === "POST"
+    ) {
       const scope = await scopeFromToken(bearerToken(request), env);
       if (!scope) return J({ error: "unauthorized" }, 401);
-      const options=await request.json().catch(()=>({}));
-      return await appCheckout(env, scope, now, fetcher, options?.restore_only===true);
-    }
-    if (url.pathname === "/agent/wechat-pay/app-pay-notify" && request.method === "POST") {
-      if (!env.USAGE || !wechatV3Ready(env)) return J({ code:"FAIL", message:"UNAVAILABLE" }, 503);
-      let data;
-      try { data = decryptWechatV3Notification(env, request.headers, await request.text(), now); }
-      catch { return J({ code:"FAIL", message:"INVALID NOTIFICATION" }, 400); }
-      const txn = await env.USAGE.prepare("SELECT * FROM wechat_txn WHERE out_trade_no=? AND payment_kind='app'").bind(data.out_trade_no || '').first();
-      if (!txn) return J({ code:"FAIL", message:"UNKNOWN ORDER" }, 400);
-      try { await settleAppCheckout(env, txn, data, now); }
-      catch { return J({ code:"FAIL", message:"PAYMENT NOT CONFIRMED" }, 500); }
-      return new Response(null, { status:204 });
-    }
-
-    if(request.method==='POST' && ['/agent/wechat-pay/pay-notify','/agent/wechat-pay/contract-notify','/agent/wechat-pay/cancel-notify'].includes(url.pathname)) {
-      const raw=await request.clone().text();
-      if(raw.trimStart().startsWith('<') || url.pathname.endsWith('/pay-notify')) {
-        try { return await handleXmlNotification(env,url.pathname,raw,now); }
-        catch { return xmlReply('FAIL','NOT CONFIRMED'); }
+      if (!ready(env)) return J({ error: "degraded" }, 503);
+      // Android/微信入口只要已有有效 iOS 订阅就不允许再起签约，避免用户在 Android
+      // 正常路径下获得第二份包月。反方向的 App Store 成交由 iOS 客户端购买前查询拦截。
+      if (await activeIapSubscription(env.USAGE, scope, now))
+        return J({ error: "already-subscribed" }, 409);
+      const outstanding = (
+        await env.USAGE.prepare(
+          "SELECT a.* FROM wechat_attempt a JOIN wechat_txn t ON t.out_trade_no=a.cycle_no WHERE t.user_sub=? AND a.status IN ('sending','unknown','accepted')",
+        )
+          .bind(scope)
+          .all()
+      ).results;
+      for (const a of outstanding)
+        await reconcilePayment(env.USAGE, env, a, now, fetcher);
+      if (await unresolvedUserOrder(env.USAGE, scope))
+        return J({ error: "payment-pending" }, 409);
+      // 同一用户在旧协议仍生效时不能再开一份，避免双协议并行扣费；收到微信解约回调后，
+      // 旧行保留为 cancelled，新签约会生成全新的 contract_code，历史完整可追溯。
+      const active = await env.USAGE.prepare(
+        "SELECT contract_code, contract_id FROM wechat_sub WHERE user_sub=? AND status='active' ORDER BY updated_at DESC LIMIT 1",
+      )
+        .bind(scope)
+        .first();
+      if (active) return J({ error: "already-subscribed" }, 409);
+      let sub = await env.USAGE.prepare(
+        "SELECT * FROM wechat_sub WHERE user_sub=? AND status='pending' ORDER BY updated_at DESC LIMIT 1",
+      )
+        .bind(scope)
+        .first();
+      if (sub && await env.USAGE.prepare("SELECT 1 FROM wechat_txn WHERE contract_code=? AND payment_kind='app' LIMIT 1").bind(sub.contract_code).first())
+        return J({ error: "contract-status-unavailable" }, 409);
+      if (!sub) {
+        if (!(await wechatPayEnabled(env)))
+          return J({ error: "disabled" }, 403);
+        let code = null;
+        for (let i = 0; i < 3; i++) {
+          const candidate = contractCode(now, () =>
+            crypto.getRandomValues(new Uint32Array(2)),
+          );
+          const ins = await env.USAGE.prepare(
+            "INSERT OR IGNORE INTO wechat_sub (contract_code,user_sub,plan_id,status,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+          )
+            .bind(candidate, scope, env.WECHAT_PAY_PLAN_ID, "pending", now, now)
+            .run();
+          if (ins && ins.meta && ins.meta.changes === 1) {
+            code = candidate;
+            break;
+          }
+        }
+        if (!code) {
+          const concurrent = await env.USAGE.prepare(
+            "SELECT * FROM wechat_sub WHERE user_sub=? AND status='pending'",
+          )
+            .bind(scope)
+            .first();
+          if (!concurrent) return J({ error: "already-subscribed" }, 409);
+          code = concurrent.contract_code;
+        }
+        sub = await env.USAGE.prepare(
+          "SELECT * FROM wechat_sub WHERE contract_code=?",
+        )
+          .bind(code)
+          .first();
+        await audit(env.USAGE, {
+          now,
+          direction: "internal",
+          event_type: "contract_created",
+          contract_code: code,
+          user_sub: scope,
+          status_after: "pending",
+          payload: { plan_id: env.WECHAT_PAY_PLAN_ID },
+        });
+      }
+      const origin = publicOrigin(env, url);
+      const serial = requestSerial(now);
+      try {
+        const provider = await postPrecontract(
+          env,
+          sub,
+          now,
+          origin,
+          fetcher,
+          serial,
+        );
+        const expiresAt = now + PRE_ENTRUST_TTL_MS;
+        await env.USAGE.prepare(
+          "UPDATE wechat_sub SET last_error_code=NULL, updated_at=? WHERE contract_code=?",
+        )
+          .bind(now, sub.contract_code)
+          .run();
+        await audit(env.USAGE, {
+          now,
+          direction: "outbound",
+          event_type: "precontract_created",
+          contract_code: sub.contract_code,
+          user_sub: scope,
+          status_before: "pending",
+          status_after: "pending",
+          payload: {
+            request_serial: serial,
+            has_mini_program: !!(
+              provider.miniprogram_username && provider.miniprogram_path
+            ),
+          },
+        });
+        // 会话只经本次 HTTPS 响应交给已认证 Android，不持久化到 D1。
+        return contractResponse(sub.contract_code, provider, expiresAt);
+      } catch (e) {
+        const code = String(e.code || "precontract-failed").slice(0, 64);
+        await env.USAGE.prepare(
+          "UPDATE wechat_sub SET last_error_code=?, last_event_at=?, updated_at=? WHERE contract_code=?",
+        )
+          .bind(code, now, now, sub.contract_code)
+          .run();
+        await audit(env.USAGE, {
+          now,
+          direction: "outbound",
+          event_type: "precontract_failed",
+          contract_code: sub.contract_code,
+          user_sub: scope,
+          status_before: "pending",
+          status_after: "pending",
+          code,
+          message: e.message,
+          payload: e.provider,
+        });
+        // Android 不应看到微信的原始失败文本、请求参数或签名材料。
+        return J({ error: "contract-unavailable" }, 502);
       }
     }
 
-    if (['/agent/wechat-pay/contract-notify','/agent/wechat-pay/cancel-notify'].includes(url.pathname) && request.method === 'POST') {
-      if (!env.USAGE || !wechatV3Ready(env)) return J({ code:'FAIL',message:'UNAVAILABLE' },503);
-      let event;
-      try { event = decryptWechatV3Event(env,request.headers,await request.text(),['ENTRUST.SIGN','ENTRUST.TERMINATE'],now); }
-      catch { return J({ code:'FAIL',message:'INVALID NOTIFICATION' },400); }
-      try { await applyContractEvent(env,event.eventType,event.data,now); }
-      catch { return J({ code:'FAIL',message:'CONTRACT NOT CONFIRMED' },500); }
-      return new Response(null,{status:204});
+    if (
+      url.pathname === "/agent/wechat-pay/contract-notify" &&
+      request.method === "POST"
+    ) {
+      if (!env.USAGE || !env.WECHAT_PAY_API_V2_KEY || !env.WECHAT_PAY_MCH_ID)
+        return xmlReply("FAIL", "UNAVAILABLE");
+      const values = parseWechatXml(await request.text());
+      if (
+        !verifyWechatV2(values, env.WECHAT_PAY_API_V2_KEY) ||
+        values.mch_id !== env.WECHAT_PAY_MCH_ID
+      )
+        return xmlReply("FAIL", "BAD SIGN");
+      if (!callbackData(values)) return xmlReply("SUCCESS", "IGNORED");
+      const code = values.contract_code || values.out_contract_code;
+      const contractId = values.contract_id || values.contract_no;
+      if (!code || !contractId) return xmlReply("FAIL", "MISSING CONTRACT");
+      const sub = await env.USAGE.prepare(
+        "SELECT * FROM wechat_sub WHERE contract_code=?",
+      )
+        .bind(code)
+        .first();
+      if (!sub || (values.plan_id && values.plan_id !== sub.plan_id))
+        return xmlReply("FAIL", "UNKNOWN CONTRACT");
+      if (sub.contract_id && sub.contract_id !== contractId)
+        return xmlReply("FAIL", "CONTRACT CONFLICT");
+      if (values.change_type !== "ADD") return xmlReply("FAIL", "WRONG EVENT");
+      if (sub.status !== "pending")
+        return xmlReply("SUCCESS", "ALREADY PROCESSED");
+      const previous = await env.USAGE.prepare(
+        "SELECT MAX(entitlement_end_at) AS period_end_at FROM wechat_txn WHERE user_sub=? AND status='paid' AND entitlement_end_at>?",
+      )
+        .bind(sub.user_sub, now)
+        .first();
+      const initialStart = previous?.period_end_at || null;
+      const nextChargeAt =
+        initialStart == null ? now : wechatChargeScheduleAt(initialStart);
+      const changed = await env.USAGE.prepare(
+        "UPDATE wechat_sub SET contract_id=?,openid=?,status='active',period_start_at=NULL,period_end_at=?,next_charge_at=?,signed_at=?,last_event_at=?,last_error_code=NULL,updated_at=? WHERE contract_code=? AND status='pending'",
+      )
+        .bind(
+          contractId,
+          values.openid || null,
+          initialStart ?? now,
+          nextChargeAt,
+          now,
+          now,
+          now,
+          code,
+        )
+        .run();
+      if (changed.meta.changes !== 1)
+        return xmlReply("SUCCESS", "ALREADY PROCESSED");
+      await audit(env.USAGE, {
+        now,
+        direction: "inbound",
+        event_type: "contract_signed",
+        contract_code: code,
+        user_sub: sub.user_sub,
+        status_before: sub.status,
+        status_after: "active",
+        payload: values,
+      });
+      // 首期不等每日 Cron：签约已确认后立刻申请扣款。waitUntil 让微信回调快速
+      // 得到 ACK；网络失败保留未知结果，由后续定时查单确认，不能直接换单重扣。
+      // 没有 ctx 的纯函数调用（例如旧测试/离线脚本）不触发网络副作用。
+      if (
+        ready(env) &&
+        ctx &&
+        typeof ctx.waitUntil === "function" &&
+        nextChargeAt <= now
+      ) {
+        const activeSub = {
+          ...sub,
+          contract_id: contractId,
+          status: "active",
+          period_end_at: initialStart == null ? now : initialStart,
+          next_charge_at: nextChargeAt,
+        };
+        const initialCharge = (async () => {
+          const txn = await createDueTransaction(
+            env.USAGE,
+            activeSub,
+            env,
+            now,
+          );
+          if (!txn) return;
+          await audit(env.USAGE, {
+            now,
+            direction: "internal",
+            event_type: "initial_charge_triggered",
+            contract_code: code,
+            out_trade_no: txn.out_trade_no,
+            user_sub: sub.user_sub,
+            status_before: "pending",
+            status_after: txn.status,
+          });
+          await requestCharge(
+            env.USAGE,
+            env,
+            txn,
+            activeSub,
+            now,
+            fetcher,
+            publicOrigin(env, url),
+          );
+        })();
+        ctx.waitUntil(
+          initialCharge.catch((e) =>
+            console.log(
+              "[wechat-pay] initial charge failed",
+              String((e && e.message) || e),
+            ),
+          ),
+        );
+      }
+      return xmlReply("SUCCESS", "OK");
     }
 
-    if (url.pathname === '/agent/wechat-pay/cancel' && request.method==='POST') {
-      const scope=await scopeFromToken(bearerToken(request),env);
-      if(!scope)return J({error:'unauthorized'},401);
-      if(!lifecycleReady(env))return J({error:'contract-management-unavailable'},503);
-      const sub=await env.USAGE.prepare("SELECT * FROM wechat_sub WHERE user_sub=? ORDER BY CASE WHEN status IN ('active','pending') THEN 0 ELSE 1 END,updated_at DESC LIMIT 1").bind(scope).first();
-      if(sub?.status==='cancelled')return J({ok:true,status:'cancelled',already:true,expires_date:await coverageEnd(env.USAGE,scope)});
-      if(!sub || !['active','pending'].includes(sub.status))return J({error:'no-active-contract'},409);
-      if(await cancelContract(env,sub,now,fetcher))return J({ok:true,status:'cancelled',expires_date:await coverageEnd(env.USAGE,scope)});
-      return J({error:'cancel-pending'},502);
+    if (
+      url.pathname === "/agent/wechat-pay/pay-notify" &&
+      request.method === "POST"
+    ) {
+      if (!env.USAGE || !env.WECHAT_PAY_API_V2_KEY || !env.WECHAT_PAY_MCH_ID)
+        return xmlReply("FAIL", "UNAVAILABLE");
+      const values = parseWechatXml(await request.text());
+      if (
+        !verifyWechatV2(values, env.WECHAT_PAY_API_V2_KEY) ||
+        values.mch_id !== env.WECHAT_PAY_MCH_ID
+      )
+        return xmlReply("FAIL", "BAD SIGN");
+      const attempt = await env.USAGE.prepare(
+        "SELECT * FROM wechat_attempt WHERE out_trade_no=?",
+      )
+        .bind(values.out_trade_no || "")
+        .first();
+      const txn =
+        attempt &&
+        (await env.USAGE.prepare(
+          "SELECT * FROM wechat_txn WHERE out_trade_no=?",
+        )
+          .bind(attempt.cycle_no)
+          .first());
+      if (!txn || txn.payment_kind === "app") return xmlReply("FAIL", "ORDER MISMATCH");
+      // 失败通知通常没有 total_fee；成功通知则必须金额完全一致才能入账。
+      if (
+        callbackData(values) &&
+        Number(values.total_fee) !== Number(txn.amount_fen)
+      )
+        return xmlReply("FAIL", "ORDER MISMATCH");
+      if (values.appid !== env.WECHAT_PAY_APP_ID)
+        return xmlReply("FAIL", "APP MISMATCH");
+      if (!callbackData(values)) {
+        if (values.return_code !== "SUCCESS" || values.result_code !== "FAIL")
+          return xmlReply("FAIL", "UNKNOWN PAYMENT RESULT");
+        await failAttempt(
+          env.USAGE,
+          values.out_trade_no,
+          now,
+          String(values.err_code || "payment-failed"),
+        );
+        return xmlReply("SUCCESS", "RECORDED");
+      }
+      if (
+        values.appid !== env.WECHAT_PAY_APP_ID ||
+        values.contract_id !== attempt.contract_id ||
+        !values.transaction_id ||
+        (values.fee_type && values.fee_type !== "CNY")
+      )
+        return xmlReply("FAIL", "PAYMENT MISMATCH");
+      await settlePayment(env.USAGE, txn, values, now);
+      return xmlReply("SUCCESS", "OK");
+    }
+
+    if (
+      url.pathname === "/agent/wechat-pay/cancel-notify" &&
+      request.method === "POST"
+    ) {
+      if (!env.USAGE || !env.WECHAT_PAY_API_V2_KEY || !env.WECHAT_PAY_MCH_ID)
+        return xmlReply("FAIL", "UNAVAILABLE");
+      const values = parseWechatXml(await request.text());
+      if (
+        !verifyWechatV2(values, env.WECHAT_PAY_API_V2_KEY) ||
+        values.mch_id !== env.WECHAT_PAY_MCH_ID
+      )
+        return xmlReply("FAIL", "BAD SIGN");
+      if (!callbackData(values)) return xmlReply("SUCCESS", "IGNORED");
+      const code = values.contract_code || values.out_contract_code;
+      const id = values.contract_id || values.contract_no;
+      const row = await env.USAGE.prepare(
+        "SELECT * FROM wechat_sub WHERE contract_code=?",
+      )
+        .bind(code || "")
+        .first();
+      if (!row || (id && row.contract_id !== id))
+        return xmlReply("FAIL", "UNKNOWN CONTRACT");
+      if (values.change_type !== "DELETE")
+        return xmlReply("FAIL", "WRONG EVENT");
+      const reason =
+        values.cancel_reason || values.contract_status || "wechat-cancelled";
+      await markWechatContractCancelled(
+        env.USAGE,
+        row,
+        now,
+        reason,
+        "contract_cancelled",
+        values,
+        reason,
+      );
+      return xmlReply("SUCCESS", "OK");
+    }
+
+    if (
+      url.pathname === "/agent/wechat-pay/cancel" &&
+      request.method === "POST"
+    ) {
+      const scope = await scopeFromToken(bearerToken(request), env);
+      if (!scope) return J({ error: "unauthorized" }, 401);
+      if (!ready(env)) return J({ error: "degraded" }, 503);
+      const sub = await env.USAGE.prepare(
+        "SELECT * FROM wechat_sub WHERE user_sub=? AND status='active' AND contract_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
+      )
+        .bind(scope)
+        .first();
+      // 网络重试必须安全：已经成功解约就直接返回成功，不能把旧记录当成错误。
+      if (!sub) {
+        const last = await env.USAGE.prepare(
+          "SELECT status,period_end_at FROM wechat_sub WHERE user_sub=? ORDER BY updated_at DESC LIMIT 1",
+        )
+          .bind(scope)
+          .first();
+        if (last && last.status === "cancelled")
+          return J({
+            ok: true,
+            status: "cancelled",
+            already: true,
+            expires_date: last.period_end_at || null,
+          });
+        return J({ error: "no-active-contract" }, 409);
+      }
+      try {
+        const provider = await terminateWechatContract(env, sub, fetcher);
+        await markWechatContractCancelled(
+          env.USAGE,
+          sub,
+          now,
+          "user-cancelled-in-app",
+          "contract_cancelled_by_user",
+          provider,
+          "用户在 App 解除自动续费",
+          "outbound",
+        );
+        return J({
+          ok: true,
+          status: "cancelled",
+          expires_date: sub.period_end_at || null,
+        });
+      } catch (e) {
+        const reconciled = await reconcileWechatContract(
+          env.USAGE,
+          env,
+          sub,
+          now,
+          fetcher,
+        );
+        if (reconciled.cancelled)
+          return J({
+            ok: true,
+            status: "cancelled",
+            expires_date: sub.period_end_at || null,
+          });
+        await env.USAGE.prepare(
+          "UPDATE wechat_sub SET last_event_at=?, last_error_code=?, updated_at=? WHERE contract_code=?",
+        )
+          .bind(
+            now,
+            String(e.code || "contract-termination-failed").slice(0, 64),
+            now,
+            sub.contract_code,
+          )
+          .run();
+        await audit(env.USAGE, {
+          now,
+          direction: "outbound",
+          event_type: "contract_cancel_failed",
+          contract_code: sub.contract_code,
+          user_sub: scope,
+          status_before: sub.status,
+          status_after: sub.status,
+          code: e.code,
+          message: e.message,
+          payload: e.provider,
+        });
+        return J({ error: "cancel-unavailable" }, 502);
+      }
     }
 
     if (
@@ -1492,18 +1636,8 @@ export async function handleWechatPayRoute(
       const scope = await scopeFromToken(bearerToken(request), env);
       if (!scope) return J({ error: "unauthorized" }, 401);
       if (!env.USAGE) return J({ active: false, degraded: true });
-      const appTxn = await env.USAGE.prepare("SELECT * FROM wechat_txn WHERE user_sub=? AND payment_kind='app' AND status='charging' ORDER BY created_at DESC LIMIT 1").bind(scope).first();
-      if (appTxn && wechatV3Ready(env)) {
-        const attempt = await env.USAGE.prepare("SELECT * FROM wechat_attempt WHERE out_trade_no=?").bind(appTxn.out_trade_no).first();
-        if (attempt) await reconcilePayment(env.USAGE, env, attempt, now, fetcher);
-      }
-      const live=await env.USAGE.prepare("SELECT * FROM wechat_sub WHERE user_sub=? AND status IN ('pending','active') LIMIT 1").bind(scope).first();
-      if(live && lifecycleReady(env) && (live.period_start_at!=null || live.contract_id) && (!live.last_event_at || live.last_event_at<=now-QUERY_INTERVAL)) {
-        if(cancelPending(live))await cancelContract(env,live,now,fetcher);
-        else await reconcileWechatContract(env.USAGE,env,live,now,fetcher);
-      }
       const row = await env.USAGE.prepare(
-        "SELECT contract_code, contract_id, plan_id, status, period_start_at, period_end_at, cancel_reason, signed_at, cancelled_at, last_error_code, next_charge_at FROM wechat_sub WHERE user_sub=? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1",
+        "SELECT contract_code, contract_id, plan_id, status, period_start_at, period_end_at, next_charge_at, cancel_reason, signed_at, cancelled_at, last_error_code FROM wechat_sub WHERE user_sub=? ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1",
       )
         .bind(scope)
         .first();
@@ -1523,29 +1657,18 @@ export async function handleWechatPayRoute(
             .bind(scope, now)
             .first()
         : { s: 0 };
-      const currentPrice=row && ['pending','active'].includes(row.status)
-        ? await env.USAGE.prepare("SELECT amount_fen FROM wechat_txn WHERE contract_code=? AND status IN ('pending','charging','paid') ORDER BY created_at DESC LIMIT 1").bind(row.contract_code).first()
-        : null;
-      const checkoutPaid=!!(row && await env.USAGE.prepare("SELECT 1 FROM wechat_txn WHERE contract_code=? AND payment_kind='app' AND status='paid' LIMIT 1").bind(row.contract_code).first());
       return J({
         active,
-        checkout_pending: !!(await env.USAGE.prepare("SELECT 1 FROM wechat_txn t JOIN wechat_sub s ON s.contract_code=t.contract_code WHERE t.user_sub=? AND t.payment_kind='app' AND t.status='charging' AND s.status IN ('pending','active') LIMIT 1").bind(scope).first()),
-        checkout_paid: checkoutPaid,
-        amount_fen: currentPrice?.amount_fen || amountFen(env),
-        restore_authorization: (row?.status==='pending' && (!!(await authorizationDraft(env.USAGE,row)) || (active && checkoutPaid && !row.contract_id))) || (active && (!row || row.status==='cancelled')),
-        contract_code: row?.contract_code || null,
+        amount_fen: amountFen(env),
         enabled: await wechatPayEnabled(env),
-        can_cancel: lifecycleReady(env) && !!row && ['pending','active'].includes(row.status),
-        renewal_available: lifecycleReady(env) && !!env.WECHAT_PAY_CALLBACK_BASE_URL && !!amountFen(env),
-        contract_management_available: lifecycleReady(env),
-        cancel_pending: cancelPending(row),
-        contract_status_known: contractKnown(row),
+        can_cancel: !!(row && row.status === "active" && row.contract_id),
         status: row ? row.status : null,
         plan_id: row ? row.plan_id : null,
         expires_date: expiresAt,
         // 尚未实际扣款的新协议以 period_start_at 为空标识；period_end_at 此时保存
         // 首期的约定起点，供稳定地计算订单周期，不能再用它判断是否待扣。
-        scheduled_charge_at: row?.next_charge_at || null,
+        scheduled_charge_at:
+          row && row.period_start_at == null ? row.next_charge_at : null,
         cancel_reason: row ? row.cancel_reason : null,
         signed_at: row ? row.signed_at : null,
         cancelled_at: row ? row.cancelled_at : null,
@@ -1553,7 +1676,12 @@ export async function handleWechatPayRoute(
         // 客户端只得到稳定、可展示的通用状态，避免暴露支付通道内部信息。
         payment_issue: row && row.last_error_code ? "payment-failed" : null,
         payment_pending: !!(await unresolvedUserOrder(env.USAGE, scope)),
-        renewal_stopped: !!row && row.status==='active' && (!lifecycleReady(env) || cancelPending(row) || row.next_charge_at==null),
+        renewal_stopped: !!(
+          row &&
+          row.status === "active" &&
+          row.next_charge_at == null &&
+          row.last_error_code
+        ),
         sub_suanli: Math.round(uyToSuanli((sum && sum.s) || 0) * 10) / 10,
         monthly_suanli: SUB_GRANT_SUANLI,
       });
